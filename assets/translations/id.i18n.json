@@ -1,6 +1,6 @@
 {
   "common": {
-    "appTitle": "Hiddify",
+    "appTitle": "ZEON",
     "start": "Mulai",
     "version": "Versi",
     "ok": "Oke",
@@ -88,7 +88,7 @@
   "intro": {
     "banner": "Semua yang Anda butuhkan untuk internet tanpa batasan",
     "termsAndPolicyCaution(rich)": "Dengan melanjutkan, Anda menyetujui ${tap(@:pages.about.termsAndConditions)}",
-    "info(rich)": "Dibuat dengan ❤️ oleh Hiddify - ${tap_source(Sumber Terbuka)} (${tap_license(Lisensi)})"
+    "info(rich)": "Dibuat dengan ❤️ oleh ZEON - ${tap_source(Sumber Terbuka)} (${tap_license(Lisensi)})"
   },
   "pages": {
     "home": {

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">ZEON</string>
     <string name="stop">Stop</string>
     <string name="quick_toggle">Toggle</string>
     <string name="status_starting">Service starting…</string>
