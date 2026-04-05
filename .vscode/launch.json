@@ -27,6 +27,15 @@
             // "args": ["-d","192.168.1.35:36463"]
         },
         {
+            "name": "Hiddify UI (Chrome + Auto DevTools)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "debug",
+            "program": "lib/main.dart",
+            "deviceId": "chrome",
+            "cwd": "D:/zeon-app"
+        },
+        {
             "name": "Hiddify Dev Windows Portable",
             "request": "launch",
             "type": "dart",

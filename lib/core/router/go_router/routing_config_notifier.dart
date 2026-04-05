@@ -13,6 +13,7 @@ import 'package:hiddify/features/log/overview/logs_page.dart';
 import 'package:hiddify/features/per_app_proxy/overview/per_app_proxy_page.dart';
 import 'package:hiddify/features/profile/details/profile_details_page.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/profile/overview/profile_menu_page.dart';
 import 'package:hiddify/features/profile/overview/profiles_page.dart';
 import 'package:hiddify/features/proxy/overview/proxies_overview_page.dart';
 import 'package:hiddify/features/settings/overview/sections/dns_options_page.dart';
@@ -34,6 +35,7 @@ final branchesScope = <String, FocusScopeNode>{
   'settings': FocusScopeNode(),
   'logs': FocusScopeNode(),
   'about': FocusScopeNode(),
+  'profileMenu': FocusScopeNode(),
 };
 
 // when the routing config is not yet initialized, this config is used
@@ -42,12 +44,12 @@ final loadingConfig = RoutingConfig(
 );
 
 String getNameOfBranch(bool isMobileBreakpoint, bool showProfilesAction, int index) => isMobileBreakpoint
-    ? ['home', 'settings'][index]
-    : ['home', if (showProfilesAction) 'profiles', 'settings', 'logs', 'about'][index];
+    ? ['home', 'settings', 'profileMenu'][index]
+    : ['home', if (showProfilesAction) 'profiles', 'settings', 'logs', 'about', 'profileMenu'][index];
 
 int getIndexOfBranch(bool isMobileBreakpoint, bool showProfilesAction, String name) => isMobileBreakpoint
-    ? ['home', 'settings'].indexOf(name)
-    : ['home', if (showProfilesAction) 'profiles', 'settings', 'logs', 'about'].indexOf(name);
+    ? ['home', 'settings', 'profileMenu'].indexOf(name)
+    : ['home', if (showProfilesAction) 'profiles', 'settings', 'logs', 'about', 'profileMenu'].indexOf(name);
 
 @Riverpod(keepAlive: true)
 class RoutingConfigNotifier extends _$RoutingConfigNotifier {
@@ -79,10 +81,11 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
         if (!introCompleted) {
           return url != null ? '/intro?url=$url' : '/intro';
         } else if (isIntro) {
-          if (url != null)
+          if (url != null) {
             WidgetsBinding.instance.addPostFrameCallback(
               (_) => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(url: url),
             );
+          }
           return '/home';
         } else if (url != null) {
           WidgetsBinding.instance.addPostFrameCallback(
@@ -244,6 +247,15 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                 ],
               ),
             ],
+            StatefulShellBranch(
+              routes: <GoRoute>[
+                GoRoute(
+                  name: 'profileMenu',
+                  path: '/profile-menu',
+                  builder: (_, _) => FocusScope(node: branchesScope['profileMenu'], child: const ProfileMenuPage()),
+                ),
+              ],
+            ),
           ],
         ),
         GoRoute(name: 'intro', path: '/intro', builder: (_, _) => const IntroPage()),

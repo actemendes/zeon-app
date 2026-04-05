@@ -12,6 +12,13 @@
         "editor.wordBasedSuggestions": "off"
 	},
 
-    "html.format.wrapLineLength": 250
-	
+    "html.format.wrapLineLength": 250,
+    "dart.flutterSdkPath": "C:\\Users\\actemendes\\.puro\\envs\\zeon\\flutter",
+    "dart.sdkPath": "C:\\Users\\actemendes\\.puro\\envs\\zeon\\flutter\\bin\\cache\\dart-sdk",
+    "dart.openDevTools": "flutter",
+    "dart.devToolsLocation": {
+        "default": "external",
+        "inspector": "external"
+    },
+    "dart.closeDevTools": "ifOpened"
 }

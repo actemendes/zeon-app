@@ -7,6 +7,7 @@ import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/router/adaptive_layout/shell_route_action.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/router/go_router/routing_config_notifier.dart';
+import 'package:hiddify/features/profile/overview/profile_menu_page.dart';
 import 'package:hiddify/features/stats/widget/side_bar_stats_overview.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -83,7 +84,7 @@ class MyAdaptiveLayout extends HookConsumerWidget {
             ? FocusScope(
                 node: navScopeNode,
                 child: NavigationBar(
-                  selectedIndex: navigationShell.currentIndex <= 1 ? navigationShell.currentIndex : 0,
+                  selectedIndex: navigationShell.currentIndex,
                   destinations: _navDests(_actions(t, showProfilesAction, isMobileBreakpoint)),
                   onDestinationSelected: (index) => _onTap(context, index),
                 ),
@@ -104,6 +105,7 @@ class MyAdaptiveLayout extends HookConsumerWidget {
     ShellRouteAction(Icons.settings_rounded, t.pages.settings.title),
     if (!isMobileBreakpoint) ShellRouteAction(Icons.description_rounded, t.pages.logs.title),
     if (!isMobileBreakpoint) ShellRouteAction(Icons.info_rounded, t.pages.about.title),
+    ShellRouteAction(Icons.person_rounded, ProfileMenuPage.title),
   ];
 
   List<NavigationDestination> _navDests(List<ShellRouteAction> actions) =>

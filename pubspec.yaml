@@ -148,6 +148,9 @@ dev_dependencies:
   slang_build_runner: ^4.4.0
   flutter_gen_runner: ^5.4.0
   dart_mappable_builder: ^4.2.1
+  widgetbook: ^3.22.0
+  widgetbook_annotation: ^3.11.0
+  widgetbook_generator: ^3.14.0
   # protoc_builder: ^0.4.1
   # google_protobuf: ^3.20.1;
 

@@ -14,24 +14,37 @@ InAppNotificationController inAppNotificationController(Ref ref) {
 enum NotificationType { info, error, success }
 
 class InAppNotificationController with AppLogger {
-  ToastificationItem _show(
+  ToastificationItem? _show(
     String message, {
     NotificationType type = NotificationType.info,
     Duration duration = const Duration(seconds: 3),
   }) {
-    toastification.dismissAll();
-    return toastification.show(
-      title: Text(message),
-      type: type._toastificationType,
-      alignment: AlignmentDirectional.bottomStart,
-      autoCloseDuration: duration,
-      style: ToastificationStyle.fillColored,
-      pauseOnHover: true,
-      showProgressBar: false,
-      dragToClose: true,
-      closeOnClick: true,
-      closeButtonShowType: CloseButtonShowType.onHover,
-    );
+    try {
+      toastification.dismissAll();
+      return toastification.show(
+        title: Text(message),
+        type: type._toastificationType,
+        alignment: AlignmentDirectional.bottomStart,
+        autoCloseDuration: duration,
+        style: ToastificationStyle.fillColored,
+        pauseOnHover: true,
+        showProgressBar: false,
+        dragToClose: true,
+        closeOnClick: true,
+        closeButtonShowType: CloseButtonShowType.onHover,
+      );
+    } catch (error, stackTrace) {
+      final errorText = error.toString();
+      final isToastificationBootstrapIssue =
+          errorText.contains("Toastification is not initialized") ||
+          errorText.contains("ToastificationOverlayState") ||
+          errorText.contains("ToastificationWrapper");
+      if (isToastificationBootstrapIssue) {
+        loggy.warning("toastification is not initialized yet, skipping toast", error, stackTrace);
+        return null;
+      }
+      rethrow;
+    }
   }
 
   ToastificationItem? showErrorToast(String message) =>
