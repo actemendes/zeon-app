@@ -92,7 +92,11 @@ abstract class ConfigOptions {
       "4.4.2.2",
       "8.8.8.8",
     ]),
-    defaultValueFunction: (ref) => ref.read(region) == Region.cn ? "223.5.5.5" : "1.1.1.1",
+    defaultValueFunction: (ref) => switch (ref.read(region)) {
+      Region.cn => "223.5.5.5",
+      Region.ru => "local",
+      _ => "1.1.1.1",
+    },
     validator: (value) => value.isNotBlank,
   );
 
@@ -407,10 +411,27 @@ abstract class ConfigOptions {
     // };
 
     final mode = ref.watch(serviceMode);
+    final selectedRegion = ref.watch(region);
+    final currentDirectDns = ref.watch(directDnsAddress);
+    const externalDnsValues = {
+      "1.1.1.1",
+      "udp://1.1.1.1",
+      "tcp://1.1.1.1",
+      "https://1.1.1.1/dns-query",
+      "https://dns.cloudflare.com/dns-query",
+      "8.8.8.8",
+      "udp://8.8.8.8",
+      "tcp://8.8.8.8",
+      "https://8.8.8.8/dns-query",
+    };
+    final effectiveDirectDns = selectedRegion == Region.ru && externalDnsValues.contains(currentDirectDns)
+        ? "local"
+        : currentDirectDns;
+    final effectiveStrictRoute = selectedRegion == Region.ru ? false : ref.watch(strictRoute);
     // final reg = ref.watch(Preferences.region.notifier).raw();
 
     return SingboxConfigOption(
-      region: ref.watch(region).name,
+      region: selectedRegion.name,
       balancerStrategy: ref.watch(balancerStrategy),
       blockAds: ref.watch(blockAds),
       useXrayCoreWhenPossible: ref.watch(useXrayCoreWhenPossible),
@@ -420,7 +441,7 @@ abstract class ConfigOptions {
       ipv6Mode: ref.watch(ipv6Mode),
       remoteDnsAddress: ref.watch(remoteDnsAddress),
       remoteDnsDomainStrategy: ref.watch(remoteDnsDomainStrategy),
-      directDnsAddress: ref.watch(directDnsAddress),
+      directDnsAddress: effectiveDirectDns,
       directDnsDomainStrategy: ref.watch(directDnsDomainStrategy),
       mixedPort: ref.watch(mixedPort),
       tproxyPort: ref.watch(tproxyPort),
@@ -428,7 +449,7 @@ abstract class ConfigOptions {
       redirectPort: ref.watch(redirectPort),
       tunImplementation: ref.watch(tunImplementation),
       mtu: ref.watch(mtu),
-      strictRoute: ref.watch(strictRoute),
+      strictRoute: effectiveStrictRoute,
       connectionTestUrl: ref.watch(connectionTestUrl),
       urlTestInterval: ref.watch(urlTestInterval),
       enableClashApi: ref.watch(enableClashApi),

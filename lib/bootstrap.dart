@@ -8,6 +8,7 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:hiddify/core/analytics/analytics_controller.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
+import 'package:hiddify/core/http_client/http_client_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/logger/logger.dart';
 import 'package:hiddify/core/logger/logger_controller.dart';
@@ -19,6 +20,7 @@ import 'package:hiddify/features/app/widget/app.dart';
 import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
 
 import 'package:hiddify/features/log/data/log_data_providers.dart';
+import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
@@ -83,6 +85,13 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   Logger.bootstrap.info(appInfo.format());
 
   await _init("profile repository", () => container.read(profileRepositoryProvider.future));
+  final mobileBootstrapImportService = MobileBootstrapImportService(
+    httpClient: container.read(httpClientProvider),
+    profileRepository: container.read(profileRepositoryProvider).requireValue,
+    preferences: container.read(sharedPreferencesProvider).requireValue,
+  );
+  await _safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 45000);
+  unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
 
   await _init("translations", () => container.read(translationsProvider.future));
 
@@ -122,6 +131,23 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
     FlutterNativeSplash.remove();
   }
   // SentryFlutter.s(DateTime.now().toUtc());
+}
+
+Future<void> _retryMobileAutoImport(MobileBootstrapImportService service) async {
+  const retryDelays = <Duration>[
+    Duration(seconds: 20),
+    Duration(seconds: 40),
+    Duration(minutes: 1),
+    Duration(minutes: 2),
+  ];
+  for (final delay in retryDelays) {
+    await Future.delayed(delay);
+    try {
+      await service.run();
+    } catch (_) {
+      // Intentionally ignored: best-effort background retries.
+    }
+  }
 }
 
 Future<T> _init<T>(String name, Future<T> Function() initializer, {int? timeout}) async {
