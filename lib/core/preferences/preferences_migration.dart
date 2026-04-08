@@ -11,7 +11,10 @@ class PreferencesMigration with InfraLogger {
   Future<void> migrate() async {
     final currentVersion = sharedPreferences.getInt(versionKey) ?? 0;
 
-    final migrationSteps = [PreferencesVersion1Migration(sharedPreferences)];
+    final List<PreferencesMigrationStep> migrationSteps = [
+      PreferencesVersion1Migration(sharedPreferences),
+      PreferencesVersion2Migration(sharedPreferences),
+    ];
 
     if (currentVersion == migrationSteps.length) {
       loggy.debug("already using the latest version (v$currentVersion)");
@@ -106,4 +109,39 @@ class PreferencesVersion1Migration extends PreferencesMigrationStep with InfraLo
     "ipv6Only" => "ipv6_only",
     _ => "",
   };
+}
+
+class PreferencesVersion2Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion2Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    final region = sharedPreferences.getString("region");
+    if (region != "ru") {
+      return;
+    }
+
+    final directDns = sharedPreferences.getString("direct-dns-address");
+    const externalDnsValues = {
+      "1.1.1.1",
+      "udp://1.1.1.1",
+      "tcp://1.1.1.1",
+      "https://1.1.1.1/dns-query",
+      "https://dns.cloudflare.com/dns-query",
+      "8.8.8.8",
+      "udp://8.8.8.8",
+      "tcp://8.8.8.8",
+      "https://8.8.8.8/dns-query",
+    };
+    if (directDns == null || externalDnsValues.contains(directDns)) {
+      loggy.debug("RU migration: changing direct-dns-address from [$directDns] to [local]");
+      await sharedPreferences.setString("direct-dns-address", "local");
+    }
+
+    final strictRoute = sharedPreferences.getBool("strict-route");
+    if (strictRoute == null || strictRoute == true) {
+      loggy.debug("RU migration: changing strict-route from [$strictRoute] to [false]");
+      await sharedPreferences.setBool("strict-route", false);
+    }
+  }
 }
