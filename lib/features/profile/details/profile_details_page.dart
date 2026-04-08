@@ -60,7 +60,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
             );
             return Scaffold(
               appBar: AppBar(
-                title: Text(t.pages.profileDetails.title),
+                title: Text(t.pages.profileDetails.title.toUpperCase()),
                 actions: [
                   TextButton.icon(
                     onPressed: isLoading || !data.isDetailsChanged
@@ -283,7 +283,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
             );
           },
           error: (error, stackTrace) => Scaffold(
-            appBar: AppBar(title: Text(t.pages.profileDetails.title)),
+            appBar: AppBar(title: Text(t.pages.profileDetails.title.toUpperCase())),
             body: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -296,7 +296,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
             ),
           ),
           loading: () => Scaffold(
-            appBar: AppBar(title: Text(t.pages.profileDetails.title)),
+            appBar: AppBar(title: Text(t.pages.profileDetails.title.toUpperCase())),
             body: const Center(child: CircularProgressIndicator()),
           ),
         );

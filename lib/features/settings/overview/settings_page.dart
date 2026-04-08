@@ -56,7 +56,7 @@ class SettingsPage extends HookConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(t.pages.settings.title),
+        title: Text(t.pages.settings.title.toUpperCase()),
         actions: [
           MenuAnchor(
             menuChildren: <Widget>[

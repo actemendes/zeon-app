@@ -1,13 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
-import 'package:hiddify/core/router/dialog/widgets/custom_alert_dialog.dart';
-import 'package:hiddify/core/theme/theme_extensions.dart';
 import 'package:hiddify/core/widget/animated_text.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
@@ -19,7 +19,6 @@ import 'package:hiddify/gen/assets.gen.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-// TODO: rewrite
 class ConnectionButton extends HookConsumerWidget {
   const ConnectionButton({super.key});
 
@@ -32,82 +31,7 @@ class ConnectionButton extends HookConsumerWidget {
 
     final requiresReconnect = ref.watch(configOptionNotifierProvider).valueOrNull;
     final today = DateTime.now();
-    // final animationController = useAnimationController(
-    //   duration: const Duration(seconds: 1),
-    // )..repeat(reverse: true); // Ensure the animation loops indefinitely
 
-    //   // Listen to the animation's value
-    //   final animationValue = useAnimation(Tween<double>(begin: 0.8, end: 1).animate(animationController));
-
-    //   // useEffect(() {
-    //   //   if (true) {
-    //   // Start repeating animation
-    //   //   } else {
-    //   //     animationController.stop(); // Stop animation if connected, disconnected, or error
-    //   //   }
-
-    //   //   // Cleanup when widget is disposed
-    //   //   return animationController.dispose;
-    //   // }, [connectionStatus.value]);
-
-    //   // ref.listen(
-    //   //   connectionNotifierProvider,
-    //   //   (_, next) {
-    //   //     if (next case AsyncError(:final error)) {
-    //   //       CustomAlertDialog.fromErr(t.presentError(error)).show(context);
-    //   //     }
-    //   //     if (next case AsyncData(value: Disconnected(:final connectionFailure?))) {
-    //   //       CustomAlertDialog.fromErr(t.presentError(connectionFailure)).show(context);
-    //   //     }
-    //   //   },
-    //   // );
-
-    const buttonTheme = ConnectionButtonTheme.light;
-
-    //   // return CircleDesignWidget(
-    //   //   onTap: switch (connectionStatus) {
-    //   //     // AsyncData(value: Disconnected()) || AsyncError() => () async {
-    //   //     //     if (await showExperimentalNotice()) {
-    //   //     //       return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
-    //   //     //     }
-    //   //     //   },
-    //   //     // AsyncData(value: Connected()) => () async {
-    //   //     //     if (requiresReconnect == true && await showExperimentalNotice()) {
-    //   //     //       return await ref.read(connectionNotifierProvider.notifier).reconnect(await ref.read(activeProfileProvider.future));
-    //   //     //     }
-    //   //     //     return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
-    //   //     //   },
-    //   //     _ => () {},
-    //   //   },
-    //   //   // enabled: switch (connectionStatus) {
-    //   //   //   AsyncData(value: Connected()) || AsyncData(value: Disconnected()) || AsyncError() => true,
-    //   //   //   _ => false,
-    //   //   // },
-    //   //   // label: switch (connectionStatus) {
-    //   //   //   AsyncData(value: Connected()) when requiresReconnect == true => t.connection.reconnect,
-    //   //   //   AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => t.connection.connecting,
-    //   //   //   AsyncData(value: final status) => status.present(t),
-    //   //   //   _ => "",
-    //   //   // },
-    //   //   color: switch (connectionStatus) {
-    //   //     AsyncData(value: Connected()) when requiresReconnect == true => Colors.teal,
-    //   //     AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => Color.fromARGB(255, 157, 139, 1),
-    //   //     AsyncData(value: Connected()) => Colors.green.shade900,
-    //   //     AsyncData(value: _) => Colors.indigo.shade700, // Color(0xFF3446A5), //buttonTheme.idleColor!,
-    //   //     _ => Colors.red,
-    //   //   },
-
-    //   //   animated: true ||
-    //   //       switch (connectionStatus) {
-    //   //         AsyncData(value: Connected()) when requiresReconnect == true => false,
-    //   //         AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => false,
-    //   //         AsyncData(value: Connected()) => true,
-    //   //         AsyncData(value: _) => true,
-    //   //         _ => false,
-    //   //       },
-    //   //   animationValue: animationValue,
-    //   // );
-    // }
     var secureLabel =
         (ref.watch(ConfigOptions.enableWarp) && ref.watch(ConfigOptions.warpDetourMode) == WarpDetourMode.warpOverProxy)
         ? t.connection.secure
@@ -115,6 +39,15 @@ class ConnectionButton extends HookConsumerWidget {
     if (delay <= 0 || delay > 65000 || connectionStatus.value != const Connected()) {
       secureLabel = "";
     }
+
+    final visualState = switch (connectionStatus) {
+      AsyncData(value: Connecting()) || AsyncData(value: Disconnecting()) => _ConnectionButtonVisualState.loading,
+      AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => _ConnectionButtonVisualState.loading,
+      AsyncData(value: Connected()) => _ConnectionButtonVisualState.connected,
+      AsyncLoading() => _ConnectionButtonVisualState.loading,
+      _ => _ConnectionButtonVisualState.off,
+    };
+
     return _ConnectionButton(
       onTap: switch (connectionStatus) {
         AsyncData(value: Connected()) when requiresReconnect == true => () async {
@@ -124,7 +57,7 @@ class ConnectionButton extends HookConsumerWidget {
         AsyncData(value: Disconnected()) || AsyncError() => () async {
           if (ref.read(activeProfileProvider).valueOrNull == null) {
             await ref.read(dialogNotifierProvider.notifier).showNoActiveProfile();
-            ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile();
+            await ref.read(bottomSheetsNotifierProvider.notifier).showProfilesOverview();
           }
           if (await ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice()) {
             return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
@@ -151,36 +84,11 @@ class ConnectionButton extends HookConsumerWidget {
         AsyncData(value: final status) => status.present(t),
         _ => "",
       },
-      buttonColor: switch (connectionStatus) {
-        AsyncData(value: Connected()) when requiresReconnect == true => Colors.teal,
-        AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => const Color.fromARGB(255, 185, 176, 103),
-        AsyncData(value: Connected()) => buttonTheme.connectedColor!,
-        AsyncData(value: _) => buttonTheme.idleColor!,
-        _ => Colors.red,
-      },
       image: switch (connectionStatus) {
-        AsyncData(value: Connected()) when requiresReconnect == true => Assets.images.disconnectNorouz,
-        AsyncData(value: Connected()) => Assets.images.connectNorouz,
-        AsyncData(value: _) => Assets.images.disconnectNorouz,
-        _ => Assets.images.disconnectNorouz,
-        AsyncData(value: Disconnected()) || AsyncError() => Assets.images.disconnectNorouz,
         AsyncData(value: Connected()) => Assets.images.connectNorouz,
         _ => Assets.images.disconnectNorouz,
       },
-      newButtonColor: switch (connectionStatus) {
-        AsyncData(value: Connected()) when requiresReconnect == true => Colors.teal,
-        AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => const Color.fromARGB(255, 185, 176, 103),
-        AsyncData(value: Connected()) => buttonTheme.connectedColor!,
-        AsyncData(value: _) => buttonTheme.idleColor!,
-        _ => Colors.red,
-      },
-      animated: switch (connectionStatus) {
-        AsyncData(value: Connected()) when requiresReconnect == true => false,
-        AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => false,
-        AsyncData(value: Connected()) => true,
-        AsyncData(value: _) => true,
-        _ => false,
-      },
+      visualState: visualState,
       useImage: today.day >= 19 && today.day <= 23 && today.month == 3,
       secureLabel: secureLabel,
     );
@@ -192,66 +100,39 @@ class _ConnectionButton extends StatelessWidget {
     required this.onTap,
     required this.enabled,
     required this.label,
-    required this.buttonColor,
     required this.image,
     required this.useImage,
-    required this.newButtonColor,
-    required this.animated,
     required this.secureLabel,
+    required this.visualState,
   });
 
   final VoidCallback onTap;
   final bool enabled;
   final String label;
-  final Color buttonColor;
   final AssetGenImage image;
   final bool useImage;
   final String secureLabel;
-
-  final Color newButtonColor;
-
-  final bool animated;
+  final _ConnectionButtonVisualState visualState;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // CircleDesignWidget(newButtonColor: newButtonColor, onTap: onTap, animated: animated),
         Semantics(
           button: true,
           enabled: enabled,
           label: label,
           child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [BoxShadow(blurRadius: 16, color: buttonColor.withValues(alpha: .5))],
-            ),
-            width: 148,
-            height: 148,
-            child: Material(
-              key: const ValueKey("home_connection_button"),
-              shape: const CircleBorder(),
-              color: Colors.white,
-              child: InkWell(
-                focusColor: Colors.grey,
-                onTap: onTap,
-                child: Padding(
-                  padding: const EdgeInsets.all(36),
-                  child: TweenAnimationBuilder(
-                    tween: ColorTween(end: buttonColor),
-                    duration: const Duration(milliseconds: 250),
-                    builder: (context, value, child) {
-                      if (useImage) {
-                        return image.image();
-                      } else {
-                        return Assets.images.logo.svg(colorFilter: ColorFilter.mode(value!, BlendMode.srcIn));
-                      }
-                    },
-                  ),
-                ),
-              ),
+            decoration: const BoxDecoration(shape: BoxShape.circle),
+            width: _ConnectionButtonFace.outerSize,
+            height: _ConnectionButtonFace.outerSize,
+            child: _ConnectionButtonFace(
+              onTap: onTap,
+              enabled: enabled,
+              image: image,
+              useImage: useImage,
+              visualState: visualState,
             ).animate(target: enabled ? 0 : 1).blurXY(end: 1),
           ).animate(target: enabled ? 0 : 1).scaleXY(end: .88, curve: Curves.easeIn),
         ),
@@ -265,7 +146,6 @@ class _ConnectionButton extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // const Gap(8),
                     Icon(FontAwesomeIcons.shieldHalved, size: 16, color: Theme.of(context).colorScheme.secondary),
                     const Gap(4),
                     Text(
@@ -284,3 +164,293 @@ class _ConnectionButton extends StatelessWidget {
     );
   }
 }
+
+enum _ConnectionButtonVisualState { off, loading, connected }
+
+class _ConnectionButtonFace extends StatefulWidget {
+  const _ConnectionButtonFace({
+    required this.onTap,
+    required this.enabled,
+    required this.image,
+    required this.useImage,
+    required this.visualState,
+  });
+
+  static const double outerSize = 230;
+  static const double innerCircleDiameter = 135;
+  static const double glyphDiameter = 47;
+
+  final VoidCallback onTap;
+  final bool enabled;
+  final AssetGenImage image;
+  final bool useImage;
+  final _ConnectionButtonVisualState visualState;
+
+  @override
+  State<_ConnectionButtonFace> createState() => _ConnectionButtonFaceState();
+}
+
+class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with TickerProviderStateMixin {
+  late final AnimationController _spinController;
+  late final AnimationController _settleController;
+
+  bool _pressed = false;
+  double _settleStartTurns = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _spinController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+    _settleController = AnimationController(vsync: this, duration: const Duration(milliseconds: 620));
+    _syncAnimationState(previous: null);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ConnectionButtonFace oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.visualState != widget.visualState) {
+      _syncAnimationState(previous: oldWidget.visualState);
+    }
+    if (!widget.enabled && _pressed) {
+      setState(() {
+        _pressed = false;
+      });
+    }
+  }
+
+  void _syncAnimationState({required _ConnectionButtonVisualState? previous}) {
+    switch (widget.visualState) {
+      case _ConnectionButtonVisualState.loading:
+        _settleController.stop();
+        _settleController.value = 0;
+        if (!_spinController.isAnimating) {
+          _spinController.repeat();
+        }
+        return;
+      case _ConnectionButtonVisualState.connected:
+        final comesFromLoading = previous == _ConnectionButtonVisualState.loading;
+        if (comesFromLoading) {
+          _settleStartTurns = _spinController.value;
+          _spinController.stop();
+          _settleController.forward(from: 0);
+        } else {
+          _spinController.stop();
+          _settleController.value = 1;
+        }
+        return;
+      case _ConnectionButtonVisualState.off:
+        _spinController.stop();
+        _settleController.stop();
+        _settleController.value = 0;
+        return;
+    }
+  }
+
+  double _rotationTurns() {
+    if (widget.visualState == _ConnectionButtonVisualState.loading) {
+      return _spinController.value;
+    }
+    if (widget.visualState == _ConnectionButtonVisualState.connected && _settleController.value < 1) {
+      final eased = Curves.easeOutCubic.transform(_settleController.value);
+      return _settleStartTurns + (1 - eased) * 0.35;
+    }
+    return 0;
+  }
+
+  double _settleProgress() {
+    if (widget.visualState == _ConnectionButtonVisualState.connected) {
+      return _settleController.value;
+    }
+    return 0;
+  }
+
+  @override
+  void dispose() {
+    _spinController.dispose();
+    _settleController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final animation = Listenable.merge([_spinController, _settleController]);
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
+    final logoAssetPath = isDarkTheme
+        ? 'assets/images/SVG/logo-black.svg'
+        : 'assets/images/SVG/logo-white.svg';
+
+    return Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      child: InkWell(
+        key: const ValueKey("home_connection_button"),
+        customBorder: const CircleBorder(),
+        splashColor: Colors.white.withValues(alpha: .12),
+        highlightColor: Colors.transparent,
+        onTap: widget.onTap,
+        onTapDown: widget.enabled
+            ? (_) => setState(() {
+                _pressed = true;
+              })
+            : null,
+        onTapUp: widget.enabled
+            ? (_) => setState(() {
+                _pressed = false;
+              })
+            : null,
+        onTapCancel: widget.enabled
+            ? () => setState(() {
+                _pressed = false;
+              })
+            : null,
+        child: AnimatedBuilder(
+          animation: animation,
+          builder: (context, child) {
+            const innerDiameter = _ConnectionButtonFace.innerCircleDiameter;
+            return SizedBox(
+              width: _ConnectionButtonFace.outerSize,
+              height: _ConnectionButtonFace.outerSize,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CustomPaint(
+                    size: const Size.square(_ConnectionButtonFace.outerSize),
+                    painter: _ConnectionRingPainter(
+                      state: widget.visualState,
+                      isDarkTheme: isDarkTheme,
+                      rotationTurns: _rotationTurns(),
+                      settleProgress: _settleProgress(),
+                    ),
+                  ),
+                  AnimatedScale(
+                    scale: _pressed && widget.enabled ? 0.94 : 1,
+                    duration: const Duration(milliseconds: 110),
+                    curve: Curves.easeOutCubic,
+                    child: Container(
+                      width: innerDiameter,
+                      height: innerDiameter,
+                      decoration: BoxDecoration(
+                        color: isDarkTheme ? const Color(0xFF000000) : const Color(0xFFE8F3F7),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                            color: isDarkTheme
+                                ? Colors.black.withValues(alpha: .5)
+                                : Colors.white.withValues(alpha: .5),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: widget.useImage
+                            ? Padding(
+                                padding: const EdgeInsets.all(
+                                  (_ConnectionButtonFace.innerCircleDiameter - _ConnectionButtonFace.glyphDiameter) / 2,
+                                ),
+                                child: widget.image.image(fit: BoxFit.contain),
+                              )
+                            : SizedBox.square(
+                                dimension: _ConnectionButtonFace.glyphDiameter,
+                                child: SvgPicture.asset(logoAssetPath),
+                              ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _ConnectionRingPainter extends CustomPainter {
+  const _ConnectionRingPainter({
+    required this.state,
+    required this.isDarkTheme,
+    required this.rotationTurns,
+    required this.settleProgress,
+  });
+
+  final _ConnectionButtonVisualState state;
+  final bool isDarkTheme;
+  final double rotationTurns;
+  final double settleProgress;
+
+  static const double _viewBoxSize = 230.65;
+  static const double _outerRadius = 115.32;
+  static const double _innerRadius = 68.13;
+  static const double _ringWidth = _outerRadius - _innerRadius;
+  static const double _ringRadius = (_outerRadius + _innerRadius) / 2;
+  static const double _arcGap = 1.15;
+  static const double _openSweep = (2 * math.pi) - _arcGap;
+  static const double _startAngle = math.pi * .46;
+
+  static const Color _lightOffColor = Color(0xFFD6E1E5);
+  static const Color _darkOffColor = Color(0xFF1A1B1F);
+  static const LinearGradient _connectionGradient = LinearGradient(colors: [Color(0xFF3CE74F), Color(0xFFBFDD71)]);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = math.min(size.width, size.height) / _viewBoxSize;
+    final dx = (size.width - (_viewBoxSize * scale)) / 2;
+    final dy = (size.height - (_viewBoxSize * scale)) / 2;
+
+    canvas.save();
+    canvas.translate(dx, dy);
+    canvas.scale(scale);
+
+    const center = Offset(115.32, 115.32);
+    const gradientRect = Rect.fromLTWH(0, 0, _viewBoxSize, _viewBoxSize);
+    final offColor = isDarkTheme ? _darkOffColor : _lightOffColor;
+
+    final basePaint = Paint()..isAntiAlias = true;
+    if (state == _ConnectionButtonVisualState.connected) {
+      basePaint.shader = _connectionGradient.createShader(gradientRect);
+    } else {
+      basePaint.color = offColor;
+    }
+    canvas.drawCircle(center, _outerRadius, basePaint);
+
+    final arcRect = Rect.fromCircle(center: center, radius: _ringRadius);
+    final rotation = rotationTurns * (2 * math.pi);
+
+    if (state == _ConnectionButtonVisualState.loading) {
+      final loadingPaint = Paint()
+        ..isAntiAlias = true
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _ringWidth
+        ..strokeCap = StrokeCap.round
+        ..shader = _connectionGradient.createShader(gradientRect);
+      canvas.drawArc(arcRect, _startAngle + rotation, _openSweep, false, loadingPaint);
+    } else if (state == _ConnectionButtonVisualState.connected && settleProgress < 1) {
+      final easedProgress = Curves.easeOutCubic.transform(settleProgress);
+      final remainingGap = _arcGap * (1 - easedProgress);
+
+      if (remainingGap > 0.0001) {
+        final gapPaint = Paint()
+          ..isAntiAlias = true
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = _ringWidth
+          ..strokeCap = StrokeCap.round
+          ..color = offColor;
+        final gapStartAngle = _startAngle + rotation + _openSweep;
+        canvas.drawArc(arcRect, gapStartAngle, remainingGap, false, gapPaint);
+      }
+    }
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _ConnectionRingPainter oldDelegate) {
+    return state != oldDelegate.state ||
+        isDarkTheme != oldDelegate.isDarkTheme ||
+        rotationTurns != oldDelegate.rotationTurns ||
+        settleProgress != oldDelegate.settleProgress;
+  }
+}
+

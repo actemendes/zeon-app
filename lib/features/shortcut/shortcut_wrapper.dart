@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/go_router/go_router_notifier.dart';
 import 'package:hiddify/features/window/notifier/window_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -32,9 +31,6 @@ class ShortcutWrapper extends HookConsumerWidget {
             const SingleActivator(LogicalKeyboardKey.comma, meta: true): OpenSettingsIntent(),
           },
         },
-        // try adding profile using Command+V and Control+V
-        const SingleActivator(LogicalKeyboardKey.keyV, meta: true): PasteIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyV, control: true): PasteIntent(),
       },
       child: Actions(
         actions: {
@@ -58,15 +54,6 @@ class ShortcutWrapper extends HookConsumerWidget {
               return null;
             },
           ),
-          PasteIntent: CallbackAction(
-            onInvoke: (_) async {
-              if (rootNavKey.currentContext != null) {
-                final captureResult = await Clipboard.getData(Clipboard.kTextPlain).then((value) => value?.text ?? '');
-                ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(url: captureResult);
-              }
-              return null;
-            },
-          ),
         },
         child: child,
       ),
@@ -79,5 +66,3 @@ class CloseWindowIntent extends Intent {}
 class QuitAppIntent extends Intent {}
 
 class OpenSettingsIntent extends Intent {}
-
-class PasteIntent extends Intent {}

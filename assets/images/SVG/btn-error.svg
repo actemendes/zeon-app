@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_Слой_2" data-name="Слой 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 230.65 230.65">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #3a444d;
+      }
+
+      .cls-2 {
+        fill: url(#_Безымянный_градиент_58);
+      }
+
+      .cls-3 {
+        fill: #e8f3f7;
+      }
+
+      .cls-4 {
+        fill: #2c9aff;
+      }
+    </style>
+    <linearGradient id="_Безымянный_градиент_58" data-name="Безымянный градиент 58" x1="0" y1="115.32" x2="230.65" y2="115.32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffbf3f"/>
+      <stop offset="1" stop-color="#ff571f"/>
+    </linearGradient>
+  </defs>
+  <g id="_Слой_2-2" data-name="Слой 2">
+    <g>
+      <circle class="cls-2" cx="115.32" cy="115.32" r="115.32"/>
+      <circle class="cls-3" cx="115.32" cy="115.32" r="68.13"/>
+      <g>
+        <rect class="cls-4" x="124.04" y="123.92" width="14.88" height="14.88" rx="2.32" ry="2.32"/>
+        <path class="cls-1" d="M138.92,94.17v10.02c0,.62-.24,1.21-.68,1.64l-32.28,32.28c-.44.44-1.03.68-1.64.68h-10.26c-1.28,0-2.32-1.04-2.32-2.32v-9.9c0-.62.24-1.21.68-1.64l1.01-1.01,17.2-17.2h-16.57c-1.28,0-2.32-1.04-2.32-2.32v-10.23c0-1.28,1.04-2.32,2.32-2.32h42.54c1.28,0,2.32,1.04,2.32,2.32Z"/>
+      </g>
+    </g>
+  </g>
+</svg>

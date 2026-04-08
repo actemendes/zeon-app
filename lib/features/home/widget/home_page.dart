@@ -1,15 +1,14 @@
 import 'package:dartx/dartx.dart';
 import 'package:flutter/material.dart';
-import 'package:gap/gap.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
+import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/features/home/widget/connection_button.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/profile/widget/profile_tile.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_card.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_delay_indicator.dart';
-import 'package:hiddify/gen/assets.gen.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:sliver_tools/sliver_tools.dart';
 
@@ -19,137 +18,203 @@ class HomePage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final backgroundMapAsset = theme.brightness == Brightness.dark
+        ? 'assets/images/2x/dark-back@2x.png'
+        : 'assets/images/2x/light-back@2x.png';
     final t = ref.watch(translationsProvider).requireValue;
     // final hasAnyProfile = ref.watch(hasAnyProfileProvider);
     final activeProfile = ref.watch(activeProfileProvider);
+    final breakpoint = Breakpoint(context);
+    final subscriptionName = switch (activeProfile) {
+      AsyncData(value: final profile?) when profile.name.isNotBlank => profile.name,
+      _ => "anonymous",
+    };
 
-    return Scaffold(
-      appBar: AppBar(
-        // leading: (RootScaffold.stateKey.currentState?.hasDrawer ?? false) && showDrawerButton(context)
-        //     ? DrawerButton(
-        //         onPressed: () {
-        //           RootScaffold.stateKey.currentState?.openDrawer();
-        //         },
-        //       )
-        //     : null,
-        title: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Stack(
           children: [
-            Assets.images.logo.svg(height: 24),
-            const Gap(8),
-            Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(text: t.common.appTitle),
-                  const TextSpan(text: " "),
-                  const WidgetSpan(child: AppVersionLabel(), alignment: PlaceholderAlignment.middle),
-                ],
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Opacity(
+                    opacity: 1,
+                    child: Image.asset(
+                      backgroundMapAsset,
+                      height: constraints.maxHeight,
+                      fit: BoxFit.fitHeight,
+                    ),
+                  ),
+                ),
               ),
             ),
-          ],
-        ),
-        actions: [
-          // IconButton(
-          //     onPressed: () => const QuickSettingsRoute().push(context),
-          //     icon: const Icon(FluentIcons.options_24_filled),
-          //     material: (context, platform) => MaterialIconButtonData(
-          //           tooltip: t.config.quickSettings,
-          //         )),
-          // IconButton(
-          //     onPressed: () => const AddProfileRoute().push(context),
-          //     icon: const Icon(FluentIcons.add_circle_24_filled),
-          //     material: (context, platform) => MaterialIconButtonData(
-          //           tooltip: t.profile.add.buttonText,
-          //         )),
-          Semantics(
-            key: const ValueKey("profile_quick_settings"),
-            label: t.pages.home.quickSettings,
-            child: IconButton(
-              icon: Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
-              onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),
-            ),
-          ),
-          const Gap(8),
-          Semantics(
-            key: const ValueKey("profile_add_button"),
-            label: t.pages.profiles.add,
-            child: IconButton(
-              icon: Icon(Icons.add_rounded, color: theme.colorScheme.primary),
-              onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(),
-            ),
-          ),
-          const Gap(8),
-        ],
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: const AssetImage('assets/images/world_map.png'), // Replace with your image path
-            fit: BoxFit.cover,
-            opacity: 0.09,
-            colorFilter: theme.brightness == Brightness.dark
-                ? ColorFilter.mode(Colors.white.withValues(alpha: .15), BlendMode.srcIn) //
-                : ColorFilter.mode(
-                    Colors.grey.withValues(alpha: 1),
-                    BlendMode.srcATop,
-                  ), // Apply white tint in dark mode
-          ),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: 600, // Set the maximum width here
-                ),
-                child: CustomScrollView(
-                  slivers: [
-                    // switch (activeProfile) {
-                    // AsyncData(value: final profile?) =>
-                    MultiSliver(
-                      children: [
-                        // const Gap(100),
-                        switch (activeProfile) {
-                          AsyncData(value: final profile?) => ProfileTile(
-                            profile: profile,
-                            isMain: true,
-                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            color: Theme.of(context).colorScheme.surfaceContainer,
-                          ),
-                          _ => const Text(""),
-                        },
-                        const SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [ConnectionButton(), ActiveProxyDelayIndicator()],
-                                ),
-                              ),
-                              ActiveProxyFooter(),
-                            ],
+            Scaffold(
+              backgroundColor: Colors.transparent,
+              appBar: AppBar(
+                backgroundColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                toolbarHeight: switch (breakpoint.activeBreakpoint) {
+                  Breakpoints.mobile => 164,
+                  Breakpoints.tablet => 132,
+                  Breakpoints.desktop => 132,
+                },
+                centerTitle: false,
+                titleSpacing: 0,
+                actionsPadding: EdgeInsets.zero,
+                // leading: (RootScaffold.stateKey.currentState?.hasDrawer ?? false) && showDrawerButton(context)
+                //     ? DrawerButton(
+                //         onPressed: () {
+                //           RootScaffold.stateKey.currentState?.openDrawer();
+                //         },
+                //       )
+                //     : null,
+                title: const SizedBox.shrink(),
+                flexibleSpace: SafeArea(
+                  bottom: false,
+                  child: Stack(
+                    children: [
+                      Align(
+                        alignment: Alignment.topLeft,
+                        child: _HomeAppBarTitle(
+                          activeBreakpoint: breakpoint.activeBreakpoint,
+                          internetLabel: t.pages.home.internet,
+                          forYouLabel: t.pages.home.forYou,
+                          subscriptionName: subscriptionName,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 20, right: 20),
+                        child: Align(
+                          alignment: Alignment.topRight,
+                          child: Semantics(
+                            key: const ValueKey("profile_quick_settings"),
+                            label: t.pages.home.quickSettings,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(width: 22, height: 20),
+                              icon: Icon(Icons.tune_rounded, color: theme.colorScheme.onSurface),
+                              onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),
+                            ),
                           ),
                         ),
-                      ],
-                    ),
-                    // AsyncData() => switch (hasAnyProfile) {
-                    //     AsyncData(value: true) => const EmptyActiveProfileHomeBody(),
-                    //     _ => const EmptyProfilesHomeBody(),
-                    //   },
-                    // AsyncError(:final error) => SliverErrorBodyPlaceholder(t.presentShortError(error)),
-                    // _ => const SliverToBoxAdapter(),
-                    // },
-                  ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              body: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: 600, // Set the maximum width here
+                  ),
+                  child: CustomScrollView(
+                    slivers: [
+                      // switch (activeProfile) {
+                      // AsyncData(value: final profile?) =>
+                      MultiSliver(
+                        children: [
+                          // const Gap(100),
+                          switch (activeProfile) {
+                            AsyncData(value: final profile?) => ProfileTile(
+                              profile: profile,
+                              isMain: true,
+                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              color: Theme.of(context).colorScheme.surfaceContainer,
+                            ),
+                            _ => const Text(""),
+                          },
+                          const SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [ConnectionButton(), ActiveProxyDelayIndicator()],
+                                  ),
+                                ),
+                                ActiveProxyFooter(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      // AsyncData() => switch (hasAnyProfile) {
+                      //     AsyncData(value: true) => const EmptyActiveProfileHomeBody(),
+                      //     _ => const EmptyProfilesHomeBody(),
+                      //   },
+                      // AsyncError(:final error) => SliverErrorBodyPlaceholder(t.presentShortError(error)),
+                      // _ => const SliverToBoxAdapter(),
+                      // },
+                    ],
+                  ),
                 ),
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+}
+
+class _HomeAppBarTitle extends StatelessWidget {
+  const _HomeAppBarTitle({
+    required this.activeBreakpoint,
+    required this.internetLabel,
+    required this.forYouLabel,
+    required this.subscriptionName,
+  });
+
+  final Breakpoints activeBreakpoint;
+  final String internetLabel;
+  final String forYouLabel;
+  final String subscriptionName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final headingStyle = theme.textTheme.titleLarge?.copyWith(
+      fontFamily: "Unbounded",
+      fontWeight: FontWeight.w300,
+      fontSize: 32,
+      height: 27 / 32,
+    );
+    final nameStyle = theme.textTheme.titleLarge?.copyWith(
+      fontFamily: "Unbounded",
+      fontWeight: FontWeight.w700,
+      fontSize: 32,
+      height: 37 / 32,
+    );
+    final subscriptionUpper = subscriptionName.toUpperCase();
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, top: 20),
+      child: switch (activeBreakpoint) {
+        Breakpoints.mobile => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(internetLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
+            Text(forYouLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
+            Text(subscriptionUpper, maxLines: 1, overflow: TextOverflow.ellipsis, style: nameStyle),
+          ],
         ),
-      ),
+        Breakpoints.tablet || Breakpoints.desktop => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$internetLabel $forYouLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
+            Text(subscriptionUpper, maxLines: 1, overflow: TextOverflow.ellipsis, style: nameStyle),
+          ],
+        ),
+      },
     );
   }
 }

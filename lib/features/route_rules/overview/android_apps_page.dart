@@ -42,7 +42,7 @@ class AndroidAppsPage extends HookConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(t.pages.settings.routing.routeRule.androidApps.pageTitle),
+        title: Text(t.pages.settings.routing.routeRule.androidApps.pageTitle.toUpperCase()),
         actions: [
           PopupMenuButton(
             icon: const Icon(Icons.more_vert_rounded),

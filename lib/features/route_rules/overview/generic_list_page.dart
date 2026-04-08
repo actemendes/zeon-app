@@ -29,7 +29,7 @@ class GenericListPage extends HookConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(ruleEnum.present(t)),
+        title: Text(ruleEnum.present(t).toUpperCase()),
         actions: [
           IconButton(
             onPressed: list.isEmpty

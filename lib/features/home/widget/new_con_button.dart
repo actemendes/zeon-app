@@ -65,12 +65,6 @@ class CircleDesignWidget extends StatelessWidget {
                       return CustomPaint(
                         painter: CirclePainter(animationValue: animationValue, baseColor: value!),
                       );
-                      // return Assets.images.logo.svg(
-                      //   colorFilter: ColorFilter.mode(
-                      //     value!,
-                      //     BlendMode.srcIn,
-                      //   ),
-                      // );
                     },
                   ),
                 ),

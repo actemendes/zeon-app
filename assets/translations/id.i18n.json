@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "appTitle": "ZEON",
     "start": "Mulai",
@@ -93,7 +93,9 @@
   "pages": {
     "home": {
       "title": "Beranda",
-      "quickSettings": "Pengaturan cepat"
+      "quickSettings": "Pengaturan cepat",
+      "internet": "INTERNET",
+      "forYou": "FOR YOU"
     },
     "proxies": {
       "title": "Proxy",

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/adaptive_layout/my_adaptive_layout.dart';
-import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/custom_transition.dart';
 import 'package:hiddify/core/router/go_router/refresh_listenable.dart';
@@ -79,15 +78,8 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
         if (!introCompleted) {
           return url != null ? '/intro?url=$url' : '/intro';
         } else if (isIntro) {
-          if (url != null)
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(url: url),
-            );
           return '/home';
         } else if (url != null) {
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(url: url),
-          );
           return '/home';
         }
         return null;

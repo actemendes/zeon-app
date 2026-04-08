@@ -53,7 +53,7 @@ class LogsPage extends HookConsumerWidget with PresLogger {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(t.pages.logs.title),
+        title: Text(t.pages.logs.title.toUpperCase()),
         actions: [
           if (state.paused)
             IconButton(

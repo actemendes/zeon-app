@@ -171,12 +171,30 @@ flutter:
     - assets/images/connect_norouz.PNG
     - assets/images/disconnect_norouz.PNG
     - assets/images/world_map.png
+    - assets/images/2x/light-back@2x.png
+    - assets/images/2x/dark-back@2x.png
+    - assets/images/SVG/light-back.svg
+    - assets/images/SVG/dark-back.svg
+    - assets/images/SVG/logo-black.svg
+    - assets/images/SVG/logo-white.svg
     - assets/images/source/ic_launcher_border.png
 
   fonts:
     - family: Shabnam
       fonts:
         - asset: assets/fonts/Shabnam.ttf
+    - family: Unbounded
+      fonts:
+        - asset: assets/fonts/Unbounded-VariableFont_wght.ttf
+          weight: 300
+        - asset: assets/fonts/Unbounded-VariableFont_wght.ttf
+          weight: 500
+        - asset: assets/fonts/Unbounded-VariableFont_wght.ttf
+          weight: 700
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/Montserrat-Medium.ttf
+          weight: 500
     # - family: Roboto
     #   fonts:
     #     - asset: assets/fonts/Roboto.ttf

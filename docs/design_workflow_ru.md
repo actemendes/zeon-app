@@ -102,7 +102,7 @@ Flutter на Windows может падать, если путь содержит
 
 Пример:
 
-- В `home_page.dart` кнопка `+` вызывает `showAddProfile()`.
+- В `home_page.dart` кнопка `+` вызывает `showProfilesOverview()`.
 - Реализация модалки: `lib/core/router/bottom_sheets/bottom_sheets_notifier.dart`.
 
 ## 6) Что чаще всего менять дизайнеру
@@ -112,4 +112,3 @@ Flutter на Windows может падать, если путь содержит
 - Конкретный компонент-кнопка: файл соответствующего экрана (`features/.../widget/...`)
 - Поведение mobile vs desktop: `my_adaptive_layout.dart` + проверки `Breakpoint(...)`
 - Платформенные исключения: проверки `PlatformUtils.isAndroid/isIOS/isDesktop`
-

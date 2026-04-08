@@ -19,7 +19,7 @@ class RouteOptionsPage extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final perAppProxy = ref.watch(Preferences.perAppProxyMode).enabled;
     return Scaffold(
-      appBar: AppBar(title: Text(t.pages.settings.routing.title)),
+      appBar: AppBar(title: Text(t.pages.settings.routing.title.toUpperCase())),
       body: ListView(
         children: [
           if (PlatformUtils.isAndroid)

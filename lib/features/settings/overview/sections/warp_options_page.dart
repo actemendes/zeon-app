@@ -17,7 +17,7 @@ class WarpOptionsPage extends HookConsumerWidget {
     final warpOptions = ref.watch(warpOptionNotifierProvider);
     final isWarpEnabled = ref.watch(ConfigOptions.enableWarp);
     return Scaffold(
-      appBar: AppBar(title: Text(t.pages.settings.warp.title)),
+      appBar: AppBar(title: Text(t.pages.settings.warp.title.toUpperCase())),
       body: ListView(
         children: [
           SwitchListTile.adaptive(

@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/analytics/analytics_controller.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
@@ -16,7 +17,6 @@ import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/features/common/general_pref_tiles.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
-import 'package:hiddify/gen/assets.gen.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -38,6 +38,9 @@ class IntroPage extends HookConsumerWidget with PresLogger {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
+    final logoAsset = theme.brightness == Brightness.dark
+        ? 'assets/images/SVG/logo-black.svg'
+        : 'assets/images/SVG/logo-white.svg';
 
     final isStarting = useState(false);
 
@@ -80,7 +83,11 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                           ? IntroConst.maxwidth
                           : constraints.maxWidth;
                       final size = width * 0.4;
-                      return Assets.images.logo.svg(width: size, height: size);
+                      return SvgPicture.asset(
+                        logoAsset,
+                        width: size,
+                        height: size,
+                      );
                     },
                   ),
                   const Gap(16),
@@ -432,3 +439,4 @@ class RegionDetector {
     'campo_grande': 'BR',
   };
 }
+

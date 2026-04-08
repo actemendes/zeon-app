@@ -26,7 +26,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(t.pages.proxies.title),
+        title: Text(t.pages.proxies.title.toUpperCase()),
         actions: [
           PopupMenuButton<ProxiesSort>(
             initialValue: sortBy,

@@ -40,7 +40,7 @@ class RulesPage extends HookConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(t.pages.settings.routing.routeRule.title),
+        title: Text(t.pages.settings.routing.routeRule.title.toUpperCase()),
         actions: [
           PopupMenuButton(
             icon: const Icon(Icons.more_vert_rounded),

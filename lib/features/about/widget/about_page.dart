@@ -1,6 +1,7 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
@@ -11,7 +12,6 @@ import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/widget/adaptive_icon.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_notifier.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_state.dart';
-import 'package:hiddify/gen/assets.gen.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -23,6 +23,10 @@ class AboutPage extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final appInfo = ref.watch(appInfoProvider).requireValue;
     final appUpdate = ref.watch(appUpdateNotifierProvider);
+    final theme = Theme.of(context);
+    final logoAsset = theme.brightness == Brightness.dark
+        ? 'assets/images/SVG/logo-black.svg'
+        : 'assets/images/SVG/logo-white.svg';
 
     ref.listen(appUpdateNotifierProvider, (_, next) async {
       if (!context.mounted) return;
@@ -63,7 +67,7 @@ class AboutPage extends HookConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(t.pages.about.title),
+        title: Text(t.pages.about.title.toUpperCase()),
         actions: [
           PopupMenuButton(
             icon: Icon(AdaptiveIcon(context).more),
@@ -89,7 +93,7 @@ class AboutPage extends HookConsumerWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Assets.images.logo.svg(width: 64, height: 64),
+                  SvgPicture.asset(logoAsset, width: 64, height: 64),
                   const Gap(16),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,3 +146,4 @@ class AboutPage extends HookConsumerWidget {
     );
   }
 }
+

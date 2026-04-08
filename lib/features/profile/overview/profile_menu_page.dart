@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:hiddify/core/localization/translations.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-class ProfileMenuPage extends StatelessWidget {
+class ProfileMenuPage extends HookConsumerWidget {
   const ProfileMenuPage({super.key});
 
-  static const title = '\u041F\u0440\u043E\u0444\u0438\u043B\u044C';
   static const _sections = <({String title, IconData icon})>[
     (
       title: '\u041F\u0440\u0438\u0433\u043B\u0430\u0441\u0438\u0442\u044C \u0434\u0440\u0443\u0433\u0430',
@@ -19,9 +20,10 @@ class ProfileMenuPage extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(translationsProvider).requireValue;
     return Scaffold(
-      appBar: AppBar(title: const Text(title)),
+      appBar: AppBar(title: Text(t.pages.profileDetails.title.toUpperCase())),
       body: CustomMultiChildLayout(
         delegate: _ProfileMenuLayoutDelegate(),
         children: [

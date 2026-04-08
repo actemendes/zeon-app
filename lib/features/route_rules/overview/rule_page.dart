@@ -50,7 +50,7 @@ class RulePage extends HookConsumerWidget {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(t.pages.settings.routing.routeRule.rule.title),
+          title: Text(t.pages.settings.routing.routeRule.rule.title.toUpperCase()),
           actions: [
             IconButton(
               onPressed: isRuleEdited

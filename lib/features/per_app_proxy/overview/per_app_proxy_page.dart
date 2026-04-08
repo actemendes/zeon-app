@@ -147,7 +147,7 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
               ),
             )
           : AppBar(
-              title: Text(t.pages.settings.routing.perAppProxy.title),
+              title: Text(t.pages.settings.routing.perAppProxy.title.toUpperCase()),
               actions: [
                 IconButton(
                   icon: const Icon(FluentIcons.search_24_regular),

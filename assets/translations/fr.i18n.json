@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "appTitle": "ZEON",
     "start": "Commencer",
@@ -93,7 +93,9 @@
   "pages": {
     "home": {
       "title": "Accueil",
-      "quickSettings": "Réglages rapides"
+      "quickSettings": "Réglages rapides",
+      "internet": "INTERNET",
+      "forYou": "FOR YOU"
     },
     "proxies": {
       "title": "Proxys",

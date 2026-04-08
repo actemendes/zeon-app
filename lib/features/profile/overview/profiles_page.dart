@@ -3,7 +3,6 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
-import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
@@ -26,7 +25,7 @@ class ProfilesPage extends HookConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(t.pages.profiles.title),
+        title: Text(t.pages.profiles.title.toUpperCase()),
         actions: [
           IconButton(
             onPressed: () => ref.read(foregroundProfilesUpdateNotifierProvider.notifier).trigger(),
@@ -40,11 +39,6 @@ class ProfilesPage extends HookConsumerWidget {
           ),
           const Gap(8),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async => await ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(),
-        label: Text(t.pages.profiles.add),
-        icon: const Icon(Icons.add_rounded),
       ),
       body: asyncProfiles.when(
         data: (data) => ListView.separated(
