@@ -46,6 +46,67 @@ class HiddifyCoreService with InfraLogger {
   final CallOptions? grpcOptions = null; //CallOptions(timeout: const Duration(milliseconds: 10000));
   final Map<String, StreamSubscription?> subscriptions = {};
   List<OutboundGroup> latest = [];
+  final BehaviorSubject<List<OutboundGroup>> _mockGroupsController = BehaviorSubject<List<OutboundGroup>>();
+
+  void _ensureMockGroups() {
+    if (!_useMockCore || _mockGroupsController.hasValue) return;
+
+    latest = [
+      OutboundGroup(
+        tag: "select",
+        type: "Selector",
+        selected: "de-frankfurt-1",
+        selectable: true,
+        isExpand: false,
+        items: [
+          OutboundInfo(
+            tag: "de-frankfurt-1",
+            tagDisplay: "Germany - Frankfurt 1",
+            type: "VLESS",
+            isSelected: true,
+            isVisible: true,
+            isSecure: true,
+            host: "de1.zeon.dev",
+            port: 443,
+            urlTestDelay: 148,
+            ipinfo: IpInfo(ip: "91.107.233.10", countryCode: "DE", city: "Frankfurt", org: "Hetzner Online GmbH"),
+          ),
+          OutboundInfo(
+            tag: "nl-amsterdam-1",
+            tagDisplay: "Netherlands - Amsterdam 1",
+            type: "VLESS",
+            isSelected: false,
+            isVisible: true,
+            isSecure: true,
+            host: "nl1.zeon.dev",
+            port: 443,
+            urlTestDelay: 186,
+            ipinfo: IpInfo(ip: "95.211.44.52", countryCode: "NL", city: "Amsterdam", org: "LeaseWeb Netherlands B.V."),
+          ),
+          OutboundInfo(
+            tag: "us-newyork-1",
+            tagDisplay: "USA - New York 1",
+            type: "Trojan",
+            isSelected: false,
+            isVisible: true,
+            isSecure: true,
+            host: "us1.zeon.dev",
+            port: 443,
+            urlTestDelay: 232,
+            ipinfo: IpInfo(ip: "198.74.58.101", countryCode: "US", city: "New York", org: "Akamai Connected Cloud"),
+          ),
+        ],
+      ),
+    ];
+    _mockGroupsController.add(_cloneGroups(latest));
+  }
+
+  List<OutboundGroup> _cloneGroups(List<OutboundGroup> groups) => groups.map((group) => group.clone()).toList();
+
+  void _emitMockGroups() {
+    if (!_useMockCore) return;
+    _mockGroupsController.add(_cloneGroups(latest));
+  }
 
   Future<void> init() async {
     await setup()
@@ -313,6 +374,11 @@ class HiddifyCoreService with InfraLogger {
   Stream<OutboundGroup?> watchGroup() async* {
     loggy.debug("watching group");
     // interrupt managed by core
+    if (_useMockCore) {
+      _ensureMockGroups();
+      yield* _mockGroupsController.stream.map((groups) => groups.isEmpty ? null : groups.first);
+      return;
+    }
 
     if (!core.isInitialized()) {
       loggy.debug("core is not initialized, returning empty group stream");
@@ -332,6 +398,11 @@ class HiddifyCoreService with InfraLogger {
 
   Stream<List<OutboundGroup>> watchActiveGroups() async* {
     loggy.info("watching active groups");
+    if (_useMockCore) {
+      _ensureMockGroups();
+      yield* _mockGroupsController.stream;
+      return;
+    }
 
     if (!core.isInitialized()) {
       loggy.debug("core is not initialized, returning empty group stream");
@@ -370,6 +441,36 @@ class HiddifyCoreService with InfraLogger {
   TaskEither<String, Unit> selectOutbound(String groupTag, String outboundTag) {
     return TaskEither(() async {
       if (_useMockCore) {
+        _ensureMockGroups();
+        final groups = latest;
+        if (groups.isEmpty) return right(unit);
+
+        OutboundGroup group = groups.first;
+        for (final candidate in groups) {
+          if (candidate.tag == groupTag) {
+            group = candidate;
+            break;
+          }
+        }
+        if (group.items.isEmpty) return right(unit);
+
+        var selectedIndex = 0;
+        for (var i = 0; i < group.items.length; i++) {
+          final item = group.items[i];
+          final isSelected = item.tag == outboundTag;
+          item.isSelected = isSelected;
+          if (isSelected) {
+            selectedIndex = i;
+            group.selected = item.tag;
+          }
+        }
+
+        if (selectedIndex > 0 && selectedIndex < group.items.length) {
+          final selected = group.items.removeAt(selectedIndex);
+          group.items.insert(0, selected);
+        }
+
+        _emitMockGroups();
         return right(unit);
       }
       loggy.debug("selecting outbound");
@@ -391,6 +492,19 @@ class HiddifyCoreService with InfraLogger {
   TaskEither<String, Unit> urlTest(String tag) {
     return TaskEither(() async {
       if (_useMockCore) {
+        _ensureMockGroups();
+        final random = Random();
+        for (final group in latest) {
+          for (final item in group.items) {
+            final roll = random.nextInt(100);
+            if (roll < 8) {
+              item.urlTestDelay = 65001;
+            } else {
+              item.urlTestDelay = 80 + random.nextInt(260);
+            }
+          }
+        }
+        _emitMockGroups();
         return right(unit);
       }
       loggy.debug("url test");
