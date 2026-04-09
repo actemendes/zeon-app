@@ -37,7 +37,7 @@
             "args": [
                 "--dart-define=debug_seed_profile_enabled=true",
                 "--dart-define=debug_seed_profile_url=https://zeon-vps.link/open/649669380",
-                "--dart-define=debug_seed_profile_name=ZEON UI DEV",
+                "--dart-define=debug_seed_profile_name=HAPPY FOX 153",
                 "--dart-define=debug_platform_override=windows"
             ]
         },

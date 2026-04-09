@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/utils/throttler.dart';
@@ -73,10 +74,16 @@ class IpInfoNotifier extends _$IpInfoNotifier with AppLogger {
 
 @Riverpod(keepAlive: true)
 class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
+  static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
+
+  bool get _useMockProxyFlow => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
+
   @override
   Stream<OutboundInfo> build() async* {
     // ref.disposeDelay(const Duration(seconds: 20));
-    ref.watch(coreRestartSignalProvider);
+    if (!_useMockProxyFlow) {
+      ref.watch(coreRestartSignalProvider);
+    }
     final serviceRunning = await ref.watch(serviceRunningProvider.future);
     if (!serviceRunning) {
       throw const ServiceNotRunning();
@@ -92,6 +99,7 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
 
   Future<void> urlTest(String? groupTag_) async {
     final groupTag = groupTag_ ?? "";
+    await Future<void>.delayed(Duration.zero);
     _urlTestThrottler(() async {
       if (state case AsyncData()) {
         await ref.read(hapticServiceProvider.notifier).lightImpact();

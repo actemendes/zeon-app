@@ -103,9 +103,18 @@ class HiddifyCoreService with InfraLogger {
 
   List<OutboundGroup> _cloneGroups(List<OutboundGroup> groups) => groups.map((group) => group.clone()).toList();
 
-  void _emitMockGroups() {
+  void _emitMockGroups({bool deferred = false}) {
     if (!_useMockCore) return;
-    _mockGroupsController.add(_cloneGroups(latest));
+    final payload = _cloneGroups(latest);
+    if (deferred) {
+      Future<void>.microtask(() {
+        if (!_mockGroupsController.isClosed) {
+          _mockGroupsController.add(payload);
+        }
+      });
+      return;
+    }
+    _mockGroupsController.add(payload);
   }
 
   Future<void> init() async {
@@ -118,7 +127,9 @@ class HiddifyCoreService with InfraLogger {
         })
         .map((_) {
           loggy.info("Hiddify-core setup done");
-          ref.read(coreRestartSignalProvider.notifier).restart();
+          if (!_useMockCore) {
+            ref.read(coreRestartSignalProvider.notifier).restart();
+          }
         })
         .run();
   }
@@ -376,7 +387,12 @@ class HiddifyCoreService with InfraLogger {
     // interrupt managed by core
     if (_useMockCore) {
       _ensureMockGroups();
-      yield* _mockGroupsController.stream.map((groups) => groups.isEmpty ? null : groups.first);
+      yield* _mockGroupsController.stream
+          .asyncMap((groups) async {
+            await Future<void>.delayed(Duration.zero);
+            return groups;
+          })
+          .map((groups) => groups.isEmpty ? null : groups.first);
       return;
     }
 
@@ -400,7 +416,10 @@ class HiddifyCoreService with InfraLogger {
     loggy.info("watching active groups");
     if (_useMockCore) {
       _ensureMockGroups();
-      yield* _mockGroupsController.stream;
+      yield* _mockGroupsController.stream.asyncMap((groups) async {
+        await Future<void>.delayed(Duration.zero);
+        return groups;
+      });
       return;
     }
 
@@ -470,7 +489,7 @@ class HiddifyCoreService with InfraLogger {
           group.items.insert(0, selected);
         }
 
-        _emitMockGroups();
+        _emitMockGroups(deferred: true);
         return right(unit);
       }
       loggy.debug("selecting outbound");
@@ -504,7 +523,7 @@ class HiddifyCoreService with InfraLogger {
             }
           }
         }
-        _emitMockGroups();
+        _emitMockGroups(deferred: true);
         return right(unit);
       }
       loggy.debug("url test");

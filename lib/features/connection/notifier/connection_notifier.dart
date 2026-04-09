@@ -60,12 +60,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         await reconnect(next);
       }
     });
-    ref.watch(coreRestartSignalProvider);
-
     if (_useMockConnectionFlow) {
       yield const Disconnected();
       return;
     }
+    ref.watch(coreRestartSignalProvider);
 
     yield* _connectionRepo.watchConnectionStatus().doOnData((event) {
       if (event case Disconnected(connectionFailure: final _?) when PlatformUtils.isDesktop) {

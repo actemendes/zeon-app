@@ -6,7 +6,6 @@ import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/features/home/widget/connection_button.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hiddify/features/profile/widget/profile_tile.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_card.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_delay_indicator.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -40,11 +39,7 @@ class HomePage extends HookConsumerWidget {
                   alignment: Alignment.topCenter,
                   child: Opacity(
                     opacity: 1,
-                    child: Image.asset(
-                      backgroundMapAsset,
-                      height: constraints.maxHeight,
-                      fit: BoxFit.fitHeight,
-                    ),
+                    child: Image.asset(backgroundMapAsset, height: constraints.maxHeight, fit: BoxFit.fitHeight),
                   ),
                 ),
               ),
@@ -113,21 +108,9 @@ class HomePage extends HookConsumerWidget {
                   ),
                   child: CustomScrollView(
                     slivers: [
-                      // switch (activeProfile) {
-                      // AsyncData(value: final profile?) =>
                       MultiSliver(
-                        children: [
-                          // const Gap(100),
-                          switch (activeProfile) {
-                            AsyncData(value: final profile?) => ProfileTile(
-                              profile: profile,
-                              isMain: true,
-                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              color: Theme.of(context).colorScheme.surfaceContainer,
-                            ),
-                            _ => const Text(""),
-                          },
-                          const SliverFillRemaining(
+                        children: const [
+                          SliverFillRemaining(
                             hasScrollBody: false,
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -145,13 +128,6 @@ class HomePage extends HookConsumerWidget {
                           ),
                         ],
                       ),
-                      // AsyncData() => switch (hasAnyProfile) {
-                      //     AsyncData(value: true) => const EmptyActiveProfileHomeBody(),
-                      //     _ => const EmptyProfilesHomeBody(),
-                      //   },
-                      // AsyncError(:final error) => SliverErrorBodyPlaceholder(t.presentShortError(error)),
-                      // _ => const SliverToBoxAdapter(),
-                      // },
                     ],
                   ),
                 ),

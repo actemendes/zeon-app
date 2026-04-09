@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
-import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/features/settings/notifier/warp_option/warp_option_notifier.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -36,26 +34,6 @@ class QuickSettingsModal extends HookConsumerWidget {
                     .toList(),
                 selected: {ref.watch(ConfigOptions.serviceMode)},
                 onSelectionChanged: (newSet) => ref.read(ConfigOptions.serviceMode.notifier).update(newSet.first),
-              ),
-            ),
-            const Gap(12),
-            ListTile(
-              leading: const Icon(Icons.cloud_rounded),
-              title: Text(ref.watch(ConfigOptions.warpDetourMode).presentExplain(t)),
-              onLongPress: () {
-                context.pop();
-                context.goNamed('warpOptions');
-              },
-              onTap: () async {
-                final value = ref.watch(ConfigOptions.enableWarp);
-                await ref.read(ConfigOptions.enableWarp.notifier).update(!value);
-              },
-              trailing: Switch.adaptive(
-                value: ref.watch(ConfigOptions.enableWarp),
-                onChanged: (value) async {
-                  await ref.read(ConfigOptions.enableWarp.notifier).update(value);
-                  // await ref.read(warpOptionNotifierProvider.notifier).genWarps();
-                },
               ),
             ),
             // ListTile(
