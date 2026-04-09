@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +20,7 @@ import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
 
 import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dart';
+import 'package:hiddify/features/profile/data/debug_profile_bootstrap_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
@@ -85,13 +85,24 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   Logger.bootstrap.info(appInfo.format());
 
   await _init("profile repository", () => container.read(profileRepositoryProvider.future));
+  final profileRepository = container.read(profileRepositoryProvider).requireValue;
+  final profileDataSource = container.read(profileDataSourceProvider);
+  final preferences = container.read(sharedPreferencesProvider).requireValue;
+
   final mobileBootstrapImportService = MobileBootstrapImportService(
     httpClient: container.read(httpClientProvider),
-    profileRepository: container.read(profileRepositoryProvider).requireValue,
-    preferences: container.read(sharedPreferencesProvider).requireValue,
+    profileRepository: profileRepository,
+    preferences: preferences,
   );
   await _safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 45000);
   unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
+  final debugProfileBootstrapService = DebugProfileBootstrapService(
+    environment: env,
+    profileRepository: profileRepository,
+    profileDataSource: profileDataSource,
+    preferences: preferences,
+  );
+  await _safeInit("debug profile bootstrap", () => debugProfileBootstrapService.run(), timeout: 10000);
 
   await _init("translations", () => container.read(translationsProvider.future));
 

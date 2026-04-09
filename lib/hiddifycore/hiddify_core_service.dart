@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:grpc/grpc.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
@@ -32,6 +33,9 @@ import 'package:rxdart/rxdart.dart';
 class HiddifyCoreService with InfraLogger {
   HiddifyCoreService(this.ref);
   final Ref ref;
+  static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
+
+  bool get _useMockCore => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
 
   // CoreHiddifyCoreService() {}
   final core = getCoreInterface();
@@ -66,6 +70,9 @@ class HiddifyCoreService with InfraLogger {
 
   TaskEither<String, Unit> validateConfigByPath(String path, String tempPath, bool debug) {
     return TaskEither(() async {
+      if (_useMockCore) {
+        return right(unit);
+      }
       try {
         final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
         if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
@@ -80,6 +87,9 @@ class HiddifyCoreService with InfraLogger {
 
   TaskEither<String, String> generateFullConfigByPath(String path) {
     return TaskEither(() async {
+      if (_useMockCore) {
+        return right("{}");
+      }
       final response = await core.fgClient.parse(ParseRequest(configPath: path, debug: false));
       if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
       return right(response.content);
@@ -88,6 +98,11 @@ class HiddifyCoreService with InfraLogger {
 
   TaskEither<String, Unit> setup() {
     return TaskEither(() async {
+      if (_useMockCore) {
+        currentState = const CoreStatus.stopped();
+        statusController.add(currentState);
+        return right(unit);
+      }
       try {
         final directories = ref.read(appDirectoriesProvider).requireValue;
         final debug = ref.read(debugModeNotifierProvider);
@@ -114,6 +129,9 @@ class HiddifyCoreService with InfraLogger {
 
   TaskEither<String, Unit> changeOptions(SingboxConfigOption options) {
     return TaskEither(() async {
+      if (_useMockCore) {
+        return right(unit);
+      }
       loggy.debug("changing options");
       // latestOptions = options;
       try {
@@ -138,6 +156,12 @@ class HiddifyCoreService with InfraLogger {
 
   TaskEither<ConnectionFailure, Unit> start(String path, String name, bool disableMemoryLimit) {
     return TaskEither(() async {
+      if (_useMockCore) {
+        statusController.add(currentState = const CoreStatus.starting());
+        await Future<void>.delayed(const Duration(milliseconds: 180));
+        statusController.add(currentState = const CoreStatus.started());
+        return right(unit);
+      }
       statusController.add(currentState = const CoreStatus.starting());
       loggy.debug("starting");
       final background = await core.setupBackground(path, name);
@@ -203,6 +227,12 @@ class HiddifyCoreService with InfraLogger {
 
   TaskEither<String, Unit> stop() {
     return TaskEither(() async {
+      if (_useMockCore) {
+        statusController.add(currentState = const CoreStatus.stopping());
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        statusController.add(currentState = const CoreStatus.stopped());
+        return right(unit);
+      }
       loggy.debug("stopping");
       var errMsg = "";
       try {
@@ -226,6 +256,12 @@ class HiddifyCoreService with InfraLogger {
 
   TaskEither<String, Unit> restart(String path, String name, bool disableMemoryLimit) {
     return TaskEither(() async {
+      if (_useMockCore) {
+        statusController.add(currentState = const CoreStatus.starting());
+        await Future<void>.delayed(const Duration(milliseconds: 140));
+        statusController.add(currentState = const CoreStatus.started());
+        return right(unit);
+      }
       loggy.debug("restarting");
       // if (!await core.restart(path, name)) {
       try {
@@ -318,7 +354,10 @@ class HiddifyCoreService with InfraLogger {
   //
   // Stream<SingboxStatus> watchStatus() => _status;
 
-  ResponseStream<SystemInfo> watchStats() {
+  Stream<SystemInfo> watchStats() {
+    if (_useMockCore || !core.isInitialized()) {
+      return const Stream<SystemInfo>.empty();
+    }
     loggy.debug("watching stats");
     try {
       return core.bgClient.getSystemInfoStream(Empty());
@@ -330,6 +369,9 @@ class HiddifyCoreService with InfraLogger {
 
   TaskEither<String, Unit> selectOutbound(String groupTag, String outboundTag) {
     return TaskEither(() async {
+      if (_useMockCore) {
+        return right(unit);
+      }
       loggy.debug("selecting outbound");
       try {
         final res = await core.bgClient.selectOutbound(
@@ -348,6 +390,9 @@ class HiddifyCoreService with InfraLogger {
 
   TaskEither<String, Unit> urlTest(String tag) {
     return TaskEither(() async {
+      if (_useMockCore) {
+        return right(unit);
+      }
       loggy.debug("url test");
       try {
         final res = await core.bgClient.urlTest(UrlTestRequest(tag: tag));
@@ -433,6 +478,13 @@ class HiddifyCoreService with InfraLogger {
   }
 
   Stream<CoreStatus> watchStatus() async* {
+    if (_useMockCore) {
+      if (!statusController.hasValue) {
+        statusController.add(currentState = const CoreStatus.stopped());
+      }
+      yield* statusController.stream;
+      return;
+    }
     await startListeningStatus("bg", core.bgClient);
     yield* statusController.stream;
     // .endWith(const CoreStatus.stopped());

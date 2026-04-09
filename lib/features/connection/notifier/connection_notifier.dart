@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
@@ -22,9 +23,15 @@ part 'connection_notifier.g.dart';
 
 @Riverpod(keepAlive: true)
 class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
+  static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
+
+  bool get _useMockConnectionFlow => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
+
+  int _mockConnectAttempts = 0;
+
   @override
   Stream<ConnectionStatus> build() async* {
-    if (Platform.isIOS) {
+    if (!kIsWeb && Platform.isIOS) {
       await _connectionRepo.setup().mapLeft((l) {
         loggy.error("error setting up connection repository", l);
       }).run();
@@ -36,7 +43,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         if (next case AsyncData(value: final Connected _)) {
           await ref.read(hapticServiceProvider.notifier).heavyImpact();
 
-          if (Platform.isAndroid && !ref.read(Preferences.storeReviewedByUser)) {
+          if (!kIsWeb && Platform.isAndroid && !ref.read(Preferences.storeReviewedByUser)) {
             if (await InAppReview.instance.isAvailable()) {
               InAppReview.instance.requestReview();
               ref.read(Preferences.storeReviewedByUser.notifier).update(true);
@@ -54,6 +61,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       }
     });
     ref.watch(coreRestartSignalProvider);
+
+    if (_useMockConnectionFlow) {
+      yield const Disconnected();
+      return;
+    }
 
     yield* _connectionRepo.watchConnectionStatus().doOnData((event) {
       if (event case Disconnected(connectionFailure: final _?) when PlatformUtils.isDesktop) {
@@ -99,6 +111,10 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         loggy.info("no active profile, disconnecting");
         return _disconnect();
       }
+      if (_useMockConnectionFlow) {
+        loggy.info("mock reconnect");
+        return _mockReconnectFlow();
+      }
       loggy.info("active profile changed, reconnecting");
       await ref.read(Preferences.startedByUser.notifier).update(true);
       await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit)).mapLeft((err) async {
@@ -136,6 +152,10 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   }
 
   Future<void> _connectThrottled() async {
+    if (_useMockConnectionFlow) {
+      await _mockConnectFlow();
+      return;
+    }
     final activeProfile = await ref.read(activeProfileProvider.future);
     if (activeProfile == null) {
       loggy.info("no active profile, not connecting");
@@ -159,6 +179,10 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   }
 
   Future<void> _disconnect() async {
+    if (_useMockConnectionFlow) {
+      await _mockDisconnectFlow();
+      return;
+    }
     await _connectionRepo.disconnect().mapLeft((err) {
       loggy.warning("error disconnecting", err);
       ref
@@ -166,6 +190,43 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
           .showCustomAlertFromErr(err.present(ref.read(translationsProvider).requireValue));
       state = AsyncError(err, StackTrace.current);
     }).run();
+  }
+
+  Future<void> _mockConnectFlow() async {
+    final activeProfile = await ref.read(activeProfileProvider.future);
+    if (activeProfile == null) {
+      loggy.info("mock connect skipped: no active profile");
+      return;
+    }
+
+    state = const AsyncData(Connecting());
+    await Future<void>.delayed(const Duration(milliseconds: 2500));
+
+    _mockConnectAttempts += 1;
+    final shouldFail = _mockConnectAttempts % 3 == 0;
+    if (shouldFail) {
+      const err = ConnectionFailure.unexpected("Mock connection failed");
+      await ref.read(Preferences.startedByUser.notifier).update(false);
+      await ref
+          .read(dialogNotifierProvider.notifier)
+          .showCustomAlertFromErr(err.present(ref.read(translationsProvider).requireValue));
+      state = AsyncError(err, StackTrace.current);
+      return;
+    }
+
+    state = const AsyncData(Connected());
+  }
+
+  Future<void> _mockDisconnectFlow() async {
+    state = const AsyncData(Disconnecting());
+    await Future<void>.delayed(const Duration(milliseconds: 2200));
+    state = const AsyncData(Disconnected());
+  }
+
+  Future<void> _mockReconnectFlow() async {
+    state = const AsyncData(Connecting());
+    await Future<void>.delayed(const Duration(milliseconds: 2400));
+    state = const AsyncData(Connected());
   }
 }
 

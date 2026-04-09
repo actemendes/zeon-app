@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -22,6 +23,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 class ConnectionButton extends HookConsumerWidget {
   const ConnectionButton({super.key});
 
+  static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
+
+  bool get _useMockConnectionUi => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
@@ -40,9 +45,12 @@ class ConnectionButton extends HookConsumerWidget {
       secureLabel = "";
     }
 
+    final connectedWithoutDelay = _useMockConnectionUi && connectionStatus.value == const Connected();
+
     final visualState = switch (connectionStatus) {
       AsyncData(value: Connecting()) || AsyncData(value: Disconnecting()) => _ConnectionButtonVisualState.loading,
-      AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => _ConnectionButtonVisualState.loading,
+      AsyncData(value: Connected()) when !connectedWithoutDelay && (delay <= 0 || delay >= 65000) =>
+        _ConnectionButtonVisualState.loading,
       AsyncData(value: Connected()) => _ConnectionButtonVisualState.connected,
       AsyncLoading() => _ConnectionButtonVisualState.loading,
       _ => _ConnectionButtonVisualState.off,
@@ -80,8 +88,10 @@ class ConnectionButton extends HookConsumerWidget {
       },
       label: switch (connectionStatus) {
         AsyncData(value: Connected()) when requiresReconnect == true => t.connection.reconnect,
-        AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => t.connection.connecting,
+        AsyncData(value: Connected()) when !connectedWithoutDelay && (delay <= 0 || delay >= 65000) =>
+          t.connection.connecting,
         AsyncData(value: final status) => status.present(t),
+        AsyncError() => t.errors.connection.connectionError,
         _ => "",
       },
       image: switch (connectionStatus) {
@@ -275,9 +285,7 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
   Widget build(BuildContext context) {
     final animation = Listenable.merge([_spinController, _settleController]);
     final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
-    final logoAssetPath = isDarkTheme
-        ? 'assets/images/SVG/logo-black.svg'
-        : 'assets/images/SVG/logo-white.svg';
+    final logoAssetPath = isDarkTheme ? 'assets/images/SVG/logo-black.svg' : 'assets/images/SVG/logo-white.svg';
 
     return Material(
       color: Colors.transparent,
@@ -453,4 +461,3 @@ class _ConnectionRingPainter extends CustomPainter {
         settleProgress != oldDelegate.settleProgress;
   }
 }
-

@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/utils/platform_utils.dart';
@@ -16,13 +15,22 @@ enum ServiceMode {
 
   final String key;
 
+  static const _debugPlatformOverride = String.fromEnvironment("debug_platform_override");
+  static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
+
+  static bool get _isWebDebugWindows =>
+      kIsWeb && kDebugMode && _debugSeedProfileEnabled && _debugPlatformOverride.toLowerCase() == "windows";
+
   static ServiceMode get defaultMode => PlatformUtils.isDesktop ? systemProxy : tun;
 
   /// supported service mode based on platform, use this instead of [values] in UI
   static List<ServiceMode> get choices {
-    if (Platform.isWindows || Platform.isLinux) {
+    if (_isWebDebugWindows) {
       return values;
-    } else if (Platform.isMacOS) {
+    }
+    if (PlatformUtils.isWindows || PlatformUtils.isLinux) {
+      return values;
+    } else if (PlatformUtils.isMacOS) {
       return [proxy, systemProxy, tun];
     }
     // mobile
