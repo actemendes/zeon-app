@@ -8,12 +8,14 @@ const Color _lightSurfaceAlt = Color(0xFFD6E1E5);
 const Color _lightAccentPrimary = Color(0xFF3CE74F);
 const Color _lightAccentSecondary = Color(0xFFBFDD71);
 const Color _lightText = Color(0xFF3B444D);
+const Color _lightNavigationIndicator = Color(0xFF586972);
 
 const Color _darkBackground = Color(0xFF000000);
 const Color _darkSurfaceAlt = Color(0xFF1A1B1F);
 const Color _darkAccentPrimary = Color(0xFF3CE74F);
 const Color _darkAccentSecondary = Color(0xFFBFDD71);
 const Color _darkText = Color(0xFFC3C6CF);
+const Color _darkNavigationIndicator = Color(0xFF333333);
 
 const ColorScheme _lightColorScheme = ColorScheme(
   brightness: Brightness.light,
@@ -94,6 +96,7 @@ class AppTheme {
       navBarColor: _lightText,
       navBarSelectedColor: _lightAccentPrimary,
       navBarUnselectedColor: _lightBackground.withValues(alpha: .82),
+      navBarIndicatorColor: _lightNavigationIndicator,
     );
   }
 
@@ -103,6 +106,7 @@ class AppTheme {
       navBarColor: _darkSurfaceAlt,
       navBarSelectedColor: _darkAccentPrimary,
       navBarUnselectedColor: _darkText.withValues(alpha: .82),
+      navBarIndicatorColor: _darkNavigationIndicator,
     );
   }
 
@@ -142,6 +146,7 @@ class AppTheme {
     required Color navBarColor,
     required Color navBarSelectedColor,
     required Color navBarUnselectedColor,
+    required Color navBarIndicatorColor,
   }) {
     final base = ThemeData(
       useMaterial3: true,
@@ -176,7 +181,7 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: navBarColor,
-        indicatorColor: scheme.secondary,
+        indicatorColor: navBarIndicatorColor,
         surfaceTintColor: Colors.transparent,
         iconTheme: MaterialStateProperty.resolveWith((states) {
           final color = states.contains(MaterialState.selected) ? navBarSelectedColor : navBarUnselectedColor;
@@ -192,7 +197,7 @@ class AppTheme {
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: navBarColor,
-        indicatorColor: scheme.secondary,
+        indicatorColor: navBarIndicatorColor,
         selectedIconTheme: IconThemeData(color: navBarSelectedColor),
         unselectedIconTheme: IconThemeData(color: navBarUnselectedColor),
         selectedLabelTextStyle: textTheme.labelMedium?.copyWith(color: navBarSelectedColor, fontWeight: FontWeight.w600),

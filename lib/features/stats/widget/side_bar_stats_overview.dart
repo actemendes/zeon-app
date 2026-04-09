@@ -73,12 +73,12 @@ class SideBarStatsOverview extends HookConsumerWidget {
                   title: t.components.stats.trafficLive,
                   stats: [
                     (
-                      label: const Text("↑", style: TextStyle(color: Colors.green)),
+                      label: const Text("↑", style: TextStyle(color: Colors.white)),
                       data: Text(stats.uplink.toInt().speed()),
                       semanticLabel: t.components.stats.uplink,
                     ),
                     (
-                      label: Text("↓", style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                      label: Text("↓", style: TextStyle(color: Colors.white)),
                       data: Text(stats.downlink.toInt().speed()),
                       semanticLabel: t.components.stats.downlink,
                     ),
@@ -89,12 +89,12 @@ class SideBarStatsOverview extends HookConsumerWidget {
                   title: t.components.stats.trafficTotal,
                   stats: [
                     (
-                      label: const Text("↑", style: TextStyle(color: Colors.green)),
+                      label: const Text("↑", style: TextStyle(color: Colors.white)),
                       data: Text(stats.uplinkTotal.toInt().size()),
                       semanticLabel: t.components.stats.uplink,
                     ),
                     (
-                      label: Text("↓", style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                      label: Text("↓", style: TextStyle(color: Colors.white)),
                       data: Text(stats.downlinkTotal.toInt().size()),
                       semanticLabel: t.components.stats.downlink,
                     ),
