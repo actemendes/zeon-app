@@ -45,6 +45,7 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final fabForegroundColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : null;
     final t = ref.watch(translationsProvider).requireValue;
     final localizations = MaterialLocalizations.of(context);
 
@@ -282,12 +283,14 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
             ),
       floatingActionButton: showScrollToTop.value
           ? FloatingActionButton(
+              foregroundColor: fabForegroundColor,
               onPressed: () =>
                   scrollController.animateTo(0.0, duration: const Duration(milliseconds: 500), curve: Curves.easeOut),
-              child: const Icon(Icons.keyboard_arrow_up_rounded),
+              child: Icon(Icons.keyboard_arrow_up_rounded, color: fabForegroundColor),
             )
           : (ref.watch(ConfigOptions.region) != Region.other)
           ? FloatingActionButton.extended(
+              foregroundColor: fabForegroundColor,
               onPressed: () async =>
                   await ref.read(bottomSheetsNotifierProvider.notifier).showAutoAppsSelection(mode: mode!),
               label: Text(t.pages.settings.routing.perAppProxy.autoSelection.title),
@@ -295,6 +298,7 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
                 ref.watch(Preferences.autoAppsSelectionRegion) == null
                     ? Icons.toggle_off_outlined
                     : Icons.toggle_on_rounded,
+                color: fabForegroundColor,
               ),
             )
           : null,

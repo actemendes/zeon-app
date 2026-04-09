@@ -161,6 +161,13 @@
     },
     "profileDetails": {
       "title": "Профиль",
+      "menu": {
+        "inviteFriend": "Пригласить друга",
+        "news": "Новости",
+        "paymentHistory": "История платежей",
+        "community": "Сообщество",
+        "support": "Поддержка"
+      },
       "lastUpdate": "Последнее обновление",
       "form": {
         "nameHint": "Имя профиля",

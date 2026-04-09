@@ -158,6 +158,13 @@
     },
     "profileDetails": {
       "title": "Profile",
+      "menu": {
+        "inviteFriend": "Invite a friend",
+        "news": "News",
+        "paymentHistory": "Payment history",
+        "community": "Community",
+        "support": "Support"
+      },
       "lastUpdate": "Last update",
       "form": {
         "nameHint": "Profile name",

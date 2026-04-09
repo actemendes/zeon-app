@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_Слой_2" data-name="Слой 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 365.55 80.34">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: none;
+        stroke: #1ae958;
+        stroke-miterlimit: 10;
+        stroke-width: 3px;
+      }
+
+      .cls-2, .cls-3 {
+        fill: #dae5eb;
+      }
+
+      .cls-2, .cls-4 {
+        font-family: Montserrat-Medium, Montserrat;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .cls-5 {
+        fill: #3b444d;
+      }
+
+      .cls-6, .cls-4 {
+        fill: #1ae958;
+      }
+    </style>
+  </defs>
+  <g id="_Слой_2-2" data-name="Слой 2">
+    <g>
+      <rect class="cls-5" x="121.85" width="121.85" height="80.34"/>
+      <rect class="cls-1" x="129.64" y="5.27" width="103.26" height="69.81" rx="16" ry="16"/>
+      <rect class="cls-6" x="170.78" y="15.35" width="24" height="24" rx="12" ry="12"/>
+      <text class="cls-4" transform="translate(147.85 64.99)"><tspan x="0" y="0">Профиль</tspan></text>
+      <rect class="cls-5" width="121.85" height="80.34"/>
+      <rect class="cls-3" x="48.93" y="15.35" width="24" height="24" rx="12" ry="12"/>
+      <text class="cls-2" transform="translate(26 64.99)"><tspan x="0" y="0">Профиль</tspan></text>
+      <rect class="cls-5" x="243.7" width="121.85" height="80.34"/>
+      <rect class="cls-3" x="292.63" y="15.35" width="24" height="24" rx="12" ry="12"/>
+      <text class="cls-2" transform="translate(269.7 64.99)"><tspan x="0" y="0">Профиль</tspan></text>
+    </g>
+  </g>
+</svg>

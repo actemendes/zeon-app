@@ -5,23 +5,17 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 class ProfileMenuPage extends HookConsumerWidget {
   const ProfileMenuPage({super.key});
 
-  static const _sections = <({String title, IconData icon})>[
-    (
-      title: '\u041F\u0440\u0438\u0433\u043B\u0430\u0441\u0438\u0442\u044C \u0434\u0440\u0443\u0433\u0430',
-      icon: Icons.person_add_alt_rounded,
-    ),
-    (title: '\u041D\u043E\u0432\u043E\u0441\u0442\u0438', icon: Icons.newspaper_rounded),
-    (
-      title: '\u0418\u0441\u0442\u043E\u0440\u0438\u044F \u043F\u043B\u0430\u0442\u0435\u0436\u0435\u0439',
-      icon: Icons.history_rounded,
-    ),
-    (title: '\u0421\u043E\u043E\u0431\u0449\u0435\u0441\u0442\u0432\u043E', icon: Icons.groups_rounded),
-    (title: '\u041F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0430', icon: Icons.support_agent_rounded),
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    final sections = <({String title, IconData icon})>[
+      (title: t.pages.profileDetails.menu.inviteFriend, icon: Icons.person_add_alt_rounded),
+      (title: t.pages.profileDetails.menu.news, icon: Icons.newspaper_rounded),
+      (title: t.pages.profileDetails.menu.paymentHistory, icon: Icons.history_rounded),
+      (title: t.pages.profileDetails.menu.community, icon: Icons.groups_rounded),
+      (title: t.pages.profileDetails.menu.support, icon: Icons.support_agent_rounded),
+    ];
+
     return Scaffold(
       appBar: AppBar(title: Text(t.pages.profileDetails.title.toUpperCase())),
       body: CustomMultiChildLayout(
@@ -31,9 +25,9 @@ class ProfileMenuPage extends HookConsumerWidget {
             id: _ProfileMenuSlot.actions,
             child: ListView.builder(
               padding: EdgeInsets.zero,
-              itemCount: _sections.length,
+              itemCount: sections.length,
               itemBuilder: (context, index) {
-                final section = _sections[index];
+                final section = sections[index];
                 return _ProfileMenuSection(title: section.title, icon: section.icon);
               },
             ),

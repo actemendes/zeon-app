@@ -38,6 +38,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
+    final fabForegroundColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : null;
     final logoAsset = theme.brightness == Brightness.dark
         ? 'assets/images/SVG/logo-black.svg'
         : 'assets/images/SVG/logo-white.svg';
@@ -83,11 +84,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                           ? IntroConst.maxwidth
                           : constraints.maxWidth;
                       final size = width * 0.4;
-                      return SvgPicture.asset(
-                        logoAsset,
-                        width: size,
-                        height: size,
-                      );
+                      return SvgPicture.asset(logoAsset, width: size, height: size);
                     },
                   ),
                   const Gap(16),
@@ -178,10 +175,22 @@ class IntroPage extends HookConsumerWidget with PresLogger {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        foregroundColor: fabForegroundColor,
         icon: isStarting.value
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator())
-            : const Icon(Icons.rocket_launch),
-        label: Text(t.common.start, style: theme.textTheme.titleMedium),
+            ? SizedBox(
+                width: 24,
+                height: 24,
+                child: fabForegroundColor == null
+                    ? const CircularProgressIndicator()
+                    : CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(fabForegroundColor)),
+              )
+            : Icon(Icons.rocket_launch, color: fabForegroundColor),
+        label: Text(
+          t.common.start,
+          style: fabForegroundColor == null
+              ? theme.textTheme.titleMedium
+              : theme.textTheme.titleMedium?.copyWith(color: fabForegroundColor),
+        ),
         onPressed: () async {
           if (isStarting.value) return;
           isStarting.value = true;
@@ -439,4 +448,3 @@ class RegionDetector {
     'campo_grande': 'BR',
   };
 }
-

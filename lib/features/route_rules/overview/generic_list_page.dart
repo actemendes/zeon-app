@@ -17,6 +17,8 @@ class GenericListPage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    final theme = Theme.of(context);
+    final fabForegroundColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : null;
     final provider = genericListNotifierProvider(ruleListOrder, ruleEnum);
     final list = ref.watch(provider);
 
@@ -49,11 +51,16 @@ class GenericListPage extends HookConsumerWidget {
         ],
       ),
       floatingActionButton: list.isNotEmpty
-          ? FloatingActionButton(onPressed: addNewValue, child: const Icon(Icons.add_rounded))
+          ? FloatingActionButton(
+              foregroundColor: fabForegroundColor,
+              onPressed: addNewValue,
+              child: Icon(Icons.add_rounded, color: fabForegroundColor),
+            )
           : FloatingActionButton.extended(
+              foregroundColor: fabForegroundColor,
               onPressed: addNewValue,
               label: Text(t.pages.settings.routing.routeRule.genericList.addNew),
-              icon: const Icon(Icons.add_rounded),
+              icon: Icon(Icons.add_rounded, color: fabForegroundColor),
             ),
       body: ListView.builder(
         itemBuilder: (context, index) => GenericListTile(

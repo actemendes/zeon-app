@@ -204,6 +204,22 @@ class AppTheme {
         selectedColor: scheme.onSurface,
         selectedTileColor: scheme.secondaryContainer,
       ),
+      switchTheme: SwitchThemeData(
+        thumbColor: MaterialStateProperty.resolveWith((states) {
+          if (states.contains(MaterialState.selected) && scheme.brightness == Brightness.light) {
+            return navBarColor;
+          }
+          return null;
+        }),
+        trackColor: MaterialStateProperty.resolveWith((states) {
+          if (!states.contains(MaterialState.selected)) {
+            return scheme.brightness == Brightness.light ? _lightSurfaceAlt : _darkSurfaceAlt;
+          }
+          return null;
+        }),
+        trackOutlineColor: const MaterialStatePropertyAll<Color>(Colors.transparent),
+        trackOutlineWidth: const MaterialStatePropertyAll<double>(0),
+      ),
       dividerColor: scheme.outlineVariant,
       cardColor: scheme.surface,
     );

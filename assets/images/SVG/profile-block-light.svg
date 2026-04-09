@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_Слой_2" data-name="Слой 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 357.03 64.6">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #969696;
+        font-family: Montserrat-Medium, Montserrat;
+        font-size: 14px;
+      }
+
+      .cls-1, .cls-2 {
+        font-weight: 500;
+      }
+
+      .cls-3 {
+        letter-spacing: 0em;
+      }
+
+      .cls-4 {
+        fill: url(#_Безымянный_градиент_17);
+      }
+
+      .cls-2 {
+        fill: #43474e;
+        font-family: Unbounded-Medium, Unbounded;
+        font-size: 18px;
+        font-variation-settings: 'wght' 500;
+      }
+
+      .cls-5 {
+        letter-spacing: 0em;
+      }
+
+      .cls-6 {
+        letter-spacing: 0em;
+      }
+
+      .cls-7 {
+        fill: #d6e1e5;
+      }
+
+      .cls-8 {
+        fill: none;
+        stroke: #3a444d;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 2px;
+      }
+    </style>
+    <linearGradient id="_Безымянный_градиент_17" data-name="Безымянный градиент 17" x1="292.42" y1="32.3" x2="357.03" y2="32.3" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#bfdd71"/>
+      <stop offset="1" stop-color="#3ce74f"/>
+    </linearGradient>
+  </defs>
+  <g id="_Слой_2-2" data-name="Слой 2">
+    <g>
+      <rect class="cls-7" width="357.03" height="64.6" rx="16" ry="16"/>
+      <g>
+        <text class="cls-2" transform="translate(67.65 29.13)"><tspan x="0" y="0">P</tspan><tspan class="cls-6" x="14.33" y="0">R</tspan><tspan x="29.14" y="0">OFILE NAME</tspan></text>
+        <text class="cls-1" transform="translate(67.65 48.91)"><tspan x="0" y="0">О</tspan><tspan class="cls-5" x="11.87" y="0">с</tspan><tspan x="19.77" y="0">талось: {</tspan><tspan class="cls-3" x="80.77" y="0">c</tspan><tspan x="88.65" y="0">ount} дней</tspan></text>
+      </g>
+      <rect class="cls-4" x="292.42" y="0" width="64.6" height="64.6" rx="16" ry="16"/>
+      <path class="cls-8" d="M309.71,46.85h29.15M309.71,17.7v22.9h29.15v-22.9l-7.29,8.33-7.29-8.33-7.29,8.33-7.29-8.33Z"/>
+    </g>
+  </g>
+</svg>

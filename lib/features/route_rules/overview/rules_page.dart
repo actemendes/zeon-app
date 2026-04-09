@@ -12,6 +12,8 @@ class RulesPage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    final theme = Theme.of(context);
+    final fabForegroundColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : null;
     final rules = ref.watch(rulesNotifierProvider);
     final menuItems = <PopupMenuEntry>[
       PopupMenuItem(
@@ -51,13 +53,15 @@ class RulesPage extends HookConsumerWidget {
       ),
       floatingActionButton: rules.isNotEmpty
           ? FloatingActionButton(
+              foregroundColor: fabForegroundColor,
               onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const RulePage())),
-              child: const Icon(Icons.add_rounded),
+              child: Icon(Icons.add_rounded, color: fabForegroundColor),
             )
           : FloatingActionButton.extended(
+              foregroundColor: fabForegroundColor,
               onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const RulePage())),
               label: Text(t.pages.settings.routing.routeRule.createRule),
-              icon: const Icon(Icons.add_rounded),
+              icon: Icon(Icons.add_rounded, color: fabForegroundColor),
             ),
       body: ReorderableListView.builder(
         buildDefaultDragHandles: false,

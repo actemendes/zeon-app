@@ -16,6 +16,8 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    final theme = Theme.of(context);
+    final fabForegroundColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : null;
 
     final proxies = ref.watch(proxiesOverviewNotifierProvider);
     final sortBy = ref.watch(proxiesSortNotifierProvider);
@@ -41,9 +43,10 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        foregroundColor: fabForegroundColor,
         onPressed: () async => await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
         tooltip: t.pages.proxies.testDelay,
-        child: const Icon(FluentIcons.flash_24_filled),
+        child: Icon(FluentIcons.flash_24_filled, color: fabForegroundColor),
       ),
       body: proxies.when(
         data: (group) => group != null
