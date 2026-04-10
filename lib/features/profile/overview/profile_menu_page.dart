@@ -1,47 +1,46 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 const avatarEmojis = [
-  "🦊",
-  "🐺",
-  "🐼",
-  "🐯",
-  "🦁",
-  "🐸",
-  "🐙",
-  "🦉",
-  "🐵",
-  "🐨",
-  "🐧",
-  "🐳",
-  "🦄",
-  "🐝",
-  "🦋",
-  "🐢",
-  "🦖",
-  "🐲",
-  "🍋",
-  "🍀",
-  "🌙",
-  "⭐",
-  "⚡",
-  "🔥",
-  "🧊",
-  "🌊",
-  "🌿",
-  "🍉",
-  "🍕",
-  "☕",
-  "🎧",
-  "🕹️",
-  "💾",
-  "🧩",
-  "🔧",
-  "🛰️",
+  '\u{1F98A}', // 🦊
+  '\u{1F43A}', // 🐺
+  '\u{1F43C}', // 🐼
+  '\u{1F42F}', // 🐯
+  '\u{1F981}', // 🦁
+  '\u{1F438}', // 🐸
+  '\u{1F419}', // 🐙
+  '\u{1F989}', // 🦉
+  '\u{1F435}', // 🐵
+  '\u{1F428}', // 🐨
+  '\u{1F427}', // 🐧
+  '\u{1F433}', // 🐳
+  '\u{1F984}', // 🦄
+  '\u{1F41D}', // 🐝
+  '\u{1F98B}', // 🦋
+  '\u{1F422}', // 🐢
+  '\u{1F996}', // 🦖
+  '\u{1F432}', // 🐲
+  '\u{1F34B}', // 🍋
+  '\u{1F340}', // 🍀
+  '\u{1F319}', // 🌙
+  '\u{2B50}', // ⭐
+  '\u{26A1}', // ⚡
+  '\u{1F525}', // 🔥
+  '\u{1F9CA}', // 🧊
+  '\u{1F30A}', // 🌊
+  '\u{1F33F}', // 🌿
+  '\u{1F349}', // 🍉
+  '\u{1F355}', // 🍕
+  '\u{2615}', // ☕
+  '\u{1F3A7}', // 🎧
+  '\u{1F579}\u{FE0F}', // 🕹️
+  '\u{1F4BE}', // 💾
+  '\u{1F9E9}', // 🧩
+  '\u{1F527}', // 🔧
+  '\u{1F6F0}\u{FE0F}', // 🛰️
 ];
 
 int fnv1a32(String input) {
@@ -146,9 +145,9 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
 
   static const double height = _ProfileSummaryBlock.height;
   static const _backgroundAsset = 'assets/images/1x/cta-background.png';
-  static const _arrowAsset = 'assets/images/SVG/cta-profile-arrow.svg';
   static const _textHorizontalPadding = 20.0;
   static const _arrowSize = 24.0;
+  static const _arrowVisualScale = 1.18;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -167,7 +166,6 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
     final title = (remainingDays > 0 ? t.pages.profileDetails.cta.renew : t.pages.profileDetails.cta.updatePlan)
         .toUpperCase();
     final arrowColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
-    final arrowColorFilter = ColorFilter.mode(arrowColor, BlendMode.srcIn);
     final titleColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
 
     return Material(
@@ -203,7 +201,12 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
                 ),
                 SizedBox.square(
                   dimension: _arrowSize,
-                  child: SvgPicture.asset(_arrowAsset, colorFilter: arrowColorFilter),
+                  child: Center(
+                    child: Transform.scale(
+                      scale: _arrowVisualScale,
+                      child: Icon(Icons.arrow_outward, size: _arrowSize, color: arrowColor),
+                    ),
+                  ),
                 ),
               ],
             ),

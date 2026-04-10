@@ -203,15 +203,23 @@ class _ConnectionButtonFace extends StatefulWidget {
 class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with TickerProviderStateMixin {
   late final AnimationController _spinController;
   late final AnimationController _settleController;
+  late final AnimationController _loadingVisibilityController;
 
   bool _pressed = false;
   double _settleStartTurns = 0;
+  double _frozenTurns = 0;
 
   @override
   void initState() {
     super.initState();
     _spinController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
     _settleController = AnimationController(vsync: this, duration: const Duration(milliseconds: 620));
+    _loadingVisibilityController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+      reverseDuration: const Duration(milliseconds: 200),
+    );
+    _loadingVisibilityController.value = widget.visualState == _ConnectionButtonVisualState.loading ? 1 : 0;
     _syncAnimationState(previous: null);
   }
 
@@ -233,6 +241,11 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
       case _ConnectionButtonVisualState.loading:
         _settleController.stop();
         _settleController.value = 0;
+        if (previous != _ConnectionButtonVisualState.loading) {
+          _loadingVisibilityController.forward(from: 0);
+        } else {
+          _loadingVisibilityController.value = 1;
+        }
         if (!_spinController.isAnimating) {
           _spinController.repeat();
         }
@@ -241,14 +254,24 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
         final comesFromLoading = previous == _ConnectionButtonVisualState.loading;
         if (comesFromLoading) {
           _settleStartTurns = _spinController.value;
+          _frozenTurns = _settleStartTurns;
+          _loadingVisibilityController.value = 1;
           _spinController.stop();
           _settleController.forward(from: 0);
         } else {
           _spinController.stop();
           _settleController.value = 1;
+          _loadingVisibilityController.value = 0;
         }
         return;
       case _ConnectionButtonVisualState.off:
+        final comesFromLoading = previous == _ConnectionButtonVisualState.loading;
+        if (comesFromLoading) {
+          _frozenTurns = _spinController.value;
+          _loadingVisibilityController.reverse(from: _loadingVisibilityController.value);
+        } else {
+          _loadingVisibilityController.value = 0;
+        }
         _spinController.stop();
         _settleController.stop();
         _settleController.value = 0;
@@ -264,6 +287,9 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
       final eased = Curves.easeOutCubic.transform(_settleController.value);
       return _settleStartTurns + (1 - eased) * 0.35;
     }
+    if (widget.visualState == _ConnectionButtonVisualState.off && _loadingVisibilityController.value > 0) {
+      return _frozenTurns;
+    }
     return 0;
   }
 
@@ -274,16 +300,27 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
     return 0;
   }
 
+  double _loadingProgress() {
+    if (widget.visualState == _ConnectionButtonVisualState.loading) {
+      return _loadingVisibilityController.value;
+    }
+    if (widget.visualState == _ConnectionButtonVisualState.off) {
+      return _loadingVisibilityController.value;
+    }
+    return 0;
+  }
+
   @override
   void dispose() {
     _spinController.dispose();
     _settleController.dispose();
+    _loadingVisibilityController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final animation = Listenable.merge([_spinController, _settleController]);
+    final animation = Listenable.merge([_spinController, _settleController, _loadingVisibilityController]);
     final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
     final logoAssetPath = isDarkTheme ? 'assets/images/SVG/logo-black.svg' : 'assets/images/SVG/logo-white.svg';
 
@@ -326,6 +363,7 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
                     painter: _ConnectionRingPainter(
                       state: widget.visualState,
                       isDarkTheme: isDarkTheme,
+                      loadingProgress: _loadingProgress(),
                       rotationTurns: _rotationTurns(),
                       settleProgress: _settleProgress(),
                     ),
@@ -379,12 +417,14 @@ class _ConnectionRingPainter extends CustomPainter {
   const _ConnectionRingPainter({
     required this.state,
     required this.isDarkTheme,
+    required this.loadingProgress,
     required this.rotationTurns,
     required this.settleProgress,
   });
 
   final _ConnectionButtonVisualState state;
   final bool isDarkTheme;
+  final double loadingProgress;
   final double rotationTurns;
   final double settleProgress;
 
@@ -393,9 +433,10 @@ class _ConnectionRingPainter extends CustomPainter {
   static const double _innerRadius = 68.13;
   static const double _ringWidth = _outerRadius - _innerRadius;
   static const double _ringRadius = (_outerRadius + _innerRadius) / 2;
-  static const double _arcGap = 1.15;
+  static const double _arcGap = math.pi / 2;
   static const double _openSweep = (2 * math.pi) - _arcGap;
   static const double _startAngle = math.pi * .46;
+  static const double _capMorphStartProgress = .58;
 
   static const Color _lightOffColor = Color(0xFFD6E1E5);
   static const Color _darkOffColor = Color(0xFF1A1B1F);
@@ -425,28 +466,45 @@ class _ConnectionRingPainter extends CustomPainter {
 
     final arcRect = Rect.fromCircle(center: center, radius: _ringRadius);
     final rotation = rotationTurns * (2 * math.pi);
+    final loadingVisibility = Curves.easeOutCubic.transform(loadingProgress.clamp(0, 1));
 
-    if (state == _ConnectionButtonVisualState.loading) {
+    if ((state == _ConnectionButtonVisualState.loading || state == _ConnectionButtonVisualState.off) &&
+        loadingVisibility > 0.001) {
       final loadingPaint = Paint()
         ..isAntiAlias = true
         ..style = PaintingStyle.stroke
         ..strokeWidth = _ringWidth
         ..strokeCap = StrokeCap.round
         ..shader = _connectionGradient.createShader(gradientRect);
-      canvas.drawArc(arcRect, _startAngle + rotation, _openSweep, false, loadingPaint);
+      canvas.drawArc(arcRect, _startAngle + rotation, _openSweep * loadingVisibility, false, loadingPaint);
     } else if (state == _ConnectionButtonVisualState.connected && settleProgress < 1) {
       final easedProgress = Curves.easeOutCubic.transform(settleProgress);
       final remainingGap = _arcGap * (1 - easedProgress);
-
       if (remainingGap > 0.0001) {
+        final capMorph = Curves.easeInOutCubic.transform(
+          ((easedProgress - _capMorphStartProgress) / (1 - _capMorphStartProgress)).clamp(0.0, 1.0),
+        );
+        final capRadius = (_ringWidth / 2) * (1 - capMorph);
+        final gapStartAngle = _startAngle + rotation + _openSweep;
+        final gapEndAngle = gapStartAngle + remainingGap;
         final gapPaint = Paint()
           ..isAntiAlias = true
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = _ringWidth
-          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.fill
           ..color = offColor;
-        final gapStartAngle = _startAngle + rotation + _openSweep;
-        canvas.drawArc(arcRect, gapStartAngle, remainingGap, false, gapPaint);
+
+        final gapPath = Path()
+          ..arcTo(Rect.fromCircle(center: center, radius: _outerRadius), gapStartAngle, remainingGap, false)
+          ..arcTo(Rect.fromCircle(center: center, radius: _innerRadius), gapEndAngle, -remainingGap, false)
+          ..close();
+
+        canvas.drawPath(gapPath, gapPaint);
+
+        if (capRadius > 0.0001) {
+          final startCapCenter = center + Offset(math.cos(gapStartAngle), math.sin(gapStartAngle)) * _ringRadius;
+          final endCapCenter = center + Offset(math.cos(gapEndAngle), math.sin(gapEndAngle)) * _ringRadius;
+          canvas.drawCircle(startCapCenter, capRadius, gapPaint);
+          canvas.drawCircle(endCapCenter, capRadius, gapPaint);
+        }
       }
     }
 
@@ -457,6 +515,7 @@ class _ConnectionRingPainter extends CustomPainter {
   bool shouldRepaint(covariant _ConnectionRingPainter oldDelegate) {
     return state != oldDelegate.state ||
         isDarkTheme != oldDelegate.isDarkTheme ||
+        loadingProgress != oldDelegate.loadingProgress ||
         rotationTurns != oldDelegate.rotationTurns ||
         settleProgress != oldDelegate.settleProgress;
   }

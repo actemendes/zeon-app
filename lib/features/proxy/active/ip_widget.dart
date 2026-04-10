@@ -20,11 +20,20 @@ final _showIp = StateProvider.autoDispose((ref) {
 });
 
 class IPText extends HookConsumerWidget {
-  const IPText({required this.ip, required this.onLongPress, this.constrained = false, super.key});
+  const IPText({
+    required this.ip,
+    required this.onLongPress,
+    this.constrained = false,
+    this.padding = const EdgeInsets.symmetric(horizontal: 2),
+    this.textColor,
+    super.key,
+  });
 
   final String ip;
   final VoidCallback onLongPress;
   final bool constrained;
+  final EdgeInsetsGeometry padding;
+  final Color? textColor;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,6 +42,7 @@ class IPText extends HookConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     final ipStyle = (constrained ? textTheme.labelMedium : textTheme.labelLarge)?.copyWith(
       fontFamily: FontFamily.emoji,
+      color: textColor,
     );
 
     return Semantics(
@@ -44,7 +54,7 @@ class IPText extends HookConsumerWidget {
         onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
+          padding: padding,
           child: AnimatedCrossFade(
             firstChild: Text(ip, style: ipStyle, textDirection: TextDirection.ltr, overflow: TextOverflow.ellipsis),
             secondChild: Padding(
@@ -67,17 +77,26 @@ class IPText extends HookConsumerWidget {
 }
 
 class UnknownIPText extends HookConsumerWidget {
-  const UnknownIPText({required this.text, required this.onTap, this.constrained = false, super.key});
+  const UnknownIPText({
+    required this.text,
+    required this.onTap,
+    this.constrained = false,
+    this.padding = const EdgeInsets.symmetric(horizontal: 2),
+    this.textColor,
+    super.key,
+  });
 
   final String text;
   final VoidCallback onTap;
   final bool constrained;
+  final EdgeInsetsGeometry padding;
+  final Color? textColor;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final textTheme = Theme.of(context).textTheme;
-    final style = constrained ? textTheme.bodySmall : textTheme.labelMedium;
+    final style = (constrained ? textTheme.bodySmall : textTheme.labelMedium)?.copyWith(color: textColor);
 
     return Semantics(
       label: t.pages.proxies.ipInfo.address,
@@ -85,7 +104,7 @@ class UnknownIPText extends HookConsumerWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
+          padding: padding,
           child: Text(text, style: style, overflow: TextOverflow.ellipsis),
         ),
       ),
@@ -128,7 +147,7 @@ class IPCountryFlag extends HookConsumerWidget {
                     CircleFlag(
                       // key: ValueKey(countryCode),
                       countryCode!.toLowerCase() == "ir" ? "ir-shir" : countryCode!,
-                      size: size - 8,
+                      size: size,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8), // Rounded effect
                       ),
