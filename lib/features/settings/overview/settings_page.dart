@@ -10,23 +10,28 @@ import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 enum ConfigOptionSection {
-  warp,
   fragment;
 
-  static final _warpKey = GlobalKey(debugLabel: "warp-section-key");
   static final _fragmentKey = GlobalKey(debugLabel: "fragment-section-key");
 
   GlobalKey get key => switch (this) {
-    ConfigOptionSection.warp => _warpKey,
     ConfigOptionSection.fragment => _fragmentKey,
   };
 }
 
 class SettingsPage extends HookConsumerWidget {
   SettingsPage({super.key, String? section})
-    : section = section != null ? ConfigOptionSection.values.byName(section) : null;
+    : section = _parseSection(section);
 
   final ConfigOptionSection? section;
+
+  static ConfigOptionSection? _parseSection(String? section) {
+    if (section == null) return null;
+    for (final value in ConfigOptionSection.values) {
+      if (value.name == section) return value;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -165,11 +170,6 @@ class SettingsPage extends HookConsumerWidget {
             title: t.pages.settings.tlsTricks.title,
             icon: Icons.content_cut_rounded,
             namedLocation: context.namedLocation('tlsTricks'),
-          ),
-          SettingsSection(
-            title: t.pages.settings.warp.title,
-            icon: Icons.cloud_rounded,
-            namedLocation: context.namedLocation('warpOptions'),
           ),
           if (PlatformUtils.isIOS)
             Material(

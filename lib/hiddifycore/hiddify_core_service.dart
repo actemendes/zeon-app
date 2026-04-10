@@ -659,8 +659,7 @@ class HiddifyCoreService with InfraLogger {
   }
 
   Future<void> startListeningLogs(String key, CoreClient cc) async {
-    final logLevel = ref.read(ConfigOptions.logLevel);
-    final coreLogLevel = getCoreLogLevel(logLevel);
+    final coreLogLevel = getCoreLogLevel(config_log_level.LogLevel.warn);
     final listenKey = "${key}LogListener";
     // await stopListenSingle(listenKey);
     await listenSingle<LogMessage>(listenKey, () {

@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:hiddify/core/analytics/analytics_controller.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
 import 'package:hiddify/core/http_client/http_client_provider.dart';
@@ -48,11 +47,6 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
 
   final appInfo = await _init("app info", () => container.read(appInfoProvider.future));
   await _init("preferences", () => container.read(sharedPreferencesProvider.future));
-
-  final enableAnalytics = await container.read(analyticsControllerProvider.future);
-  if (enableAnalytics) {
-    await _init("analytics", () => container.read(analyticsControllerProvider.notifier).enableAnalytics());
-  }
 
   await _init("preferences migration", () async {
     try {
