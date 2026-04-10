@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/proxy/active/ip_widget.dart';
 import 'package:hiddify/gen/fonts.gen.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-class ProxyTile extends HookConsumerWidget with PresLogger {
+class ProxyTile extends StatelessWidget with PresLogger {
   const ProxyTile(this.proxy, {super.key, required this.selected, required this.onTap});
 
   final OutboundInfo proxy;
@@ -15,53 +13,81 @@ class ProxyTile extends HookConsumerWidget with PresLogger {
   final GestureTapCallback? onTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final themeTextColor = theme.textTheme.bodyLarge?.color ?? theme.colorScheme.onSurface;
+    final selectedTextColor = isDark ? themeTextColor : theme.colorScheme.onPrimaryContainer;
+
+    final primaryColor = selected ? selectedTextColor : themeTextColor;
+    final secondaryColor = primaryColor.withValues(alpha: .8);
+    final iconColor = selected ? selectedTextColor : themeTextColor;
+    final tileColor = selected ? theme.colorScheme.primaryContainer : Colors.transparent;
+    final typeDescription = proxy.isGroup && proxy.groupSelectedTagDisplay.trim().isNotEmpty
+        ? '${proxy.type} (${proxy.groupSelectedTagDisplay.trim()})'
+        : proxy.type;
+    final hasDelay = proxy.urlTestDelay != 0;
+    final hasNoPing = proxy.urlTestDelay > 65000;
+    final hasDownload = proxy.download > 0;
 
     return ListTile(
-      // shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      title: Text(
-        proxy.tagDisplay,
-        overflow: TextOverflow.ellipsis,
-        style: PlatformUtils.isWindows ? const TextStyle(fontFamily: FontFamily.emoji) : null,
-      ),
-      leading: IPCountryFlag(
-        countryCode: proxy.ipinfo.countryCode,
-        organization: proxy.ipinfo.org,
-        size: 40,
-        padding: const EdgeInsetsDirectional.only(end: 8),
-      ),
-      subtitle: Text.rich(
-        TextSpan(
-          text: proxy.type,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      tileColor: tileColor,
+      selected: selected,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      minTileHeight: 64,
+      minLeadingWidth: 40,
+      horizontalTitleGap: 12,
+      title: SizedBox(
+        height: 40,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (proxy.isGroup)
-              TextSpan(
-                text: ' (${proxy.groupSelectedTagDisplay.trim()})',
-                style: Theme.of(context).textTheme.bodySmall,
+            Text(
+              proxy.tagDisplay,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: primaryColor,
+                fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
               ),
+            ),
+            Text(
+              typeDescription,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(color: secondaryColor),
+            ),
           ],
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       ),
-      trailing: Column(
-        children: [
-          if (proxy.urlTestDelay != 0)
-            Text(
-              proxy.urlTestDelay > 65000 ? "×" : proxy.urlTestDelay.toString(),
-              style: TextStyle(color: delayColor(context, proxy.urlTestDelay)),
-            ),
-
-          if (proxy.download > 0) Text("⬩", style: Theme.of(context).textTheme.bodySmall),
-        ],
-      ),
-
-      selected: selected,
-      selectedTileColor: theme.colorScheme.primaryContainer,
+      leading: IPCountryFlag(countryCode: proxy.ipinfo.countryCode, size: 40),
+      trailing: hasDelay || hasDownload
+          ? SizedBox(
+              width: 44,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (hasDelay)
+                    Text(
+                      hasNoPing ? "\u00D7" : proxy.urlTestDelay.toString(),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: delayColor(context, proxy.urlTestDelay),
+                        fontSize: hasNoPing ? 16 : null,
+                        height: hasNoPing ? 1 : null,
+                      ),
+                    ),
+                  if (hasDelay && hasDownload) const SizedBox(height: 2),
+                  if (hasDownload) Icon(Icons.download_rounded, size: 16, color: iconColor.withValues(alpha: .85)),
+                ],
+              ),
+            )
+          : null,
       onTap: onTap,
-      onLongPress: () async => await ref.read(dialogNotifierProvider.notifier).showProxyInfo(outboundInfo: proxy),
-      horizontalTitleGap: 4,
     );
   }
 

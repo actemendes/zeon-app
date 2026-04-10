@@ -55,7 +55,8 @@ int fnv1a32(String input) {
 String pickAvatarEmoji(String? profileName) {
   final raw = (profileName ?? '').trim();
   final normalized = raw.isEmpty ? 'user' : raw;
-  final hash = fnv1a32('v1|$normalized');
+  final stable = normalized.toLowerCase().replaceAll(RegExp(r'[\s\-]+'), '_').replaceAll(RegExp('_+'), '_');
+  final hash = fnv1a32('v1|$stable');
   return avatarEmojis[hash % avatarEmojis.length];
 }
 

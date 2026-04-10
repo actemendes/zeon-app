@@ -55,11 +55,13 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                   final width = constraints.maxWidth;
                   final crossAxisCount = PlatformUtils.isMobile && width < 600 ? 1 : max(1, (width / 268).floor());
                   return GridView.builder(
-                    padding: const EdgeInsets.only(bottom: 86),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 86),
                     itemCount: group.items.length,
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: crossAxisCount,
-                      mainAxisExtent: 72,
+                      mainAxisExtent: 64,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
                     ),
                     itemBuilder: (context, index) {
                       final proxy = group.items[index];

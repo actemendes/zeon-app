@@ -450,7 +450,7 @@
         "allowConnectionFromLan": "Поделиться VPN в локальной сети"
       },
       "tlsTricks": {
-        "title": "Трюки TLS",
+        "title": "Фрагментация",
         "enable": "Включить фрагментацию",
         "packets": "Пакеты фрагментации",
         "packetsTlsHello": "TLS Hello",

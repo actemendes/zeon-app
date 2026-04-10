@@ -16,14 +16,10 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final connectionState = ref.watch(
-      connectionNotifierProvider.select(
-        (value) => value.valueOrNull ?? const Disconnected(),
-      ),
+      connectionNotifierProvider.select((value) => value.valueOrNull ?? const Disconnected()),
     );
 
-    final activeProxy = ref.watch(
-      activeProxyNotifierProvider.select((value) => value.valueOrNull),
-    );
+    final activeProxy = ref.watch(activeProxyNotifierProvider.select((value) => value.valueOrNull));
     final t = ref.watch(translationsProvider).requireValue;
 
     // Early return if required data is not available
@@ -32,18 +28,11 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
     }
 
     final theme = Theme.of(context);
-    final navBarBackground =
-        theme.navigationBarTheme.backgroundColor ?? theme.colorScheme.surface;
+    final navBarBackground = theme.navigationBarTheme.backgroundColor ?? theme.colorScheme.surface;
     final navBarTextColor =
-        theme.navigationBarTheme.labelTextStyle
-            ?.resolve(const <WidgetState>{})
-            ?.color ??
-        theme.colorScheme.onSurface;
+        theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
     final navBarIconColor =
-        theme.navigationBarTheme.iconTheme
-            ?.resolve(const <WidgetState>{})
-            ?.color ??
-        theme.colorScheme.onSurface;
+        theme.navigationBarTheme.iconTheme?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
 
     // Handle URL test in a way that won't trigger during build
     Future<void> handleUrlTest() async {
@@ -83,16 +72,10 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                 InkWell(
                   onTap: () async {
                     await handleUrlTest();
-                    await ref
-                        .read(dialogNotifierProvider.notifier)
-                        .showProxyInfo(outboundInfo: activeProxy);
+                    await ref.read(dialogNotifierProvider.notifier).showProxyInfo(outboundInfo: activeProxy);
                   },
                   borderRadius: BorderRadius.circular(20),
-                  child: IPCountryFlag(
-                    countryCode: activeProxy.ipinfo.countryCode,
-                    organization: activeProxy.ipinfo.org,
-                    size: 40,
-                  ),
+                  child: IPCountryFlag(countryCode: activeProxy.ipinfo.countryCode, size: 40),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -153,8 +136,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
 
 String getRealOutboundTag(OutboundInfo group) {
   var tag = group.tagDisplay;
-  if (group.groupSelectedTagDisplay != "" &&
-      group.groupSelectedTagDisplay != tag) {
+  if (group.groupSelectedTagDisplay != "" && group.groupSelectedTagDisplay != tag) {
     tag = "$tag → ${group.groupSelectedTagDisplay}";
   }
   return tag;
