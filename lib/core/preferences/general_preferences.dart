@@ -12,6 +12,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 part 'general_preferences.g.dart';
 
 bool _debugIntroPage = false;
+const _defaultWindowSize = Size(868, 668);
 
 abstract class Preferences {
   static final introCompleted = PreferencesNotifier.create(
@@ -68,7 +69,7 @@ abstract class Preferences {
 
   static final windowSize = PreferencesNotifier.create<Size, String>(
     "window_size",
-    defaultWindowSize,
+    _defaultWindowSize,
     mapFrom: (value) {
       final list = value.split(',').map((e) => double.tryParse(e)).toList();
       return Size(list[0]!, list[1]!);

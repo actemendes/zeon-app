@@ -484,26 +484,28 @@ class _ConnectionRingPainter extends CustomPainter {
         final capMorph = Curves.easeInOutCubic.transform(
           ((easedProgress - _capMorphStartProgress) / (1 - _capMorphStartProgress)).clamp(0.0, 1.0),
         );
-        final capRadius = (_ringWidth / 2) * (1 - capMorph);
+        final desiredCapRadius = (_ringWidth / 2) * (1 - capMorph);
+        final maxCapRadiusByGap = (remainingGap * _ringRadius) / 2;
+        final capRadius = math.min(desiredCapRadius, maxCapRadiusByGap);
         final gapStartAngle = _startAngle + rotation + _openSweep;
         final gapEndAngle = gapStartAngle + remainingGap;
         final gapPaint = Paint()
           ..isAntiAlias = true
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = _ringWidth
+          ..strokeCap = StrokeCap.butt
+          ..color = offColor;
+        final capPaint = Paint()
+          ..isAntiAlias = true
           ..style = PaintingStyle.fill
           ..color = offColor;
-
-        final gapPath = Path()
-          ..arcTo(Rect.fromCircle(center: center, radius: _outerRadius), gapStartAngle, remainingGap, false)
-          ..arcTo(Rect.fromCircle(center: center, radius: _innerRadius), gapEndAngle, -remainingGap, false)
-          ..close();
-
-        canvas.drawPath(gapPath, gapPaint);
+        canvas.drawArc(arcRect, gapStartAngle, remainingGap, false, gapPaint);
 
         if (capRadius > 0.0001) {
           final startCapCenter = center + Offset(math.cos(gapStartAngle), math.sin(gapStartAngle)) * _ringRadius;
           final endCapCenter = center + Offset(math.cos(gapEndAngle), math.sin(gapEndAngle)) * _ringRadius;
-          canvas.drawCircle(startCapCenter, capRadius, gapPaint);
-          canvas.drawCircle(endCapCenter, capRadius, gapPaint);
+          canvas.drawCircle(startCapCenter, capRadius, capPaint);
+          canvas.drawCircle(endCapCenter, capRadius, capPaint);
         }
       }
     }
