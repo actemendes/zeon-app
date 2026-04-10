@@ -157,11 +157,6 @@ class SettingsPage extends HookConsumerWidget {
             namedLocation: context.namedLocation('routeOptions'),
           ),
           SettingsSection(
-            title: t.pages.settings.dns.title,
-            icon: Icons.dns_rounded,
-            namedLocation: context.namedLocation('dnsOptions'),
-          ),
-          SettingsSection(
             title: t.pages.settings.inbound.title,
             icon: Icons.input_rounded,
             namedLocation: context.namedLocation('inboundOptions'),
@@ -182,11 +177,6 @@ class SettingsPage extends HookConsumerWidget {
               ),
             ),
           if (Breakpoint(context).isMobile()) ...[
-            SettingsSection(
-              title: t.pages.logs.title,
-              icon: Icons.description_rounded,
-              namedLocation: context.namedLocation('logs'),
-            ),
             SettingsSection(
               title: t.pages.about.title,
               icon: Icons.info_rounded,
