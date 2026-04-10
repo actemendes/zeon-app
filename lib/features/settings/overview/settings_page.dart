@@ -10,23 +10,28 @@ import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 enum ConfigOptionSection {
-  warp,
   fragment;
 
-  static final _warpKey = GlobalKey(debugLabel: "warp-section-key");
   static final _fragmentKey = GlobalKey(debugLabel: "fragment-section-key");
 
   GlobalKey get key => switch (this) {
-    ConfigOptionSection.warp => _warpKey,
     ConfigOptionSection.fragment => _fragmentKey,
   };
 }
 
 class SettingsPage extends HookConsumerWidget {
   SettingsPage({super.key, String? section})
-    : section = section != null ? ConfigOptionSection.values.byName(section) : null;
+    : section = _parseSection(section);
 
   final ConfigOptionSection? section;
+
+  static ConfigOptionSection? _parseSection(String? section) {
+    if (section == null) return null;
+    for (final value in ConfigOptionSection.values) {
+      if (value.name == section) return value;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -152,11 +157,6 @@ class SettingsPage extends HookConsumerWidget {
             namedLocation: context.namedLocation('routeOptions'),
           ),
           SettingsSection(
-            title: t.pages.settings.dns.title,
-            icon: Icons.dns_rounded,
-            namedLocation: context.namedLocation('dnsOptions'),
-          ),
-          SettingsSection(
             title: t.pages.settings.inbound.title,
             icon: Icons.input_rounded,
             namedLocation: context.namedLocation('inboundOptions'),
@@ -165,11 +165,6 @@ class SettingsPage extends HookConsumerWidget {
             title: t.pages.settings.tlsTricks.title,
             icon: Icons.content_cut_rounded,
             namedLocation: context.namedLocation('tlsTricks'),
-          ),
-          SettingsSection(
-            title: t.pages.settings.warp.title,
-            icon: Icons.cloud_rounded,
-            namedLocation: context.namedLocation('warpOptions'),
           ),
           if (PlatformUtils.isIOS)
             Material(
@@ -182,11 +177,6 @@ class SettingsPage extends HookConsumerWidget {
               ),
             ),
           if (Breakpoint(context).isMobile()) ...[
-            SettingsSection(
-              title: t.pages.logs.title,
-              icon: Icons.description_rounded,
-              namedLocation: context.namedLocation('logs'),
-            ),
             SettingsSection(
               title: t.pages.about.title,
               icon: Icons.info_rounded,

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/analytics/analytics_controller.dart';
 import 'package:hiddify/core/localization/locale_extensions.dart';
 import 'package:hiddify/core/localization/locale_preferences.dart';
 import 'package:hiddify/core/localization/translations.dart';
@@ -33,36 +32,6 @@ class LocalePrefTile extends ConsumerWidget {
             );
         if (selectedLocale != null) {
           await ref.read(localePreferencesProvider.notifier).changeLocale(selectedLocale);
-        }
-      },
-    );
-  }
-}
-
-class EnableAnalyticsPrefTile extends ConsumerWidget {
-  const EnableAnalyticsPrefTile({super.key, this.onChanged});
-
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = ref.watch(translationsProvider).requireValue;
-
-    final enabled = ref.watch(analyticsControllerProvider).requireValue;
-
-    return SwitchListTile.adaptive(
-      title: Text(t.pages.settings.general.enableAnalytics),
-      subtitle: Text(t.pages.settings.general.enableAnalyticsMsg, style: Theme.of(context).textTheme.bodySmall),
-      secondary: const Icon(Icons.analytics_rounded),
-      value: enabled,
-      onChanged: (value) async {
-        if (onChanged != null) {
-          return onChanged!(value);
-        }
-        if (enabled) {
-          await ref.read(analyticsControllerProvider.notifier).disableAnalytics();
-        } else {
-          await ref.read(analyticsControllerProvider.notifier).enableAnalytics();
         }
       },
     );

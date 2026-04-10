@@ -173,7 +173,7 @@ abstract class ConfigOptions {
     validator: (value) => isPort(value.toString()),
   );
 
-  static final bypassLan = PreferencesNotifier.create<bool, bool>("bypass-lan", false);
+  static final bypassLan = PreferencesNotifier.create<bool, bool>("bypass-lan", true);
 
   static final allowConnectionFromLan = PreferencesNotifier.create<bool, bool>("allow-connection-from-lan", false);
 
@@ -436,7 +436,8 @@ abstract class ConfigOptions {
       blockAds: ref.watch(blockAds),
       useXrayCoreWhenPossible: ref.watch(useXrayCoreWhenPossible),
       executeConfigAsIs: false,
-      logLevel: ref.watch(logLevel),
+      // logLevel is fixed to keep runtime behavior predictable.
+      logLevel: LogLevel.warn,
       resolveDestination: ref.watch(resolveDestination),
       ipv6Mode: ref.watch(ipv6Mode),
       remoteDnsAddress: ref.watch(remoteDnsAddress),
