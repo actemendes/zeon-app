@@ -166,11 +166,33 @@
         "news": "Новости",
         "paymentHistory": "История платежей",
         "community": "Сообщество",
-        "support": "Поддержка"
+        "support": "Поддержка",
+        "bindAccount": "Привязать аккаунт"
       },
       "cta": {
         "renew": "Продлить",
         "updatePlan": "Обновить план"
+      },
+      "specialServers": {
+        "headerLineOne": "ОСОБЫЕ СЕРВЕРА",
+        "headerLineTwo": "ДЛЯ ВАС.",
+        "features": {
+          "prioritySupport": "Приоритетная поддержка",
+          "noSupport": "Подключение до 10 устройств",
+          "parkingCoverage": "Ловит даже на парковке"
+        },
+        "serversLabel": "Серверы",
+        "serversValue": "60+",
+        "operatorsLabel": "Операторы",
+        "subscriptionTitle": "Доступны по подписке:",
+        "plans": {
+          "oneMonth": "1 месяц",
+          "threeMonths": "3 месяца",
+          "sixMonths": "6 месяцев",
+          "twelveMonths": "12 месяцев"
+        },
+        "connect": "Подключить",
+        "paymentLaunchError": "Не удалось открыть оплату"
       },
       "lastUpdate": "Последнее обновление",
       "form": {

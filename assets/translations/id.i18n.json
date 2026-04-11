@@ -157,6 +157,30 @@
     },
     "profileDetails": {
       "title": "Profil",
+      "menu": {
+        "bindAccount": "Tautkan akun"
+      },
+      "specialServers": {
+        "headerLineOne": "SERVER KHUSUS",
+        "headerLineTwo": "UNTUK ANDA.",
+        "features": {
+          "prioritySupport": "Dukungan prioritas",
+          "noSupport": "Koneksi hingga 10 perangkat",
+          "parkingCoverage": "Tetap menangkap sinyal bahkan di parkiran."
+        },
+        "serversLabel": "Server",
+        "serversValue": "60+",
+        "operatorsLabel": "Operator",
+        "subscriptionTitle": "Tersedia dengan langganan.",
+        "plans": {
+          "oneMonth": "1 bulan",
+          "threeMonths": "3 bulan",
+          "sixMonths": "6 bulan",
+          "twelveMonths": "12 bulan"
+        },
+        "connect": "Hubungkan",
+        "paymentLaunchError": "Halaman pembayaran tidak dapat dibuka"
+      },
       "lastUpdate": "Terakhir diperbarui",
       "form": {
         "nameHint": "Nama profil",

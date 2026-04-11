@@ -163,6 +163,30 @@
     },
     "profileDetails": {
       "title": "الملف الشخصي",
+      "menu": {
+        "bindAccount": "ربط الحساب"
+      },
+      "specialServers": {
+        "headerLineOne": "خوادم خاصة",
+        "headerLineTwo": "لك.",
+        "features": {
+          "prioritySupport": "دعم أولوية",
+          "noSupport": "اتصال حتى 10 أجهزة",
+          "parkingCoverage": "يعمل حتى في مواقف السيارات."
+        },
+        "serversLabel": "الخوادم",
+        "serversValue": "60+",
+        "operatorsLabel": "المشغلون",
+        "subscriptionTitle": "متاحة بالاشتراك.",
+        "plans": {
+          "oneMonth": "شهر واحد",
+          "threeMonths": "3 أشهر",
+          "sixMonths": "6 أشهر",
+          "twelveMonths": "12 شهرًا"
+        },
+        "connect": "اتصال",
+        "paymentLaunchError": "تعذر فتح صفحة الدفع"
+      },
       "lastUpdate": "آخر تحديث",
       "form": {
         "nameHint": "اسم الملف الشخصي",

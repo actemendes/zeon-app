@@ -157,6 +157,30 @@
     },
     "profileDetails": {
       "title": "Profil",
+      "menu": {
+        "bindAccount": "Hesabı bağla"
+      },
+      "specialServers": {
+        "headerLineOne": "ÖZEL SUNUCULAR",
+        "headerLineTwo": "SİZİN İÇİN.",
+        "features": {
+          "prioritySupport": "Öncelikli destek",
+          "noSupport": "10 cihaza kadar bağlantı",
+          "parkingCoverage": "Otoparkta bile çekiyor."
+        },
+        "serversLabel": "Sunucular",
+        "serversValue": "60+",
+        "operatorsLabel": "Operatörler",
+        "subscriptionTitle": "Abonelik ile kullanılabilir.",
+        "plans": {
+          "oneMonth": "1 ay",
+          "threeMonths": "3 ay",
+          "sixMonths": "6 ay",
+          "twelveMonths": "12 ay"
+        },
+        "connect": "Bağlan",
+        "paymentLaunchError": "Ödeme sayfası açılamadı"
+      },
       "lastUpdate": "Son güncelleme",
       "form": {
         "nameHint": "Profil adı",

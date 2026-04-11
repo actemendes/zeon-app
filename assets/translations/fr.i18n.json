@@ -157,6 +157,30 @@
     },
     "profileDetails": {
       "title": "Profil",
+      "menu": {
+        "bindAccount": "Lier le compte"
+      },
+      "specialServers": {
+        "headerLineOne": "SERVEURS SPÉCIAUX",
+        "headerLineTwo": "POUR VOUS.",
+        "features": {
+          "prioritySupport": "Support prioritaire",
+          "noSupport": "Connexion jusqu'à 10 appareils",
+          "parkingCoverage": "Capte même dans les parkings."
+        },
+        "serversLabel": "Serveurs",
+        "serversValue": "60+",
+        "operatorsLabel": "Opérateurs",
+        "subscriptionTitle": "Disponibles par abonnement.",
+        "plans": {
+          "oneMonth": "1 mois",
+          "threeMonths": "3 mois",
+          "sixMonths": "6 mois",
+          "twelveMonths": "12 mois"
+        },
+        "connect": "Connecter",
+        "paymentLaunchError": "Impossible d'ouvrir la page de paiement"
+      },
       "lastUpdate": "Dernière mise à jour",
       "form": {
         "nameHint": "Nom du profil",

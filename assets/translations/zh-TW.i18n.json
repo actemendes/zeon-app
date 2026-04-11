@@ -157,6 +157,30 @@
     },
     "profileDetails": {
       "title": "設定檔",
+      "menu": {
+        "bindAccount": "綁定帳號"
+      },
+      "specialServers": {
+        "headerLineOne": "專屬伺服器",
+        "headerLineTwo": "為您準備。",
+        "features": {
+          "prioritySupport": "優先支援",
+          "noSupport": "最多可連接10台裝置",
+          "parkingCoverage": "停車場也有訊號。"
+        },
+        "serversLabel": "伺服器",
+        "serversValue": "60+",
+        "operatorsLabel": "運營商",
+        "subscriptionTitle": "可透過訂閱使用。",
+        "plans": {
+          "oneMonth": "1個月",
+          "threeMonths": "3個月",
+          "sixMonths": "6個月",
+          "twelveMonths": "12個月"
+        },
+        "connect": "連接",
+        "paymentLaunchError": "無法開啟付款頁面"
+      },
       "lastUpdate": "最後更新",
       "form": {
         "nameHint": "設定檔名稱",

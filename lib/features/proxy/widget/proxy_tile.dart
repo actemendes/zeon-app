@@ -6,7 +6,12 @@ import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 
 class ProxyTile extends StatelessWidget with PresLogger {
-  const ProxyTile(this.proxy, {super.key, required this.selected, required this.onTap});
+  const ProxyTile(
+    this.proxy, {
+    super.key,
+    required this.selected,
+    required this.onTap,
+  });
 
   final OutboundInfo proxy;
   final bool selected;
@@ -16,16 +21,17 @@ class ProxyTile extends StatelessWidget with PresLogger {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final themeTextColor = theme.textTheme.bodyLarge?.color ?? theme.colorScheme.onSurface;
-    final selectedTextColor = isDark ? themeTextColor : theme.colorScheme.onPrimaryContainer;
+    final themeTextColor =
+        theme.textTheme.bodyLarge?.color ?? theme.colorScheme.onSurface;
+    final selectedTextColor = isDark
+        ? themeTextColor
+        : theme.colorScheme.onPrimaryContainer;
 
     final primaryColor = selected ? selectedTextColor : themeTextColor;
-    final secondaryColor = primaryColor.withValues(alpha: .8);
     final iconColor = selected ? selectedTextColor : themeTextColor;
-    final tileColor = selected ? theme.colorScheme.primaryContainer : Colors.transparent;
-    final typeDescription = proxy.isGroup && proxy.groupSelectedTagDisplay.trim().isNotEmpty
-        ? '${proxy.type} (${proxy.groupSelectedTagDisplay.trim()})'
-        : proxy.type;
+    final tileColor = selected
+        ? theme.colorScheme.primaryContainer
+        : Colors.transparent;
     final hasDelay = proxy.urlTestDelay != 0;
     final hasNoPing = proxy.urlTestDelay > 65000;
     final hasDownload = proxy.download > 0;
@@ -40,27 +46,18 @@ class ProxyTile extends StatelessWidget with PresLogger {
       horizontalTitleGap: 12,
       title: SizedBox(
         height: 40,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              proxy.tagDisplay,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: primaryColor,
-                fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
-              ),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            proxy.tagDisplay,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: primaryColor,
+              fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
             ),
-            Text(
-              typeDescription,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelMedium?.copyWith(color: secondaryColor),
-            ),
-          ],
+          ),
         ),
       ),
       leading: IPCountryFlag(countryCode: proxy.ipinfo.countryCode, size: 40),
@@ -82,7 +79,12 @@ class ProxyTile extends StatelessWidget with PresLogger {
                       ),
                     ),
                   if (hasDelay && hasDownload) const SizedBox(height: 2),
-                  if (hasDownload) Icon(Icons.download_rounded, size: 16, color: iconColor.withValues(alpha: .85)),
+                  if (hasDownload)
+                    Icon(
+                      Icons.download_rounded,
+                      size: 16,
+                      color: iconColor.withValues(alpha: .85),
+                    ),
                 ],
               ),
             )

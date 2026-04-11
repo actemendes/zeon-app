@@ -157,6 +157,30 @@
     },
     "profileDetails": {
       "title": "Perfil",
+      "menu": {
+        "bindAccount": "Vincular cuenta"
+      },
+      "specialServers": {
+        "headerLineOne": "SERVIDORES ESPECIALES",
+        "headerLineTwo": "PARA TI.",
+        "features": {
+          "prioritySupport": "Soporte prioritario",
+          "noSupport": "Conexión hasta 10 dispositivos",
+          "parkingCoverage": "Funciona incluso en estacionamientos."
+        },
+        "serversLabel": "Servidores",
+        "serversValue": "60+",
+        "operatorsLabel": "Operadores",
+        "subscriptionTitle": "Disponibles por suscripción.",
+        "plans": {
+          "oneMonth": "1 mes",
+          "threeMonths": "3 meses",
+          "sixMonths": "6 meses",
+          "twelveMonths": "12 meses"
+        },
+        "connect": "Conectar",
+        "paymentLaunchError": "No se pudo abrir la página de pago"
+      },
       "lastUpdate": "Última actualización",
       "form": {
         "nameHint": "Nombre del perfil",

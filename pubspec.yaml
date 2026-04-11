@@ -174,11 +174,23 @@ flutter:
     - assets/images/1x/cta-background.png
     - assets/images/2x/light-back@2x.png
     - assets/images/2x/dark-back@2x.png
+    - assets/images/2x/operator-mts@2x.png
+    - assets/images/2x/operator-megaphone@2x.png
+    - assets/images/2x/operator-beeline@2x.png
+    - assets/images/2x/operator-t2@2x.png
+    - assets/images/2x/operator-yota@2x.png
+    - assets/images/2x/operator-tmob@2x.png
     - assets/images/SVG/light-back.svg
     - assets/images/SVG/dark-back.svg
     - assets/images/SVG/cta-profile-arrow.svg
     - assets/images/SVG/logo-black.svg
     - assets/images/SVG/logo-white.svg
+    - assets/images/SVG/operator-mts.svg
+    - assets/images/SVG/operator-megaphone.svg
+    - assets/images/SVG/operator-beeline.svg
+    - assets/images/SVG/operator-t2.svg
+    - assets/images/SVG/operator-yota.svg
+    - assets/images/SVG/operator-tmob.svg
     - assets/images/source/ic_launcher_border.png
 
   fonts:

@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const avatarEmojis = [
   '\u{1F98A}', // 🦊
@@ -63,15 +67,47 @@ String pickAvatarEmoji(String? profileName) {
 class ProfileMenuPage extends HookConsumerWidget {
   const ProfileMenuPage({super.key});
 
+  static final Uri _communityUri = Uri.parse('https://t.me/zvo_net');
+  static final Uri _supportUri = Uri.parse('https://t.me/zvo_net_support_bot');
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
-    final sections = <({String title, IconData icon})>[
-      (title: t.pages.profileDetails.menu.inviteFriend, icon: Icons.person_add_alt_rounded),
-      (title: t.pages.profileDetails.menu.news, icon: Icons.newspaper_rounded),
-      (title: t.pages.profileDetails.menu.paymentHistory, icon: Icons.history_rounded),
-      (title: t.pages.profileDetails.menu.community, icon: Icons.groups_rounded),
-      (title: t.pages.profileDetails.menu.support, icon: Icons.support_agent_rounded),
+
+    final profile = switch (ref.watch(activeProfileProvider)) {
+      AsyncData(value: final profile?) => profile,
+      _ => null,
+    };
+    final subInfo = switch (profile) {
+      RemoteProfileEntity(:final subInfo) => subInfo,
+      _ => null,
+    };
+    final remainingDays = subInfo == null ? 0 : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
+
+    final sections = <({String title, IconData icon, IconData trailingIcon, VoidCallback? onTap})>[
+      if (remainingDays > 0)
+        (
+          title: t.pages.profileDetails.menu.bindAccount,
+          icon: Icons.link_rounded,
+          trailingIcon: Icons.chevron_right_rounded,
+          onTap: null,
+        ),
+      (
+        title: t.pages.profileDetails.menu.community,
+        icon: Icons.groups_rounded,
+        trailingIcon: Icons.open_in_new,
+        onTap: () {
+          unawaited(launchUrl(_communityUri, mode: LaunchMode.externalApplication));
+        },
+      ),
+      (
+        title: t.pages.profileDetails.menu.support,
+        icon: Icons.support_agent_rounded,
+        trailingIcon: Icons.open_in_new,
+        onTap: () {
+          unawaited(launchUrl(_supportUri, mode: LaunchMode.externalApplication));
+        },
+      ),
     ];
 
     return Scaffold(
@@ -87,7 +123,12 @@ class ProfileMenuPage extends HookConsumerWidget {
               itemCount: sections.length,
               itemBuilder: (context, index) {
                 final section = sections[index];
-                return _ProfileMenuSection(title: section.title, icon: section.icon);
+                return _ProfileMenuSection(
+                  title: section.title,
+                  icon: section.icon,
+                  trailingIcon: section.trailingIcon,
+                  onTap: section.onTap,
+                );
               },
             ),
           ),
@@ -180,7 +221,7 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
           image: const DecorationImage(image: AssetImage(_backgroundAsset), fit: BoxFit.cover),
         ),
         child: InkWell(
-          onTap: () {},
+          onTap: () => context.pushNamed('profilePayment'),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: _textHorizontalPadding),
             child: Row(
@@ -382,18 +423,25 @@ class _ProfileCrownPainter extends CustomPainter {
 }
 
 class _ProfileMenuSection extends StatelessWidget {
-  const _ProfileMenuSection({required this.title, required this.icon});
+  const _ProfileMenuSection({
+    required this.title,
+    required this.icon,
+    this.trailingIcon = Icons.chevron_right_rounded,
+    this.onTap,
+  });
 
   final String title;
   final IconData icon;
+  final IconData trailingIcon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       leading: Icon(icon),
       title: Text(title),
-      trailing: const Icon(Icons.chevron_right_rounded),
-      onTap: () {},
+      trailing: Icon(trailingIcon),
+      onTap: onTap ?? () {},
     );
   }
 }

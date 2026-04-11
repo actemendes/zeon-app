@@ -157,6 +157,30 @@
     },
     "profileDetails": {
       "title": "Perfil",
+      "menu": {
+        "bindAccount": "Vincular conta"
+      },
+      "specialServers": {
+        "headerLineOne": "SERVIDORES ESPECIAIS",
+        "headerLineTwo": "PARA VOCÊ.",
+        "features": {
+          "prioritySupport": "Suporte prioritário",
+          "noSupport": "Conexão para até 10 dispositivos",
+          "parkingCoverage": "Pega até no estacionamento."
+        },
+        "serversLabel": "Servidores",
+        "serversValue": "60+",
+        "operatorsLabel": "Operadoras",
+        "subscriptionTitle": "Disponíveis por assinatura.",
+        "plans": {
+          "oneMonth": "1 mês",
+          "threeMonths": "3 meses",
+          "sixMonths": "6 meses",
+          "twelveMonths": "12 meses"
+        },
+        "connect": "Conectar",
+        "paymentLaunchError": "Não foi possível abrir a página de pagamento"
+      },
       "lastUpdate": "Última atualização",
       "form": {
         "nameHint": "Nome do perfil",

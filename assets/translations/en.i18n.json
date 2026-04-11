@@ -163,11 +163,33 @@
         "news": "News",
         "paymentHistory": "Payment history",
         "community": "Community",
-        "support": "Support"
+        "support": "Support",
+        "bindAccount": "Link account"
       },
       "cta": {
         "renew": "Renew",
         "updatePlan": "Update plan"
+      },
+      "specialServers": {
+        "headerLineOne": "SPECIAL SERVERS",
+        "headerLineTwo": "FOR YOU.",
+        "features": {
+          "prioritySupport": "Priority support",
+          "noSupport": "Connect up to 10 devices",
+          "parkingCoverage": "Works even in parking lots."
+        },
+        "serversLabel": "Servers",
+        "serversValue": "60+",
+        "operatorsLabel": "Operators",
+        "subscriptionTitle": "Available by subscription.",
+        "plans": {
+          "oneMonth": "1 month",
+          "threeMonths": "3 months",
+          "sixMonths": "6 months",
+          "twelveMonths": "12 months"
+        },
+        "connect": "Connect",
+        "paymentLaunchError": "Unable to open payment page"
       },
       "lastUpdate": "Last update",
       "form": {

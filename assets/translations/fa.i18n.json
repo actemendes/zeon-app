@@ -157,6 +157,30 @@
     },
     "profileDetails": {
       "title": "پروفایل",
+      "menu": {
+        "bindAccount": "اتصال حساب"
+      },
+      "specialServers": {
+        "headerLineOne": "سرورهای ویژه",
+        "headerLineTwo": "برای شما.",
+        "features": {
+          "prioritySupport": "پشتیبانی اولویت‌دار",
+          "noSupport": "اتصال تا ۱۰ دستگاه",
+          "parkingCoverage": "حتی در پارکینگ هم آنتن می‌دهد."
+        },
+        "serversLabel": "سرورها",
+        "serversValue": "60+",
+        "operatorsLabel": "اپراتورها",
+        "subscriptionTitle": "با اشتراک در دسترس است.",
+        "plans": {
+          "oneMonth": "۱ ماه",
+          "threeMonths": "۳ ماه",
+          "sixMonths": "۶ ماه",
+          "twelveMonths": "۱۲ ماه"
+        },
+        "connect": "اتصال",
+        "paymentLaunchError": "باز کردن صفحه پرداخت ممکن نشد"
+      },
       "lastUpdate": "آخرین به‌روزرسانی",
       "form": {
         "nameHint": "نام پروفایل",

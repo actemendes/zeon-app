@@ -157,6 +157,30 @@
     },
     "profileDetails": {
       "title": "配置文件",
+      "menu": {
+        "bindAccount": "绑定账号"
+      },
+      "specialServers": {
+        "headerLineOne": "专属服务器",
+        "headerLineTwo": "为您准备。",
+        "features": {
+          "prioritySupport": "优先支持",
+          "noSupport": "最多连接10台设备",
+          "parkingCoverage": "停车场也有信号。"
+        },
+        "serversLabel": "服务器",
+        "serversValue": "60+",
+        "operatorsLabel": "运营商",
+        "subscriptionTitle": "可通过订阅使用。",
+        "plans": {
+          "oneMonth": "1个月",
+          "threeMonths": "3个月",
+          "sixMonths": "6个月",
+          "twelveMonths": "12个月"
+        },
+        "connect": "连接",
+        "paymentLaunchError": "无法打开支付页面"
+      },
       "lastUpdate": "最后更新",
       "form": {
         "nameHint": "配置文件名称",
