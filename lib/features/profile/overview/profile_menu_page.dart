@@ -59,7 +59,10 @@ int fnv1a32(String input) {
 String pickAvatarEmoji(String? profileName) {
   final raw = (profileName ?? '').trim();
   final normalized = raw.isEmpty ? 'user' : raw;
-  final stable = normalized.toLowerCase().replaceAll(RegExp(r'[\s\-]+'), '_').replaceAll(RegExp('_+'), '_');
+  final stable = normalized
+      .toLowerCase()
+      .replaceAll(RegExp(r'[\s\-]+'), '_')
+      .replaceAll(RegExp('_+'), '_');
   final hash = fnv1a32('v1|$stable');
   return avatarEmojis[hash % avatarEmojis.length];
 }
@@ -82,40 +85,57 @@ class ProfileMenuPage extends HookConsumerWidget {
       RemoteProfileEntity(:final subInfo) => subInfo,
       _ => null,
     };
-    final remainingDays = subInfo == null ? 0 : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
+    final remainingDays = subInfo == null
+        ? 0
+        : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
 
-    final sections = <({String title, IconData icon, IconData trailingIcon, VoidCallback? onTap})>[
-      if (remainingDays > 0)
-        (
-          title: t.pages.profileDetails.menu.bindAccount,
-          icon: Icons.link_rounded,
-          trailingIcon: Icons.chevron_right_rounded,
-          onTap: null,
-        ),
-      (
-        title: t.pages.profileDetails.menu.community,
-        icon: Icons.groups_rounded,
-        trailingIcon: Icons.open_in_new,
-        onTap: () {
-          unawaited(launchUrl(_communityUri, mode: LaunchMode.externalApplication));
-        },
-      ),
-      (
-        title: t.pages.profileDetails.menu.support,
-        icon: Icons.support_agent_rounded,
-        trailingIcon: Icons.open_in_new,
-        onTap: () {
-          unawaited(launchUrl(_supportUri, mode: LaunchMode.externalApplication));
-        },
-      ),
-    ];
+    final sections =
+        <
+          ({
+            String title,
+            IconData icon,
+            IconData trailingIcon,
+            VoidCallback? onTap,
+          })
+        >[
+          if (remainingDays > 0)
+            (
+              title: t.pages.profileDetails.menu.bindAccount,
+              icon: Icons.link_rounded,
+              trailingIcon: Icons.chevron_right_rounded,
+              onTap: null,
+            ),
+          (
+            title: t.pages.profileDetails.menu.community,
+            icon: Icons.groups_rounded,
+            trailingIcon: Icons.open_in_new,
+            onTap: () {
+              unawaited(
+                launchUrl(_communityUri, mode: LaunchMode.externalApplication),
+              );
+            },
+          ),
+          (
+            title: t.pages.profileDetails.menu.support,
+            icon: Icons.support_agent_rounded,
+            trailingIcon: Icons.open_in_new,
+            onTap: () {
+              unawaited(
+                launchUrl(_supportUri, mode: LaunchMode.externalApplication),
+              );
+            },
+          ),
+        ];
 
     return Scaffold(
       appBar: AppBar(title: Text(t.pages.profileDetails.title.toUpperCase())),
       body: CustomMultiChildLayout(
         delegate: _ProfileMenuLayoutDelegate(),
         children: [
-          LayoutId(id: _ProfileMenuSlot.summary, child: const _ProfileSummaryBlock()),
+          LayoutId(
+            id: _ProfileMenuSlot.summary,
+            child: const _ProfileSummaryBlock(),
+          ),
           LayoutId(
             id: _ProfileMenuSlot.actions,
             child: ListView.builder(
@@ -132,7 +152,10 @@ class ProfileMenuPage extends HookConsumerWidget {
               },
             ),
           ),
-          LayoutId(id: _ProfileMenuSlot.cta, child: const _ProfileMenuCtaPanel()),
+          LayoutId(
+            id: _ProfileMenuSlot.cta,
+            child: const _ProfileMenuCtaPanel(),
+          ),
         ],
       ),
     );
@@ -144,7 +167,7 @@ enum _ProfileMenuSlot { summary, actions, cta }
 class _ProfileMenuLayoutDelegate extends MultiChildLayoutDelegate {
   static const _horizontalPadding = 16.0;
   static const _topPadding = 12.0;
-  static const _bottomPadding = 12.0;
+  static const _bottomPadding = 16.0;
   static const _sectionSpacing = 12.0;
 
   @override
@@ -153,33 +176,58 @@ class _ProfileMenuLayoutDelegate extends MultiChildLayoutDelegate {
     var contentBottom = size.height;
 
     if (hasChild(_ProfileMenuSlot.summary)) {
-      final summaryWidth = (size.width - (_horizontalPadding * 2)).clamp(0.0, size.width);
+      final summaryWidth = (size.width - (_horizontalPadding * 2)).clamp(
+        0.0,
+        size.width,
+      );
       layoutChild(
         _ProfileMenuSlot.summary,
-        BoxConstraints.tightFor(width: summaryWidth, height: _ProfileSummaryBlock.height),
+        BoxConstraints.tightFor(
+          width: summaryWidth,
+          height: _ProfileSummaryBlock.height,
+        ),
       );
-      positionChild(_ProfileMenuSlot.summary, const Offset(_horizontalPadding, _topPadding));
+      positionChild(
+        _ProfileMenuSlot.summary,
+        const Offset(_horizontalPadding, _topPadding),
+      );
       contentTop = _topPadding + _ProfileSummaryBlock.height + _sectionSpacing;
     }
 
     if (hasChild(_ProfileMenuSlot.cta)) {
-      final ctaWidth = (size.width - (_horizontalPadding * 2)).clamp(0.0, size.width);
-      layoutChild(_ProfileMenuSlot.cta, BoxConstraints.tightFor(width: ctaWidth, height: _ProfileMenuCtaPanel.height));
-      final desiredTop = size.height - _bottomPadding - _ProfileMenuCtaPanel.height;
+      final ctaWidth = (size.width - (_horizontalPadding * 2)).clamp(
+        0.0,
+        size.width,
+      );
+      layoutChild(
+        _ProfileMenuSlot.cta,
+        BoxConstraints.tightFor(
+          width: ctaWidth,
+          height: _ProfileMenuCtaPanel.height,
+        ),
+      );
+      final desiredTop =
+          size.height - _bottomPadding - _ProfileMenuCtaPanel.height;
       final ctaTop = desiredTop < contentTop ? contentTop : desiredTop;
       positionChild(_ProfileMenuSlot.cta, Offset(_horizontalPadding, ctaTop));
       contentBottom = ctaTop - _sectionSpacing;
     }
 
     if (hasChild(_ProfileMenuSlot.actions)) {
-      final remainingHeight = contentBottom > contentTop ? contentBottom - contentTop : 0.0;
-      layoutChild(_ProfileMenuSlot.actions, BoxConstraints.tightFor(width: size.width, height: remainingHeight));
+      final remainingHeight = contentBottom > contentTop
+          ? contentBottom - contentTop
+          : 0.0;
+      layoutChild(
+        _ProfileMenuSlot.actions,
+        BoxConstraints.tightFor(width: size.width, height: remainingHeight),
+      );
       positionChild(_ProfileMenuSlot.actions, Offset(0, contentTop));
     }
   }
 
   @override
-  bool shouldRelayout(covariant _ProfileMenuLayoutDelegate oldDelegate) => false;
+  bool shouldRelayout(covariant _ProfileMenuLayoutDelegate oldDelegate) =>
+      false;
 }
 
 class _ProfileMenuCtaPanel extends HookConsumerWidget {
@@ -204,11 +252,20 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
       RemoteProfileEntity(:final subInfo) => subInfo,
       _ => null,
     };
-    final remainingDays = subInfo == null ? 0 : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
-    final title = (remainingDays > 0 ? t.pages.profileDetails.cta.renew : t.pages.profileDetails.cta.updatePlan)
-        .toUpperCase();
-    final arrowColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
-    final titleColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
+    final remainingDays = subInfo == null
+        ? 0
+        : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
+    final title =
+        (remainingDays > 0
+                ? t.pages.profileDetails.cta.renew
+                : t.pages.profileDetails.cta.updatePlan)
+            .toUpperCase();
+    final arrowColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFF3B444D);
+    final titleColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFF3B444D);
 
     return Material(
       color: Colors.transparent,
@@ -218,12 +275,17 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
         height: height,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          image: const DecorationImage(image: AssetImage(_backgroundAsset), fit: BoxFit.cover),
+          image: const DecorationImage(
+            image: AssetImage(_backgroundAsset),
+            fit: BoxFit.cover,
+          ),
         ),
         child: InkWell(
           onTap: () => context.pushNamed('profilePayment'),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: _textHorizontalPadding),
+            padding: const EdgeInsets.symmetric(
+              horizontal: _textHorizontalPadding,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -246,7 +308,11 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
                   child: Center(
                     child: Transform.scale(
                       scale: _arrowVisualScale,
-                      child: Icon(Icons.arrow_outward, size: _arrowSize, color: arrowColor),
+                      child: Icon(
+                        Icons.arrow_outward,
+                        size: _arrowSize,
+                        color: arrowColor,
+                      ),
                     ),
                   ),
                 ),
@@ -288,34 +354,58 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
     };
 
     final rawProfileName = (profile?.name ?? '').trim();
-    final normalizedDays = subInfo == null ? 0 : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
-    final isPremiumActive = subInfo != null && !subInfo.isExpired && subInfo.ratio < 1 && normalizedDays > 0;
-    final profileName = rawProfileName.isNotEmpty ? rawProfileName : t.common.unknown;
+    final normalizedDays = subInfo == null
+        ? 0
+        : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
+    final isPremiumActive =
+        subInfo != null &&
+        !subInfo.isExpired &&
+        subInfo.ratio < 1 &&
+        normalizedDays > 0;
+    final profileName = rawProfileName.isNotEmpty
+        ? rawProfileName
+        : t.common.unknown;
     final avatarEmoji = pickAvatarEmoji(rawProfileName);
     final daysLabel = normalizedDays == 0
         ? _premiumInactiveLabel
-        : t.components.subscriptionInfo.remainingDuration(duration: normalizedDays);
-    final surfaceColor = theme.brightness == Brightness.dark ? const Color(0xFF1A1B1F) : const Color(0xFFD6E1E5);
-    final subtitleColor = theme.brightness == Brightness.dark ? const Color(0xFF8B8B8B) : const Color(0xFF969696);
-    final crownColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3A444D);
+        : t.components.subscriptionInfo.remainingDuration(
+            duration: normalizedDays,
+          );
+    final surfaceColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF1A1B1F)
+        : const Color(0xFFD6E1E5);
+    final subtitleColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF8B8B8B)
+        : const Color(0xFF969696);
+    final crownColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFF3A444D);
     final inactiveBackgroundColor = theme.brightness == Brightness.dark
         ? const Color(0xFF2E3136)
         : const Color(0xFFE4ECCB);
 
     return Container(
       height: height,
-      decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
       clipBehavior: Clip.antiAlias,
       child: Row(
         children: [
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: _textHorizontalPadding, vertical: _textVerticalPadding),
+              padding: const EdgeInsets.symmetric(
+                horizontal: _textHorizontalPadding,
+                vertical: _textVerticalPadding,
+              ),
               child: Row(
                 children: [
                   SizedBox.square(
                     dimension: _avatarSize,
-                    child: FittedBox(child: Text(avatarEmoji, textAlign: TextAlign.center)),
+                    child: FittedBox(
+                      child: Text(avatarEmoji, textAlign: TextAlign.center),
+                    ),
                   ),
                   const SizedBox(width: _avatarGap),
                   Expanded(
@@ -327,7 +417,10 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
                           profileName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         Text(
                           daysLabel,
@@ -350,7 +443,11 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
             width: _rightSegmentWidth,
             height: height,
             decoration: BoxDecoration(
-              gradient: isPremiumActive ? const LinearGradient(colors: [Color(0xFFBFDD71), Color(0xFF3CE74F)]) : null,
+              gradient: isPremiumActive
+                  ? const LinearGradient(
+                      colors: [Color(0xFFBFDD71), Color(0xFF3CE74F)],
+                    )
+                  : null,
               color: isPremiumActive ? null : inactiveBackgroundColor,
               borderRadius: BorderRadius.circular(16),
             ),
@@ -419,7 +516,8 @@ class _ProfileCrownPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ProfileCrownPainter oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(covariant _ProfileCrownPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _ProfileMenuSection extends StatelessWidget {

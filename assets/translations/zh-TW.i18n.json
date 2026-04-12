@@ -87,6 +87,12 @@
   },
   "intro": {
     "banner": "暢享無限制網路的所需一切",
+    "appBarLine1": "無廣告。",
+    "appBarLine2": "無限制。",
+    "appBarLine3": "免費",
+    "ctaTitle": "開始吧",
+    "ctaSubtitle": "並贈送高級會員",
+    "alreadyHaveAccount": "我已經有帳號",
     "termsAndPolicyCaution(rich)": "繼續即表示您同意 ${tap(@:pages.about.termsAndConditions)}",
     "info(rich)": "由 ZEON 以 ❤️ 製作 - ${tap_source(開源)} (${tap_license(授權)})"
   },

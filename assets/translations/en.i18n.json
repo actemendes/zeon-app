@@ -87,6 +87,12 @@
   },
   "intro": {
     "banner": "All you need for an unrestricted internet",
+    "appBarLine1": "NO ADS.",
+    "appBarLine2": "NO LIMITS.",
+    "appBarLine3": "FREE",
+    "ctaTitle": "LET'S START",
+    "ctaSubtitle": "and premium as a gift",
+    "alreadyHaveAccount": "I already have an account",
     "termsAndPolicyCaution(rich)": "By continuing you agree to ${tap(@:pages.about.termsAndConditions)}",
     "info(rich)": "Made with ❤️ by ZEON - ${tap_source(Open Source)} (${tap_license(License)})"
   },

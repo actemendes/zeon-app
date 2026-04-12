@@ -87,6 +87,12 @@
   },
   "intro": {
     "banner": "Semua yang Anda butuhkan untuk internet tanpa batasan",
+    "appBarLine1": "TANPA IKLAN.",
+    "appBarLine2": "TANPA BATAS.",
+    "appBarLine3": "GRATIS",
+    "ctaTitle": "MULAI",
+    "ctaSubtitle": "dan premium sebagai hadiah",
+    "alreadyHaveAccount": "Saya sudah punya akun",
     "termsAndPolicyCaution(rich)": "Dengan melanjutkan, Anda menyetujui ${tap(@:pages.about.termsAndConditions)}",
     "info(rich)": "Dibuat dengan ❤️ oleh ZEON - ${tap_source(Sumber Terbuka)} (${tap_license(Lisensi)})"
   },

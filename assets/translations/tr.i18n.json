@@ -87,6 +87,12 @@
   },
   "intro": {
     "banner": "Sınırsız bir internet için ihtiyacınız olan her şey",
+    "appBarLine1": "REKLAMSIZ.",
+    "appBarLine2": "SINIRSIZ.",
+    "appBarLine3": "ÜCRETSİZ",
+    "ctaTitle": "BAŞLAYALIM",
+    "ctaSubtitle": "ve premium hediye",
+    "alreadyHaveAccount": "Zaten bir hesabım var",
     "termsAndPolicyCaution(rich)": "Devam ederek ${tap(@:pages.about.termsAndConditions)} kabul etmiş olursunuz",
     "info(rich)": "ZEON tarafından ❤️ ile yapıldı - ${tap_source(Açık Kaynak)} (${tap_license(Lisans)})"
   },

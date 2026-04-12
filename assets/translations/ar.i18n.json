@@ -93,6 +93,12 @@
   },
   "intro": {
     "banner": "كل ما تحتاجه لإنترنت بلا قيود",
+    "appBarLine1": "بدون إعلانات.",
+    "appBarLine2": "بدون حدود.",
+    "appBarLine3": "مجانًا",
+    "ctaTitle": "لنبدأ",
+    "ctaSubtitle": "وباقة بريميوم هدية",
+    "alreadyHaveAccount": "لدي حساب بالفعل",
     "termsAndPolicyCaution(rich)": "بالاستمرار، أنت توافق على ${tap(@:pages.about.termsAndConditions)}",
     "info(rich)": "صُنع بـ ❤️ بواسطة ZEON - ${tap_source(مفتوح المصدر)} (${tap_license(الرخصة)})"
   },

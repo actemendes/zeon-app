@@ -25,8 +25,8 @@ class AboutPage extends HookConsumerWidget {
     final appUpdate = ref.watch(appUpdateNotifierProvider);
     final theme = Theme.of(context);
     final logoAsset = theme.brightness == Brightness.dark
-        ? 'assets/images/SVG/logo-black.svg'
-        : 'assets/images/SVG/logo-white.svg';
+        ? 'assets/images/SVG/big-logo-dark.svg'
+        : 'assets/images/SVG/big-logo-light.svg';
 
     ref.listen(appUpdateNotifierProvider, (_, next) async {
       if (!context.mounted) return;
@@ -93,7 +93,7 @@ class AboutPage extends HookConsumerWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SvgPicture.asset(logoAsset, width: 64, height: 64),
+                  SvgPicture.asset(logoAsset, width: 140),
                   const Gap(16),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,17 +112,24 @@ class AboutPage extends HookConsumerWidget {
               ...conditionalTiles,
               if (conditionalTiles.isNotEmpty) const Divider(),
               ListTile(
-                title: Text(t.pages.about.sourceCode),
+                title: Text('${t.pages.about.sourceCode} ZEON'),
                 trailing: const Icon(FluentIcons.open_24_regular),
                 onTap: () async {
                   await UriUtils.tryLaunch(Uri.parse(Constants.githubUrl));
                 },
               ),
               ListTile(
-                title: Text(t.pages.about.telegramChannel),
+                title: Text('${t.pages.about.sourceCode} Hiddify'),
                 trailing: const Icon(FluentIcons.open_24_regular),
                 onTap: () async {
-                  await UriUtils.tryLaunch(Uri.parse(Constants.telegramChannelUrl));
+                  await UriUtils.tryLaunch(Uri.parse(Constants.hiddifySourceCodeUrl));
+                },
+              ),
+              ListTile(
+                title: const Text('Open Source Licenses'),
+                trailing: const Icon(FluentIcons.open_24_regular),
+                onTap: () async {
+                  await UriUtils.tryLaunch(Uri.parse(Constants.openSourceLicensesUrl));
                 },
               ),
               ListTile(
@@ -146,4 +153,3 @@ class AboutPage extends HookConsumerWidget {
     );
   }
 }
-

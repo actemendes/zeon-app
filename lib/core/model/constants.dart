@@ -3,14 +3,18 @@ import 'package:flutter/services.dart';
 
 abstract class Constants {
   static const appName = "ZEON";
-  static const githubUrl = "https://github.com/hiddify/hiddify-next";
-  static const licenseUrl = "https://github.com/hiddify/hiddify-next?tab=License-1-ov-file#readme";
+  static const githubUrl = "https://github.com/actemendes/zeon-app";
+  static const hiddifySourceCodeUrl = "https://github.com/hiddify/hiddify-next";
+  static const openSourceLicensesUrl =
+      "https://github.com/hiddify/hiddify-app?tab=License-1-ov-file#hiddify-extended-gnu-general-public-license-v3";
+  static const licenseUrl = openSourceLicensesUrl;
   static const githubReleasesApiUrl = "https://api.github.com/repos/hiddify/hiddify-next/releases";
   static const githubLatestReleaseUrl = "https://github.com/hiddify/hiddify-app/releases/latest";
   static const appCastUrl = "https://raw.githubusercontent.com/hiddify/hiddify-next/main/appcast.xml";
-  static const telegramChannelUrl = "https://t.me/hiddify";
-  static const privacyPolicyUrl = "https://hiddify.com/privacy-policy/";
-  static const termsAndConditionsUrl = "https://hiddify.com/terms/";
+  static const privacyPolicyUrl =
+      "https://zeon-vps.net/faq/?k=HHhBa3AAQleuzYt3Tl2GYycjl8HGG_a_m0lucqCqJDg#/zeon-app-privacy";
+  static const termsAndConditionsUrl =
+      "https://zeon-vps.net/faq/?k=HHhBa3AAQleuzYt3Tl2GYycjl8HGG_a_m0lucqCqJDg#/zeon-app-terms";
   static const cfWarpPrivacyPolicy = "https://www.cloudflare.com/application/privacypolicy/";
   static const cfWarpTermsOfService = "https://www.cloudflare.com/application/terms/";
 }
@@ -56,7 +60,11 @@ abstract class IntroConst {
   static const termsAndConditionsKey = 'terms-and-conditions';
   static const githubKey = 'github';
   static const licenseKey = 'license';
-  static const url = <String, String>{IntroConst.termsAndConditionsKey: Constants.termsAndConditionsUrl, IntroConst.githubKey: Constants.githubUrl, IntroConst.licenseKey: Constants.licenseUrl};
+  static const url = <String, String>{
+    IntroConst.termsAndConditionsKey: Constants.termsAndConditionsUrl,
+    IntroConst.githubKey: Constants.githubUrl,
+    IntroConst.licenseKey: Constants.licenseUrl,
+  };
 }
 
 abstract class WarpConst {
@@ -65,11 +73,19 @@ abstract class WarpConst {
   static const warpConsentGiven = "warp-consent-given";
   static const warpTermsOfServiceKey = 'warp-terms-of-service';
   static const warpPrivacyPolicyKey = 'warp-privacy-policy';
-  static const url = <String, String>{WarpConst.warpTermsOfServiceKey: Constants.cfWarpTermsOfService, WarpConst.warpPrivacyPolicyKey: Constants.cfWarpPrivacyPolicy};
+  static const url = <String, String>{
+    WarpConst.warpTermsOfServiceKey: Constants.cfWarpTermsOfService,
+    WarpConst.warpPrivacyPolicyKey: Constants.cfWarpPrivacyPolicy,
+  };
 }
 
 abstract class KeyboardConst {
-  static final allArrows = {LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowDown, LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight};
+  static final allArrows = {
+    LogicalKeyboardKey.arrowUp,
+    LogicalKeyboardKey.arrowDown,
+    LogicalKeyboardKey.arrowLeft,
+    LogicalKeyboardKey.arrowRight,
+  };
   static final horizontalArrows = {LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight};
   static final verticalArrows = {LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowDown};
   static final select = {LogicalKeyboardKey.select, LogicalKeyboardKey.enter, LogicalKeyboardKey.tab};

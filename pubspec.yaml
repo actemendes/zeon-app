@@ -183,6 +183,10 @@ flutter:
     - assets/images/SVG/light-back.svg
     - assets/images/SVG/dark-back.svg
     - assets/images/SVG/cta-profile-arrow.svg
+    - assets/images/SVG/cta-main.svg
+    - assets/images/SVG/big-logo-dark.svg
+    - assets/images/SVG/big-logo-light.svg
+    - assets/images/SVG/big-logo-white.svg
     - assets/images/SVG/logo-black.svg
     - assets/images/SVG/logo-white.svg
     - assets/images/SVG/operator-mts.svg

@@ -91,6 +91,12 @@
   },
   "intro": {
     "banner": "Все, что вам нужно для интернета без ограничений",
+    "appBarLine1": "БЕЗ РЕКЛАМЫ.",
+    "appBarLine2": "БЕЗ ЛИМИТОВ.",
+    "appBarLine3": "БЕСПЛАТНО",
+    "ctaTitle": "СТАРТУЕМ",
+    "ctaSubtitle": "и премиум в подарок",
+    "alreadyHaveAccount": "Я уже имею аккаунт",
     "termsAndPolicyCaution(rich)": "Продолжая, вы соглашаетесь с ${tap(@:pages.about.termsAndConditions)}",
     "info(rich)": "Сделано с ❤️ ZEON - ${tap_source(Открытый исходный код)} (${tap_license(Лицензия)})"
   },

@@ -87,6 +87,12 @@
   },
   "intro": {
     "banner": "هرآنچه برای اینترنت بدون محدودیت نیاز دارید",
+    "appBarLine1": "بدون تبلیغات.",
+    "appBarLine2": "بدون محدودیت.",
+    "appBarLine3": "رایگان",
+    "ctaTitle": "شروع کنیم",
+    "ctaSubtitle": "و پریمیوم هدیه بگیرید",
+    "alreadyHaveAccount": "من از قبل حساب دارم",
     "termsAndPolicyCaution(rich)": "با ادامه، شما با ${tap(@:pages.about.termsAndConditions)} موافقت می‌کنید",
     "info(rich)": "ساخته شده با ❤️ توسط ZEON - ${tap_source(متن‌باز)} (${tap_license(مجوز)})"
   },

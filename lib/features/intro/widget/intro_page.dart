@@ -3,19 +3,18 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/core/localization/locale_preferences.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/features/common/general_pref_tiles.dart';
+import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/features/settings/widget/preference_tile.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -24,177 +23,142 @@ class IntroPage extends HookConsumerWidget with PresLogger {
 
   static bool locationInfoLoaded = false;
 
-  // for focus management
-  KeyEventResult _handleKeyEvent(KeyEvent event, String key) {
-    if (KeyboardConst.select.contains(event.logicalKey) && event is KeyUpEvent) {
-      UriUtils.tryLaunch(Uri.parse(IntroConst.url[key]!));
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
-    final fabForegroundColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : null;
+    final breakpoint = Breakpoint(context);
+    final baseBackgroundColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFFE4ECEF);
+    final backgroundMapAsset = theme.brightness == Brightness.dark
+        ? 'assets/images/2x/dark-back@2x.png'
+        : 'assets/images/2x/light-back@2x.png';
     final logoAsset = theme.brightness == Brightness.dark
-        ? 'assets/images/SVG/logo-black.svg'
-        : 'assets/images/SVG/logo-white.svg';
+        ? 'assets/images/SVG/big-logo-dark.svg'
+        : 'assets/images/SVG/big-logo-light.svg';
 
     final isStarting = useState(false);
 
     if (!locationInfoLoaded) {
-      autoSelectRegion(ref).then((value) => loggy.debug("Auto Region selection finished!"));
+      autoSelectRegion(
+        ref,
+      ).then((value) => loggy.debug("Auto Region selection finished!"));
       locationInfoLoaded = true;
     }
 
-    // for focus management
-    final focusStates = <String, ValueNotifier<bool>>{
-      IntroConst.termsAndConditionsKey: useState<bool>(false),
-      IntroConst.githubKey: useState<bool>(false),
-      IntroConst.licenseKey: useState<bool>(false),
-    };
-    final focusNodes = <String, FocusNode>{
-      IntroConst.termsAndConditionsKey: useFocusNode(),
-      IntroConst.githubKey: useFocusNode(),
-      IntroConst.licenseKey: useFocusNode(),
-    };
-    useEffect(() {
-      for (final entry in focusNodes.entries) {
-        entry.value.addListener(() => focusStates[entry.key]!.value = entry.value.hasPrimaryFocus);
-      }
-      return null;
-    }, []);
-
-    return Scaffold(
-      body: Center(
-        child: ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-          child: SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 620),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final width = constraints.maxWidth > IntroConst.maxwidth
-                          ? IntroConst.maxwidth
-                          : constraints.maxWidth;
-                      final size = width * 0.4;
-                      return SvgPicture.asset(logoAsset, width: size, height: size);
-                    },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final logoWidth = switch (breakpoint.activeBreakpoint) {
+          Breakpoints.mobile => (constraints.maxWidth * 0.76).clamp(
+            230.0,
+            360.0,
+          ),
+          Breakpoints.tablet => (constraints.maxWidth * 0.56).clamp(
+            320.0,
+            480.0,
+          ),
+          Breakpoints.desktop => 440.0,
+        };
+        return Stack(
+          children: [
+            Positioned.fill(child: ColoredBox(color: baseBackgroundColor)),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Image.asset(
+                    backgroundMapAsset,
+                    height: constraints.maxHeight,
+                    fit: BoxFit.fitHeight,
                   ),
-                  const Gap(16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      t.intro.banner,
-                      style: theme.textTheme.bodyLarge,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const Gap(24),
-                  const LocalePrefTile(),
-                  ChoicePreferenceWidget(
-                    selected: ref.watch(ConfigOptions.region),
-                    preferences: ref.watch(ConfigOptions.region.notifier),
-                    choices: Region.values,
-                    title: t.pages.settings.routing.region,
-                    showFlag: true,
-                    icon: Icons.place_rounded,
-                    presentChoice: (value) => value.present(t),
-                    onChanged: (val) async {
-                      await ref.read(ConfigOptions.directDnsAddress.notifier).reset();
-                    },
-                  ),
-                  const Gap(24),
-                  Focus(
-                    focusNode: focusNodes[IntroConst.termsAndConditionsKey],
-                    onKeyEvent: (node, event) => _handleKeyEvent(event, IntroConst.termsAndConditionsKey),
-                    child: Text.rich(
-                      t.intro.termsAndPolicyCaution(
-                        tap: (text) => TextSpan(
-                          text: text,
-                          style: TextStyle(
-                            color: focusStates[IntroConst.termsAndConditionsKey]!.value ? Colors.green : Colors.blue,
-                          ),
-                          recognizer: TapGestureRecognizer()
-                            ..onTap = () async {
-                              await UriUtils.tryLaunch(Uri.parse(Constants.termsAndConditionsUrl));
-                            },
-                        ),
-                      ),
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                  const Gap(8),
-                  Focus(
-                    focusNode: focusNodes[IntroConst.githubKey],
-                    onKeyEvent: (node, event) => _handleKeyEvent(event, IntroConst.githubKey),
-                    child: Text.rich(
-                      t.intro.info(
-                        tap_source: (text) => TextSpan(
-                          text: text,
-                          style: TextStyle(
-                            color: focusStates[IntroConst.githubKey]!.value ? Colors.green : Colors.blue,
-                          ),
-                          recognizer: TapGestureRecognizer()
-                            ..onTap = () async {
-                              await UriUtils.tryLaunch(Uri.parse(Constants.githubUrl));
-                            },
-                        ),
-                        tap_license: (text) => TextSpan(
-                          text: text,
-                          style: TextStyle(
-                            color: focusStates[IntroConst.githubKey]!.value ? Colors.green : Colors.blue,
-                          ),
-                          recognizer: TapGestureRecognizer()
-                            ..onTap = () async {
-                              await UriUtils.tryLaunch(Uri.parse(Constants.licenseUrl));
-                            },
-                        ),
-                      ),
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                  // only for managing license node focus
-                  Focus(
-                    focusNode: focusNodes[IntroConst.licenseKey],
-                    onKeyEvent: (node, event) => _handleKeyEvent(event, IntroConst.licenseKey),
-                    child: const Gap(88),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        foregroundColor: fabForegroundColor,
-        icon: isStarting.value
-            ? SizedBox(
-                width: 24,
-                height: 24,
-                child: fabForegroundColor == null
-                    ? const CircularProgressIndicator()
-                    : CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(fabForegroundColor)),
-              )
-            : Icon(Icons.rocket_launch, color: fabForegroundColor),
-        label: Text(
-          t.common.start,
-          style: fabForegroundColor == null
-              ? theme.textTheme.titleMedium
-              : theme.textTheme.titleMedium?.copyWith(color: fabForegroundColor),
-        ),
-        onPressed: () async {
-          if (isStarting.value) return;
-          isStarting.value = true;
-          await ref.read(Preferences.introCompleted.notifier).update(true);
-        },
-      ),
+            Scaffold(
+              backgroundColor: Colors.transparent,
+              appBar: AppBar(
+                backgroundColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                toolbarHeight: switch (breakpoint.activeBreakpoint) {
+                  Breakpoints.mobile => 164,
+                  Breakpoints.tablet || Breakpoints.desktop => 132,
+                },
+                centerTitle: false,
+                titleSpacing: 0,
+                actionsPadding: EdgeInsets.zero,
+                title: const SizedBox.shrink(),
+                flexibleSpace: SafeArea(
+                  bottom: false,
+                  child: Stack(
+                    children: [
+                      Align(
+                        alignment: Alignment.topLeft,
+                        child: _IntroAppBarTitle(
+                          line1: t.intro.appBarLine1,
+                          line2: t.intro.appBarLine2,
+                          line3: t.intro.appBarLine3,
+                          activeBreakpoint: breakpoint.activeBreakpoint,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              body: SafeArea(
+                top: false,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 620),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: Center(
+                              child: SvgPicture.asset(
+                                logoAsset,
+                                width: logoWidth,
+                              ),
+                            ),
+                          ),
+                          _IntroFooter(
+                            isStarting: isStarting.value,
+                            startTitle: t.intro.ctaTitle,
+                            startSubtitle: t.intro.ctaSubtitle,
+                            accountLabel: t.intro.alreadyHaveAccount,
+                            onStart: () async {
+                              if (isStarting.value) return;
+                              isStarting.value = true;
+                              await ref
+                                  .read(Preferences.introCompleted.notifier)
+                                  .update(true);
+                              if (context.mounted) {
+                                context.goNamed('home');
+                              }
+                            },
+                            onTermsTap: () async {
+                              await UriUtils.tryLaunch(
+                                Uri.parse(Constants.termsAndConditionsUrl),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -202,30 +166,48 @@ class IntroPage extends HookConsumerWidget with PresLogger {
     try {
       final countryCode = RegionDetector.detect();
       final regionLocale = _getRegionLocale(countryCode);
-      loggy.debug('Timezone Region: ${regionLocale.region} Locale: ${regionLocale.locale}');
+      loggy.debug(
+        'Timezone Region: ${regionLocale.region} Locale: ${regionLocale.locale}',
+      );
       await ref.read(ConfigOptions.region.notifier).update(regionLocale.region);
       await ref.watch(ConfigOptions.directDnsAddress.notifier).reset();
-      await ref.read(localePreferencesProvider.notifier).changeLocale(regionLocale.locale);
+      await ref
+          .read(localePreferencesProvider.notifier)
+          .changeLocale(regionLocale.locale);
       return;
     } catch (e) {
-      loggy.warning('Could not get the local country code based on timezone', e);
+      loggy.warning(
+        'Could not get the local country code based on timezone',
+        e,
+      );
     }
 
     try {
       final DioHttpClient client = DioHttpClient(
         timeout: const Duration(seconds: 2),
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+        userAgent:
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
         debug: true,
       );
-      final response = await client.get<Map<String, dynamic>>('https://api.ip.sb/geoip/');
+      final response = await client.get<Map<String, dynamic>>(
+        'https://api.ip.sb/geoip/',
+      );
 
       if (response.statusCode == 200) {
         final jsonData = response.data!;
-        final regionLocale = _getRegionLocale(jsonData['country_code']?.toString() ?? "");
+        final regionLocale = _getRegionLocale(
+          jsonData['country_code']?.toString() ?? "",
+        );
 
-        loggy.debug('Region: ${regionLocale.region} Locale: ${regionLocale.locale}');
-        await ref.read(ConfigOptions.region.notifier).update(regionLocale.region);
-        await ref.read(localePreferencesProvider.notifier).changeLocale(regionLocale.locale);
+        loggy.debug(
+          'Region: ${regionLocale.region} Locale: ${regionLocale.locale}',
+        );
+        await ref
+            .read(ConfigOptions.region.notifier)
+            .update(regionLocale.region);
+        await ref
+            .read(localePreferencesProvider.notifier)
+            .changeLocale(regionLocale.locale);
       } else {
         loggy.warning('Request failed with status: ${response.statusCode}');
       }
@@ -252,6 +234,358 @@ class IntroPage extends HookConsumerWidget with PresLogger {
         return RegionLocale(Region.other, AppLocale.en);
     }
   }
+}
+
+class _IntroFooter extends ConsumerWidget {
+  const _IntroFooter({
+    required this.isStarting,
+    required this.startTitle,
+    required this.startSubtitle,
+    required this.accountLabel,
+    required this.onStart,
+    required this.onTermsTap,
+  });
+
+  final bool isStarting;
+  final String startTitle;
+  final String startSubtitle;
+  final String accountLabel;
+  final VoidCallback onStart;
+  final VoidCallback onTermsTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(translationsProvider).requireValue;
+    final theme = Theme.of(context);
+    final linkColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF91C2FF)
+        : const Color(0xFF245FA8);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _IntroStartButton(
+          isLoading: isStarting,
+          title: startTitle,
+          subtitle: startSubtitle,
+          onPressed: onStart,
+        ),
+        const Gap(16),
+        _IntroSecondaryButton(label: accountLabel),
+        const Gap(16),
+        Text.rich(
+          textAlign: TextAlign.center,
+          t.intro.termsAndPolicyCaution(
+            tap: (text) => TextSpan(
+              text: text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: linkColor,
+                fontWeight: FontWeight.w500,
+              ),
+              recognizer: TapGestureRecognizer()..onTap = onTermsTap,
+            ),
+          ),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.brightness == Brightness.dark
+                ? const Color(0xFF989CA3)
+                : const Color(0xFF63707B),
+            fontFamily: 'Montserrat',
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _IntroStartButton extends StatelessWidget {
+  const _IntroStartButton({
+    required this.isLoading,
+    required this.title,
+    required this.subtitle,
+    required this.onPressed,
+  });
+
+  static const double _height = 65;
+  static const double _leftSegmentWidth = 65;
+  static const double _crownPadding = 18;
+  static const double _crownSize = 29;
+  static const _backgroundAsset = 'assets/images/1x/cta-background.png';
+  static const _arrowSize = 24.0;
+  static const _arrowVisualScale = 1.18;
+
+  final bool isLoading;
+  final String title;
+  final String subtitle;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final titleColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFF3B444D);
+    final subtitleColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF0F2218)
+        : const Color(0xFF3B444D);
+    final arrowColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFF3B444D);
+    final crownColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFF3A444D);
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: Ink(
+        height: _height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          image: const DecorationImage(
+            image: AssetImage(_backgroundAsset),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: InkWell(
+          onTap: isLoading ? null : onPressed,
+          child: Row(
+            children: [
+              Container(
+                width: _leftSegmentWidth,
+                height: _height,
+                color: Colors.transparent,
+                padding: const EdgeInsets.all(_crownPadding),
+                child: _IntroCrownIcon(size: _crownSize, color: crownColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontFamily: 'Unbounded',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        color: titleColor,
+                        height: 1,
+                      ),
+                    ),
+                    const Gap(7),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'Montserrat',
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                        color: subtitleColor,
+                        height: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox.square(
+                dimension: 44,
+                child: Center(
+                  child: isLoading
+                      ? SizedBox(
+                          width: _arrowSize,
+                          height: _arrowSize,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              arrowColor,
+                            ),
+                          ),
+                        )
+                      : Transform.scale(
+                          scale: _arrowVisualScale,
+                          child: Icon(
+                            Icons.arrow_outward,
+                            size: _arrowSize,
+                            color: arrowColor,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IntroSecondaryButton extends StatelessWidget {
+  const _IntroSecondaryButton({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final surfaceColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF1A1B1F)
+        : const Color(0xFFD6E1E5);
+    final textColor = theme.brightness == Brightness.dark
+        ? const Color(0xFFD8DEE6)
+        : const Color(0xFF3B444D);
+    return Material(
+      color: surfaceColor,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {},
+        child: SizedBox(
+          height: 44,
+          child: Center(
+            child: Text(
+              label,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontFamily: 'Montserrat',
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IntroAppBarTitle extends StatelessWidget {
+  const _IntroAppBarTitle({
+    required this.line1,
+    required this.line2,
+    required this.line3,
+    required this.activeBreakpoint,
+  });
+
+  final String line1;
+  final String line2;
+  final String line3;
+  final Breakpoints activeBreakpoint;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final lineOneTwoStyle = theme.textTheme.titleLarge?.copyWith(
+      fontFamily: "Unbounded",
+      fontWeight: FontWeight.w300,
+      fontSize: 32,
+      height: 27 / 32,
+    );
+    final lineThreeStyle = theme.textTheme.titleLarge?.copyWith(
+      fontFamily: "Unbounded",
+      fontWeight: FontWeight.w700,
+      fontSize: 32,
+      height: 37 / 32,
+    );
+    final maxLineWidth = switch (activeBreakpoint) {
+      Breakpoints.mobile => 260.0,
+      Breakpoints.tablet => 460.0,
+      Breakpoints.desktop => 520.0,
+    };
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, top: 20),
+      child: SizedBox(
+        width: maxLineWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              line1,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: lineOneTwoStyle,
+            ),
+            Text(
+              line2,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: lineOneTwoStyle,
+            ),
+            Text(
+              line3,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: lineThreeStyle,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IntroCrownIcon extends StatelessWidget {
+  const _IntroCrownIcon({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _IntroCrownPainter(color)),
+    );
+  }
+}
+
+class _IntroCrownPainter extends CustomPainter {
+  const _IntroCrownPainter(this.color);
+
+  static const _viewBox = 31.15;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = size.shortestSide / _viewBox;
+    final dx = (size.width - (_viewBox * scale)) / 2;
+    final dy = (size.height - (_viewBox * scale)) / 2;
+
+    canvas.save();
+    canvas.translate(dx, dy);
+    canvas.scale(scale);
+
+    final crownPath = Path()
+      ..moveTo(1, 30.15)
+      ..lineTo(30.15, 30.15)
+      ..moveTo(1, 1)
+      ..lineTo(1, 23.9)
+      ..lineTo(30.15, 23.9)
+      ..lineTo(30.15, 1)
+      ..lineTo(22.86, 9.33)
+      ..lineTo(15.57, 1)
+      ..lineTo(8.28, 9.33)
+      ..close();
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = color;
+
+    canvas.drawPath(crownPath, paint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _IntroCrownPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class RegionLocale {
@@ -312,7 +646,19 @@ class RegionDetector {
   static bool _matchesRussiaTz(String tz) {
     if (tz.contains('russia') || tz.contains('moscow')) return true;
 
-    const abbrs = {'msk', 'yekt', 'omst', 'krat', 'irkt', 'yakt', 'vlat', 'magt', 'pett', 'sakt', 'sret'};
+    const abbrs = {
+      'msk',
+      'yekt',
+      'omst',
+      'krat',
+      'irkt',
+      'yakt',
+      'vlat',
+      'magt',
+      'pett',
+      'sakt',
+      'sret',
+    };
     if (abbrs.contains(tz)) return true;
 
     const winKeys = [
@@ -339,7 +685,12 @@ class RegionDetector {
     if (tz == 'brt' || tz == 'brst') return true;
     if (tz.contains('brazil') || tz.contains('brasilia')) return true;
 
-    const winKeys = ['e. south america', 'central brazilian', 'tocantins', 'bahia'];
+    const winKeys = [
+      'e. south america',
+      'central brazilian',
+      'tocantins',
+      'bahia',
+    ];
     return winKeys.any(tz.contains);
   }
 
@@ -357,7 +708,19 @@ class RegionDetector {
     return c;
   }
 
-  static const _ruOffsets = {120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720};
+  static const _ruOffsets = {
+    120,
+    180,
+    240,
+    300,
+    360,
+    420,
+    480,
+    540,
+    600,
+    660,
+    720,
+  };
 
   static const _brOffsets = {-120, -180, -240, -300};
 
@@ -395,7 +758,14 @@ class RegionDetector {
     }
   }
 
-  static const _langToRegion = <String, String>{'fa': 'IR', 'ps': 'AF', 'tr': 'TR', 'zh': 'CN', 'ru': 'RU', 'pt': 'BR'};
+  static const _langToRegion = <String, String>{
+    'fa': 'IR',
+    'ps': 'AF',
+    'tr': 'TR',
+    'zh': 'CN',
+    'ru': 'RU',
+    'pt': 'BR',
+  };
 
   static const _ianaCities = <String, String>{
     'tehran': 'IR',

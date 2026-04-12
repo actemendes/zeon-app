@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_Слой_2" data-name="Слой 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 357.03 64.6">
+  <defs>
+    <style>
+      .cls-1 {
+        letter-spacing: -.13em;
+      }
+
+      .cls-2 {
+        stroke: #3b444d;
+        stroke-miterlimit: 10;
+      }
+
+      .cls-2, .cls-3, .cls-4 {
+        fill: none;
+      }
+
+      .cls-5 {
+        fill: url(#_Безымянный_градиент_17);
+      }
+
+      .cls-6 {
+        font-family: Montserrat-Medium, Montserrat;
+        font-size: 14px;
+      }
+
+      .cls-6, .cls-7 {
+        font-weight: 500;
+      }
+
+      .cls-4 {
+        stroke: #000;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 3px;
+      }
+
+      .cls-8 {
+        opacity: .2;
+      }
+
+      .cls-9 {
+        letter-spacing: -.03em;
+      }
+
+      .cls-10 {
+        letter-spacing: 0em;
+      }
+
+      .cls-7 {
+        font-family: Unbounded-Medium, Unbounded;
+        font-size: 18px;
+        font-variation-settings: 'wght' 500;
+      }
+
+      .cls-11 {
+        letter-spacing: 0em;
+      }
+
+      .cls-12 {
+        clip-path: url(#clippath);
+      }
+    </style>
+    <linearGradient id="_Безымянный_градиент_17" data-name="Безымянный градиент 17" x1="0" y1="32.3" x2="357.03" y2="32.3" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#bfdd71"/>
+      <stop offset="1" stop-color="#3ce74f"/>
+    </linearGradient>
+    <clipPath id="clippath">
+      <rect class="cls-3" width="357.03" height="64.6" rx="16" ry="16"/>
+    </clipPath>
+  </defs>
+  <g id="_Слой_2-2" data-name="Слой 2">
+    <g>
+      <rect class="cls-5" width="357.03" height="64.6" rx="16" ry="16"/>
+      <g>
+        <text class="cls-7" transform="translate(67.65 29.13)"><tspan class="cls-9" x="0" y="0">С</tspan><tspan class="cls-1" x="16.04" y="0">Т</tspan><tspan x="28.19" y="0">А</tspan><tspan class="cls-10" x="44.89" y="0">Р</tspan><tspan x="59.04" y="0">ТУЕМ</tspan></text>
+        <text class="cls-6" transform="translate(67.65 48.91)"><tspan x="0" y="0">и премиум в п</tspan><tspan class="cls-11" x="107.04" y="0">о</tspan><tspan x="115.96" y="0">дарок</tspan></text>
+      </g>
+      <path class="cls-4" d="M17.61,48.91h33.28M17.61,15.63v26.15h33.28V15.63l-8.32,9.51-8.32-9.51-8.32,9.51-8.32-9.51Z"/>
+      <polygon points="322.59 25.16 322.59 27.62 334.81 27.62 320.95 41.48 322.69 43.22 336.56 29.36 336.56 41.58 339.02 41.58 339.02 25.16 322.59 25.16"/>
+      <g class="cls-8">
+        <g class="cls-12">
+          <g>
+            <path class="cls-2" d="M349.89,65.05c-17.2-3.8-25.16-16-19.56-25.06,5.94-9.61,26.47-14.64,43.09-8.16"/>
+            <path class="cls-2" d="M335.85,65.05c-23.5-5.5-34.38-23.17-26.72-36.29,8.11-13.91,36.16-21.19,58.86-11.81"/>
+            <path class="cls-2" d="M323.79,65.05c-26.41-6.7-38.63-28.21-30.03-44.19,9.12-16.94,40.63-25.81,66.14-14.39"/>
+            <path class="cls-2" d="M305.49,65.05c-24.79-7.96-36.27-33.51-28.19-52.49,8.56-20.12,38.15-30.65,62.1-17.09"/>
+            <path class="cls-2" d="M289.13,65.05c-30.02-9.64-43.91-40.57-34.13-63.55,10.36-24.36,46.19-37.11,75.19-20.69"/>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

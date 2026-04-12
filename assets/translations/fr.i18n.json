@@ -87,6 +87,12 @@
   },
   "intro": {
     "banner": "Tout ce dont vous avez besoin pour un internet sans restrictions",
+    "appBarLine1": "SANS PUB.",
+    "appBarLine2": "SANS LIMITES.",
+    "appBarLine3": "GRATUIT",
+    "ctaTitle": "ON COMMENCE",
+    "ctaSubtitle": "et premium offert",
+    "alreadyHaveAccount": "J'ai déjà un compte",
     "termsAndPolicyCaution(rich)": "En continuant, vous acceptez les ${tap(@:pages.about.termsAndConditions)}",
     "info(rich)": "Fait avec ❤️ par ZEON - ${tap_source(Open Source)} (${tap_license(Licence)})"
   },

@@ -11,7 +11,11 @@ enum _SubscriptionPlan {
   six(months: 6, amountRub: 700, code: '6m'),
   twelve(months: 12, amountRub: 1200, code: '12m');
 
-  const _SubscriptionPlan({required this.months, required this.amountRub, required this.code});
+  const _SubscriptionPlan({
+    required this.months,
+    required this.amountRub,
+    required this.code,
+  });
 
   final int months;
   final int amountRub;
@@ -21,7 +25,9 @@ enum _SubscriptionPlan {
 class ProfilePaymentPage extends HookConsumerWidget {
   const ProfilePaymentPage({super.key});
 
-  static const _headerGradient = LinearGradient(colors: [Color(0xFF3CE74F), Color(0xFFBFDD71)]);
+  static const _headerGradient = LinearGradient(
+    colors: [Color(0xFF3CE74F), Color(0xFFBFDD71)],
+  );
   static const _operatorAssetPaths = <String>[
     'assets/images/2x/operator-mts@2x.png',
     'assets/images/2x/operator-megaphone@2x.png',
@@ -39,7 +45,9 @@ class ProfilePaymentPage extends HookConsumerWidget {
     final theme = Theme.of(context);
     final breakpoint = Breakpoint(context);
     final selectedPlan = useState(_SubscriptionPlan.one);
-    final headingColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
+    final headingColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFF3B444D);
     final maxContentWidth = switch (breakpoint.activeBreakpoint) {
       Breakpoints.mobile => double.infinity,
       Breakpoints.tablet => 720.0,
@@ -64,14 +72,25 @@ class ProfilePaymentPage extends HookConsumerWidget {
                     children: [
                       Expanded(
                         child: _PaymentHeaderTitle(
-                          lineOne: t.pages.profileDetails.specialServers.headerLineOne,
-                          lineTwo: t.pages.profileDetails.specialServers.headerLineTwo,
+                          lineOne: t
+                              .pages
+                              .profileDetails
+                              .specialServers
+                              .headerLineOne,
+                          lineTwo: t
+                              .pages
+                              .profileDetails
+                              .specialServers
+                              .headerLineTwo,
                           color: headingColor,
                         ),
                       ),
                       IconButton(
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+                        constraints: const BoxConstraints.tightFor(
+                          width: 24,
+                          height: 24,
+                        ),
                         icon: Icon(Icons.close_rounded, color: headingColor),
                         onPressed: () => Navigator.of(context).maybePop(),
                       ),
@@ -92,17 +111,32 @@ class ProfilePaymentPage extends HookConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _FeatureItem(
-                        text: t.pages.profileDetails.specialServers.features.prioritySupport,
+                        text: t
+                            .pages
+                            .profileDetails
+                            .specialServers
+                            .features
+                            .prioritySupport,
                         icon: Icons.support_agent_rounded,
                       ),
                       const SizedBox(height: 12),
                       _FeatureItem(
-                        text: t.pages.profileDetails.specialServers.features.noSupport,
+                        text: t
+                            .pages
+                            .profileDetails
+                            .specialServers
+                            .features
+                            .noSupport,
                         icon: Icons.devices_other_rounded,
                       ),
                       const SizedBox(height: 12),
                       _FeatureItem(
-                        text: t.pages.profileDetails.specialServers.features.parkingCoverage,
+                        text: t
+                            .pages
+                            .profileDetails
+                            .specialServers
+                            .features
+                            .parkingCoverage,
                         icon: Icons.signal_cellular_alt_rounded,
                       ),
                       const SizedBox(height: 20),
@@ -111,14 +145,26 @@ class ProfilePaymentPage extends HookConsumerWidget {
                         children: [
                           Expanded(
                             child: _ServersCard(
-                              label: t.pages.profileDetails.specialServers.serversLabel,
-                              value: t.pages.profileDetails.specialServers.serversValue,
+                              label: t
+                                  .pages
+                                  .profileDetails
+                                  .specialServers
+                                  .serversLabel,
+                              value: t
+                                  .pages
+                                  .profileDetails
+                                  .specialServers
+                                  .serversValue,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _OperatorsCard(
-                              label: t.pages.profileDetails.specialServers.operatorsLabel,
+                              label: t
+                                  .pages
+                                  .profileDetails
+                                  .specialServers
+                                  .operatorsLabel,
                               operatorAssetPaths: _operatorAssetPaths,
                             ),
                           ),
@@ -148,20 +194,34 @@ class ProfilePaymentPage extends HookConsumerWidget {
     );
   }
 
-  Future<void> _openCheckout(BuildContext context, Translations t, _SubscriptionPlan plan) async {
+  Future<void> _openCheckout(
+    BuildContext context,
+    Translations t,
+    _SubscriptionPlan plan,
+  ) async {
     final checkoutUri = Uri(
       scheme: 'youkassa',
       host: 'pay',
-      queryParameters: {'plan': plan.code, 'months': '${plan.months}', 'amount': '${plan.amountRub}'},
+      queryParameters: {
+        'plan': plan.code,
+        'months': '${plan.months}',
+        'amount': '${plan.amountRub}',
+      },
     );
     final isOpened = await UriUtils.tryLaunch(checkoutUri);
     if (!context.mounted || isOpened) return;
-    CustomToast.error(t.pages.profileDetails.specialServers.paymentLaunchError).show(context);
+    CustomToast.error(
+      t.pages.profileDetails.specialServers.paymentLaunchError,
+    ).show(context);
   }
 }
 
 class _PaymentHeaderTitle extends StatelessWidget {
-  const _PaymentHeaderTitle({required this.lineOne, required this.lineTwo, required this.color});
+  const _PaymentHeaderTitle({
+    required this.lineOne,
+    required this.lineTwo,
+    required this.color,
+  });
 
   final String lineOne;
   final String lineTwo;
@@ -215,7 +275,11 @@ class _FeatureItem extends StatelessWidget {
       children: [
         SizedBox.square(
           dimension: 24,
-          child: Icon(icon, size: 20, color: theme.colorScheme.onSurface.withValues(alpha: .95)),
+          child: Icon(
+            icon,
+            size: 20,
+            color: theme.colorScheme.onSurface.withValues(alpha: .95),
+          ),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -247,7 +311,10 @@ class _ServersCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: height,
-      decoration: BoxDecoration(color: theme.colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -289,7 +356,10 @@ class _OperatorsCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       height: _ServersCard.height,
-      decoration: BoxDecoration(color: theme.colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -321,7 +391,10 @@ class _OperatorsCard extends StatelessWidget {
                 itemBuilder: (context, index) {
                   return SizedBox.square(
                     dimension: 32,
-                    child: Image.asset(operatorAssetPaths[index], fit: BoxFit.contain),
+                    child: Image.asset(
+                      operatorAssetPaths[index],
+                      fit: BoxFit.contain,
+                    ),
                   );
                 },
               ),
@@ -353,15 +426,21 @@ class _BottomSubscriptionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final panelColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFFE4EFF4);
+    final panelColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFFE4EFF4);
 
     return Align(
       alignment: Alignment.bottomCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 920),
         child: Container(
-          decoration: BoxDecoration(color: panelColor, borderRadius: BorderRadius.circular(16)),
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          // margin: const EdgeInsets.fromLTRB(0, 0, 0, 16),
+          decoration: BoxDecoration(
+            color: panelColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -418,7 +497,12 @@ class _BottomSubscriptionPanel extends StatelessWidget {
 }
 
 class _PlanTile extends StatelessWidget {
-  const _PlanTile({required this.label, required this.price, required this.selected, required this.onTap});
+  const _PlanTile({
+    required this.label,
+    required this.price,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final String price;
@@ -428,10 +512,14 @@ class _PlanTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final defaultBackground = theme.brightness == Brightness.dark ? const Color(0xFF1A1B1F) : const Color(0xFFD6E1E5);
+    final defaultBackground = theme.brightness == Brightness.dark
+        ? const Color(0xFF1A1B1F)
+        : const Color(0xFFD6E1E5);
     const selectedBorderColor = Color(0xFF1AE958);
     final textColor = theme.colorScheme.onSurface;
-    final priceColor = theme.brightness == Brightness.dark ? const Color(0xFFC3C6CF) : const Color(0xFF969696);
+    final priceColor = theme.brightness == Brightness.dark
+        ? const Color(0xFFC3C6CF)
+        : const Color(0xFF969696);
 
     return Material(
       color: Colors.transparent,
@@ -442,7 +530,10 @@ class _PlanTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: defaultBackground,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: selected ? selectedBorderColor : Colors.transparent, width: selected ? 2.5 : 0),
+          border: Border.all(
+            color: selected ? selectedBorderColor : Colors.transparent,
+            width: selected ? 2.5 : 0,
+          ),
         ),
         child: InkWell(
           onTap: onTap,
@@ -492,7 +583,9 @@ class _ConnectButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final foreground = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
+    final foreground = theme.brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFF3B444D);
 
     return Material(
       color: Colors.transparent,
@@ -502,12 +595,17 @@ class _ConnectButton extends StatelessWidget {
         height: 64,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          image: const DecorationImage(image: AssetImage(ProfilePaymentPage._ctaBackgroundAsset), fit: BoxFit.cover),
+          image: const DecorationImage(
+            image: AssetImage(ProfilePaymentPage._ctaBackgroundAsset),
+            fit: BoxFit.cover,
+          ),
         ),
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: _textHorizontalPadding),
+            padding: const EdgeInsets.symmetric(
+              horizontal: _textHorizontalPadding,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -530,7 +628,11 @@ class _ConnectButton extends StatelessWidget {
                   child: Center(
                     child: Transform.scale(
                       scale: _arrowVisualScale,
-                      child: Icon(Icons.arrow_outward, size: _arrowSize, color: foreground),
+                      child: Icon(
+                        Icons.arrow_outward,
+                        size: _arrowSize,
+                        color: foreground,
+                      ),
                     ),
                   ),
                 ),
