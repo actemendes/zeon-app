@@ -533,6 +533,7 @@
       "remainingTrafficSemanticLabel": "已使用 ${consumed} / ${total} 流量",
       "remainingTraffic": "剩餘流量",
       "remainingUsage": "剩餘",
+      "premiumInactive": "高級版未啟用",
       "profileSite": "提供商",
       "profileSupport": "支援"
     }
@@ -673,3 +674,4 @@
     }
   }
 }
+

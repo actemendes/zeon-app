@@ -43,12 +43,16 @@ class DebugProfileBootstrapService with InfraLogger {
       loggy.warning("debug profile bootstrap skipped: invalid debug_seed_profile_url");
       return;
     }
+    final seedName = _resolveSeedName();
 
     final existing = await _profileDataSource.getByUrl(url);
     if (existing != null) {
-      await _profileDataSource.edit(existing.id, const ProfileEntriesCompanion(active: Value(true)));
+      await _profileDataSource.edit(
+        existing.id,
+        ProfileEntriesCompanion(active: const Value(true), name: Value(seedName)),
+      );
       await _preferences.setBool(_prefDone, true);
-      loggy.info("debug profile bootstrap: existing profile activated");
+      loggy.info("debug profile bootstrap: existing profile activated and renamed");
       return;
     }
 
@@ -57,8 +61,15 @@ class DebugProfileBootstrapService with InfraLogger {
       try {
         final importResult = await _profileRepository.upsertRemote(url).run();
         if (importResult.isRight()) {
+          final imported = await _profileDataSource.getByUrl(url);
+          if (imported != null) {
+            await _profileDataSource.edit(
+              imported.id,
+              ProfileEntriesCompanion(active: const Value(true), name: Value(seedName)),
+            );
+          }
           await _preferences.setBool(_prefDone, true);
-          loggy.info("debug profile bootstrap: imported from remote url");
+          loggy.info("debug profile bootstrap: imported from remote url and renamed");
           return;
         }
       } catch (e, st) {
@@ -66,15 +77,17 @@ class DebugProfileBootstrapService with InfraLogger {
       }
     }
 
-    await _insertFallback(url);
+    await _insertFallback(url, seedName);
     await _preferences.setBool(_prefDone, true);
     loggy.warning("debug profile bootstrap: remote import failed, fallback profile inserted");
   }
 
-  Future<void> _insertFallback(String url) async {
+  String _resolveSeedName() {
     final parsedSeedName = parseProfileName(_seedName);
-    final fallbackName = parsedSeedName.isEmpty ? _defaultSeedName : parsedSeedName;
+    return parsedSeedName.isEmpty ? _defaultSeedName : parsedSeedName;
+  }
 
+  Future<void> _insertFallback(String url, String fallbackName) async {
     final fallbackProfile = ProfileEntity.remote(
       id: const Uuid().v4(),
       active: true,

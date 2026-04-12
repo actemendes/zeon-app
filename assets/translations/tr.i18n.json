@@ -533,6 +533,7 @@
       "remainingTrafficSemanticLabel": "${consumed} / ${total} trafik kullanıldı",
       "remainingTraffic": "Kalan trafik",
       "remainingUsage": "Kalan",
+      "premiumInactive": "Premium aktif değil",
       "profileSite": "Sağlayıcı",
       "profileSupport": "Destek"
     }
@@ -673,3 +674,4 @@
     }
   }
 }
+

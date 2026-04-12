@@ -533,6 +533,7 @@
       "remainingTrafficSemanticLabel": "${consumed} de ${total} de tráfico consumido",
       "remainingTraffic": "Tráfico restante",
       "remainingUsage": "Restante",
+      "premiumInactive": "Premium inactivo",
       "profileSite": "Proveedor",
       "profileSupport": "Soporte"
     }
@@ -673,3 +674,4 @@
     }
   }
 }
+

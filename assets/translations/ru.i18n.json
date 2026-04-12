@@ -546,6 +546,7 @@
       "remainingTrafficSemanticLabel": "израсходовано ${consumed} из ${total} трафика",
       "remainingTraffic": "Оставшийся трафик",
       "remainingUsage": "Осталось",
+      "premiumInactive": "Премиум не активен",
       "profileSite": "Провайдер",
       "profileSupport": "Поддержка"
     }
@@ -686,3 +687,4 @@
     }
   }
 }
+

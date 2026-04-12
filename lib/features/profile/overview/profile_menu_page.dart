@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
@@ -9,6 +10,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 const _avatarEmojiAssetDir = 'assets/images/emoji/apple/64';
+const _debugSeedProfileEnabled = bool.fromEnvironment('debug_seed_profile_enabled');
+const _debugSeedProfileName = String.fromEnvironment('debug_seed_profile_name');
+const _debugSeedProfileRemainingDays = int.fromEnvironment('debug_seed_profile_remaining_days', defaultValue: -1);
 const _avatarEmojis = <({String emoji, String assetFile})>[
   (emoji: '\u{1F98A}', assetFile: '1f98a.png'),
   (emoji: '\u{1F43A}', assetFile: '1f43a.png'),
@@ -52,18 +56,30 @@ int fnv1a32(String input) {
   var h = 0x811c9dc5;
   for (final cu in input.codeUnits) {
     h ^= cu;
-    h = (h * 0x01000193) & 0xffffffff;
+    // JS number multiplication can lose 32-bit precision on web builds.
+    // FNV prime 16777619 = 1 + 2 + 16 + 128 + 256 + 16777216.
+    h = (h + (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24)) & 0xffffffff;
   }
   return h;
 }
 
-int _avatarIndex(String? profileName) {
-  final raw = (profileName ?? '').trim();
-  final normalized = raw.isEmpty ? 'user' : raw;
-  final stable = normalized
+String _normalizeAvatarSeed(String? profileName) {
+  final source = (profileName ?? '').trim();
+  final suffix = source.contains('|') ? source.split('|').last.trim() : source;
+  final fallback = suffix.isEmpty ? 'user' : suffix;
+
+  final stable = fallback
       .toLowerCase()
+      .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '')
       .replaceAll(RegExp(r'[\s\-]+'), '_')
-      .replaceAll(RegExp('_+'), '_');
+      .replaceAll(RegExp('_+'), '_')
+      .replaceAll(RegExp(r'^_+|_+$'), '');
+
+  return stable.isEmpty ? 'user' : stable;
+}
+
+int _avatarIndex(String? profileName) {
+  final stable = _normalizeAvatarSeed(profileName);
   final hash = fnv1a32('v1|$stable');
   return hash % _avatarEmojis.length;
 }
@@ -95,57 +111,40 @@ class ProfileMenuPage extends HookConsumerWidget {
       RemoteProfileEntity(:final subInfo) => subInfo,
       _ => null,
     };
-    final remainingDays = subInfo == null
-        ? 0
-        : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
+    final remainingDays = subInfo == null ? 0 : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
 
-    final sections =
-        <
-          ({
-            String title,
-            IconData icon,
-            IconData trailingIcon,
-            VoidCallback? onTap,
-          })
-        >[
-          if (remainingDays > 0)
-            (
-              title: t.pages.profileDetails.menu.bindAccount,
-              icon: Icons.link_rounded,
-              trailingIcon: Icons.chevron_right_rounded,
-              onTap: null,
-            ),
-          (
-            title: t.pages.profileDetails.menu.community,
-            icon: Icons.groups_rounded,
-            trailingIcon: Icons.open_in_new,
-            onTap: () {
-              unawaited(
-                launchUrl(_communityUri, mode: LaunchMode.externalApplication),
-              );
-            },
-          ),
-          (
-            title: t.pages.profileDetails.menu.support,
-            icon: Icons.support_agent_rounded,
-            trailingIcon: Icons.open_in_new,
-            onTap: () {
-              unawaited(
-                launchUrl(_supportUri, mode: LaunchMode.externalApplication),
-              );
-            },
-          ),
-        ];
+    final sections = <({String title, IconData icon, IconData trailingIcon, VoidCallback? onTap})>[
+      if (remainingDays > 0)
+        (
+          title: t.pages.profileDetails.menu.bindAccount,
+          icon: Icons.link_rounded,
+          trailingIcon: Icons.chevron_right_rounded,
+          onTap: null,
+        ),
+      (
+        title: t.pages.profileDetails.menu.community,
+        icon: Icons.groups_rounded,
+        trailingIcon: Icons.open_in_new,
+        onTap: () {
+          unawaited(launchUrl(_communityUri, mode: LaunchMode.externalApplication));
+        },
+      ),
+      (
+        title: t.pages.profileDetails.menu.support,
+        icon: Icons.support_agent_rounded,
+        trailingIcon: Icons.open_in_new,
+        onTap: () {
+          unawaited(launchUrl(_supportUri, mode: LaunchMode.externalApplication));
+        },
+      ),
+    ];
 
     return Scaffold(
       appBar: AppBar(title: Text(t.pages.profileDetails.title.toUpperCase())),
       body: CustomMultiChildLayout(
         delegate: _ProfileMenuLayoutDelegate(),
         children: [
-          LayoutId(
-            id: _ProfileMenuSlot.summary,
-            child: const _ProfileSummaryBlock(),
-          ),
+          LayoutId(id: _ProfileMenuSlot.summary, child: const _ProfileSummaryBlock()),
           LayoutId(
             id: _ProfileMenuSlot.actions,
             child: ListView.builder(
@@ -162,10 +161,7 @@ class ProfileMenuPage extends HookConsumerWidget {
               },
             ),
           ),
-          LayoutId(
-            id: _ProfileMenuSlot.cta,
-            child: const _ProfileMenuCtaPanel(),
-          ),
+          LayoutId(id: _ProfileMenuSlot.cta, child: const _ProfileMenuCtaPanel()),
         ],
       ),
     );
@@ -186,58 +182,33 @@ class _ProfileMenuLayoutDelegate extends MultiChildLayoutDelegate {
     var contentBottom = size.height;
 
     if (hasChild(_ProfileMenuSlot.summary)) {
-      final summaryWidth = (size.width - (_horizontalPadding * 2)).clamp(
-        0.0,
-        size.width,
-      );
+      final summaryWidth = (size.width - (_horizontalPadding * 2)).clamp(0.0, size.width);
       layoutChild(
         _ProfileMenuSlot.summary,
-        BoxConstraints.tightFor(
-          width: summaryWidth,
-          height: _ProfileSummaryBlock.height,
-        ),
+        BoxConstraints.tightFor(width: summaryWidth, height: _ProfileSummaryBlock.height),
       );
-      positionChild(
-        _ProfileMenuSlot.summary,
-        const Offset(_horizontalPadding, _topPadding),
-      );
+      positionChild(_ProfileMenuSlot.summary, const Offset(_horizontalPadding, _topPadding));
       contentTop = _topPadding + _ProfileSummaryBlock.height + _sectionSpacing;
     }
 
     if (hasChild(_ProfileMenuSlot.cta)) {
-      final ctaWidth = (size.width - (_horizontalPadding * 2)).clamp(
-        0.0,
-        size.width,
-      );
-      layoutChild(
-        _ProfileMenuSlot.cta,
-        BoxConstraints.tightFor(
-          width: ctaWidth,
-          height: _ProfileMenuCtaPanel.height,
-        ),
-      );
-      final desiredTop =
-          size.height - _bottomPadding - _ProfileMenuCtaPanel.height;
+      final ctaWidth = (size.width - (_horizontalPadding * 2)).clamp(0.0, size.width);
+      layoutChild(_ProfileMenuSlot.cta, BoxConstraints.tightFor(width: ctaWidth, height: _ProfileMenuCtaPanel.height));
+      final desiredTop = size.height - _bottomPadding - _ProfileMenuCtaPanel.height;
       final ctaTop = desiredTop < contentTop ? contentTop : desiredTop;
       positionChild(_ProfileMenuSlot.cta, Offset(_horizontalPadding, ctaTop));
       contentBottom = ctaTop - _sectionSpacing;
     }
 
     if (hasChild(_ProfileMenuSlot.actions)) {
-      final remainingHeight = contentBottom > contentTop
-          ? contentBottom - contentTop
-          : 0.0;
-      layoutChild(
-        _ProfileMenuSlot.actions,
-        BoxConstraints.tightFor(width: size.width, height: remainingHeight),
-      );
+      final remainingHeight = contentBottom > contentTop ? contentBottom - contentTop : 0.0;
+      layoutChild(_ProfileMenuSlot.actions, BoxConstraints.tightFor(width: size.width, height: remainingHeight));
       positionChild(_ProfileMenuSlot.actions, Offset(0, contentTop));
     }
   }
 
   @override
-  bool shouldRelayout(covariant _ProfileMenuLayoutDelegate oldDelegate) =>
-      false;
+  bool shouldRelayout(covariant _ProfileMenuLayoutDelegate oldDelegate) => false;
 }
 
 class _ProfileMenuCtaPanel extends HookConsumerWidget {
@@ -262,20 +233,11 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
       RemoteProfileEntity(:final subInfo) => subInfo,
       _ => null,
     };
-    final remainingDays = subInfo == null
-        ? 0
-        : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
-    final title =
-        (remainingDays > 0
-                ? t.pages.profileDetails.cta.renew
-                : t.pages.profileDetails.cta.updatePlan)
-            .toUpperCase();
-    final arrowColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF000000)
-        : const Color(0xFF3B444D);
-    final titleColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF000000)
-        : const Color(0xFF3B444D);
+    final remainingDays = subInfo == null ? 0 : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
+    final title = (remainingDays > 0 ? t.pages.profileDetails.cta.renew : t.pages.profileDetails.cta.updatePlan)
+        .toUpperCase();
+    final arrowColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
+    final titleColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
 
     return Material(
       color: Colors.transparent,
@@ -285,17 +247,12 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
         height: height,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          image: const DecorationImage(
-            image: AssetImage(_backgroundAsset),
-            fit: BoxFit.cover,
-          ),
+          image: const DecorationImage(image: AssetImage(_backgroundAsset), fit: BoxFit.cover),
         ),
         child: InkWell(
           onTap: () => context.pushNamed('profilePayment'),
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: _textHorizontalPadding,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: _textHorizontalPadding),
             child: Row(
               children: [
                 Expanded(
@@ -318,11 +275,7 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
                   child: Center(
                     child: Transform.scale(
                       scale: _arrowVisualScale,
-                      child: Icon(
-                        Icons.arrow_outward,
-                        size: _arrowSize,
-                        color: arrowColor,
-                      ),
+                      child: Icon(Icons.arrow_outward, size: _arrowSize, color: arrowColor),
                     ),
                   ),
                 ),
@@ -346,8 +299,6 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
   static const double _avatarGap = 20;
   static const double _crownPadding = 18;
   static const double _crownSize = 29;
-  static const _premiumInactiveLabel =
-      "\u043f\u0440\u0435\u043c\u0438\u0443\u043c \u043d\u0435 \u0430\u043a\u0442\u0438\u0432\u0435\u043d";
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -364,52 +315,36 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
     };
 
     final rawProfileName = (profile?.name ?? '').trim();
-    final normalizedDays = subInfo == null
-        ? 0
-        : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
-    final isPremiumActive =
-        subInfo != null &&
-        !subInfo.isExpired &&
-        subInfo.ratio < 1 &&
-        normalizedDays > 0;
-    final profileName = rawProfileName.isNotEmpty
-        ? rawProfileName
-        : t.common.unknown;
-    final avatarEmoji = pickAvatarEmoji(rawProfileName);
-    final avatarEmojiAsset = pickAvatarEmojiAsset(rawProfileName);
-    final daysLabel = normalizedDays == 0
-        ? _premiumInactiveLabel
-        : t.components.subscriptionInfo.remainingDuration(
-            duration: normalizedDays,
-          );
-    final surfaceColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF1A1B1F)
-        : const Color(0xFFD6E1E5);
-    final subtitleColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF8B8B8B)
-        : const Color(0xFF969696);
-    final crownColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF000000)
-        : const Color(0xFF3A444D);
+    final avatarSeedName = (kDebugMode && _debugSeedProfileEnabled && _debugSeedProfileName.trim().isNotEmpty)
+        ? _debugSeedProfileName
+        : rawProfileName;
+    final normalizedDays = subInfo == null ? 0 : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
+    final effectiveDays = (kDebugMode && _debugSeedProfileEnabled && _debugSeedProfileRemainingDays >= 0)
+        ? _debugSeedProfileRemainingDays
+        : normalizedDays;
+    final isPremiumActive = subInfo != null && !subInfo.isExpired && subInfo.ratio < 1 && effectiveDays > 0;
+    final profileName = rawProfileName.isNotEmpty ? rawProfileName : t.common.unknown;
+    final avatarEmoji = pickAvatarEmoji(avatarSeedName);
+    final avatarEmojiAsset = pickAvatarEmojiAsset(avatarSeedName);
+    final daysLabel = effectiveDays == 0
+        ? t.components.subscriptionInfo.premiumInactive
+        : '${t.components.subscriptionInfo.remainingUsage} ${t.common.interval.day(n: effectiveDays)}';
+    final surfaceColor = theme.brightness == Brightness.dark ? const Color(0xFF1A1B1F) : const Color(0xFFD6E1E5);
+    final subtitleColor = theme.brightness == Brightness.dark ? const Color(0xFF8B8B8B) : const Color(0xFF969696);
+    final crownColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3A444D);
     final inactiveBackgroundColor = theme.brightness == Brightness.dark
         ? const Color(0xFF2E3136)
         : const Color(0xFFE4ECCB);
 
     return Container(
       height: height,
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: Row(
         children: [
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: _textHorizontalPadding,
-                vertical: _textVerticalPadding,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: _textHorizontalPadding, vertical: _textVerticalPadding),
               child: Row(
                 children: [
                   SizedBox.square(
@@ -417,9 +352,8 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
                     child: Image.asset(
                       avatarEmojiAsset,
                       fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) => FittedBox(
-                        child: Text(avatarEmoji, textAlign: TextAlign.center),
-                      ),
+                      errorBuilder: (context, error, stackTrace) =>
+                          FittedBox(child: Text(avatarEmoji, textAlign: TextAlign.center)),
                     ),
                   ),
                   const SizedBox(width: _avatarGap),
@@ -432,10 +366,7 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
                           profileName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600),
                         ),
                         Text(
                           daysLabel,
@@ -454,21 +385,17 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
               ),
             ),
           ),
-          Container(
-            width: _rightSegmentWidth,
-            height: height,
-            decoration: BoxDecoration(
-              gradient: isPremiumActive
-                  ? const LinearGradient(
-                      colors: [Color(0xFFBFDD71), Color(0xFF3CE74F)],
-                    )
-                  : null,
-              color: isPremiumActive ? null : inactiveBackgroundColor,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.all(_crownPadding),
-            child: _ProfileCrownIcon(size: _crownSize, color: crownColor),
-          ),
+          // Container(
+          //   width: _rightSegmentWidth,
+          //   height: height,
+          //   decoration: BoxDecoration(
+          //     gradient: isPremiumActive ? const LinearGradient(colors: [Color(0xFFBFDD71), Color(0xFF3CE74F)]) : null,
+          //     color: isPremiumActive ? null : inactiveBackgroundColor,
+          //     borderRadius: BorderRadius.circular(16),
+          //   ),
+          //   padding: const EdgeInsets.all(_crownPadding),
+          //   child: _ProfileCrownIcon(size: _crownSize, color: crownColor),
+          // ),
         ],
       ),
     );
@@ -531,8 +458,7 @@ class _ProfileCrownPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ProfileCrownPainter oldDelegate) =>
-      oldDelegate.color != color;
+  bool shouldRepaint(covariant _ProfileCrownPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class _ProfileMenuSection extends StatelessWidget {
@@ -550,11 +476,6 @@ class _ProfileMenuSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      trailing: Icon(trailingIcon),
-      onTap: onTap ?? () {},
-    );
+    return ListTile(leading: Icon(icon), title: Text(title), trailing: Icon(trailingIcon), onTap: onTap ?? () {});
   }
 }

@@ -533,6 +533,7 @@
       "remainingTrafficSemanticLabel": "${consumed} از ${total} ترافیک مصرف شده",
       "remainingTraffic": "ترافیک باقی‌مانده",
       "remainingUsage": "باقی‌مانده",
+      "premiumInactive": "پریمیوم غیرفعال است",
       "profileSite": "سرویس‌دهنده",
       "profileSupport": "پشتیبانی"
     }
@@ -673,4 +674,5 @@
     }
   }
 }
+
 

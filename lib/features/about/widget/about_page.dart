@@ -22,7 +22,6 @@ class AboutPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final appInfo = ref.watch(appInfoProvider).requireValue;
-    final appUpdate = ref.watch(appUpdateNotifierProvider);
     final theme = Theme.of(context);
     final logoAsset = theme.brightness == Brightness.dark
         ? 'assets/images/SVG/big-logo-dark.svg'
@@ -43,17 +42,6 @@ class AboutPage extends HookConsumerWidget {
     });
 
     final conditionalTiles = [
-      if (appInfo.release.allowCustomUpdateChecker)
-        ListTile(
-          title: Text(t.pages.about.checkForUpdate),
-          trailing: switch (appUpdate) {
-            AppUpdateStateChecking() => const SizedBox(width: 24, height: 24, child: CircularProgressIndicator()),
-            _ => const Icon(FluentIcons.arrow_sync_24_regular),
-          },
-          onTap: () async {
-            await ref.read(appUpdateNotifierProvider.notifier).check();
-          },
-        ),
       if (PlatformUtils.isDesktop)
         ListTile(
           title: Text(t.pages.about.openWorkingDir),

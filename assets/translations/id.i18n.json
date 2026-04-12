@@ -533,6 +533,7 @@
       "remainingTrafficSemanticLabel": "${consumed} dari ${total} lalu lintas terpakai",
       "remainingTraffic": "Sisa lalu lintas",
       "remainingUsage": "Sisa",
+      "premiumInactive": "Premium tidak aktif",
       "profileSite": "Penyedia",
       "profileSupport": "Dukungan"
     }
@@ -673,3 +674,4 @@
     }
   }
 }
+

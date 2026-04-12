@@ -539,6 +539,7 @@
       "remainingTrafficSemanticLabel": "تم استهلاك ${consumed} من ${total}",
       "remainingTraffic": "البيانات المتبقية",
       "remainingUsage": "المتبقي",
+      "premiumInactive": "البريميوم غير نشط",
       "profileSite": "المزوّد",
       "profileSupport": "الدعم"
     }
@@ -679,3 +680,4 @@
     }
   }
 }
+
