@@ -1,13 +1,60 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 79.14 76.09">
-  <defs>
-    <linearGradient id="logoGradient" x1="0" y1="59.67" x2="79.14" y2="59.67" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#3ce74f"/>
-      <stop offset="1" stop-color="#bfdd71"/>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 79.14 76.09"
+   version="1.1"
+   id="svg3"
+   sodipodi:docname="logo-white.svg"
+   inkscape:version="1.3.2 (091e20e, 2023-11-25, custom)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview3"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="10.684716"
+     inkscape:cx="39.542464"
+     inkscape:cy="38.044998"
+     inkscape:window-width="1920"
+     inkscape:window-height="1009"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg3" />
+  <defs
+     id="defs2">
+    <linearGradient
+       id="logoGradient"
+       x1="0"
+       y1="59.67"
+       x2="79.14"
+       y2="59.67"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#3ce74f"
+         id="stop1" />
+      <stop
+         offset="1"
+         stop-color="#bfdd71"
+         id="stop2" />
     </linearGradient>
   </defs>
-  <g>
-    <path fill="#454d58" d="M43.15,29.05v-9.34c0-2.05-1.79-3.72-3.99-3.72H3.99c-2.2,0-3.99-1.66-3.99-3.72V3.72C0,1.66,1.79,0,3.99,0h71.15c3.58,0,5.35,4.06,2.78,6.38l-27.99,25.34c-2.53,2.29-6.77.62-6.77-2.67Z"/>
-    <path fill="url(#logoGradient)" d="M35.99,46.97v9.33c0,2.05,1.79,3.72,3.99,3.72h35.17c2.2,0,3.99,1.66,3.99,3.72v8.64c0,2.05-1.79,3.72-3.99,3.72H4c-3.58,0-5.35-4.05-2.78-6.38l28-25.4c2.53-2.29,6.77-.63,6.77,2.66Z"/>
+  <g
+     id="g3">
+    <path
+       fill="#454d58"
+       d="M43.15,29.05v-9.34c0-2.05-1.79-3.72-3.99-3.72H3.99c-2.2,0-3.99-1.66-3.99-3.72V3.72C0,1.66,1.79,0,3.99,0h71.15c3.58,0,5.35,4.06,2.78,6.38l-27.99,25.34c-2.53,2.29-6.77.62-6.77-2.67Z"
+       id="path2" />
+    <path
+       fill="#454d58"
+       d="M35.99,46.97v9.33c0,2.05,1.79,3.72,3.99,3.72h35.17c2.2,0,3.99,1.66,3.99,3.72v8.64c0,2.05-1.79,3.72-3.99,3.72H4c-3.58,0-5.35-4.05-2.78-6.38l28-25.4c2.53-2.29,6.77-.63,6.77,2.66Z"
+       id="path3" />
   </g>
 </svg>

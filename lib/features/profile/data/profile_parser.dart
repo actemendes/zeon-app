@@ -7,6 +7,7 @@ import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/features/profile/data/profile_data_mapper.dart';
+import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/model/profile_failure.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -328,6 +329,7 @@ class ProfileParser {
             name = part.replaceFirst(pattern, "");
           }
         }
+        name = parseProfileName(name);
         if (name.isBlank) {
           switch (profile) {
             case RemoteProfileEntity():
@@ -337,6 +339,7 @@ class ProfileParser {
               name = protocol(File(tempFilePath).readAsStringSync());
           }
         }
+        name = parseProfileName(name);
 
         if (headers['enable-warp'].toString() == 'true' || profile.userOverride?.enableWarp == true) {
           final value = {'enable': true, 'mode': 'warp_over_proxy'};

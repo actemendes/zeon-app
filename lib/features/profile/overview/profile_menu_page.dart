@@ -8,43 +8,44 @@ import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-const avatarEmojis = [
-  '\u{1F98A}', // 🦊
-  '\u{1F43A}', // 🐺
-  '\u{1F43C}', // 🐼
-  '\u{1F42F}', // 🐯
-  '\u{1F981}', // 🦁
-  '\u{1F438}', // 🐸
-  '\u{1F419}', // 🐙
-  '\u{1F989}', // 🦉
-  '\u{1F435}', // 🐵
-  '\u{1F428}', // 🐨
-  '\u{1F427}', // 🐧
-  '\u{1F433}', // 🐳
-  '\u{1F984}', // 🦄
-  '\u{1F41D}', // 🐝
-  '\u{1F98B}', // 🦋
-  '\u{1F422}', // 🐢
-  '\u{1F996}', // 🦖
-  '\u{1F432}', // 🐲
-  '\u{1F34B}', // 🍋
-  '\u{1F340}', // 🍀
-  '\u{1F319}', // 🌙
-  '\u{2B50}', // ⭐
-  '\u{26A1}', // ⚡
-  '\u{1F525}', // 🔥
-  '\u{1F9CA}', // 🧊
-  '\u{1F30A}', // 🌊
-  '\u{1F33F}', // 🌿
-  '\u{1F349}', // 🍉
-  '\u{1F355}', // 🍕
-  '\u{2615}', // ☕
-  '\u{1F3A7}', // 🎧
-  '\u{1F579}\u{FE0F}', // 🕹️
-  '\u{1F4BE}', // 💾
-  '\u{1F9E9}', // 🧩
-  '\u{1F527}', // 🔧
-  '\u{1F6F0}\u{FE0F}', // 🛰️
+const _avatarEmojiAssetDir = 'assets/images/emoji/apple/64';
+const _avatarEmojis = <({String emoji, String assetFile})>[
+  (emoji: '\u{1F98A}', assetFile: '1f98a.png'),
+  (emoji: '\u{1F43A}', assetFile: '1f43a.png'),
+  (emoji: '\u{1F43C}', assetFile: '1f43c.png'),
+  (emoji: '\u{1F42F}', assetFile: '1f42f.png'),
+  (emoji: '\u{1F981}', assetFile: '1f981.png'),
+  (emoji: '\u{1F438}', assetFile: '1f438.png'),
+  (emoji: '\u{1F419}', assetFile: '1f419.png'),
+  (emoji: '\u{1F989}', assetFile: '1f989.png'),
+  (emoji: '\u{1F435}', assetFile: '1f435.png'),
+  (emoji: '\u{1F428}', assetFile: '1f428.png'),
+  (emoji: '\u{1F427}', assetFile: '1f427.png'),
+  (emoji: '\u{1F433}', assetFile: '1f433.png'),
+  (emoji: '\u{1F984}', assetFile: '1f984.png'),
+  (emoji: '\u{1F41D}', assetFile: '1f41d.png'),
+  (emoji: '\u{1F98B}', assetFile: '1f98b.png'),
+  (emoji: '\u{1F422}', assetFile: '1f422.png'),
+  (emoji: '\u{1F996}', assetFile: '1f996.png'),
+  (emoji: '\u{1F432}', assetFile: '1f432.png'),
+  (emoji: '\u{1F34B}', assetFile: '1f34b.png'),
+  (emoji: '\u{1F340}', assetFile: '1f340.png'),
+  (emoji: '\u{1F319}', assetFile: '1f319.png'),
+  (emoji: '\u{2B50}', assetFile: '2b50.png'),
+  (emoji: '\u{26A1}', assetFile: '26a1.png'),
+  (emoji: '\u{1F525}', assetFile: '1f525.png'),
+  (emoji: '\u{1F9CA}', assetFile: '1f9ca.png'),
+  (emoji: '\u{1F30A}', assetFile: '1f30a.png'),
+  (emoji: '\u{1F33F}', assetFile: '1f33f.png'),
+  (emoji: '\u{1F349}', assetFile: '1f349.png'),
+  (emoji: '\u{1F355}', assetFile: '1f355.png'),
+  (emoji: '\u{2615}', assetFile: '2615.png'),
+  (emoji: '\u{1F3A7}', assetFile: '1f3a7.png'),
+  (emoji: '\u{1F579}\u{FE0F}', assetFile: '1f579-fe0f.png'),
+  (emoji: '\u{1F4BE}', assetFile: '1f4be.png'),
+  (emoji: '\u{1F9E9}', assetFile: '1f9e9.png'),
+  (emoji: '\u{1F527}', assetFile: '1f527.png'),
+  (emoji: '\u{1F6F0}\u{FE0F}', assetFile: '1f6f0-fe0f.png'),
 ];
 
 int fnv1a32(String input) {
@@ -56,7 +57,7 @@ int fnv1a32(String input) {
   return h;
 }
 
-String pickAvatarEmoji(String? profileName) {
+int _avatarIndex(String? profileName) {
   final raw = (profileName ?? '').trim();
   final normalized = raw.isEmpty ? 'user' : raw;
   final stable = normalized
@@ -64,7 +65,16 @@ String pickAvatarEmoji(String? profileName) {
       .replaceAll(RegExp(r'[\s\-]+'), '_')
       .replaceAll(RegExp('_+'), '_');
   final hash = fnv1a32('v1|$stable');
-  return avatarEmojis[hash % avatarEmojis.length];
+  return hash % _avatarEmojis.length;
+}
+
+String pickAvatarEmoji(String? profileName) {
+  return _avatarEmojis[_avatarIndex(profileName)].emoji;
+}
+
+String pickAvatarEmojiAsset(String? profileName) {
+  final assetFile = _avatarEmojis[_avatarIndex(profileName)].assetFile;
+  return '$_avatarEmojiAssetDir/$assetFile';
 }
 
 class ProfileMenuPage extends HookConsumerWidget {
@@ -366,6 +376,7 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
         ? rawProfileName
         : t.common.unknown;
     final avatarEmoji = pickAvatarEmoji(rawProfileName);
+    final avatarEmojiAsset = pickAvatarEmojiAsset(rawProfileName);
     final daysLabel = normalizedDays == 0
         ? _premiumInactiveLabel
         : t.components.subscriptionInfo.remainingDuration(
@@ -403,8 +414,12 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
                 children: [
                   SizedBox.square(
                     dimension: _avatarSize,
-                    child: FittedBox(
-                      child: Text(avatarEmoji, textAlign: TextAlign.center),
+                    child: Image.asset(
+                      avatarEmojiAsset,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => FittedBox(
+                        child: Text(avatarEmoji, textAlign: TextAlign.center),
+                      ),
                     ),
                   ),
                   const SizedBox(width: _avatarGap),

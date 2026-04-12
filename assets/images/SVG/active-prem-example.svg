@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_Слой_2" data-name="Слой 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 357.03 35.19">
+  <defs>
+    <style>
+      .cls-1 {
+        stroke: #3b444d;
+        stroke-miterlimit: 10;
+      }
+
+      .cls-1, .cls-2 {
+        fill: none;
+      }
+
+      .cls-3 {
+        fill: url(#_Безымянный_градиент_17);
+      }
+
+      .cls-4 {
+        opacity: .2;
+      }
+
+      .cls-5 {
+        letter-spacing: 0em;
+      }
+
+      .cls-6 {
+        fill: #3b444d;
+        font-family: Unbounded-Medium, Unbounded;
+        font-size: 18px;
+        font-variation-settings: 'wght' 500;
+        font-weight: 500;
+      }
+
+      .cls-7 {
+        clip-path: url(#clippath);
+      }
+    </style>
+    <linearGradient id="_Безымянный_градиент_17" data-name="Безымянный градиент 17" x1="0" y1="17.59" x2="357.03" y2="17.59" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#bfdd71"/>
+      <stop offset="1" stop-color="#3ce74f"/>
+    </linearGradient>
+    <clipPath id="clippath">
+      <rect class="cls-2" width="357.03" height="35.19" rx="16" ry="16"/>
+    </clipPath>
+  </defs>
+  <g id="_Слой_2-2" data-name="Слой 2">
+    <g>
+      <rect class="cls-3" width="357.03" height="35.19" rx="16" ry="16"/>
+      <text class="cls-6" transform="translate(96.13 24.22)"><tspan x="0" y="0">ВЫ П</tspan><tspan class="cls-5" x="56.39" y="0">Р</tspan><tspan x="70.7" y="0">ЕМИУМ</tspan></text>
+      <g class="cls-4">
+        <g class="cls-7">
+          <g>
+            <path class="cls-1" d="M349.89,65.05c-17.2-3.8-25.16-16-19.56-25.06,5.94-9.61,26.47-14.64,43.09-8.16"/>
+            <path class="cls-1" d="M335.85,65.05c-23.5-5.5-34.38-23.17-26.72-36.29,8.11-13.91,36.16-21.19,58.86-11.81"/>
+            <path class="cls-1" d="M323.79,65.05c-26.41-6.7-38.63-28.21-30.03-44.19,9.12-16.94,40.63-25.81,66.14-14.39"/>
+            <path class="cls-1" d="M305.49,65.05c-24.79-7.96-36.27-33.51-28.19-52.49,8.56-20.12,38.15-30.65,62.1-17.09"/>
+            <path class="cls-1" d="M289.13,65.05c-30.02-9.64-43.91-40.57-34.13-63.55,10.36-24.36,46.19-37.11,75.19-20.69"/>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

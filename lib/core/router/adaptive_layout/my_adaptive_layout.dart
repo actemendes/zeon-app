@@ -119,13 +119,12 @@ class MyAdaptiveLayout extends HookConsumerWidget {
           ShellRouteAction(Icons.power_settings_new_rounded, t.pages.home.title),
           ShellRouteAction(Icons.settings_rounded, t.pages.settings.title),
           ShellRouteAction(Icons.person_rounded, t.pages.profileDetails.title),
-          ShellRouteAction(Icons.description_rounded, t.pages.logs.title),
           ShellRouteAction(Icons.info_rounded, t.pages.about.title),
         ];
 
   List<String> _actionBranchNames(bool isMobileBreakpoint) => isMobileBreakpoint
       ? ['profileMenu', 'home', 'settings']
-      : ['home', 'settings', 'profileMenu', 'logs', 'about'];
+      : ['home', 'settings', 'profileMenu', 'about'];
 
   List<NavigationDestination> _navDests(List<ShellRouteAction> actions) =>
       actions.map((e) => NavigationDestination(icon: Icon(e.icon), label: e.title)).toList();

@@ -162,5 +162,29 @@ void main() {
         });
       });
     });
+
+    test("Should normalize profile title with provider prefix", () {
+      final headers = <String, dynamic>{"profile-title": "ZEON | happy_fox_153"};
+      final allHeaders = ProfileParser.populateHeaders(content: '', remoteHeaders: headers);
+      expect(allHeaders.isRight(), true);
+
+      allHeaders.match((l) {}, (r) {
+        final profile = ProfileParser.parse(
+          tempFilePath: '',
+          profile: RemoteProfileEntity(
+            id: const Uuid().v4(),
+            active: true,
+            name: '',
+            url: validBaseUrl,
+            lastUpdate: DateTime.now(),
+            populatedHeaders: r,
+          ),
+        );
+        expect(profile.isRight(), true);
+        profile.match((l) {}, (value) {
+          value.map(remote: (rp) => expect(rp.name, equals("happy fox 153")), local: (lp) {});
+        });
+      });
+    });
   });
 }

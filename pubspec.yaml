@@ -172,6 +172,18 @@ flutter:
     - assets/images/disconnect_norouz.PNG
     - assets/images/world_map.png
     - assets/images/1x/cta-background.png
+    - assets/images/emoji/apple/64/
+    - assets/images/1x/count-days-0.png
+    - assets/images/1x/count-days-1.png
+    - assets/images/1x/count-days-2.png
+    - assets/images/1x/count-days-3.png
+    - assets/images/1x/count-days-4.png
+    - assets/images/1x/count-days-5.png
+    - assets/images/1x/count-days-6.png
+    - assets/images/1x/count-days-7.png
+    - assets/images/1x/count-days-8.png
+    - assets/images/1x/count-days-9.png
+    - assets/images/1x/count-days-10.png
     - assets/images/2x/light-back@2x.png
     - assets/images/2x/dark-back@2x.png
     - assets/images/2x/operator-mts@2x.png

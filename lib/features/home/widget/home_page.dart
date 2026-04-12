@@ -5,6 +5,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/features/home/widget/connection_button.dart';
+import 'package:hiddify/features/home/widget/home_premium_access_button.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_card.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_delay_indicator.dart';
@@ -25,7 +26,8 @@ class HomePage extends HookConsumerWidget {
     final activeProfile = ref.watch(activeProfileProvider);
     final breakpoint = Breakpoint(context);
     final subscriptionName = switch (activeProfile) {
-      AsyncData(value: final profile?) when profile.name.isNotBlank => profile.name,
+      AsyncData(value: final profile?) when profile.name.isNotBlank =>
+        profile.name,
       _ => "anonymous",
     };
 
@@ -39,7 +41,11 @@ class HomePage extends HookConsumerWidget {
                   alignment: Alignment.topCenter,
                   child: Opacity(
                     opacity: 1,
-                    child: Image.asset(backgroundMapAsset, height: constraints.maxHeight, fit: BoxFit.fitHeight),
+                    child: Image.asset(
+                      backgroundMapAsset,
+                      height: constraints.maxHeight,
+                      fit: BoxFit.fitHeight,
+                    ),
                   ),
                 ),
               ),
@@ -90,9 +96,17 @@ class HomePage extends HookConsumerWidget {
                             label: t.pages.home.quickSettings,
                             child: IconButton(
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints.tightFor(width: 22, height: 20),
-                              icon: Icon(Icons.tune_rounded, color: theme.colorScheme.onSurface),
-                              onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),
+                              constraints: const BoxConstraints.tightFor(
+                                width: 22,
+                                height: 20,
+                              ),
+                              icon: Icon(
+                                Icons.tune_rounded,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                              onPressed: () => ref
+                                  .read(bottomSheetsNotifierProvider.notifier)
+                                  .showQuickSettings(),
                             ),
                           ),
                         ),
@@ -119,10 +133,14 @@ class HomePage extends HookConsumerWidget {
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [ConnectionButton(), ActiveProxyDelayIndicator()],
+                                    children: [
+                                      ConnectionButton(),
+                                      ActiveProxyDelayIndicator(),
+                                    ],
                                   ),
                                 ),
                                 ActiveProxyFooter(),
+                                HomePremiumAccessButton(),
                               ],
                             ),
                           ),
@@ -177,17 +195,42 @@ class _HomeAppBarTitle extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(internetLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
-            Text(forYouLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
-            Text(subscriptionUpper, maxLines: 1, overflow: TextOverflow.ellipsis, style: nameStyle),
+            Text(
+              internetLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: headingStyle,
+            ),
+            Text(
+              forYouLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: headingStyle,
+            ),
+            Text(
+              subscriptionUpper,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: nameStyle,
+            ),
           ],
         ),
         Breakpoints.tablet || Breakpoints.desktop => Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$internetLabel $forYouLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
-            Text(subscriptionUpper, maxLines: 1, overflow: TextOverflow.ellipsis, style: nameStyle),
+            Text(
+              '$internetLabel $forYouLabel',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: headingStyle,
+            ),
+            Text(
+              subscriptionUpper,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: nameStyle,
+            ),
           ],
         ),
       },
@@ -210,12 +253,17 @@ class AppVersionLabel extends HookConsumerWidget {
       label: t.common.version,
       button: false,
       child: Container(
-        decoration: BoxDecoration(color: theme.colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(4)),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(4),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         child: Text(
           version,
           textDirection: TextDirection.ltr,
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSecondaryContainer),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSecondaryContainer,
+          ),
         ),
       ),
     );

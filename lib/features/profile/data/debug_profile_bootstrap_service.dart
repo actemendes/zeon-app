@@ -4,6 +4,7 @@ import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/core/model/environment.dart';
 import 'package:hiddify/features/profile/data/profile_data_mapper.dart';
 import 'package:hiddify/features/profile/data/profile_data_source.dart';
+import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/data/profile_repository.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
@@ -21,9 +22,10 @@ class DebugProfileBootstrapService with InfraLogger {
        _profileDataSource = profileDataSource,
        _preferences = preferences;
 
+  static const _defaultSeedName = "UI Debug Profile";
   static const _enabled = bool.fromEnvironment("debug_seed_profile_enabled");
   static const _seedUrl = String.fromEnvironment("debug_seed_profile_url");
-  static const _seedName = String.fromEnvironment("debug_seed_profile_name", defaultValue: "UI Debug Profile");
+  static const _seedName = String.fromEnvironment("debug_seed_profile_name", defaultValue: _defaultSeedName);
   static const _prefDone = "debug_seed_profile_bootstrap_done";
 
   final Environment _environment;
@@ -70,10 +72,13 @@ class DebugProfileBootstrapService with InfraLogger {
   }
 
   Future<void> _insertFallback(String url) async {
+    final parsedSeedName = parseProfileName(_seedName);
+    final fallbackName = parsedSeedName.isEmpty ? _defaultSeedName : parsedSeedName;
+
     final fallbackProfile = ProfileEntity.remote(
       id: const Uuid().v4(),
       active: true,
-      name: _seedName,
+      name: fallbackName,
       url: url,
       lastUpdate: DateTime.now(),
       options: const ProfileOptions(updateInterval: Duration(hours: 6)),
@@ -86,7 +91,7 @@ class DebugProfileBootstrapService with InfraLogger {
         supportUrl: url,
       ),
       profileOverride: "{}",
-      populatedHeaders: const {"profile-title": _seedName},
+      populatedHeaders: {"profile-title": fallbackName},
     );
     await _profileDataSource.insert(fallbackProfile.toInsertEntry());
   }
