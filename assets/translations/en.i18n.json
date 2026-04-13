@@ -176,6 +176,26 @@
         "renew": "Renew",
         "updatePlan": "Update plan"
       },
+      "linkAccount": {
+        "title": "Link account",
+        "description": "To link a device to your account, enter the 6-digit code below on that device. The digits are refreshed every hour.",
+        "codeLabel": "Link code",
+        "updatesInMinutes": {
+          "one": "Updates in 1 minute",
+          "other": "Updates in $n minutes"
+        },
+        "connectedDevices": "Connected devices",
+        "currentDevice": "This device",
+        "noDevices": "No connected devices",
+        "removeDevice": "Remove device",
+        "removeDeviceTitle": "Remove device",
+        "removeDeviceMessage": "Are you sure you want to remove \"$name\"?",
+        "deleteAccount": "Delete account",
+        "deleteAccountTitle": "Delete account",
+        "deleteAccountMessage": "Are you sure you want to remove this account from this device? You will need to sign in to the app again.",
+        "yes": "Yes",
+        "no": "No"
+      },
       "specialServers": {
         "headerLineOne": "SPECIAL SERVERS",
         "headerLineTwo": "FOR YOU.",

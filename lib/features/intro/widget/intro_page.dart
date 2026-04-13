@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
@@ -12,6 +13,7 @@ import 'package:hiddify/core/localization/locale_preferences.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/region.dart';
+import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -21,6 +23,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 class IntroPage extends HookConsumerWidget with PresLogger {
   const IntroPage({super.key});
 
+  static const double _maxContentWidth = 620;
   static bool locationInfoLoaded = false;
 
   @override
@@ -28,9 +31,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
     final breakpoint = Breakpoint(context);
-    final baseBackgroundColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF000000)
-        : const Color(0xFFE4ECEF);
+    final baseBackgroundColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFFE4ECEF);
     final backgroundMapAsset = theme.brightness == Brightness.dark
         ? 'assets/images/2x/dark-back@2x.png'
         : 'assets/images/2x/light-back@2x.png';
@@ -41,23 +42,15 @@ class IntroPage extends HookConsumerWidget with PresLogger {
     final isStarting = useState(false);
 
     if (!locationInfoLoaded) {
-      autoSelectRegion(
-        ref,
-      ).then((value) => loggy.debug("Auto Region selection finished!"));
+      autoSelectRegion(ref).then((value) => loggy.debug("Auto Region selection finished!"));
       locationInfoLoaded = true;
     }
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final logoWidth = switch (breakpoint.activeBreakpoint) {
-          Breakpoints.mobile => (constraints.maxWidth * 0.76).clamp(
-            230.0,
-            360.0,
-          ),
-          Breakpoints.tablet => (constraints.maxWidth * 0.56).clamp(
-            320.0,
-            480.0,
-          ),
+          Breakpoints.mobile => (constraints.maxWidth * 0.76).clamp(230.0, 360.0),
+          Breakpoints.tablet => (constraints.maxWidth * 0.56).clamp(320.0, 480.0),
           Breakpoints.desktop => 440.0,
         };
         return Stack(
@@ -67,11 +60,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
               child: IgnorePointer(
                 child: Align(
                   alignment: Alignment.topCenter,
-                  child: Image.asset(
-                    backgroundMapAsset,
-                    height: constraints.maxHeight,
-                    fit: BoxFit.fitHeight,
-                  ),
+                  child: Image.asset(backgroundMapAsset, height: constraints.maxHeight, fit: BoxFit.fitHeight),
                 ),
               ),
             ),
@@ -93,9 +82,10 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                 title: const SizedBox.shrink(),
                 flexibleSpace: SafeArea(
                   bottom: false,
-                  child: Stack(
-                    children: [
-                      Align(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+                      child: Align(
                         alignment: Alignment.topLeft,
                         child: _IntroAppBarTitle(
                           line1: t.intro.appBarLine1,
@@ -104,7 +94,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                           activeBreakpoint: breakpoint.activeBreakpoint,
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -112,21 +102,13 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                 top: false,
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 620),
+                    constraints: const BoxConstraints(maxWidth: _maxContentWidth),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 16,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                       child: Column(
                         children: [
                           Expanded(
-                            child: Center(
-                              child: SvgPicture.asset(
-                                logoAsset,
-                                width: logoWidth,
-                              ),
-                            ),
+                            child: Center(child: SvgPicture.asset(logoAsset, width: logoWidth)),
                           ),
                           _IntroFooter(
                             isStarting: isStarting.value,
@@ -136,17 +118,13 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                             onStart: () async {
                               if (isStarting.value) return;
                               isStarting.value = true;
-                              await ref
-                                  .read(Preferences.introCompleted.notifier)
-                                  .update(true);
+                              await ref.read(Preferences.introCompleted.notifier).update(true);
                               if (context.mounted) {
                                 context.goNamed('home');
                               }
                             },
                             onTermsTap: () async {
-                              await UriUtils.tryLaunch(
-                                Uri.parse(Constants.termsAndConditionsUrl),
-                              );
+                              await UriUtils.tryLaunch(Uri.parse(Constants.termsAndConditionsUrl));
                             },
                           ),
                         ],
@@ -166,48 +144,30 @@ class IntroPage extends HookConsumerWidget with PresLogger {
     try {
       final countryCode = RegionDetector.detect();
       final regionLocale = _getRegionLocale(countryCode);
-      loggy.debug(
-        'Timezone Region: ${regionLocale.region} Locale: ${regionLocale.locale}',
-      );
+      loggy.debug('Timezone Region: ${regionLocale.region} Locale: ${regionLocale.locale}');
       await ref.read(ConfigOptions.region.notifier).update(regionLocale.region);
       await ref.watch(ConfigOptions.directDnsAddress.notifier).reset();
-      await ref
-          .read(localePreferencesProvider.notifier)
-          .changeLocale(regionLocale.locale);
+      await ref.read(localePreferencesProvider.notifier).changeLocale(regionLocale.locale);
       return;
     } catch (e) {
-      loggy.warning(
-        'Could not get the local country code based on timezone',
-        e,
-      );
+      loggy.warning('Could not get the local country code based on timezone', e);
     }
 
     try {
       final DioHttpClient client = DioHttpClient(
         timeout: const Duration(seconds: 2),
-        userAgent:
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
         debug: true,
       );
-      final response = await client.get<Map<String, dynamic>>(
-        'https://api.ip.sb/geoip/',
-      );
+      final response = await client.get<Map<String, dynamic>>('https://api.ip.sb/geoip/');
 
       if (response.statusCode == 200) {
         final jsonData = response.data!;
-        final regionLocale = _getRegionLocale(
-          jsonData['country_code']?.toString() ?? "",
-        );
+        final regionLocale = _getRegionLocale(jsonData['country_code']?.toString() ?? "");
 
-        loggy.debug(
-          'Region: ${regionLocale.region} Locale: ${regionLocale.locale}',
-        );
-        await ref
-            .read(ConfigOptions.region.notifier)
-            .update(regionLocale.region);
-        await ref
-            .read(localePreferencesProvider.notifier)
-            .changeLocale(regionLocale.locale);
+        loggy.debug('Region: ${regionLocale.region} Locale: ${regionLocale.locale}');
+        await ref.read(ConfigOptions.region.notifier).update(regionLocale.region);
+        await ref.read(localePreferencesProvider.notifier).changeLocale(regionLocale.locale);
       } else {
         loggy.warning('Request failed with status: ${response.statusCode}');
       }
@@ -257,18 +217,11 @@ class _IntroFooter extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
-    final linkColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF91C2FF)
-        : const Color(0xFF245FA8);
+    final linkColor = theme.brightness == Brightness.dark ? const Color(0xFF91C2FF) : const Color(0xFF245FA8);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _IntroStartButton(
-          isLoading: isStarting,
-          title: startTitle,
-          subtitle: startSubtitle,
-          onPressed: onStart,
-        ),
+        _IntroStartButton(isLoading: isStarting, title: startTitle, subtitle: startSubtitle, onPressed: onStart),
         const Gap(16),
         _IntroSecondaryButton(label: accountLabel),
         const Gap(16),
@@ -277,17 +230,12 @@ class _IntroFooter extends ConsumerWidget {
           t.intro.termsAndPolicyCaution(
             tap: (text) => TextSpan(
               text: text,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: linkColor,
-                fontWeight: FontWeight.w500,
-              ),
+              style: theme.textTheme.bodySmall?.copyWith(color: linkColor, fontWeight: FontWeight.w500),
               recognizer: TapGestureRecognizer()..onTap = onTermsTap,
             ),
           ),
           style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.brightness == Brightness.dark
-                ? const Color(0xFF989CA3)
-                : const Color(0xFF63707B),
+            color: theme.brightness == Brightness.dark ? const Color(0xFF989CA3) : const Color(0xFF63707B),
             fontFamily: 'Montserrat',
             fontWeight: FontWeight.w500,
           ),
@@ -321,18 +269,10 @@ class _IntroStartButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final titleColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF000000)
-        : const Color(0xFF3B444D);
-    final subtitleColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF0F2218)
-        : const Color(0xFF3B444D);
-    final arrowColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF000000)
-        : const Color(0xFF3B444D);
-    final crownColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF000000)
-        : const Color(0xFF3A444D);
+    final titleColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
+    final subtitleColor = theme.brightness == Brightness.dark ? const Color(0xFF0F2218) : const Color(0xFF3B444D);
+    final arrowColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
+    final crownColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3A444D);
 
     return Material(
       color: Colors.transparent,
@@ -342,10 +282,7 @@ class _IntroStartButton extends StatelessWidget {
         height: _height,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          image: const DecorationImage(
-            image: AssetImage(_backgroundAsset),
-            fit: BoxFit.cover,
-          ),
+          image: const DecorationImage(image: AssetImage(_backgroundAsset), fit: BoxFit.cover),
         ),
         child: InkWell(
           onTap: isLoading ? null : onPressed,
@@ -401,18 +338,12 @@ class _IntroStartButton extends StatelessWidget {
                           height: _arrowSize,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              arrowColor,
-                            ),
+                            valueColor: AlwaysStoppedAnimation<Color>(arrowColor),
                           ),
                         )
                       : Transform.scale(
                           scale: _arrowVisualScale,
-                          child: Icon(
-                            Icons.arrow_outward,
-                            size: _arrowSize,
-                            color: arrowColor,
-                          ),
+                          child: Icon(Icons.arrow_outward, size: _arrowSize, color: arrowColor),
                         ),
                 ),
               ),
@@ -432,18 +363,16 @@ class _IntroSecondaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final surfaceColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF1A1B1F)
-        : const Color(0xFFD6E1E5);
-    final textColor = theme.brightness == Brightness.dark
-        ? const Color(0xFFD8DEE6)
-        : const Color(0xFF3B444D);
+    final surfaceColor = theme.brightness == Brightness.dark ? const Color(0xFF1A1B1F) : const Color(0xFFD6E1E5);
+    final textColor = theme.brightness == Brightness.dark ? const Color(0xFFD8DEE6) : const Color(0xFF3B444D);
     return Material(
       color: surfaceColor,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {},
+        onTap: () {
+          showDialog<void>(context: context, builder: (_) => const _BindAccountCodeDialog());
+        },
         child: SizedBox(
           height: 44,
           child: Center(
@@ -458,6 +387,166 @@ class _IntroSecondaryButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _BindAccountCodeDialog extends HookConsumerWidget {
+  const _BindAccountCodeDialog();
+
+  static const _codeLength = 6;
+  static const _simulatedErrorCode = '000000';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = ref.watch(translationsProvider).requireValue;
+    final theme = Theme.of(context);
+    final codeController = useTextEditingController();
+    final codeFocusNode = useFocusNode();
+    final isSubmitting = useState(false);
+
+    useListenable(codeController);
+
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          codeFocusNode.requestFocus();
+        }
+      });
+      return null;
+    }, [codeFocusNode]);
+
+    final isCodeComplete = codeController.text.length == _codeLength;
+
+    Future<void> bind() async {
+      if (isSubmitting.value) return;
+
+      final code = codeController.text.trim();
+      final notification = ref.read(inAppNotificationControllerProvider);
+
+      if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+        notification.showErrorToast(t.errors.unexpected);
+        return;
+      }
+
+      isSubmitting.value = true;
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      final isBindSuccessful = code != _simulatedErrorCode;
+      isSubmitting.value = false;
+
+      if (!context.mounted) return;
+
+      if (!isBindSuccessful) {
+        notification.showErrorToast(t.errors.unexpected);
+        return;
+      }
+
+      notification.showSuccessToast(t.common.done);
+      await ref.read(Preferences.introCompleted.notifier).update(true);
+      if (!context.mounted) return;
+
+      Navigator.of(context).pop();
+      context.goNamed('home');
+    }
+
+    final dialogBackgroundColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF161B22)
+        : const Color(0xFFFFFFFF);
+    final titleColor = theme.brightness == Brightness.dark ? const Color(0xFFF1F5F9) : const Color(0xFF1F2937);
+    final helperTextColor = theme.brightness == Brightness.dark ? const Color(0xFFB3BFCA) : const Color(0xFF5B6670);
+    final inputFillColor = theme.brightness == Brightness.dark ? const Color(0xFF202833) : const Color(0xFFF4F7FA);
+    final inputBorderColor = theme.brightness == Brightness.dark ? const Color(0xFF3B4756) : const Color(0xFFC8D3DC);
+
+    return AlertDialog(
+      backgroundColor: dialogBackgroundColor,
+      title: Text(
+        t.pages.profileDetails.linkAccount.title,
+        style: theme.textTheme.titleLarge?.copyWith(
+          fontFamily: 'Unbounded',
+          fontWeight: FontWeight.w600,
+          color: titleColor,
+        ),
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              t.pages.profileDetails.linkAccount.description,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: helperTextColor,
+                fontFamily: 'Montserrat',
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const Gap(16),
+            Text(
+              t.pages.profileDetails.linkAccount.codeLabel,
+              style: theme.textTheme.labelLarge?.copyWith(fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
+            ),
+            const Gap(10),
+            SizedBox(
+              width: double.infinity,
+              child: TextField(
+                controller: codeController,
+                focusNode: codeFocusNode,
+                onSubmitted: (_) => bind(),
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontFamily: 'Montserrat',
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 10,
+                  color: titleColor,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(_codeLength),
+                ],
+                decoration: InputDecoration(
+                  hintText: '000000',
+                  hintStyle: theme.textTheme.headlineSmall?.copyWith(
+                    fontFamily: 'Montserrat',
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 10,
+                    color: helperTextColor.withValues(alpha: 0.6),
+                  ),
+                  filled: true,
+                  fillColor: inputFillColor,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: inputBorderColor),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: inputBorderColor),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+      actions: [
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: isSubmitting.value || !isCodeComplete ? null : bind,
+            child: isSubmitting.value
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : Text(t.pages.profileDetails.menu.bindAccount),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -503,24 +592,9 @@ class _IntroAppBarTitle extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              line1,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: lineOneTwoStyle,
-            ),
-            Text(
-              line2,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: lineOneTwoStyle,
-            ),
-            Text(
-              line3,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: lineThreeStyle,
-            ),
+            Text(line1, maxLines: 1, overflow: TextOverflow.ellipsis, style: lineOneTwoStyle),
+            Text(line2, maxLines: 1, overflow: TextOverflow.ellipsis, style: lineOneTwoStyle),
+            Text(line3, maxLines: 1, overflow: TextOverflow.ellipsis, style: lineThreeStyle),
           ],
         ),
       ),
@@ -584,8 +658,7 @@ class _IntroCrownPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _IntroCrownPainter oldDelegate) =>
-      oldDelegate.color != color;
+  bool shouldRepaint(covariant _IntroCrownPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class RegionLocale {
@@ -646,19 +719,7 @@ class RegionDetector {
   static bool _matchesRussiaTz(String tz) {
     if (tz.contains('russia') || tz.contains('moscow')) return true;
 
-    const abbrs = {
-      'msk',
-      'yekt',
-      'omst',
-      'krat',
-      'irkt',
-      'yakt',
-      'vlat',
-      'magt',
-      'pett',
-      'sakt',
-      'sret',
-    };
+    const abbrs = {'msk', 'yekt', 'omst', 'krat', 'irkt', 'yakt', 'vlat', 'magt', 'pett', 'sakt', 'sret'};
     if (abbrs.contains(tz)) return true;
 
     const winKeys = [
@@ -685,12 +746,7 @@ class RegionDetector {
     if (tz == 'brt' || tz == 'brst') return true;
     if (tz.contains('brazil') || tz.contains('brasilia')) return true;
 
-    const winKeys = [
-      'e. south america',
-      'central brazilian',
-      'tocantins',
-      'bahia',
-    ];
+    const winKeys = ['e. south america', 'central brazilian', 'tocantins', 'bahia'];
     return winKeys.any(tz.contains);
   }
 
@@ -708,19 +764,7 @@ class RegionDetector {
     return c;
   }
 
-  static const _ruOffsets = {
-    120,
-    180,
-    240,
-    300,
-    360,
-    420,
-    480,
-    540,
-    600,
-    660,
-    720,
-  };
+  static const _ruOffsets = {120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720};
 
   static const _brOffsets = {-120, -180, -240, -300};
 
@@ -758,14 +802,7 @@ class RegionDetector {
     }
   }
 
-  static const _langToRegion = <String, String>{
-    'fa': 'IR',
-    'ps': 'AF',
-    'tr': 'TR',
-    'zh': 'CN',
-    'ru': 'RU',
-    'pt': 'BR',
-  };
+  static const _langToRegion = <String, String>{'fa': 'IR', 'ps': 'AF', 'tr': 'TR', 'zh': 'CN', 'ru': 'RU', 'pt': 'BR'};
 
   static const _ianaCities = <String, String>{
     'tehran': 'IR',

@@ -119,7 +119,7 @@ class ProfileMenuPage extends HookConsumerWidget {
           title: t.pages.profileDetails.menu.bindAccount,
           icon: Icons.link_rounded,
           trailingIcon: Icons.chevron_right_rounded,
-          onTap: null,
+          onTap: () => context.pushNamed('profileLinkAccount'),
         ),
       (
         title: t.pages.profileDetails.menu.community,

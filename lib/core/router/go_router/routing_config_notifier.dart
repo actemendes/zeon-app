@@ -12,6 +12,7 @@ import 'package:hiddify/features/log/overview/logs_page.dart';
 import 'package:hiddify/features/per_app_proxy/overview/per_app_proxy_page.dart';
 import 'package:hiddify/features/profile/details/profile_details_page.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/profile/overview/profile_link_account_page.dart';
 import 'package:hiddify/features/profile/overview/profile_menu_page.dart';
 import 'package:hiddify/features/profile/overview/profile_payment_page.dart';
 import 'package:hiddify/features/profile/overview/profiles_page.dart';
@@ -251,6 +252,12 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                       path: '/profile-payment',
                       pageBuilder: (_, state) =>
                           customTransition(TransitionType.slide, state.pageKey, const ProfilePaymentPage()),
+                    ),
+                    GoRoute(
+                      name: 'profileLinkAccount',
+                      path: '/link-account',
+                      pageBuilder: (_, state) =>
+                          customTransition(TransitionType.slide, state.pageKey, const ProfileLinkAccountPage()),
                     ),
                   ],
                 ),
