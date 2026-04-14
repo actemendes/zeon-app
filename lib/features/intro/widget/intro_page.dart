@@ -594,7 +594,7 @@ class _IntroAppBarTitle extends StatelessWidget {
           children: [
             Text(line1, maxLines: 1, overflow: TextOverflow.ellipsis, style: lineOneTwoStyle),
             Text(line2, maxLines: 1, overflow: TextOverflow.ellipsis, style: lineOneTwoStyle),
-            Text(line3, maxLines: 1, overflow: TextOverflow.ellipsis, style: lineThreeStyle),
+            Text(line3, maxLines: 2, overflow: TextOverflow.ellipsis, style: lineThreeStyle),
           ],
         ),
       ),

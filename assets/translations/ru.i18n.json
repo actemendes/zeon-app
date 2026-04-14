@@ -91,8 +91,8 @@
   },
   "intro": {
     "banner": "Все, что вам нужно для интернета без ограничений",
-    "appBarLine1": "БЕЗ РЕКЛАМЫ.",
-    "appBarLine2": "БЕЗ ЛИМИТОВ.",
+    "appBarLine1": "ЧИСТО.",
+    "appBarLine2": "СВОБОДНО.",
     "appBarLine3": "БЕСПЛАТНО",
     "ctaTitle": "СТАРТУЕМ",
     "ctaSubtitle": "и премиум в подарок",
@@ -350,10 +350,10 @@
           "other": "Другой"
         },
         "balancerStrategy": {
-          "title": "Стратегия Balancer",
-          "roundRobin": "Round robin",
-          "consistentHash": "Consistent hash",
-          "stickySession": "Sticky session"
+          "title": "Стратегия Автовыбора",
+          "roundRobin": "Равномерно по всем серверам",
+          "consistentHash": "Приоритет за 'любимым' сервером",
+          "stickySession": "Не менять сервер во время сессии"
         },
         "blockAds": "Блокировать рекламу",
         "bypassLan": "Обход LAN",

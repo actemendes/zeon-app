@@ -26,8 +26,7 @@ class HomePage extends HookConsumerWidget {
     final activeProfile = ref.watch(activeProfileProvider);
     final breakpoint = Breakpoint(context);
     final subscriptionName = switch (activeProfile) {
-      AsyncData(value: final profile?) when profile.name.isNotBlank =>
-        profile.name,
+      AsyncData(value: final profile?) when profile.name.isNotBlank => profile.name,
       _ => "anonymous",
     };
 
@@ -41,11 +40,7 @@ class HomePage extends HookConsumerWidget {
                   alignment: Alignment.topCenter,
                   child: Opacity(
                     opacity: 1,
-                    child: Image.asset(
-                      backgroundMapAsset,
-                      height: constraints.maxHeight,
-                      fit: BoxFit.fitHeight,
-                    ),
+                    child: Image.asset(backgroundMapAsset, height: constraints.maxHeight, fit: BoxFit.fitHeight),
                   ),
                 ),
               ),
@@ -77,6 +72,7 @@ class HomePage extends HookConsumerWidget {
                 flexibleSpace: SafeArea(
                   bottom: false,
                   child: Stack(
+                    fit: StackFit.expand,
                     children: [
                       Align(
                         alignment: Alignment.topLeft,
@@ -87,27 +83,17 @@ class HomePage extends HookConsumerWidget {
                           subscriptionName: subscriptionName,
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 20, right: 20),
-                        child: Align(
-                          alignment: Alignment.topRight,
-                          child: Semantics(
-                            key: const ValueKey("profile_quick_settings"),
-                            label: t.pages.home.quickSettings,
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints.tightFor(
-                                width: 22,
-                                height: 20,
-                              ),
-                              icon: Icon(
-                                Icons.tune_rounded,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                              onPressed: () => ref
-                                  .read(bottomSheetsNotifierProvider.notifier)
-                                  .showQuickSettings(),
-                            ),
+                      Positioned(
+                        top: 20,
+                        right: 20,
+                        child: Semantics(
+                          key: const ValueKey("profile_quick_settings"),
+                          label: t.pages.home.quickSettings,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(width: 22, height: 20),
+                            icon: Icon(Icons.tune_rounded, color: theme.colorScheme.onSurface),
+                            onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),
                           ),
                         ),
                       ),
@@ -133,10 +119,7 @@ class HomePage extends HookConsumerWidget {
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      ConnectionButton(),
-                                      ActiveProxyDelayIndicator(),
-                                    ],
+                                    children: [ConnectionButton(), ActiveProxyDelayIndicator()],
                                   ),
                                 ),
                                 ActiveProxyFooter(),
@@ -195,42 +178,17 @@ class _HomeAppBarTitle extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              internetLabel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: headingStyle,
-            ),
-            Text(
-              forYouLabel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: headingStyle,
-            ),
-            Text(
-              subscriptionUpper,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: nameStyle,
-            ),
+            Text(internetLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
+            Text(forYouLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
+            Text(subscriptionUpper, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
           ],
         ),
         Breakpoints.tablet || Breakpoints.desktop => Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '$internetLabel $forYouLabel',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: headingStyle,
-            ),
-            Text(
-              subscriptionUpper,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: nameStyle,
-            ),
+            Text('$internetLabel $forYouLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
+            Text(subscriptionUpper, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
           ],
         ),
       },
@@ -253,17 +211,12 @@ class AppVersionLabel extends HookConsumerWidget {
       label: t.common.version,
       button: false,
       child: Container(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(4),
-        ),
+        decoration: BoxDecoration(color: theme.colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(4)),
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         child: Text(
           version,
           textDirection: TextDirection.ltr,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSecondaryContainer,
-          ),
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSecondaryContainer),
         ),
       ),
     );

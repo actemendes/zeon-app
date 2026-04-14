@@ -100,13 +100,14 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
                     if (kDebugMode && _debugAccessibility) {
                       return AccessibilityTools(checkFontOverflows: true, child: child);
                     }
+                    final isDark = theme.brightness == Brightness.dark;
                     return AnnotatedRegion<SystemUiOverlayStyle>(
                       value: SystemUiOverlayStyle(
                         statusBarColor: theme.scaffoldBackgroundColor,
+                        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
                         systemNavigationBarColor: theme.scaffoldBackgroundColor,
-                        systemNavigationBarIconBrightness: theme.brightness == Brightness.dark
-                            ? Brightness.light
-                            : Brightness.dark,
+                        systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
                       ),
                       child: child,
                     );

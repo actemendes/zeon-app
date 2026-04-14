@@ -189,6 +189,13 @@ class HiddifyCoreService with InfraLogger {
         if (!core.isSingleChannel()) {
           await startListeningLogs("bg", core.bgClient);
         }
+        if (!core.isSingleChannel()) {
+          try {
+            currentState = await core.isActiveBg() ? const CoreStatus.started() : const CoreStatus.stopped();
+          } catch (e) {
+            loggy.warning("failed to detect background core state: $e");
+          }
+        }
         statusController.add(currentState);
         await startListeningStatus("bg", core.bgClient);
         // ref.read(coreRestartSignalProvider.notifier).restart();
@@ -629,18 +636,14 @@ class HiddifyCoreService with InfraLogger {
       () => cc
           .coreInfoListener(Empty(), options: grpcOptions)
           .doOnCancel(() {
-            loggy.error("status", "Canceld");
-            if (currentState == const CoreStatus.started()) currentState = const CoreStatus.stopped();
+            loggy.debug("status listener canceled [$key]");
           })
           .doOnData((event) {
             loggy.debug("status", event);
-            if (currentState == const CoreStatus.started()) currentState = const CoreStatus.stopped();
           })
           .doOnDone(() {
-            loggy.error("status", "done");
-            if (currentState == const CoreStatus.started()) currentState = const CoreStatus.stopped();
+            loggy.debug("status listener done [$key]");
           })
-          .endWith(CoreInfoResponse(coreState: CoreStates.STOPPED))
           .map((event) {
             currentState = CoreStatus.fromCoreInfo(event);
             statusController.add(currentState);
