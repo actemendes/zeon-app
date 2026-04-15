@@ -9,6 +9,7 @@ Usage:
 from __future__ import annotations
 
 import re
+import zipfile
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -48,7 +49,7 @@ CONTAINER_GRADIENT_TOP = (246, 251, 255, 255)
 CONTAINER_GRADIENT_BOTTOM = (223, 237, 255, 255)
 
 # 5) Размер логотипа внутри контейнера (safe area)
-MASTER_LOGO_WIDTH_RATIO = 0.35
+MASTER_LOGO_WIDTH_RATIO = 0.2
 
 # 6) Android notification / quick tile (монохром)
 STAT_ICON_LOGO_WIDTH_RATIO = 0.50
@@ -93,6 +94,15 @@ TRAY_OUTPUT_SIZE = 128
 TRAY_LOGO_WIDTH_RATIO = 0.76
 TRAY_LIGHT_COLOR = (242, 242, 242, 255)
 TRAY_ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
+
+# 12) Startup splash/preloader assets
+ANDROID_LEGACY_SPLASH_SIZE = 324
+IOS_LAUNCH_IMAGE_SIZES = {
+    "LaunchImage.png": 256,
+    "LaunchImage@2x.png": 512,
+    "LaunchImage@3x.png": 768,
+}
+ANDROID12_SPLASH_XML_TARGET = ROOT / "android/app/src/main/res/drawable/android12splash.xml"
 
 
 def _ensure_parent(path: Path) -> None:
@@ -495,6 +505,34 @@ def _write_android_banner(master: Image.Image) -> None:
     _save_png(ROOT / "android/app/src/main/res/mipmap-xhdpi/ic_banner.png", banner)
 
 
+def _write_startup_splash_assets(master: Image.Image) -> None:
+    # Android legacy splash drawable used by launch_background.xml.
+    android_splash = master.resize((ANDROID_LEGACY_SPLASH_SIZE, ANDROID_LEGACY_SPLASH_SIZE), Image.Resampling.LANCZOS)
+    _save_png(ROOT / "android/app/src/main/res/drawable-xxxhdpi/splash.png", android_splash)
+
+    # Android 12+ startup icon; keep in sync with current launcher foreground mark.
+    foreground_xml = (ROOT / "android/app/src/main/res/drawable/ic_launcher_foreground.xml").read_text(
+        encoding="utf-8"
+    )
+    ANDROID12_SPLASH_XML_TARGET.write_text(foreground_xml, encoding="utf-8")
+    print(f"wrote {ANDROID12_SPLASH_XML_TARGET.relative_to(ROOT)}")
+
+    # iOS launch image set used by LaunchScreen.storyboard.
+    launch_dir = ROOT / "ios/Runner/Assets.xcassets/LaunchImage.imageset"
+    for filename, size in IOS_LAUNCH_IMAGE_SIZES.items():
+        launch_img = master.resize((size, size), Image.Resampling.LANCZOS)
+        _save_png(launch_dir / filename, launch_img)
+
+    # Keep the archived imageset synced as well.
+    zip_target = ROOT / "ios/Runner/Assets.xcassets/LaunchImage.imageset.zip"
+    with zipfile.ZipFile(zip_target, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for name in ("Contents.json", *IOS_LAUNCH_IMAGE_SIZES.keys(), "README.md"):
+            src = launch_dir / name
+            if src.exists():
+                zf.write(src, arcname=f"LaunchImage.imageset/{name}")
+    print(f"wrote {zip_target.relative_to(ROOT)}")
+
+
 def _write_tray_icons(logo: Image.Image) -> None:
     colored_2048 = _compose_tray_icon(TRAY_SOURCE_SIZE, logo)
     white_logo = _recolor_logo(logo, TRAY_LIGHT_COLOR)
@@ -528,6 +566,7 @@ def main() -> None:
     _write_ios_and_macos(master)
     _write_web(master)
     _write_windows_linux_sources(master)
+    _write_startup_splash_assets(master)
     _write_tray_icons(logo)
 
 
