@@ -8,8 +8,10 @@ import 'package:hiddify/core/http_client/http_client_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
+import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
+import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:hiddify/features/profile/add/model/free_profiles_model.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/data/profile_repository.dart';
@@ -59,6 +61,13 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
 
   ProfileRepository get _profilesRepo => ref.read(profileRepositoryProvider).requireValue;
   CancelToken? _cancelToken;
+
+  MobileBootstrapImportService get _mobileBootstrapImportService => MobileBootstrapImportService(
+    httpClient: ref.read(httpClientProvider),
+    profileRepository: ref.read(profileRepositoryProvider).requireValue,
+    profileDataSource: ref.read(profileDataSourceProvider),
+    preferences: ref.read(sharedPreferencesProvider).requireValue,
+  );
 
   Future<void> addClipboard(String rawInput) async {
     if (state.isLoading) return;
@@ -110,6 +119,18 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
             },
           )
           .run();
+    });
+  }
+
+  Future<void> addMobileAccount() async {
+    if (state.isLoading) return;
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final imported = await _mobileBootstrapImportService.runOrThrow(skipIfAlreadyDone: false);
+      if (!imported) {
+        throw const ProfileFailure.unexpected("mobile account import returned no data");
+      }
+      return unit;
     });
   }
 }

@@ -33,7 +33,26 @@
             "flutterMode": "debug",
             "program": "lib/main.dart",
             "deviceId": "chrome",
-            "cwd": "D:/zeon-app",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "CHROME_EXECUTABLE": "C:/Program Files/Google/Chrome/Application/chrome.exe"
+            },
+            "args": [
+                "--dart-define=debug_seed_profile_enabled=true",
+                "--dart-define=debug_seed_profile_url=https://zeon-vps.link/open/649669380",
+                "--dart-define=debug_seed_profile_name=ZEON | happy_fox_153",
+                "--dart-define=debug_seed_profile_remaining_days=7",
+                "--dart-define=debug_platform_override=windows"
+            ]
+        },
+        {
+            "name": "Hiddify UI (Edge Fallback)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "debug",
+            "program": "lib/main.dart",
+            "deviceId": "edge",
+            "cwd": "${workspaceFolder}",
             "args": [
                 "--dart-define=debug_seed_profile_enabled=true",
                 "--dart-define=debug_seed_profile_url=https://zeon-vps.link/open/649669380",

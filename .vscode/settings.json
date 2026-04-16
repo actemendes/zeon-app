@@ -13,8 +13,14 @@
 	},
 
     "html.format.wrapLineLength": 250,
-    "dart.flutterSdkPath": "C:\\Users\\actemendes\\.puro\\envs\\zeon\\flutter",
-    "dart.sdkPath": "C:\\Users\\actemendes\\.puro\\envs\\zeon\\flutter\\bin\\cache\\dart-sdk",
+    "dart.flutterSdkPath": "C:\\Users\\artem\\flutter",
+    "dart.flutterSdkPaths": [
+        "C:\\Users\\artem\\flutter"
+    ],
+    "dart.sdkPath": "C:\\Users\\artem\\flutter\\bin\\cache\\dart-sdk",
+    "terminal.integrated.env.windows": {
+        "PATH": "C:\\Users\\artem\\flutter\\bin;${env:PATH}"
+    },
     "dart.openDevTools": "flutter",
     "dart.devToolsLocation": {
         "default": "external",

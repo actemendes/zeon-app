@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hiddify/core/http_client/http_client_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
+import 'package:hiddify/features/mobile/data/mobile_payment_service.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 enum _SubscriptionPlan {
-  one(months: 1, amountRub: 150, code: '1m'),
-  three(months: 3, amountRub: 400, code: '3m'),
-  six(months: 6, amountRub: 700, code: '6m'),
-  twelve(months: 12, amountRub: 1200, code: '12m');
+  one(months: 1, amountRub: 150, code: '1'),
+  three(months: 3, amountRub: 400, code: '3'),
+  six(months: 6, amountRub: 700, code: '6'),
+  twelve(months: 12, amountRub: 1200, code: '12');
 
   const _SubscriptionPlan({required this.months, required this.amountRub, required this.code});
 
@@ -39,6 +42,14 @@ class ProfilePaymentPage extends HookConsumerWidget {
     final theme = Theme.of(context);
     final breakpoint = Breakpoint(context);
     final selectedPlan = useState(_SubscriptionPlan.one);
+    final isProcessingPayment = useState(false);
+    final paymentService = useMemoized(
+      () => MobilePaymentService(
+        httpClient: ref.read(httpClientProvider),
+        preferences: ref.read(sharedPreferencesProvider).requireValue,
+      ),
+      const [],
+    );
     final headingColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
     final maxContentWidth = switch (breakpoint.activeBreakpoint) {
       Breakpoints.mobile => double.infinity,
@@ -144,22 +155,48 @@ class ProfilePaymentPage extends HookConsumerWidget {
             ),
             onPlanSelected: (plan) => selectedPlan.value = plan,
             connectLabel: t.pages.profileDetails.specialServers.connect,
-            onConnectTap: () => _openCheckout(context, t, selectedPlan.value),
+            isLoading: isProcessingPayment.value,
+            onConnectTap: () => _openCheckout(
+              context,
+              t,
+              selectedPlan.value,
+              paymentService: paymentService,
+              isProcessingPayment: isProcessingPayment,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _openCheckout(BuildContext context, Translations t, _SubscriptionPlan plan) async {
-    final checkoutUri = Uri(
-      scheme: 'youkassa',
-      host: 'pay',
-      queryParameters: {'plan': plan.code, 'months': '${plan.months}', 'amount': '${plan.amountRub}'},
-    );
-    final isOpened = await UriUtils.tryLaunch(checkoutUri);
-    if (!context.mounted || isOpened) return;
-    CustomToast.error(t.pages.profileDetails.specialServers.paymentLaunchError).show(context);
+  Future<void> _openCheckout(
+    BuildContext context,
+    Translations t,
+    _SubscriptionPlan plan, {
+    required MobilePaymentService paymentService,
+    required ValueNotifier<bool> isProcessingPayment,
+  }) async {
+    if (isProcessingPayment.value) return;
+    isProcessingPayment.value = true;
+    try {
+      final checkout = await paymentService.createPayment(plan: plan.code);
+      if (!context.mounted || checkout == null) {
+        if (context.mounted) {
+          CustomToast.error(t.pages.profileDetails.specialServers.paymentLaunchError).show(context);
+        }
+        return;
+      }
+      final paymentUri = Uri.tryParse(checkout.confirmationUrl);
+      if (paymentUri == null) {
+        CustomToast.error(t.pages.profileDetails.specialServers.paymentLaunchError).show(context);
+        return;
+      }
+      final opened = await UriUtils.tryLaunch(paymentUri);
+      if (!context.mounted || opened) return;
+      CustomToast.error(t.pages.profileDetails.specialServers.paymentLaunchError).show(context);
+    } finally {
+      isProcessingPayment.value = false;
+    }
   }
 }
 
@@ -343,6 +380,7 @@ class _BottomSubscriptionPanel extends StatelessWidget {
     required this.optionLabels,
     required this.onPlanSelected,
     required this.connectLabel,
+    required this.isLoading,
     required this.onConnectTap,
   });
 
@@ -351,6 +389,7 @@ class _BottomSubscriptionPanel extends StatelessWidget {
   final ({String one, String three, String six, String twelve}) optionLabels;
   final ValueChanged<_SubscriptionPlan> onPlanSelected;
   final String connectLabel;
+  final bool isLoading;
   final VoidCallback onConnectTap;
 
   @override
@@ -410,7 +449,7 @@ class _BottomSubscriptionPanel extends StatelessWidget {
                 onTap: () => onPlanSelected(_SubscriptionPlan.twelve),
               ),
               const SizedBox(height: 12),
-              _ConnectButton(label: connectLabel, onTap: onConnectTap),
+              _ConnectButton(label: connectLabel, isLoading: isLoading, onTap: onConnectTap),
             ],
           ),
         ),
@@ -484,13 +523,14 @@ class _PlanTile extends StatelessWidget {
 }
 
 class _ConnectButton extends StatelessWidget {
-  const _ConnectButton({required this.label, required this.onTap});
+  const _ConnectButton({required this.label, required this.isLoading, required this.onTap});
 
   static const _textHorizontalPadding = 20.0;
   static const _arrowSize = 24.0;
   static const _arrowVisualScale = 1.18;
 
   final String label;
+  final bool isLoading;
   final VoidCallback onTap;
 
   @override
@@ -509,7 +549,7 @@ class _ConnectButton extends StatelessWidget {
           image: const DecorationImage(image: AssetImage(ProfilePaymentPage._ctaBackgroundAsset), fit: BoxFit.cover),
         ),
         child: InkWell(
-          onTap: onTap,
+          onTap: isLoading ? null : onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: _textHorizontalPadding),
             child: Row(
@@ -518,7 +558,7 @@ class _ConnectButton extends StatelessWidget {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      label.toUpperCase(),
+                      (isLoading ? '...' : label).toUpperCase(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium?.copyWith(
@@ -529,15 +569,21 @@ class _ConnectButton extends StatelessWidget {
                     ),
                   ),
                 ),
-                SizedBox.square(
-                  dimension: _arrowSize,
-                  child: Center(
-                    child: Transform.scale(
-                      scale: _arrowVisualScale,
-                      child: Icon(Icons.arrow_outward, size: _arrowSize, color: foreground),
+                if (isLoading)
+                  const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  SizedBox.square(
+                    dimension: _arrowSize,
+                    child: Center(
+                      child: Transform.scale(
+                        scale: _arrowVisualScale,
+                        child: Icon(Icons.arrow_outward, size: _arrowSize, color: foreground),
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

@@ -18,6 +18,7 @@ class FixBtns extends ConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
 
     final isDesktop = PlatformUtils.isDesktop;
+    final isMobile = PlatformUtils.isMobile;
     return Row(
       children: [
         if (!isDesktop) ...[
@@ -31,6 +32,18 @@ class FixBtns extends ConsumerWidget {
               final cr = await ref.read(dialogNotifierProvider.notifier).showQrScanner();
               if (cr == null) return;
               ref.read(addProfileNotifierProvider.notifier).addClipboard(cr);
+            },
+          ),
+        ],
+        if (isMobile) ...[
+          const Gap(AddProfileModalConst.fixBtnsGap),
+          FixBtn(
+            key: const ValueKey('add_mobile_account_button'),
+            height: height,
+            title: t.intro.alreadyHaveAccount,
+            icon: Icons.person_add_alt_1_rounded,
+            onTap: () {
+              ref.read(addProfileNotifierProvider.notifier).addMobileAccount();
             },
           ),
         ],

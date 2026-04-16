@@ -8,6 +8,7 @@ import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
+import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
 import 'package:hiddify/features/proxy/model/proxy_failure.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/hiddifycore/init_signal.dart';
@@ -166,6 +167,9 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     };
     final items = <OutboundInfo>[];
     for (final item in sortedItems) {
+      if (shouldHideProxyOption(tag: item.tag, tagDisplay: item.tagDisplay)) {
+        continue;
+      }
       // if (groupWithSelected.keys.contains(item.tag)) {
       //   items.add(item.copyWith(selectedTag: groupWithSelected[item.tag]));
       // } else {

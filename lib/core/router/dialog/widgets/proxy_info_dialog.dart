@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -16,7 +17,7 @@ class ProxyInfoDialog extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     return AlertDialog(
-      title: SelectionArea(child: Text(outboundInfo.tagDisplay)),
+      title: SelectionArea(child: Text(formatProxyDisplayName(outboundInfo.tagDisplay))),
       content: OutboundInfoWidget(outboundInfo: outboundInfo),
       actions: [TextButton(onPressed: context.pop, child: Text(t.common.close))],
     );

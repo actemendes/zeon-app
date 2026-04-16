@@ -151,7 +151,7 @@ object Settings {
             preferences.edit().putString(SettingsKey.GRPC_FLUTTER_PUBLIC_KEY, encoded).apply()
         }
     var grpcServiceModePort: Int
-        get() = preferences.getInt(SettingsKey.GRPC_PORT, 17078)!!
+        get() = preferences.getInt(SettingsKey.GRPC_PORT, 17178)!!
         set(value) = preferences.edit().putInt(SettingsKey.GRPC_PORT, value).apply()
 
     var startCoreAfterStartingService: Boolean

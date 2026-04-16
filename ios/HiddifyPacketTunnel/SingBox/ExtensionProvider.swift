@@ -23,7 +23,7 @@ open class ExtensionProvider: NEPacketTunnelProvider {
             
             // Extract options with better error handling
             let disableMemoryLimit = false && (options?["DisableMemoryLimit"] as? NSString as? String ?? "NO") == "YES" 
-            let grpcServiceModePort = (options?["GrpcServiceModePort"] as? NSNumber)?.intValue ?? 17079
+            let grpcServiceModePort = (options?["GrpcServiceModePort"] as? NSNumber)?.intValue ?? 17179
             
             let config = options?["Config"] as? NSString as? String ?? ""
             

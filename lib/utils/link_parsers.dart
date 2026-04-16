@@ -54,7 +54,19 @@ abstract class LinkParser {
 
 String safeDecodeBase64(String str) {
   try {
-    return utf8.decode(base64Decode(str));
+    final value = str.trim();
+    if (value.isEmpty) return value;
+
+    String normalize(String input) {
+      var out = input.replaceAll('-', '+').replaceAll('_', '/');
+      final mod = out.length % 4;
+      if (mod != 0) {
+        out = out.padRight(out.length + (4 - mod), '=');
+      }
+      return out;
+    }
+
+    return utf8.decode(base64Decode(normalize(value)));
   } catch (e) {
     return str;
   }

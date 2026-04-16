@@ -28,8 +28,9 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   late Uint8List serverPublicKey;
   static final cert = CryptoUtils.generateEcKeyPair();
 
-  static const portBack = 17079;
-  static const portFront = 17078;
+  // Keep app-specific gRPC ports to avoid collisions with other Hiddify-based apps on device.
+  static const portBack = int.fromEnvironment("mobile_grpc_port_back", defaultValue: 17179);
+  static const portFront = int.fromEnvironment("mobile_grpc_port_front", defaultValue: 17178);
 
   bool _isBgClientAvailable = false;
   bool _debug = false;

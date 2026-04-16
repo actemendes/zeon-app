@@ -269,7 +269,11 @@ int? _resolveRemainingDays(SubscriptionInfo? subInfo) {
   if (_debugSeedProfileEnabled && _debugSeedProfileRemainingDays != -1) {
     return _debugSeedProfileRemainingDays;
   }
-  return subInfo?.remaining.inDays;
+  if (subInfo == null) return null;
+  final remaining = subInfo.remaining;
+  if (remaining.inSeconds <= 0) return 0;
+  final days = remaining.inDays;
+  return days < 1 ? 1 : days;
 }
 
 String _buildPremiumLabel(BuildContext context, Translations t, int days) {

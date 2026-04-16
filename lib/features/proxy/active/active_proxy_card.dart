@@ -6,6 +6,7 @@ import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/proxy/active/ip_widget.dart';
+import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -77,7 +78,13 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                     await ref.read(dialogNotifierProvider.notifier).showProxyInfo(outboundInfo: activeProxy);
                   },
                   borderRadius: BorderRadius.circular(_panelRadius),
-                  child: IPCountryFlag(countryCode: activeProxy.ipinfo.countryCode, size: 40),
+                  child: IPCountryFlag(
+                    countryCode: resolveProxyCountryCode(
+                      tagDisplay: activeProxy.tagDisplay,
+                      fallbackCountryCode: activeProxy.ipinfo.countryCode,
+                    ),
+                    size: 40,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -88,7 +95,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                       child: Semantics(
                         label: t.pages.proxies.activeProxy,
                         child: Text(
-                          activeProxy.tagDisplay,
+                          getRealOutboundTag(activeProxy),
                           style: theme.textTheme.bodyLarge?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: navBarTextColor,
@@ -112,72 +119,10 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
 }
 
 String getRealOutboundTag(OutboundInfo group) {
-  var tag = group.tagDisplay;
-  if (group.groupSelectedTagDisplay != "" && group.groupSelectedTagDisplay != tag) {
-    tag = "$tag → ${group.groupSelectedTagDisplay}";
+  var tag = formatProxyDisplayName(group.tagDisplay);
+  final selected = formatProxyDisplayName(group.groupSelectedTagDisplay);
+  if (selected.isNotEmpty && selected != tag && selected.toLowerCase() != 'round-robin') {
+    tag = '$tag → $selected';
   }
   return tag;
 }
-
-// class _StatsColumn extends HookConsumerWidget {
-//   const _StatsColumn();
-
-//   @override
-//   Widget build(BuildContext context, WidgetRef ref) {
-//     final t = ref.watch(translationsProvider).requireValue;
-//     final stats = ref.watch(statsNotifierProvider).value;
-
-//     return Directionality(
-//       textDirection: TextDirection.values[(Directionality.of(context).index + 1) % TextDirection.values.length],
-//       child: Flexible(
-//         child: Column(
-//           children: [
-//             _InfoProp(
-//               icon: FluentIcons.arrow_bidirectional_up_down_20_regular,
-//               text: (stats?.downlinkTotal ?? 0).size(),
-//               semanticLabel: t.stats.totalTransferred,
-//             ),
-//             const Gap(8),
-//             _InfoProp(
-//               icon: FluentIcons.arrow_download_20_regular,
-//               text: (stats?.downlink ?? 0).speed(),
-//               semanticLabel: t.stats.speed,
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
-
-// class _InfoProp extends StatelessWidget {
-//   const _InfoProp({
-//     required this.icon,
-//     required this.text,
-//     this.semanticLabel,
-//   });
-
-//   final IconData icon;
-//   final String text;
-//   final String? semanticLabel;
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Semantics(
-//       label: semanticLabel,
-//       child: Row(
-//         children: [
-//           Icon(icon),
-//           const Gap(8),
-//           Flexible(
-//             child: Text(
-//               text,
-//               style: Theme.of(context).textTheme.labelMedium?.copyWith(fontFamily: FontFamily.emoji),
-//               overflow: TextOverflow.ellipsis,
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }

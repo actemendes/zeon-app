@@ -13,6 +13,15 @@ const _avatarEmojiAssetDir = 'assets/images/emoji/apple/64';
 const _debugSeedProfileEnabled = bool.fromEnvironment('debug_seed_profile_enabled');
 const _debugSeedProfileName = String.fromEnvironment('debug_seed_profile_name');
 const _debugSeedProfileRemainingDays = int.fromEnvironment('debug_seed_profile_remaining_days', defaultValue: -1);
+
+int _resolveUiRemainingDays(SubscriptionInfo? subInfo) {
+  if (subInfo == null) return 0;
+  final remaining = subInfo.remaining;
+  if (remaining.inSeconds <= 0) return 0;
+  final days = remaining.inDays;
+  return days < 1 ? 1 : days;
+}
+
 const _avatarEmojis = <({String emoji, String assetFile})>[
   (emoji: '\u{1F98A}', assetFile: '1f98a.png'),
   (emoji: '\u{1F43A}', assetFile: '1f43a.png'),
@@ -111,7 +120,7 @@ class ProfileMenuPage extends HookConsumerWidget {
       RemoteProfileEntity(:final subInfo) => subInfo,
       _ => null,
     };
-    final remainingDays = subInfo == null ? 0 : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
+    final remainingDays = _resolveUiRemainingDays(subInfo);
 
     final sections = <({String title, IconData icon, IconData trailingIcon, VoidCallback? onTap})>[
       if (remainingDays > 0)
@@ -233,7 +242,7 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
       RemoteProfileEntity(:final subInfo) => subInfo,
       _ => null,
     };
-    final remainingDays = subInfo == null ? 0 : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
+    final remainingDays = _resolveUiRemainingDays(subInfo);
     final title = (remainingDays > 0 ? t.pages.profileDetails.cta.renew : t.pages.profileDetails.cta.updatePlan)
         .toUpperCase();
     final arrowColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
@@ -318,7 +327,7 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
     final avatarSeedName = (kDebugMode && _debugSeedProfileEnabled && _debugSeedProfileName.trim().isNotEmpty)
         ? _debugSeedProfileName
         : rawProfileName;
-    final normalizedDays = subInfo == null ? 0 : (subInfo.remaining.inDays < 0 ? 0 : subInfo.remaining.inDays);
+    final normalizedDays = _resolveUiRemainingDays(subInfo);
     final effectiveDays = (kDebugMode && _debugSeedProfileEnabled && _debugSeedProfileRemainingDays >= 0)
         ? _debugSeedProfileRemainingDays
         : normalizedDays;

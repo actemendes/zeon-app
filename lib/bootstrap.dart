@@ -19,6 +19,9 @@ import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
 
 import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dart';
+import 'package:hiddify/features/per_app_proxy/data/selected_data_provider.dart';
+import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_backup.dart';
+import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:hiddify/features/profile/data/debug_profile_bootstrap_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
@@ -60,6 +63,7 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   });
 
   final debug = container.read(debugModeNotifierProvider) || kDebugMode;
+  await _safeInit("per-app proxy defaults", () => _seedPerAppProxyDefaults(container), timeout: 5000);
 
   if (PlatformUtils.isDesktop) {
     await _init("window controller", () => container.read(windowNotifierProvider.future));
@@ -83,13 +87,6 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   final profileDataSource = container.read(profileDataSourceProvider);
   final preferences = container.read(sharedPreferencesProvider).requireValue;
 
-  final mobileBootstrapImportService = MobileBootstrapImportService(
-    httpClient: container.read(httpClientProvider),
-    profileRepository: profileRepository,
-    preferences: preferences,
-  );
-  await _safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 45000);
-  unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
   final debugProfileBootstrapService = DebugProfileBootstrapService(
     environment: env,
     profileRepository: profileRepository,
@@ -100,8 +97,16 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
 
   await _init("translations", () => container.read(translationsProvider.future));
 
-  await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
   await _init("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
+  final mobileBootstrapImportService = MobileBootstrapImportService(
+    httpClient: container.read(httpClientProvider),
+    profileRepository: profileRepository,
+    profileDataSource: profileDataSource,
+    preferences: preferences,
+  );
+  await _safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 15000);
+  unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
+  await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
 
   if (!kIsWeb) {
     // await _safeInit(
@@ -138,12 +143,87 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   // SentryFlutter.s(DateTime.now().toUtc());
 }
 
+Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
+  if (!PlatformUtils.isAndroid) return;
+  final prefs = container.read(sharedPreferencesProvider).requireValue;
+  const seedKey = "per_app_proxy_seed_v2_done";
+  if (prefs.getBool(seedKey) ?? false) return;
+
+  const excludePkgs = <String>[
+    "com.apteka.sklad",
+    "com.avito.android",
+    "com.carshering",
+    "com.gnivts.selfemployed",
+    "com.platfomni.vita",
+    "com.profibackoffice.reactnative",
+    "com.vk.equals",
+    "com.vk.im",
+    "com.vkontakte.android",
+    "com.vtosters.lite",
+    "com.yandex.bank",
+    "com.yandex.searchapp",
+    "ru.apteki.plus",
+    "ru.belkacar.belkacar",
+    "ru.dublgis.dgismobile",
+    "ru.fns.lkfl",
+    "ru.gazprombank.android.mobilebank.app",
+    "ru.gosuslugi.auto",
+    "ru.gosuslugi.goskey",
+    "ru.kinopoisk",
+    "ru.megafon.mlk",
+    "ru.mts.mymts",
+    "ru.nspk.mirpay",
+    "ru.oneme.app",
+    "ru.parkomatica",
+    "ru.poryadok.poryadok_flutter_app",
+    "ru.profi.client",
+    "ru.pyaterochka.app.browser",
+    "ru.qugo.mobile",
+    "ru.rostel",
+    "ru.rutube.app",
+    "ru.sbcs.store",
+    "ru.tander.magnit",
+    "ru.tele2.mytele2",
+    "ru.vk.store",
+    "ru.yandex.disk",
+    "ru.yandex.music",
+    "ru.yandex.taxi",
+    "ru.yandex.taximeter",
+    "ru.yandex.telemost",
+    "ru.yandex.yandexmaps",
+    "ru.zenmoney.androidsub",
+    "shop.tornado.store",
+    "youdrive.today",
+  ];
+
+  final currentMode = container.read(Preferences.perAppProxyMode);
+  final currentInclude = container.read(Preferences.includeApps);
+  final currentExclude = container.read(Preferences.excludeApps);
+  final shouldApplyDefaults =
+      currentMode == PerAppProxyMode.off && currentInclude.isEmpty && currentExclude.isEmpty;
+  if (!shouldApplyDefaults) {
+    await prefs.setBool(seedKey, true);
+    return;
+  }
+
+  await container.read(Preferences.perAppProxyMode.notifier).update(PerAppProxyMode.exclude);
+  await container.read(Preferences.includeApps.notifier).update(const []);
+  await container.read(Preferences.excludeApps.notifier).update(excludePkgs);
+  await container.read(appProxyDataSourceProvider).importPkgs(
+    backup: const PerAppProxyBackup(
+      include: PerAppProxyBackupMode(selected: [], deselected: []),
+      exclude: PerAppProxyBackupMode(selected: excludePkgs, deselected: []),
+    ),
+  );
+  await prefs.setBool(seedKey, true);
+}
+
 Future<void> _retryMobileAutoImport(MobileBootstrapImportService service) async {
   const retryDelays = <Duration>[
+    Duration(seconds: 5),
+    Duration(seconds: 10),
     Duration(seconds: 20),
     Duration(seconds: 40),
-    Duration(minutes: 1),
-    Duration(minutes: 2),
   ];
   for (final delay in retryDelays) {
     await Future.delayed(delay);
