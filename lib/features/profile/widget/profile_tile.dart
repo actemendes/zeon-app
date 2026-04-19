@@ -13,6 +13,7 @@ import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/widget/adaptive_icon.dart';
 import 'package:hiddify/core/widget/adaptive_menu.dart';
+import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
@@ -52,6 +53,8 @@ class ProfileTile extends HookConsumerWidget {
     };
 
     final showActionButton = profile is RemoteProfileEntity || !isMain;
+    final normalizedProfileName = parseProfileName(profile.name).trim();
+    final displayProfileName = normalizedProfileName.isNotEmpty ? normalizedProfileName : profile.name;
 
     // final effectiveMargin = isMain ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8) : const EdgeInsets.only(left: 12, right: 12, bottom: 12);
     // final double effectiveElevation = profile.active ? 12 : 4;
@@ -132,13 +135,13 @@ class ProfileTile extends HookConsumerWidget {
                                   children: [
                                     Flexible(
                                       child: Text(
-                                        profile.name,
+                                        displayProfileName,
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.titleMedium?.copyWith(
                                           fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
                                         ),
-                                        semanticsLabel: t.pages.profiles.activeProfileName(name: profile.name),
+                                        semanticsLabel: t.pages.profiles.activeProfileName(name: displayProfileName),
                                       ),
                                     ),
                                     const Icon(Icons.arrow_drop_down_rounded),
@@ -148,15 +151,15 @@ class ProfileTile extends HookConsumerWidget {
                             )
                           else
                             Text(
-                              profile.name,
+                              displayProfileName,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
                               ),
                               semanticsLabel: profile.active
-                                  ? t.pages.profiles.activeProfileName(name: profile.name)
-                                  : t.pages.profiles.nonActiveProfileName(name: profile.name),
+                                  ? t.pages.profiles.activeProfileName(name: displayProfileName)
+                                  : t.pages.profiles.nonActiveProfileName(name: displayProfileName),
                             ),
                           if (subInfo != null) ...[
                             const Gap(4),

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -13,6 +14,7 @@ const _avatarEmojiAssetDir = 'assets/images/emoji/apple/64';
 const _debugSeedProfileEnabled = bool.fromEnvironment('debug_seed_profile_enabled');
 const _debugSeedProfileName = String.fromEnvironment('debug_seed_profile_name');
 const _debugSeedProfileRemainingDays = int.fromEnvironment('debug_seed_profile_remaining_days', defaultValue: -1);
+const _bindFeatureEnabled = bool.fromEnvironment('mobile_bind_enabled');
 
 int _resolveUiRemainingDays(SubscriptionInfo? subInfo) {
   if (subInfo == null) return 0;
@@ -111,19 +113,8 @@ class ProfileMenuPage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
-
-    final profile = switch (ref.watch(activeProfileProvider)) {
-      AsyncData(value: final profile?) => profile,
-      _ => null,
-    };
-    final subInfo = switch (profile) {
-      RemoteProfileEntity(:final subInfo) => subInfo,
-      _ => null,
-    };
-    final remainingDays = _resolveUiRemainingDays(subInfo);
-
     final sections = <({String title, IconData icon, IconData trailingIcon, VoidCallback? onTap})>[
-      if (remainingDays > 0)
+      if (_bindFeatureEnabled)
         (
           title: t.pages.profileDetails.menu.bindAccount,
           icon: Icons.link_rounded,
@@ -323,7 +314,7 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
       _ => null,
     };
 
-    final rawProfileName = (profile?.name ?? '').trim();
+    final rawProfileName = parseProfileName(profile?.name).trim();
     final avatarSeedName = (kDebugMode && _debugSeedProfileEnabled && _debugSeedProfileName.trim().isNotEmpty)
         ? _debugSeedProfileName
         : rawProfileName;

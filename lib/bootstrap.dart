@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
 import 'package:hiddify/core/http_client/http_client_provider.dart';
@@ -36,18 +37,22 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async {
-  widgetsBinding;
+  final shouldPreserveNativeSplash = await _shouldShowNativeSplashOnThisRun();
+  if (shouldPreserveNativeSplash) {
+    FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  }
   LoggerController.preInit();
   FlutterError.onError = Logger.logFlutterError;
   WidgetsBinding.instance.platformDispatcher.onError = Logger.logPlatformDispatcherError;
 
-  runApp(_BootstrapHost(environment: env));
+  runApp(_BootstrapHost(environment: env, shouldRemoveNativeSplash: shouldPreserveNativeSplash));
 }
 
 class _BootstrapHost extends StatefulWidget {
-  const _BootstrapHost({required this.environment});
+  const _BootstrapHost({required this.environment, required this.shouldRemoveNativeSplash});
 
   final Environment environment;
+  final bool shouldRemoveNativeSplash;
 
   @override
   State<_BootstrapHost> createState() => _BootstrapHostState();
@@ -62,6 +67,11 @@ class _BootstrapHostState extends State<_BootstrapHost> {
     super.initState();
     _bootstrapFuture = _bootstrapAfterFirstFrame();
     unawaited(_loadInitialThemeMode());
+    if (widget.shouldRemoveNativeSplash) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        FlutterNativeSplash.remove();
+      });
+    }
   }
 
   Future<ProviderContainer> _bootstrapAfterFirstFrame() async {
@@ -211,7 +221,7 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
     profileDataSource: profileDataSource,
     preferences: preferences,
   );
-  await _safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 15000);
+  unawaited(_safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 15000));
   unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
   await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
 
@@ -236,6 +246,16 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   Logger.bootstrap.info("bootstrap took [${stopWatch.elapsedMilliseconds}ms]");
   stopWatch.stop();
   return container;
+}
+
+Future<bool> _shouldShowNativeSplashOnThisRun() async {
+  if (kIsWeb || !PlatformUtils.isMobile) return false;
+  const key = "native_splash_first_launch_done";
+  final prefs = await SharedPreferences.getInstance();
+  final done = prefs.getBool(key) ?? false;
+  if (done) return false;
+  await prefs.setBool(key, true);
+  return true;
 }
 
 Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {

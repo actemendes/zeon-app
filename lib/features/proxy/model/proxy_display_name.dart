@@ -3,10 +3,10 @@ String formatProxyDisplayName(String raw) {
   if (value.isEmpty) return value;
 
   value = _stripLeadingFlag(value);
-  value = value.replaceAll(RegExp(r"\s*(?:->|→)\s*round-?robin\s*$", caseSensitive: false), "");
+  value = value.replaceAll(RegExp(r"\s*(?:->|\u2192)\s*round-?robin\s*$", caseSensitive: false), "");
 
   if (RegExp(r"^balance$", caseSensitive: false).hasMatch(value)) {
-    return "Авто конфиг";
+    return "\u0410\u0432\u0442\u043e\u0432\u044b\u0431\u043e\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u0430"; // Автовыбор сервера
   }
 
   return value.trim();
@@ -49,7 +49,7 @@ String _stripLeadingFlag(String value) {
   if (!_isRegionalIndicator(runes[0]) || !_isRegionalIndicator(runes[1])) return value.trim();
 
   final rest = String.fromCharCodes(runes.skip(2));
-  return rest.replaceFirst(RegExp(r"^[\s\-\|:•·]+"), "").trim();
+  return rest.replaceFirst(RegExp(r"^[\s\-\|:\u2022\u00B7]+"), "").trim();
 }
 
 bool shouldHideProxyOption({required String tag, required String tagDisplay}) {

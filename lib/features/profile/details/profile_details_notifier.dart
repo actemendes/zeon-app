@@ -6,6 +6,7 @@ import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
+import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/data/profile_repository.dart';
 import 'package:hiddify/features/profile/details/profile_details_state.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
@@ -104,10 +105,14 @@ class ProfileDetailsNotifier extends _$ProfileDetailsNotifier with AppLogger {
             final t = await ref.read(translationsProvider.future);
             return (await _profilesRepo.offlineUpdate(value.profile, value.configContent).run()).match(
               (l) async {
+                final normalizedProfileName = parseProfileName(value.profile.name).trim();
+                final displayProfileName = normalizedProfileName.isNotEmpty
+                    ? normalizedProfileName
+                    : value.profile.name;
                 await ref
                     .read(dialogNotifierProvider.notifier)
                     .showCustomAlertFromErr(
-                      t.presentError(l, action: t.pages.profiles.msg.update.failureNamed(name: value.profile.name)),
+                      t.presentError(l, action: t.pages.profiles.msg.update.failureNamed(name: displayProfileName)),
                     );
                 return false;
               },

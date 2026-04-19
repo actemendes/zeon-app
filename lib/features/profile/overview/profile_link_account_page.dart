@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/mobile/data/mobile_bind_service.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ProfileLinkAccountPage extends HookConsumerWidget {
@@ -17,36 +18,95 @@ class ProfileLinkAccountPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
-    final profileName = switch (ref.watch(activeProfileProvider)) {
-      AsyncData(value: final profile?) => profile.name,
-      _ => '',
-    };
+    final service = ref.read(mobileBindServiceProvider);
+    final notification = ref.read(inAppNotificationControllerProvider);
 
-    final now = useState(DateTime.now());
-    final devices = useState<List<_LinkedDevice>>([
-      _LinkedDevice(id: 'current', name: t.pages.profileDetails.linkAccount.currentDevice),
-      const _LinkedDevice(id: 'iphone', name: 'iPhone 14 Pro'),
-      const _LinkedDevice(id: 'macbook', name: 'MacBook Air'),
-    ]);
+    final now = useState(DateTime.now().toUtc());
+    final bindSession = useState<BindCreateResult?>(null);
+    final status = useState<String>("loading");
+    final error = useState<String?>(null);
+    final targetDevice = useState<String?>(null);
+    final wsConnection = useRef<BindWsConnection?>(null);
+
+    Future<void> bootstrap() async {
+      error.value = null;
+      status.value = "loading";
+      bindSession.value = null;
+
+      try {
+        final created = await service.createSession();
+        bindSession.value = created;
+        status.value = "pending";
+        try {
+          final conn = await service.connectSessionEvents(created.bindSessionId);
+          wsConnection.value = conn;
+          if (conn != null) {
+            conn.events.listen((event) {
+              if (!context.mounted) return;
+              switch (event.event) {
+                case "bind_confirmed":
+                  status.value = "confirmed";
+                  final platform = event.targetPlatform?.trim();
+                  final mask = event.targetDeviceMask?.trim();
+                  targetDevice.value = [platform, mask].whereType<String>().where((e) => e.isNotEmpty).join(" ");
+                  notification.showSuccessToast(t.common.done);
+                case "bind_expired":
+                  status.value = "expired";
+                case "bind_cancelled":
+                  status.value = "cancelled";
+              }
+            });
+          }
+        } catch (_) {
+          // WebSocket is optional; status polling continues to work.
+        }
+      } on MobileBindException catch (e) {
+        error.value = e.code;
+        status.value = "error";
+      } catch (_) {
+        error.value = t.errors.unexpected;
+        status.value = "error";
+      }
+    }
 
     useEffect(() {
-      final timer = Timer.periodic(const Duration(minutes: 1), (_) {
-        now.value = DateTime.now();
+      bootstrap();
+      final ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        now.value = DateTime.now().toUtc();
       });
-      return timer.cancel;
+      final poller = Timer.periodic(const Duration(seconds: 10), (_) async {
+        final session = bindSession.value;
+        if (session == null) return;
+        if (status.value != "pending") return;
+        try {
+          final current = await service.getStatus(session.bindSessionId);
+          status.value = current.status;
+        } catch (_) {
+          // Keep pending state, websocket may still deliver updates.
+        }
+      });
+      return () {
+        ticker.cancel();
+        poller.cancel();
+        final session = bindSession.value;
+        final currentStatus = status.value;
+        if (session != null && currentStatus == "pending") {
+          unawaited(service.cancelSession(session.bindSessionId));
+        }
+        unawaited(wsConnection.value?.close() ?? Future<void>.value());
+      };
     }, const []);
 
-    final code = _generateHourlyCode(profileName, now.value);
-    final nextHour = DateTime(now.value.year, now.value.month, now.value.day, now.value.hour + 1);
-    final minutesUntilRefresh = nextHour.difference(now.value).inMinutes.clamp(0, 59);
+    final session = bindSession.value;
+    final expiresAt = session?.expiresAt;
+    final remainingSeconds = expiresAt == null ? 0 : expiresAt.difference(now.value).inSeconds.clamp(0, 360000);
+    final minutesUntilRefresh = (remainingSeconds / 60).ceil().clamp(0, 99);
     final codePanelColor = theme.brightness == Brightness.dark ? const Color(0xFF1A1B1F) : const Color(0xFFD6E1E5);
     final codePanelBorderColor = theme.brightness == Brightness.dark
         ? const Color(0xFF333333)
         : const Color(0xFFC3CDD2);
-    final codeTextColor = theme.colorScheme.onSurface;
     final subtitleColor = theme.brightness == Brightness.dark ? const Color(0xFF8B8B8B) : const Color(0xFF707780);
-    final dangerBackground = theme.brightness == Brightness.dark ? const Color(0xFF291718) : const Color(0xFFFFEAEA);
-    final dangerForeground = theme.brightness == Brightness.dark ? const Color(0xFFFFB4AB) : const Color(0xFF8E1A1A);
+    final codeTextColor = theme.colorScheme.onSurface;
 
     return Scaffold(
       appBar: AppBar(title: Text(t.pages.profileDetails.linkAccount.title.toUpperCase())),
@@ -73,126 +133,77 @@ class ProfileLinkAccountPage extends HookConsumerWidget {
                   border: Border.all(color: codePanelBorderColor),
                 ),
                 padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      t.pages.profileDetails.linkAccount.codeLabel,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        fontFamily: 'Montserrat',
-                        fontWeight: FontWeight.w600,
-                        color: subtitleColor,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        _formatCode(code),
-                        style: theme.textTheme.displaySmall?.copyWith(
-                          fontFamily: 'Unbounded',
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 2.6,
-                          color: codeTextColor,
+                child: switch (status.value) {
+                  "loading" => const Center(
+                    child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()),
+                  ),
+                  "error" => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _friendlyError(error.value),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontFamily: 'Montserrat',
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.error,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      t.pages.profileDetails.linkAccount.updatesInMinutes(n: minutesUntilRefresh),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'Montserrat',
-                        fontWeight: FontWeight.w500,
-                        color: subtitleColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 22),
-              Text(
-                t.pages.profileDetails.linkAccount.connectedDevices,
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 12),
-              if (devices.value.isEmpty)
-                Container(
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(16),
+                      const SizedBox(height: 12),
+                      FilledButton.tonal(onPressed: bootstrap, child: const Text("Повторить")),
+                    ],
                   ),
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    t.pages.profileDetails.linkAccount.noDevices,
-                    style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'Montserrat', fontWeight: FontWeight.w500),
-                  ),
-                )
-              else
-                Container(
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: devices.value.length,
-                    separatorBuilder: (context, index) =>
-                        Divider(height: 1, color: theme.colorScheme.onSurface.withValues(alpha: .1)),
-                    itemBuilder: (context, index) {
-                      final device = devices.value[index];
-                      return ListTile(
-                        dense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                        leading: Icon(
-                          device.id == 'current' ? Icons.phone_android_rounded : Icons.devices_rounded,
-                          size: 20,
+                  _ => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        t.pages.profileDetails.linkAccount.codeLabel,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontFamily: 'Montserrat',
+                          fontWeight: FontWeight.w600,
+                          color: subtitleColor,
                         ),
-                        title: Text(
-                          device.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontFamily: 'Montserrat',
-                            fontWeight: FontWeight.w600,
+                      ),
+                      const SizedBox(height: 12),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _formatCode(session?.bindCode ?? "------"),
+                          style: theme.textTheme.displaySmall?.copyWith(
+                            fontFamily: 'Unbounded',
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 2.6,
+                            color: codeTextColor,
                           ),
                         ),
-                        trailing: IconButton(
-                          tooltip: t.pages.profileDetails.linkAccount.removeDevice,
-                          icon: const Icon(Icons.close_rounded),
-                          onPressed: () async {
-                            final confirmed = await _showYesNoDialog(
-                              context: context,
-                              title: t.pages.profileDetails.linkAccount.removeDeviceTitle,
-                              message: t.pages.profileDetails.linkAccount.removeDeviceMessage(name: device.name),
-                              yesLabel: t.pages.profileDetails.linkAccount.yes,
-                              noLabel: t.pages.profileDetails.linkAccount.no,
-                            );
-                            if (!context.mounted || !confirmed) return;
-                            devices.value = devices.value.where((e) => e.id != device.id).toList(growable: false);
-                          },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        t.pages.profileDetails.linkAccount.updatesInMinutes(n: minutesUntilRefresh),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'Montserrat',
+                          fontWeight: FontWeight.w500,
+                          color: subtitleColor,
                         ),
-                      );
-                    },
+                      ),
+                    ],
                   ),
+                },
+              ),
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(16),
                 ),
+                padding: const EdgeInsets.all(14),
+                child: Text(
+                  _statusText(status.value, targetDevice.value),
+                  style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
+                ),
+              ),
               const SizedBox(height: 24),
               FilledButton.tonalIcon(
-                style: FilledButton.styleFrom(
-                  foregroundColor: dangerForeground,
-                  backgroundColor: dangerBackground,
-                  minimumSize: const Size.fromHeight(52),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
                 onPressed: () async {
-                  final confirmed = await _showYesNoDialog(
-                    context: context,
-                    title: t.pages.profileDetails.linkAccount.deleteAccountTitle,
-                    message: t.pages.profileDetails.linkAccount.deleteAccountMessage,
-                    yesLabel: t.pages.profileDetails.linkAccount.yes,
-                    noLabel: t.pages.profileDetails.linkAccount.no,
-                  );
-                  if (!context.mounted || !confirmed) return;
                   await ref.read(Preferences.introCompleted.notifier).update(false);
                   if (!context.mounted) return;
                   context.goNamed('intro');
@@ -200,11 +211,7 @@ class ProfileLinkAccountPage extends HookConsumerWidget {
                 icon: const Icon(Icons.delete_forever_rounded),
                 label: Text(
                   t.pages.profileDetails.linkAccount.deleteAccount,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: dangerForeground,
-                    fontFamily: 'Unbounded',
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: theme.textTheme.titleSmall?.copyWith(fontFamily: 'Unbounded', fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -214,44 +221,50 @@ class ProfileLinkAccountPage extends HookConsumerWidget {
     );
   }
 
-  Future<bool> _showYesNoDialog({
-    required BuildContext context,
-    required String title,
-    required String message,
-    required String yesLabel,
-    required String noLabel,
-  }) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(noLabel)),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), child: Text(yesLabel)),
-        ],
-      ),
-    );
-    return result ?? false;
+  String _formatCode(String code) {
+    if (code.length < 6) return code;
+    return '${code.substring(0, 3)} ${code.substring(3)}';
   }
 
-  String _generateHourlyCode(String seed, DateTime dateTime) {
-    final hourlySeed = '${dateTime.year}${dateTime.month}${dateTime.day}${dateTime.hour}|$seed';
-    var hash = 0x811c9dc5;
-    for (final cu in hourlySeed.codeUnits) {
-      hash ^= cu;
-      hash = (hash + (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)) & 0x7fffffff;
+  String _statusText(String status, String? targetDevice) {
+    switch (status) {
+      case "pending":
+        return "Ожидание подтверждения кода на втором устройстве";
+      case "confirmed":
+        final suffix = (targetDevice == null || targetDevice.isEmpty) ? "" : ": $targetDevice";
+        return "Привязка подтверждена$suffix";
+      case "expired":
+        return "Код истек, обновите страницу";
+      case "cancelled":
+        return "Сессия привязки отменена";
+      case "loading":
+        return "Создаем сессию привязки...";
+      default:
+        return "Ошибка привязки";
     }
-    final value = 100000 + (hash % 900000);
-    return value.toString().padLeft(6, '0');
   }
 
-  String _formatCode(String code) => '${code.substring(0, 3)} ${code.substring(3)}';
-}
-
-class _LinkedDevice {
-  const _LinkedDevice({required this.id, required this.name});
-
-  final String id;
-  final String name;
+  String _friendlyError(String? code) {
+    switch ((code ?? "").trim()) {
+      case "jwt_expired":
+      case "unauthorized":
+      case "missing_claims":
+      case "invalid_signature":
+      case "invalid_jwt":
+      case "device_id_missing":
+      case "user_id_missing":
+        return "Сессия привязки истекла. Нажмите «Повторить».";
+      case "bind_not_configured":
+        return "Сервис привязки временно недоступен. Попробуйте позже.";
+      case "device_already_bound":
+        return "Это устройство уже привязано к аккаунту.";
+      case "network_connectionError":
+      case "network_connectionTimeout":
+      case "network_socket":
+      case "network_tls":
+        return "Нет соединения с сервером. Проверьте интернет и повторите.";
+      default:
+        return code?.isNotEmpty == true ? code! : "Ошибка привязки";
+    }
+  }
 }

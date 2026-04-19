@@ -43,6 +43,7 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
             RequestIgnoreBatteryOptimizations("request_ignore_battery_optimizations"),
             GetInstalledPackages("get_installed_packages"),
             GetPackagesIcon("get_package_icon"),
+            GetStableDeviceId("get_stable_device_id"),
         }
     }
 
@@ -180,6 +181,16 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
                     val base64: String =
                         Base64.encodeToString(byteArrayOutputStream.toByteArray(), Base64.NO_WRAP)
                     success(base64)
+                }
+            }
+
+            Trigger.GetStableDeviceId.method -> {
+                result.runCatching {
+                    val androidId = android.provider.Settings.Secure.getString(
+                        Application.application.contentResolver,
+                        android.provider.Settings.Secure.ANDROID_ID
+                    ).orEmpty().trim()
+                    success(androidId)
                 }
             }
 
