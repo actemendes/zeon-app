@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -23,19 +22,14 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 class ConnectionButton extends HookConsumerWidget {
   const ConnectionButton({super.key});
 
-  static const _debugSeedProfileEnabled = bool.fromEnvironment(
-    "debug_seed_profile_enabled",
-  );
-
-  bool get _useMockConnectionUi =>
-      kIsWeb && kDebugMode && _debugSeedProfileEnabled;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final connectionStatus = ref.watch(connectionNotifierProvider);
+    final resolvedConnectionStatus = connectionStatus.valueOrNull;
     final activeProxy = ref.watch(activeProxyNotifierProvider);
     final delay = activeProxy.valueOrNull?.urlTestDelay ?? 0;
+    final hasValidDelay = delay > 0 && delay < 65000;
 
     final requiresReconnect = ref
         .watch(configOptionNotifierProvider)
@@ -48,23 +42,17 @@ class ConnectionButton extends HookConsumerWidget {
                 WarpDetourMode.warpOverProxy)
         ? t.connection.secure
         : "";
-    if (delay <= 0 ||
-        delay > 65000 ||
-        connectionStatus.value != const Connected()) {
+    if (!hasValidDelay || resolvedConnectionStatus != const Connected()) {
       secureLabel = "";
     }
 
-    final connectedWithoutDelay =
-        _useMockConnectionUi && connectionStatus.value == const Connected();
+    final isInitialConnectionLoad =
+        connectionStatus.isLoading && resolvedConnectionStatus == null;
 
-    final visualState = switch (connectionStatus) {
-      AsyncData(value: Connecting()) ||
-      AsyncData(value: Disconnecting()) => _ConnectionButtonVisualState.loading,
-      AsyncData(value: Connected())
-          when !connectedWithoutDelay && (delay <= 0 || delay >= 65000) =>
-        _ConnectionButtonVisualState.loading,
-      AsyncData(value: Connected()) => _ConnectionButtonVisualState.connected,
-      AsyncLoading() => _ConnectionButtonVisualState.loading,
+    final visualState = switch (resolvedConnectionStatus) {
+      Connecting() || Disconnecting() => _ConnectionButtonVisualState.loading,
+      Connected() => _ConnectionButtonVisualState.connected,
+      _ when isInitialConnectionLoad => _ConnectionButtonVisualState.loading,
       _ => _ConnectionButtonVisualState.off,
     };
 
@@ -115,18 +103,15 @@ class ConnectionButton extends HookConsumerWidget {
         AsyncError() => true,
         _ => false,
       },
-      label: switch (connectionStatus) {
-        AsyncData(value: Connected()) when requiresReconnect == true =>
+      label: switch (resolvedConnectionStatus) {
+        Connected() when requiresReconnect == true =>
           t.connection.reconnect,
-        AsyncData(value: Connected())
-            when !connectedWithoutDelay && (delay <= 0 || delay >= 65000) =>
-          t.connection.connecting,
-        AsyncData(value: final status) => status.present(t),
-        AsyncError() => t.errors.connection.connectionError,
+        final status? => status.present(t),
+        _ when connectionStatus.hasError => t.errors.connection.connectionError,
         _ => "",
       },
-      image: switch (connectionStatus) {
-        AsyncData(value: Connected()) => Assets.images.connectNorouz,
+      image: switch (resolvedConnectionStatus) {
+        Connected() => Assets.images.connectNorouz,
         _ => Assets.images.disconnectNorouz,
       },
       visualState: visualState,

@@ -292,6 +292,7 @@
       },
       "routing": {
         "title": "Routing",
+        "hint": "The selected region and apps will bypass the VPN. Bypass for most Russian services is preconfigured.",
         "perAppProxy": {
           "title": "Per-app proxy",
           "hideSysApps": "Hide system apps",
@@ -497,6 +498,7 @@
       "tlsTricks": {
         "title": "TLS tricks",
         "enable": "Enable fragment",
+        "hint": "Fragmentation helps when the connection is actively suppressed. Recommended settings are preconfigured for enabling it.",
         "packets": "Fragmentation Packets",
         "packetsTlsHello": "TLS Hello",
         "packets1_1": "1-1",

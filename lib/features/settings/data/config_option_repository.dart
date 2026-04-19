@@ -187,7 +187,7 @@ abstract class ConfigOptions {
 
   static final fragmentPackets = PreferencesNotifier.create<String, String>(
     "fragment-packets",
-    "tlshello",
+    "1-5",
     possibleValues: ["tlshello", "1-1", "1-2", "1-3", "1-4", "1-5"],
   );
 
@@ -373,7 +373,7 @@ abstract class ConfigOptions {
     final selectedRegion = ref.watch(region);
     // NOTE: core expects `rules.domains` as list, not comma-separated string.
     // Keep routing rules empty until we migrate these entries to list format.
-    final rules = const <SingboxRule>[];
+    const rules = <SingboxRule>[];
 
     final currentDirectDns = ref.watch(directDnsAddress);
     const externalDnsValues = {
@@ -390,7 +390,7 @@ abstract class ConfigOptions {
     final effectiveDirectDns = selectedRegion == Region.ru && externalDnsValues.contains(currentDirectDns)
         ? "local"
         : currentDirectDns;
-    final effectiveStrictRoute = selectedRegion == Region.ru ? false : ref.watch(strictRoute);
+    final effectiveStrictRoute = selectedRegion != Region.ru && ref.watch(strictRoute);
     // final reg = ref.watch(Preferences.region.notifier).raw();
 
     return SingboxConfigOption(
