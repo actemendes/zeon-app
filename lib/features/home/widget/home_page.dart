@@ -157,17 +157,19 @@ class _HomeAppBarTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    const headingLineHeight = 27 / 32;
+    const subscriptionTopSpacing = 6.0;
     final headingStyle = theme.textTheme.titleLarge?.copyWith(
       fontFamily: "Unbounded",
       fontWeight: FontWeight.w300,
       fontSize: 32,
-      height: 27 / 32,
+      height: headingLineHeight,
     );
     final nameStyle = theme.textTheme.titleLarge?.copyWith(
       fontFamily: "Unbounded",
       fontWeight: FontWeight.w700,
       fontSize: 32,
-      height: 37 / 32,
+      height: headingLineHeight,
     );
     final subscriptionUpper = subscriptionName.toUpperCase();
 
@@ -180,6 +182,7 @@ class _HomeAppBarTitle extends StatelessWidget {
           children: [
             Text(internetLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
             Text(forYouLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
+            const SizedBox(height: subscriptionTopSpacing),
             Text(subscriptionUpper, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
           ],
         ),
@@ -188,6 +191,7 @@ class _HomeAppBarTitle extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('$internetLabel $forYouLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
+            const SizedBox(height: subscriptionTopSpacing),
             Text(subscriptionUpper, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
           ],
         ),

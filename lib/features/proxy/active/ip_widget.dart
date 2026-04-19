@@ -124,22 +124,27 @@ class IPCountryFlag extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     return Semantics(
       label: t.pages.proxies.ipInfo.country,
-      child: Padding(
-        padding: padding,
-        child: (countryCode?.isEmpty ?? true)
-            ? Icon(FluentIcons.question_circle_20_regular, size: size)
-            : SizedBox(
-                width: size,
-                height: size,
-                child: CircleFlag(
-                  // key: ValueKey(countryCode),
-                  countryCode!.toLowerCase() == "ir" ? "ir-shir" : countryCode!,
-                  size: size,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8), // Rounded effect
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        onLongPress: () {},
+        child: Padding(
+          padding: padding,
+          child: (countryCode?.isEmpty ?? true)
+              ? Icon(FluentIcons.question_circle_20_regular, size: size)
+              : SizedBox(
+                  width: size,
+                  height: size,
+                  child: CircleFlag(
+                    // key: ValueKey(countryCode),
+                    countryCode!.toLowerCase() == "ir" ? "ir-shir" : countryCode!,
+                    size: size,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8), // Rounded effect
+                    ),
                   ),
                 ),
-              ),
+        ),
       ),
     );
   }

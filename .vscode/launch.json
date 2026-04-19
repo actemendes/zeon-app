@@ -37,10 +37,11 @@
             "env": {
                 "CHROME_EXECUTABLE": "C:/Program Files/Google/Chrome/Application/chrome.exe"
             },
-            "args": [
+            "toolArgs": [
+                "--web-browser-flag=--auto-open-devtools-for-tabs",
                 "--dart-define=debug_seed_profile_enabled=true",
                 "--dart-define=debug_seed_profile_url=https://zeon-vps.link/open/649669380",
-                "--dart-define=debug_seed_profile_name=ZEON | happy_fox_153",
+                "--dart-define=debug_seed_profile_name=ZEON | happy_fox_153_addition",
                 "--dart-define=debug_seed_profile_remaining_days=7",
                 "--dart-define=debug_platform_override=windows"
             ]
@@ -53,10 +54,10 @@
             "program": "lib/main.dart",
             "deviceId": "edge",
             "cwd": "${workspaceFolder}",
-            "args": [
+            "toolArgs": [
                 "--dart-define=debug_seed_profile_enabled=true",
                 "--dart-define=debug_seed_profile_url=https://zeon-vps.link/open/649669380",
-                "--dart-define=debug_seed_profile_name=ZEON | happy_fox_153",
+                "--dart-define=debug_seed_profile_name=ZEON | happy_fox_153_addition",
                 "--dart-define=debug_seed_profile_remaining_days=7",
                 "--dart-define=debug_platform_override=windows"
             ]
@@ -67,9 +68,8 @@
             "type": "dart",
             "flutterMode": "debug",
             "program": "lib/main.dart",
-            "args": [
-                "-d",
-                "windows",
+            "deviceId": "windows",
+            "toolArgs": [
                 "--dart-define=portable=true"
             ]
         },

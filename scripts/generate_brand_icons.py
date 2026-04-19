@@ -49,7 +49,7 @@ CONTAINER_GRADIENT_TOP = (246, 251, 255, 255)
 CONTAINER_GRADIENT_BOTTOM = (223, 237, 255, 255)
 
 # 5) Размер логотипа внутри контейнера (safe area)
-MASTER_LOGO_WIDTH_RATIO = 0.2
+MASTER_LOGO_WIDTH_RATIO = 0.3
 
 # 6) Android notification / quick tile (монохром)
 STAT_ICON_LOGO_WIDTH_RATIO = 0.50
@@ -510,11 +510,13 @@ def _write_startup_splash_assets(master: Image.Image) -> None:
     android_splash = master.resize((ANDROID_LEGACY_SPLASH_SIZE, ANDROID_LEGACY_SPLASH_SIZE), Image.Resampling.LANCZOS)
     _save_png(ROOT / "android/app/src/main/res/drawable-xxxhdpi/splash.png", android_splash)
 
-    # Android 12+ startup icon; keep in sync with current launcher foreground mark.
-    foreground_xml = (ROOT / "android/app/src/main/res/drawable/ic_launcher_foreground.xml").read_text(
-        encoding="utf-8"
-    )
-    ANDROID12_SPLASH_XML_TARGET.write_text(foreground_xml, encoding="utf-8")
+    # Android 12+ splash should use the full branded icon, not just the
+    # foreground mark. Point the drawable to the generated splash bitmap.
+    android12splash_xml = """<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:gravity="center"
+    android:src="@drawable/splash" />
+"""
+    ANDROID12_SPLASH_XML_TARGET.write_text(android12splash_xml, encoding="utf-8")
     print(f"wrote {ANDROID12_SPLASH_XML_TARGET.relative_to(ROOT)}")
 
     # iOS launch image set used by LaunchScreen.storyboard.

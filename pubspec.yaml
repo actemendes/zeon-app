@@ -243,7 +243,7 @@ flutter_native_splash:
   android_gravity: center
   android_12:
     color: "#ffffff"
-    image: assets/images/source/ic_launcher_foreground.png
+    image: assets/images/source/ic_launcher_splash.png
 
 ffigen:
   name: "HiddifyCoreNativeLibrary"
