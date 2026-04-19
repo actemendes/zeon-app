@@ -198,7 +198,11 @@ class ProfileParser {
       return MapEntry(key, value);
     });
     for (final entry in ok24MetaHeaders.entries) {
-      // Parsed metadata from body should override stale/missing transport headers.
+      // Keep canonical name headers from transport when present.
+      if (entry.key == "profile-title") {
+        final existing = responseHeaders["profile-title"]?.toString().trim() ?? "";
+        if (existing.isNotEmpty) continue;
+      }
       responseHeaders[entry.key] = entry.value;
     }
     return responseHeaders;
@@ -605,8 +609,16 @@ class ProfileParser {
         final rawContent = File(tempFilePath).readAsStringSync();
         final normalizedContent = _decodeOuterBase64Json(rawContent);
         final headers = Map<String, dynamic>.from(profile.populatedHeaders ?? {});
-        // Ensure metadata from raw JSON body always reaches parse stage.
-        headers.addAll(_extractOk24MetaHeaders(normalizedContent));
+        // Ensure metadata from raw JSON body reaches parse stage, but do not
+        // clobber canonical naming headers already provided by transport.
+        final extractedMeta = _extractOk24MetaHeaders(normalizedContent);
+        for (final entry in extractedMeta.entries) {
+          if (entry.key == "profile-title") {
+            final existing = headers["profile-title"]?.toString().trim() ?? "";
+            if (existing.isNotEmpty) continue;
+          }
+          headers[entry.key] = entry.value;
+        }
         var name = '';
         if (profile.userOverride?.name case final String oName when oName.isNotEmpty) {
           name = oName;

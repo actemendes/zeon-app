@@ -86,7 +86,7 @@ class ProfilePaymentPage extends HookConsumerWidget {
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(width: 24, height: 24),
                           icon: Icon(Icons.close_rounded, color: headingColor),
-                          onPressed: () => Navigator.of(context).maybePop(),
+                          onPressed: isProcessingPayment.value ? null : () => Navigator.of(context).maybePop(),
                         ),
                       ],
                     ),
@@ -153,7 +153,7 @@ class ProfilePaymentPage extends HookConsumerWidget {
               six: t.pages.profileDetails.specialServers.plans.sixMonths,
               twelve: t.pages.profileDetails.specialServers.plans.twelveMonths,
             ),
-            onPlanSelected: (plan) => selectedPlan.value = plan,
+            onPlanSelected: isProcessingPayment.value ? null : (plan) => selectedPlan.value = plan,
             connectLabel: t.pages.profileDetails.specialServers.connect,
             isLoading: isProcessingPayment.value,
             onConnectTap: () => _openCheckout(
@@ -387,7 +387,7 @@ class _BottomSubscriptionPanel extends StatelessWidget {
   final String title;
   final _SubscriptionPlan selectedPlan;
   final ({String one, String three, String six, String twelve}) optionLabels;
-  final ValueChanged<_SubscriptionPlan> onPlanSelected;
+  final ValueChanged<_SubscriptionPlan>? onPlanSelected;
   final String connectLabel;
   final bool isLoading;
   final VoidCallback onConnectTap;
@@ -425,28 +425,32 @@ class _BottomSubscriptionPanel extends StatelessWidget {
                 label: optionLabels.one,
                 price: _formatPrice(_SubscriptionPlan.one.amountRub),
                 selected: selectedPlan == _SubscriptionPlan.one,
-                onTap: () => onPlanSelected(_SubscriptionPlan.one),
+                enabled: onPlanSelected != null,
+                onTap: () => onPlanSelected?.call(_SubscriptionPlan.one),
               ),
               const SizedBox(height: 8),
               _PlanTile(
                 label: optionLabels.three,
                 price: _formatPrice(_SubscriptionPlan.three.amountRub),
                 selected: selectedPlan == _SubscriptionPlan.three,
-                onTap: () => onPlanSelected(_SubscriptionPlan.three),
+                enabled: onPlanSelected != null,
+                onTap: () => onPlanSelected?.call(_SubscriptionPlan.three),
               ),
               const SizedBox(height: 8),
               _PlanTile(
                 label: optionLabels.six,
                 price: _formatPrice(_SubscriptionPlan.six.amountRub),
                 selected: selectedPlan == _SubscriptionPlan.six,
-                onTap: () => onPlanSelected(_SubscriptionPlan.six),
+                enabled: onPlanSelected != null,
+                onTap: () => onPlanSelected?.call(_SubscriptionPlan.six),
               ),
               const SizedBox(height: 8),
               _PlanTile(
                 label: optionLabels.twelve,
                 price: _formatPrice(_SubscriptionPlan.twelve.amountRub),
                 selected: selectedPlan == _SubscriptionPlan.twelve,
-                onTap: () => onPlanSelected(_SubscriptionPlan.twelve),
+                enabled: onPlanSelected != null,
+                onTap: () => onPlanSelected?.call(_SubscriptionPlan.twelve),
               ),
               const SizedBox(height: 12),
               _ConnectButton(label: connectLabel, isLoading: isLoading, onTap: onConnectTap),
@@ -461,11 +465,18 @@ class _BottomSubscriptionPanel extends StatelessWidget {
 }
 
 class _PlanTile extends StatelessWidget {
-  const _PlanTile({required this.label, required this.price, required this.selected, required this.onTap});
+  const _PlanTile({
+    required this.label,
+    required this.price,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
 
   final String label;
   final String price;
   final bool selected;
+  final bool enabled;
   final VoidCallback onTap;
 
   @override
@@ -475,6 +486,7 @@ class _PlanTile extends StatelessWidget {
     const selectedBorderColor = Color(0xFF1AE958);
     final textColor = theme.colorScheme.onSurface;
     final priceColor = theme.brightness == Brightness.dark ? const Color(0xFFC3C6CF) : const Color(0xFF969696);
+    final disabledOpacity = enabled ? 1.0 : 0.55;
 
     return Material(
       color: Colors.transparent,
@@ -488,7 +500,7 @@ class _PlanTile extends StatelessWidget {
           border: Border.all(color: selected ? selectedBorderColor : Colors.transparent, width: selected ? 2.5 : 0),
         ),
         child: InkWell(
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
@@ -500,7 +512,7 @@ class _PlanTile extends StatelessWidget {
                       fontFamily: 'Montserrat',
                       fontWeight: FontWeight.w500,
                       fontSize: 14,
-                      color: textColor,
+                      color: textColor.withValues(alpha: disabledOpacity),
                     ),
                   ),
                 ),
@@ -510,7 +522,7 @@ class _PlanTile extends StatelessWidget {
                     fontFamily: 'Montserrat',
                     fontWeight: FontWeight.w500,
                     fontSize: 14,
-                    color: priceColor,
+                    color: priceColor.withValues(alpha: disabledOpacity),
                   ),
                 ),
               ],
@@ -558,7 +570,7 @@ class _ConnectButton extends StatelessWidget {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      (isLoading ? '...' : label).toUpperCase(),
+                      label.toUpperCase(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium?.copyWith(
@@ -570,10 +582,7 @@ class _ConnectButton extends StatelessWidget {
                   ),
                 ),
                 if (isLoading)
-                  const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                  const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
                 else
                   SizedBox.square(
                     dimension: _arrowSize,

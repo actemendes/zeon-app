@@ -10,6 +10,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
+import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/details/json_editor.dart';
 import 'package:hiddify/features/profile/details/profile_details_notifier.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
@@ -45,6 +46,8 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
           data: (data) {
             final isLoading = data.loadingState is AsyncLoading;
             final userOverride = data.profile.userOverride ?? const UserOverride();
+            final normalizedProfileName = parseProfileName(data.profile.name).trim();
+            final displayProfileName = normalizedProfileName.isNotEmpty ? normalizedProfileName : data.profile.name;
             final sliderFocusNode = useFocusNode(
               onKeyEvent: (node, event) {
                 if (KeyboardConst.verticalArrows.contains(event.logicalKey) && event is KeyDownEvent) {
@@ -91,7 +94,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           child: CustomTextFormField(
                             maxLines: 1,
-                            initialValue: userOverride.name ?? data.profile.name,
+                            initialValue: userOverride.name ?? displayProfileName,
                             validator: (value) =>
                                 (value?.isEmpty ?? true) ? t.pages.profileDetails.form.emptyName : null,
                             onChanged: (value) => ref

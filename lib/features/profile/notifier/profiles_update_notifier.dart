@@ -4,6 +4,7 @@ import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
+import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:meta/meta.dart';
@@ -85,6 +86,8 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
           .first;
 
       await for (final profile in Stream.fromIterable(remoteProfiles)) {
+        final normalizedProfileName = parseProfileName(profile.name).trim();
+        final displayProfileName = normalizedProfileName.isNotEmpty ? normalizedProfileName : profile.name;
         final updateInterval = profile.options?.updateInterval;
         if (force || updateInterval != null && updateInterval <= DateTime.now().difference(profile.lastUpdate)) {
           final t = ref.read(translationsProvider).requireValue;
@@ -96,15 +99,15 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
                 loggy.debug("error updating profile [${profile.id}]", l);
                 ref
                     .read(inAppNotificationControllerProvider)
-                    .showErrorToast(t.pages.profiles.msg.update.failureNamed(name: profile.name));
-                state = AsyncData((name: profile.name, success: false));
+                    .showErrorToast(t.pages.profiles.msg.update.failureNamed(name: displayProfileName));
+                state = AsyncData((name: displayProfileName, success: false));
               })
               .map((_) {
                 loggy.debug("profile [${profile.id}] updated successfully");
                 ref
                     .read(inAppNotificationControllerProvider)
-                    .showSuccessToast(t.pages.profiles.msg.update.successNamed(name: profile.name));
-                state = AsyncData((name: profile.name, success: true));
+                    .showSuccessToast(t.pages.profiles.msg.update.successNamed(name: displayProfileName));
+                state = AsyncData((name: displayProfileName, success: true));
               })
               .run();
         } else {

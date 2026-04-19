@@ -1,8 +1,8 @@
 import 'package:hiddify/core/http_client/dio_http_client.dart';
+import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 class MobilePaymentService with InfraLogger {
   MobilePaymentService({
@@ -14,14 +14,14 @@ class MobilePaymentService with InfraLogger {
   static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://zeon-vps.link");
   static const _apiKey = String.fromEnvironment("mobile_api_key", defaultValue: "mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7");
 
-  static const _prefDeviceId = "mobile_auto_import_device_id";
   static const _prefUserId = "mobile_auto_import_user_id";
 
   final DioHttpClient _httpClient;
   final SharedPreferences _preferences;
+  StableDeviceIdService get _stableDeviceId => StableDeviceIdService(preferences: _preferences);
 
   Future<PaymentCheckout?> createPayment({required String plan}) async {
-    if (!PlatformUtils.isMobile) return null;
+    if (PlatformUtils.isWeb) return null;
     if (_apiBaseUrl.isEmpty || _apiKey.isEmpty) return null;
 
     final normalizedPlan = _normalizePlan(plan);
@@ -97,18 +97,8 @@ class MobilePaymentService with InfraLogger {
     }
   }
 
-  Future<String> _ensureDeviceId() async {
-    final stored = _preferences.getString(_prefDeviceId);
-    if (stored != null && stored.isNotEmpty) return stored;
-
-    final platformPrefix = PlatformUtils.isAndroid
-        ? "android"
-        : PlatformUtils.isIOS
-        ? "ios"
-        : "mobile";
-    final generated = "${platformPrefix}_${const Uuid().v4().replaceAll('-', '')}";
-    await _preferences.setString(_prefDeviceId, generated);
-    return generated;
+  Future<String> _ensureDeviceId() {
+    return _stableDeviceId.getOrCreate();
   }
 
   static String _normalizePlan(String plan) {

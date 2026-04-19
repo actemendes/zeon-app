@@ -31,10 +31,12 @@ import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
 import 'package:hiddify/riverpod_observer.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async {
-  if (!kIsWeb) {
+  final shouldShowNativeSplash = await _shouldShowNativeSplashOnThisRun();
+  if (shouldShowNativeSplash) {
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   }
   LoggerController.preInit();
@@ -104,7 +106,7 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
     profileDataSource: profileDataSource,
     preferences: preferences,
   );
-  await _safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 15000);
+  unawaited(_safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 15000));
   unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
   await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
 
@@ -137,10 +139,20 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
     ),
   );
 
-  if (!kIsWeb) {
+  if (shouldShowNativeSplash) {
     FlutterNativeSplash.remove();
   }
   // SentryFlutter.s(DateTime.now().toUtc());
+}
+
+Future<bool> _shouldShowNativeSplashOnThisRun() async {
+  if (kIsWeb || !PlatformUtils.isMobile) return false;
+  const key = "native_splash_first_launch_done";
+  final prefs = await SharedPreferences.getInstance();
+  final done = prefs.getBool(key) ?? false;
+  if (done) return false;
+  await prefs.setBool(key, true);
+  return true;
 }
 
 Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {

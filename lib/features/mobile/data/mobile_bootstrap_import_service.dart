@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
@@ -11,7 +12,6 @@ import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/link_parsers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 class MobileBootstrapImportService with InfraLogger {
   MobileBootstrapImportService({
@@ -24,11 +24,10 @@ class MobileBootstrapImportService with InfraLogger {
        _profileDataSource = profileDataSource,
        _preferences = preferences;
 
-  static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://zeon-vps.link");
+  static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "http://130.49.151.173");
   static const _apiKey = String.fromEnvironment("mobile_api_key", defaultValue: "mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7");
 
   static const _prefDone = "mobile_auto_import_done";
-  static const _prefDeviceId = "mobile_auto_import_device_id";
   static const _prefUserId = "mobile_auto_import_user_id";
   static const _prefConnLink = "mobile_auto_import_conn_link";
   static const _prefRegion = "region";
@@ -47,7 +46,7 @@ class MobileBootstrapImportService with InfraLogger {
   }
 
   Future<bool> runOrThrow({bool skipIfAlreadyDone = true}) async {
-    if (!PlatformUtils.isMobile) {
+    if (PlatformUtils.isWeb) {
       return false;
     }
     if (skipIfAlreadyDone && (_preferences.getBool(_prefDone) ?? false)) {
@@ -55,8 +54,8 @@ class MobileBootstrapImportService with InfraLogger {
       if (hasAnyProfile) {
         final savedConnLink = _preferences.getString(_prefConnLink);
         if (savedConnLink != null && savedConnLink.isNotEmpty) {
-          // Keep profile metadata (expire/status/name) fresh even after first import.
-          await _importFromConnLink(savedConnLink);
+          // Do not re-import on every launch: it can create duplicates/switch active profile.
+          // Keep only metadata refresh for the existing active profile.
           await _syncMetaFromConnLink(savedConnLink);
         }
         return false;
@@ -67,39 +66,43 @@ class MobileBootstrapImportService with InfraLogger {
       throw const MobileBootstrapImportException("mobile api is not configured");
     }
 
-    final deviceId = await _ensureDeviceId();
-    if (deviceId.isEmpty) {
-      throw const MobileBootstrapImportException("device_id is empty");
-    }
-
-    final uri = Uri.parse(_apiBaseUrl).resolve("/api/mobile/users/create").toString();
-
     try {
-      final response = await _httpClient.post<Map<String, dynamic>>(
-        uri,
-        data: {"device_id": deviceId},
-        headers: {"X-API-Key": _apiKey, "Content-Type": "application/json"},
-        directOnly: true,
-      );
+      final savedUserId = int.tryParse((_preferences.getString(_prefUserId) ?? "").trim());
+      var effectiveUserId = savedUserId;
+      String? apiLogin;
+      String? apiStatus;
+      DateTime? apiExpiresAt;
 
-      final statusCode = response.statusCode ?? 0;
-      if (statusCode != 200 && statusCode != 201) {
-        throw MobileBootstrapImportException("users/create returned status $statusCode");
+      var connLink = "";
+      if (savedUserId != null && savedUserId > 0) {
+        final lookup = await _lookupSubscriptionByUserId(savedUserId);
+        if (lookup != null) {
+          connLink = lookup.connectionLink;
+          apiStatus = lookup.status;
+          apiExpiresAt = lookup.expiresAt;
+        }
       }
 
-      final body = response.data;
-      if (body == null || body["ok"] != true) {
-        throw const MobileBootstrapImportException("users/create returned invalid body");
+      if (connLink.isEmpty) {
+        final created = await _createOrReuseUser(userId: savedUserId);
+        effectiveUserId = created.userId ?? effectiveUserId;
+        apiLogin = created.login;
+        apiStatus = created.status ?? apiStatus;
+        apiExpiresAt = created.expiresAt ?? apiExpiresAt;
+        connLink = created.rawUrl;
       }
 
-      final data = body["data"];
-      if (data is! Map<String, dynamic>) {
-        throw const MobileBootstrapImportException("users/create missing data object");
+      if (connLink.isEmpty && effectiveUserId != null && effectiveUserId > 0) {
+        final lookup = await _lookupSubscriptionByUserId(effectiveUserId);
+        if (lookup != null) {
+          connLink = lookup.connectionLink;
+          apiStatus = lookup.status ?? apiStatus;
+          apiExpiresAt = lookup.expiresAt ?? apiExpiresAt;
+        }
       }
 
-      final connLink = data["conn_link"]?.toString() ?? "";
       if (connLink.isEmpty || Uri.tryParse(connLink) == null) {
-        throw const MobileBootstrapImportException("users/create returned invalid conn_link");
+        throw const MobileBootstrapImportException("connection_link is missing");
       }
 
       final imported = await _importFromConnLink(connLink);
@@ -107,10 +110,14 @@ class MobileBootstrapImportService with InfraLogger {
         throw const MobileBootstrapImportException("failed to import conn_link");
       }
       await _syncMetaFromConnLink(connLink);
+      await _syncMetaFromApiSummary(status: apiStatus, expiresAt: apiExpiresAt, login: apiLogin);
+      await _syncNameFromApiLogin(apiLogin);
 
       await _preferences.setBool(_prefDone, true);
       await _preferences.setString(_prefConnLink, connLink);
-      await _preferences.setString(_prefUserId, data["user_id"]?.toString() ?? "");
+      if (effectiveUserId != null && effectiveUserId > 0) {
+        await _preferences.setString(_prefUserId, effectiveUserId.toString());
+      }
       final existingRegion = _preferences.getString(_prefRegion);
       if (existingRegion == null || existingRegion.isEmpty || existingRegion == "other") {
         await _preferences.setString(_prefRegion, "ru");
@@ -121,22 +128,6 @@ class MobileBootstrapImportService with InfraLogger {
       loggy.warning("mobile auto import failed with error", e, st);
       rethrow;
     }
-  }
-
-  Future<String> _ensureDeviceId() async {
-    final stored = _preferences.getString(_prefDeviceId);
-    if (stored != null && stored.isNotEmpty) {
-      return stored;
-    }
-
-    final platformPrefix = PlatformUtils.isAndroid
-        ? "android"
-        : PlatformUtils.isIOS
-        ? "ios"
-        : "mobile";
-    final generated = "${platformPrefix}_${const Uuid().v4().replaceAll('-', '')}";
-    await _preferences.setString(_prefDeviceId, generated);
-    return generated;
   }
 
   Future<String> _resolveImportUrl(String connLink) async {
@@ -219,17 +210,13 @@ class MobileBootstrapImportService with InfraLogger {
 
     // Last-resort fallback: store profile even if core validation fails now.
     loggy.warning("mobile import: trying fallback import without validation");
-    final fallbackDirect = await _profileRepository
-        .upsertRemote(connLink, validateConfigOnImport: false)
-        .run();
+    final fallbackDirect = await _profileRepository.upsertRemote(connLink, validateConfigOnImport: false).run();
     if (fallbackDirect.isRight()) {
       loggy.warning("mobile import: fallback import without validation succeeded");
       return true;
     }
     if (importUrl.isNotEmpty && importUrl != connLink) {
-      final fallbackResolved = await _profileRepository
-          .upsertRemote(importUrl, validateConfigOnImport: false)
-          .run();
+      final fallbackResolved = await _profileRepository.upsertRemote(importUrl, validateConfigOnImport: false).run();
       if (fallbackResolved.isRight()) {
         loggy.warning("mobile import: fallback resolved import without validation succeeded");
         return true;
@@ -270,9 +257,13 @@ class MobileBootstrapImportService with InfraLogger {
       await _profileDataSource.edit(
         active.id,
         ProfileEntriesCompanion(
-          name: (meta.login?.trim().isNotEmpty == true)
-              ? Value(parseProfileName(meta.login ?? ""))
-              : const Value.absent(),
+          name: () {
+            final normalizedName = parseProfileName(meta.login).trim();
+            if (normalizedName.isEmpty || _looksObfuscatedName(normalizedName)) {
+              return const Value<String>.absent();
+            }
+            return Value(normalizedName);
+          }(),
           upload: Value(effectiveExpire == null ? (active.upload ?? 0) : 0),
           download: Value(effectiveExpire == null ? (active.download ?? 0) : 0),
           total: Value(effectiveExpire == null ? (active.total ?? 920233720369) : 920233720369),
@@ -293,10 +284,7 @@ class MobileBootstrapImportService with InfraLogger {
 
   Future<_ConnLinkMeta?> _fetchConnLinkMeta(String connLink) async {
     try {
-      final response = await _httpClient.get<String>(
-        connLink,
-        headers: {"Accept": "text/html"},
-      );
+      final response = await _httpClient.get<String>(connLink, headers: {"Accept": "text/html"});
       final content = response.data?.trim();
       if (content == null || content.isEmpty) return null;
 
@@ -376,6 +364,136 @@ class MobileBootstrapImportService with InfraLogger {
     final base64Like = RegExp(r'^[A-Za-z0-9+/_=-]+$').hasMatch(raw);
     if (!base64Like) return raw;
     return safeDecodeBase64(raw).trim();
+  }
+
+  Future<void> _syncMetaFromApiSummary({String? status, DateTime? expiresAt, String? login}) async {
+    try {
+      final normalizedStatus = status?.trim().toLowerCase();
+      final normalizedName = parseProfileName(login).trim();
+      final active = await _profileDataSource.watchActiveProfile().first;
+      if (active == null || active.type != ProfileType.remote) return;
+
+      final now = DateTime.now().toUtc();
+      DateTime? effectiveExpire = expiresAt?.toUtc();
+      if (normalizedStatus == "inactive") {
+        effectiveExpire = (effectiveExpire != null && effectiveExpire.isAfter(now))
+            ? now.subtract(const Duration(seconds: 1))
+            : (effectiveExpire ?? now.subtract(const Duration(seconds: 1)));
+      }
+
+      await _profileDataSource.edit(
+        active.id,
+        ProfileEntriesCompanion(
+          name: () {
+            if (normalizedName.isEmpty || _looksObfuscatedName(normalizedName)) {
+              return const Value<String>.absent();
+            }
+            return Value(normalizedName);
+          }(),
+          upload: Value(effectiveExpire == null ? (active.upload ?? 0) : 0),
+          download: Value(effectiveExpire == null ? (active.download ?? 0) : 0),
+          total: Value(effectiveExpire == null ? (active.total ?? 920233720369) : 920233720369),
+          expire: Value(effectiveExpire ?? active.expire),
+        ),
+      );
+    } catch (_) {
+      // Best-effort only.
+    }
+  }
+
+  Future<_LookupSummary?> _lookupSubscriptionByUserId(int userId) async {
+    try {
+      final uri = Uri.parse(
+        _apiBaseUrl,
+      ).resolve("/api/v1/subscriptions/lookup").replace(queryParameters: {"user_id": userId.toString()});
+      final response = await _httpClient.get<Map<String, dynamic>>(
+        uri.toString(),
+        headers: {"x-api-key": _apiKey, "Content-Type": "application/json"},
+        directOnly: true,
+      );
+      if ((response.statusCode ?? 0) != 200) return null;
+      final body = response.data;
+      if (body == null || body["ok"] != true) return null;
+      final data = body["data"];
+      if (data is! Map<String, dynamic>) return null;
+
+      final connLink = (data["connection_link"]?.toString() ?? "").trim();
+      if (connLink.isEmpty) return null;
+      return _LookupSummary(
+        connectionLink: connLink,
+        status: data["status"]?.toString(),
+        expiresAt: _parseFlexibleExpire(data["expires_at"]?.toString() ?? ""),
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  Future<_CreateResult> _createOrReuseUser({int? userId}) async {
+    final uri = Uri.parse(_apiBaseUrl).resolve("/api/v1/users/create").toString();
+    final body = <String, dynamic>{
+      "user": {if (userId != null && userId > 0) "user_id": userId},
+      "subscription": {"create_if_missing": true},
+    };
+    final response = await _httpClient.post<Map<String, dynamic>>(
+      uri,
+      data: body,
+      headers: {"x-api-key": _apiKey, "Content-Type": "application/json"},
+      directOnly: true,
+    );
+    final statusCode = response.statusCode ?? 0;
+    if (statusCode != 200 && statusCode != 201) {
+      throw MobileBootstrapImportException("users/create returned status $statusCode");
+    }
+    final payload = response.data;
+    if (payload == null || payload["ok"] != true) {
+      throw const MobileBootstrapImportException("users/create returned invalid body");
+    }
+    final data = payload["data"];
+    if (data is! Map<String, dynamic>) {
+      throw const MobileBootstrapImportException("users/create missing data object");
+    }
+    final user = data["user"];
+    final userMap = user is Map<String, dynamic> ? user : const <String, dynamic>{};
+    final sub = data["subscription"];
+    final subMap = sub is Map<String, dynamic> ? sub : const <String, dynamic>{};
+    final conn = data["connection"];
+    final connMap = conn is Map<String, dynamic> ? conn : const <String, dynamic>{};
+
+    final rawUrl = (connMap["raw_url"]?.toString() ?? "").trim();
+    final fallbackVpnUuid = (subMap["vpn_uuid"]?.toString() ?? "").trim();
+    final fallbackUrl = fallbackVpnUuid.isEmpty
+        ? ""
+        : Uri.parse(_apiBaseUrl).resolve("/subscription/$fallbackVpnUuid").toString();
+
+    return _CreateResult(
+      userId: _parseInt(userMap["user_id"]),
+      login: userMap["login"]?.toString(),
+      status: subMap["status"]?.toString(),
+      expiresAt: _parseFlexibleExpire(subMap["expires_at"]?.toString() ?? ""),
+      rawUrl: rawUrl.isNotEmpty ? rawUrl : fallbackUrl,
+    );
+  }
+
+  Future<void> _syncNameFromApiLogin(String? login) async {
+    try {
+      final normalizedName = parseProfileName(login).trim();
+      if (normalizedName.isEmpty || _looksObfuscatedName(normalizedName)) return;
+      final active = await _profileDataSource.watchActiveProfile().first;
+      if (active == null) return;
+      await _profileDataSource.edit(active.id, ProfileEntriesCompanion(name: Value(normalizedName)));
+    } catch (_) {
+      // Best-effort only.
+    }
+  }
+
+  static bool _looksObfuscatedName(String value) {
+    final v = value.trim();
+    if (v.length < 14) return false;
+    if (v.contains(' ')) return false;
+    if (!RegExp(r'^[A-Za-z0-9]+$').hasMatch(v)) return false;
+    return RegExp('[A-Za-z]').hasMatch(v) && RegExp('[0-9]').hasMatch(v);
   }
 
   static DateTime? _parseFlexibleExpire(String raw) {
@@ -460,4 +578,34 @@ class _ConnLinkMeta {
   final String? login;
   final String? webPageUrl;
   final String? supportUrl;
+}
+
+class _LookupSummary {
+  const _LookupSummary({required this.connectionLink, required this.status, required this.expiresAt});
+
+  final String connectionLink;
+  final String? status;
+  final DateTime? expiresAt;
+}
+
+class _CreateResult {
+  const _CreateResult({
+    required this.userId,
+    required this.login,
+    required this.status,
+    required this.expiresAt,
+    required this.rawUrl,
+  });
+
+  final int? userId;
+  final String? login;
+  final String? status;
+  final DateTime? expiresAt;
+  final String rawUrl;
+}
+
+int? _parseInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? "");
 }

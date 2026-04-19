@@ -16,6 +16,7 @@ import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
+import 'package:hiddify/features/mobile/data/mobile_bind_service.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -24,6 +25,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
   const IntroPage({super.key});
 
   static const double _maxContentWidth = 620;
+  static const bool _bindFeatureEnabled = bool.fromEnvironment('mobile_bind_enabled');
   static bool locationInfoLoaded = false;
 
   @override
@@ -115,6 +117,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                             startTitle: t.intro.ctaTitle,
                             startSubtitle: t.intro.ctaSubtitle,
                             accountLabel: t.intro.alreadyHaveAccount,
+                            showAccountButton: _bindFeatureEnabled,
                             onStart: () async {
                               if (isStarting.value) return;
                               isStarting.value = true;
@@ -202,6 +205,7 @@ class _IntroFooter extends ConsumerWidget {
     required this.startTitle,
     required this.startSubtitle,
     required this.accountLabel,
+    required this.showAccountButton,
     required this.onStart,
     required this.onTermsTap,
   });
@@ -210,6 +214,7 @@ class _IntroFooter extends ConsumerWidget {
   final String startTitle;
   final String startSubtitle;
   final String accountLabel;
+  final bool showAccountButton;
   final VoidCallback onStart;
   final VoidCallback onTermsTap;
 
@@ -222,9 +227,12 @@ class _IntroFooter extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _IntroStartButton(isLoading: isStarting, title: startTitle, subtitle: startSubtitle, onPressed: onStart),
-        const Gap(16),
-        _IntroSecondaryButton(label: accountLabel),
-        const Gap(16),
+        if (showAccountButton) ...[
+          const Gap(16),
+          _IntroSecondaryButton(label: accountLabel),
+          const Gap(16),
+        ] else
+          const Gap(16),
         Text.rich(
           textAlign: TextAlign.center,
           t.intro.termsAndPolicyCaution(
@@ -395,7 +403,6 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
   const _BindAccountCodeDialog();
 
   static const _codeLength = 6;
-  static const _simulatedErrorCode = '000000';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -418,29 +425,66 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
 
     final isCodeComplete = codeController.text.length == _codeLength;
 
+    String mapBindError(String code) {
+      switch (code.trim()) {
+        case "device_already_bound":
+          return "Устройство уже привязано, загружаем текущий профиль...";
+        case "bind_link_not_found":
+          return "Ссылка профиля не найдена. Повторите позже.";
+        case "bind_not_configured":
+          return "Сервис привязки временно недоступен.";
+        case "network_connectionTimeout":
+          return "Сервер долго отвечает. Проверьте интернет и повторите.";
+        case "network_connectionError":
+          return "Нет соединения с сервером.";
+        default:
+          return code.isEmpty ? t.errors.unexpected : code;
+      }
+    }
+
+    void showError(String message) {
+      final notification = ref.read(inAppNotificationControllerProvider);
+      notification.showErrorToast(message);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red.shade700));
+    }
+
     Future<void> bind() async {
       if (isSubmitting.value) return;
 
       final code = codeController.text.trim();
-      final notification = ref.read(inAppNotificationControllerProvider);
 
       if (!RegExp(r'^\d{6}$').hasMatch(code)) {
-        notification.showErrorToast(t.errors.unexpected);
+        showError(t.errors.unexpected);
         return;
       }
 
       isSubmitting.value = true;
-      await Future<void>.delayed(const Duration(milliseconds: 350));
-      final isBindSuccessful = code != _simulatedErrorCode;
+      try {
+        await ref.read(mobileBindServiceProvider).confirmCode(code).timeout(const Duration(seconds: 30));
+      } on MobileBindException catch (e) {
+        if (!context.mounted) return;
+        isSubmitting.value = false;
+        showError(mapBindError(e.code));
+        return;
+      } on TimeoutException {
+        if (!context.mounted) return;
+        isSubmitting.value = false;
+        showError(mapBindError("network_connectionTimeout"));
+        return;
+      } catch (_) {
+        if (!context.mounted) return;
+        isSubmitting.value = false;
+        showError(t.errors.unexpected);
+        return;
+      }
       isSubmitting.value = false;
 
       if (!context.mounted) return;
 
-      if (!isBindSuccessful) {
-        notification.showErrorToast(t.errors.unexpected);
-        return;
-      }
-
+      final notification = ref.read(inAppNotificationControllerProvider);
       notification.showSuccessToast(t.common.done);
       await ref.read(Preferences.introCompleted.notifier).update(true);
       if (!context.mounted) return;

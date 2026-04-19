@@ -8,6 +8,7 @@
 import Flutter
 import Combine
 import HiddifyCore
+import UIKit
 
 public class PlatformMethodHandler: NSObject, FlutterPlugin {
         
@@ -26,6 +27,8 @@ public class PlatformMethodHandler: NSObject, FlutterPlugin {
         switch call.method {
         case "get_paths":
             result(getPaths(args: call.arguments) as NSDictionary)
+        case "get_stable_device_id":
+            result(UIDevice.current.identifierForVendor?.uuidString ?? "")
         default:
             result(FlutterMethodNotImplemented)
         }
