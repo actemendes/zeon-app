@@ -6,7 +6,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
-import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -27,7 +26,6 @@ import java.util.LinkedList
 
 class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     companion object {
-        private const val TAG = "ANDROID/MyActivity"
         lateinit var instance: MainActivity
 
         const val VPN_PERMISSION_REQUEST_CODE = 1001

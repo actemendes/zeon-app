@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
 import 'package:hiddify/core/http_client/http_client_provider.dart';
@@ -14,8 +13,10 @@ import 'package:hiddify/core/model/environment.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/preferences/preferences_migration.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
+import 'package:hiddify/core/theme/app_theme_mode.dart';
 import 'package:hiddify/features/app/widget/app.dart';
 import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
+import 'package:hiddify/features/bootstrap/widget/bootstrap_splash_screen.dart';
 
 import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dart';
@@ -32,15 +33,121 @@ import 'package:hiddify/riverpod_observer.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async {
-  if (!kIsWeb) {
-    FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
-  }
+  widgetsBinding;
   LoggerController.preInit();
   FlutterError.onError = Logger.logFlutterError;
   WidgetsBinding.instance.platformDispatcher.onError = Logger.logPlatformDispatcherError;
 
+  runApp(_BootstrapHost(environment: env));
+}
+
+class _BootstrapHost extends StatefulWidget {
+  const _BootstrapHost({required this.environment});
+
+  final Environment environment;
+
+  @override
+  State<_BootstrapHost> createState() => _BootstrapHostState();
+}
+
+class _BootstrapHostState extends State<_BootstrapHost> {
+  late final Future<ProviderContainer> _bootstrapFuture;
+  AppThemeMode _initialThemeMode = AppThemeMode.system;
+
+  @override
+  void initState() {
+    super.initState();
+    _bootstrapFuture = _bootstrapAfterFirstFrame();
+    unawaited(_loadInitialThemeMode());
+  }
+
+  Future<ProviderContainer> _bootstrapAfterFirstFrame() async {
+    await WidgetsBinding.instance.endOfFrame;
+    return _bootstrapContainer(widget.environment);
+  }
+
+  Future<void> _loadInitialThemeMode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final persisted = prefs.getString("theme_mode");
+      final themeMode = switch (persisted) {
+        null => AppThemeMode.system,
+        "black" => AppThemeMode.dark,
+        _ => AppThemeMode.values.firstWhere((mode) => mode.name == persisted, orElse: () => AppThemeMode.system),
+      };
+      if (!mounted) return;
+      setState(() {
+        _initialThemeMode = themeMode;
+      });
+    } catch (_) {
+      // Fall back to system brightness for the bootstrap splash.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<ProviderContainer>(
+      future: _bootstrapFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return ProviderScope(
+            parent: snapshot.requireData,
+            observers: [RiverpodObserver()],
+            child: SentryUserInteractionWidget(child: const App()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return _BootstrapFailureApp(error: snapshot.error);
+        }
+
+        return _BootstrapSplashApp(themeMode: _initialThemeMode);
+      },
+    );
+  }
+}
+
+class _BootstrapSplashApp extends StatelessWidget {
+  const _BootstrapSplashApp({required this.themeMode});
+
+  final AppThemeMode themeMode;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(debugShowCheckedModeBanner: false, home: BootstrapSplashScreen(themeMode: themeMode));
+  }
+}
+
+class _BootstrapFailureApp extends StatelessWidget {
+  const _BootstrapFailureApp({required this.error});
+
+  final Object? error;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              '$error',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   final stopWatch = Stopwatch()..start();
 
   final container = ProviderContainer(overrides: [environmentProvider.overrideWithValue(env)]);
@@ -128,19 +235,7 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
 
   Logger.bootstrap.info("bootstrap took [${stopWatch.elapsedMilliseconds}ms]");
   stopWatch.stop();
-
-  runApp(
-    ProviderScope(
-      parent: container,
-      observers: [RiverpodObserver()],
-      child: SentryUserInteractionWidget(child: const App()),
-    ),
-  );
-
-  if (!kIsWeb) {
-    FlutterNativeSplash.remove();
-  }
-  // SentryFlutter.s(DateTime.now().toUtc());
+  return container;
 }
 
 Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
@@ -199,8 +294,7 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
   final currentMode = container.read(Preferences.perAppProxyMode);
   final currentInclude = container.read(Preferences.includeApps);
   final currentExclude = container.read(Preferences.excludeApps);
-  final shouldApplyDefaults =
-      currentMode == PerAppProxyMode.off && currentInclude.isEmpty && currentExclude.isEmpty;
+  final shouldApplyDefaults = currentMode == PerAppProxyMode.off && currentInclude.isEmpty && currentExclude.isEmpty;
   if (!shouldApplyDefaults) {
     await prefs.setBool(seedKey, true);
     return;
@@ -209,12 +303,14 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
   await container.read(Preferences.perAppProxyMode.notifier).update(PerAppProxyMode.exclude);
   await container.read(Preferences.includeApps.notifier).update(const []);
   await container.read(Preferences.excludeApps.notifier).update(excludePkgs);
-  await container.read(appProxyDataSourceProvider).importPkgs(
-    backup: const PerAppProxyBackup(
-      include: PerAppProxyBackupMode(selected: [], deselected: []),
-      exclude: PerAppProxyBackupMode(selected: excludePkgs, deselected: []),
-    ),
-  );
+  await container
+      .read(appProxyDataSourceProvider)
+      .importPkgs(
+        backup: const PerAppProxyBackup(
+          include: PerAppProxyBackupMode(selected: [], deselected: []),
+          exclude: PerAppProxyBackupMode(selected: excludePkgs, deselected: []),
+        ),
+      );
   await prefs.setBool(seedKey, true);
 }
 

@@ -178,7 +178,7 @@
       },
       "linkAccount": {
         "title": "Link account",
-        "description": "To link a device to your account, enter the 6-digit code below on that device. The digits are refreshed every hour.",
+        "description": "To link a new device to your account, enter the 6-digit code below on that device",
         "codeLabel": "Link code",
         "updatesInMinutes": {
           "one": "Updates in 1 minute",

@@ -31,6 +31,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # =============================================================================
 # 1) Источник логотипа (SVG)
 LOGO_SVG = ROOT / "assets/images/SVG/logo-icon.svg"
+STARTUP_LOGO_LIGHT_PNG = ROOT / "assets/images/2x/big-logo-white.png"
+STARTUP_LOGO_DARK_PNG = ROOT / "assets/images/2x/big-logo-dark.png"
 
 # 2) Качество растеризации SVG -> PNG (влияет на сглаживание/скорость)
 SVG_RENDER_BASE_WIDTH = 1400
@@ -97,11 +99,29 @@ TRAY_ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 # 12) Startup splash/preloader assets
 ANDROID_LEGACY_SPLASH_SIZE = 324
+ANDROID_12_SPLASH_SIZE = 1152
+STARTUP_SOURCE_SIZE = 1024
+STARTUP_LOGO_WIDTH_RATIO = 0.88
+ANDROID_12_STARTUP_LOGO_WIDTH_RATIO = 0.52
+ANDROID_STARTUP_WORDMARK_SIZES = {
+    "drawable-mdpi": 200,
+    "drawable-hdpi": 300,
+    "drawable-xhdpi": 400,
+    "drawable-xxhdpi": 600,
+    "drawable-xxxhdpi": 800,
+}
 IOS_LAUNCH_IMAGE_SIZES = {
     "LaunchImage.png": 256,
     "LaunchImage@2x.png": 512,
     "LaunchImage@3x.png": 768,
 }
+IOS_LAUNCH_IMAGE_DARK_SIZES = {
+    "LaunchImage-dark.png": 256,
+    "LaunchImage-dark@2x.png": 512,
+    "LaunchImage-dark@3x.png": 768,
+}
+IOS_LAUNCH_BACKGROUND_LIGHT = (228, 239, 244, 255)
+IOS_LAUNCH_BACKGROUND_DARK = (0, 0, 0, 255)
 ANDROID12_SPLASH_XML_TARGET = ROOT / "android/app/src/main/res/drawable/android12splash.xml"
 
 
@@ -286,12 +306,12 @@ def _sample_svg_path_points(d: str, samples: int) -> list[tuple[float, float]]:
     return points
 
 
-def _render_logo() -> Image.Image:
-    tree = ET.parse(LOGO_SVG)
+def _render_logo(svg_path: Path = LOGO_SVG) -> Image.Image:
+    tree = ET.parse(svg_path)
     root = tree.getroot()
     view_box = root.attrib.get("viewBox")
     if not view_box:
-        raise RuntimeError(f"Missing viewBox in {LOGO_SVG}")
+        raise RuntimeError(f"Missing viewBox in {svg_path}")
 
     min_x, min_y, vb_w, vb_h = [float(v) for v in view_box.strip().split()]
     target_w = SVG_RENDER_BASE_WIDTH
@@ -311,43 +331,88 @@ def _render_logo() -> Image.Image:
 
     for element in root.iter():
         tag = element.tag.lower()
-        if not tag.endswith("path"):
-            continue
-        d = element.attrib.get("d")
-        if not d:
-            continue
-
-        # Number of interpolation points for bezier path rasterization.
-        points = _sample_svg_path_points(d, samples=SVG_PATH_SAMPLES)
-        mapped = [((x - min_x) * scale_x, (y - min_y) * scale_y) for x, y in points]
         fill_value = _pick_fill_value(element, class_fills)
         gradient_id = _resolve_gradient_id(fill_value)
-        if gradient_id and gradient_id in gradients:
-            mask = Image.new("L", (canvas_w, canvas_h), 0)
-            mask_draw = ImageDraw.Draw(mask)
-            mask_draw.polygon(mapped, fill=255)
-            if gradient_id not in gradient_cache:
-                gradient_cache[gradient_id] = _build_linear_gradient_image(
-                    canvas_w,
-                    canvas_h,
-                    gradients[gradient_id],
-                    min_x,
-                    min_y,
-                    scale_x,
-                    scale_y,
-                )
-            logo.paste(gradient_cache[gradient_id], (0, 0), mask)
+        if tag.endswith("path"):
+            d = element.attrib.get("d")
+            if not d:
+                continue
+
+            # Number of interpolation points for bezier path rasterization.
+            points = _sample_svg_path_points(d, samples=SVG_PATH_SAMPLES)
+            mapped = [((x - min_x) * scale_x, (y - min_y) * scale_y) for x, y in points]
+
+            if gradient_id and gradient_id in gradients:
+                mask = Image.new("L", (canvas_w, canvas_h), 0)
+                mask_draw = ImageDraw.Draw(mask)
+                mask_draw.polygon(mapped, fill=255)
+                if gradient_id not in gradient_cache:
+                    gradient_cache[gradient_id] = _build_linear_gradient_image(
+                        canvas_w,
+                        canvas_h,
+                        gradients[gradient_id],
+                        min_x,
+                        min_y,
+                        scale_x,
+                        scale_y,
+                    )
+                logo.paste(gradient_cache[gradient_id], (0, 0), mask)
+                continue
+
+            fill = _parse_hex_color(fill_value, default=(69, 77, 88, 255))
+            if fill[3] == 0:
+                continue
+            draw.polygon(mapped, fill=fill)
             continue
 
-        fill = _parse_hex_color(fill_value, default=(69, 77, 88, 255))
-        if fill[3] == 0:
-            continue
-        draw.polygon(mapped, fill=fill)
+        if tag.endswith("rect"):
+            x = (float(element.attrib.get("x", "0")) - min_x) * scale_x
+            y = (float(element.attrib.get("y", "0")) - min_y) * scale_y
+            width = float(element.attrib.get("width", "0")) * scale_x
+            height = float(element.attrib.get("height", "0")) * scale_y
+            rx = float(element.attrib.get("rx", element.attrib.get("ry", "0"))) * scale_x
+            ry = float(element.attrib.get("ry", element.attrib.get("rx", "0"))) * scale_y
+            rect = (x, y, x + width, y + height)
+            radius = max(rx, ry)
+
+            if gradient_id and gradient_id in gradients:
+                mask = Image.new("L", (canvas_w, canvas_h), 0)
+                mask_draw = ImageDraw.Draw(mask)
+                mask_draw.rounded_rectangle(rect, radius=radius, fill=255)
+                if gradient_id not in gradient_cache:
+                    gradient_cache[gradient_id] = _build_linear_gradient_image(
+                        canvas_w,
+                        canvas_h,
+                        gradients[gradient_id],
+                        min_x,
+                        min_y,
+                        scale_x,
+                        scale_y,
+                    )
+                logo.paste(gradient_cache[gradient_id], (0, 0), mask)
+                continue
+
+            fill = _parse_hex_color(fill_value, default=(69, 77, 88, 255))
+            if fill[3] == 0:
+                continue
+            draw.rounded_rectangle(rect, radius=radius, fill=fill)
 
     logo = logo.resize((target_w, target_h), Image.Resampling.LANCZOS)
     bbox = logo.getbbox()
     if not bbox:
-        raise RuntimeError(f"Logo has no visible pixels after rasterization: {LOGO_SVG}")
+        raise RuntimeError(f"Logo has no visible pixels after rasterization: {svg_path}")
+    return logo.crop(bbox)
+
+
+def _load_logo_image(path: Path) -> Image.Image:
+    if path.suffix.lower() == ".svg":
+        return _render_logo(path)
+
+    with Image.open(path) as image:
+        logo = image.convert("RGBA")
+    bbox = logo.getbbox()
+    if not bbox:
+        raise RuntimeError(f"Logo has no visible pixels after loading: {path}")
     return logo.crop(bbox)
 
 
@@ -422,6 +487,16 @@ def _compose_tray_icon(size: int, logo: Image.Image) -> Image.Image:
     return tray
 
 
+def _compose_startup_canvas(size: int, logo: Image.Image, width_ratio: float) -> Image.Image:
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    logo_w = int(round(size * width_ratio))
+    logo_img = _fit_logo(logo, logo_w)
+    x = (size - logo_img.width) // 2
+    y = (size - logo_img.height) // 2
+    canvas.alpha_composite(logo_img, (x, y))
+    return canvas
+
+
 def _write_android_launcher(master: Image.Image) -> None:
     for bucket, px in ANDROID_LAUNCHER_SIZES.items():
         icon = master.resize((px, px), Image.Resampling.LANCZOS)
@@ -465,10 +540,13 @@ def _write_web(master: Image.Image) -> None:
     _save_png(ROOT / "web/icons/Icon-512.png", icon_512)
 
 
-def _write_windows_linux_sources(master: Image.Image) -> None:
+def _write_windows_linux_sources(master: Image.Image, startup_light: Image.Image, startup_dark: Image.Image) -> None:
     master_1024 = master.resize((MASTER_ICON_SIZE, MASTER_ICON_SIZE), Image.Resampling.LANCZOS)
     _save_png(ROOT / "assets/images/source/ic_launcher_border.png", master_1024)
-    _save_png(ROOT / "assets/images/source/ic_launcher_splash.png", master_1024)
+    _save_png(ROOT / "assets/images/source/ic_launcher_splash.png", startup_light)
+    _save_png(ROOT / "assets/images/source/ic_launcher_splash_dark.png", startup_dark)
+    _save_png(ROOT / "assets/images/source/ic_launcher_splash_android12.png", startup_light)
+    _save_png(ROOT / "assets/images/source/ic_launcher_splash_android12_dark.png", startup_dark)
 
     foreground = Image.new("RGBA", (MASTER_ICON_SIZE, MASTER_ICON_SIZE), (0, 0, 0, 0))
     logo = _render_logo()
@@ -505,16 +583,45 @@ def _write_android_banner(master: Image.Image) -> None:
     _save_png(ROOT / "android/app/src/main/res/mipmap-xhdpi/ic_banner.png", banner)
 
 
-def _write_startup_splash_assets(master: Image.Image) -> None:
+def _write_startup_splash_assets(startup_light_logo: Image.Image, startup_dark_logo: Image.Image) -> None:
+    for bucket, px in ANDROID_STARTUP_WORDMARK_SIZES.items():
+        light_logo = _fit_logo(startup_light_logo, px)
+        dark_logo = _fit_logo(startup_dark_logo, px)
+        _save_png(ROOT / f"android/app/src/main/res/{bucket}/startup_wordmark.png", light_logo)
+        _save_png(ROOT / f"android/app/src/main/res/{bucket.replace('drawable', 'drawable-night')}/startup_wordmark.png", dark_logo)
+
     # Android legacy splash drawable used by launch_background.xml.
-    android_splash = master.resize((ANDROID_LEGACY_SPLASH_SIZE, ANDROID_LEGACY_SPLASH_SIZE), Image.Resampling.LANCZOS)
-    _save_png(ROOT / "android/app/src/main/res/drawable-xxxhdpi/splash.png", android_splash)
+    android_splash_light = _compose_startup_canvas(
+        ANDROID_LEGACY_SPLASH_SIZE,
+        startup_light_logo,
+        STARTUP_LOGO_WIDTH_RATIO,
+    )
+    android_splash_dark = _compose_startup_canvas(
+        ANDROID_LEGACY_SPLASH_SIZE,
+        startup_dark_logo,
+        STARTUP_LOGO_WIDTH_RATIO,
+    )
+    _save_png(ROOT / "android/app/src/main/res/drawable-xxxhdpi/splash.png", android_splash_light)
+    _save_png(ROOT / "android/app/src/main/res/drawable-night-xxxhdpi/splash.png", android_splash_dark)
+
+    android12_splash_light = _compose_startup_canvas(
+        ANDROID_12_SPLASH_SIZE,
+        startup_light_logo,
+        ANDROID_12_STARTUP_LOGO_WIDTH_RATIO,
+    )
+    android12_splash_dark = _compose_startup_canvas(
+        ANDROID_12_SPLASH_SIZE,
+        startup_dark_logo,
+        ANDROID_12_STARTUP_LOGO_WIDTH_RATIO,
+    )
+    _save_png(ROOT / "android/app/src/main/res/drawable-xxxhdpi/splash_android12.png", android12_splash_light)
+    _save_png(ROOT / "android/app/src/main/res/drawable-night-xxxhdpi/splash_android12.png", android12_splash_dark)
 
     # Android 12+ splash should use the full branded icon, not just the
     # foreground mark. Point the drawable to the generated splash bitmap.
     android12splash_xml = """<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
     android:gravity="center"
-    android:src="@drawable/splash" />
+    android:src="@drawable/splash_android12" />
 """
     ANDROID12_SPLASH_XML_TARGET.write_text(android12splash_xml, encoding="utf-8")
     print(f"wrote {ANDROID12_SPLASH_XML_TARGET.relative_to(ROOT)}")
@@ -522,16 +629,137 @@ def _write_startup_splash_assets(master: Image.Image) -> None:
     # iOS launch image set used by LaunchScreen.storyboard.
     launch_dir = ROOT / "ios/Runner/Assets.xcassets/LaunchImage.imageset"
     for filename, size in IOS_LAUNCH_IMAGE_SIZES.items():
-        launch_img = master.resize((size, size), Image.Resampling.LANCZOS)
+        launch_img = _compose_startup_canvas(size, startup_light_logo, STARTUP_LOGO_WIDTH_RATIO)
         _save_png(launch_dir / filename, launch_img)
+    for filename, size in IOS_LAUNCH_IMAGE_DARK_SIZES.items():
+        launch_img = _compose_startup_canvas(size, startup_dark_logo, STARTUP_LOGO_WIDTH_RATIO)
+        _save_png(launch_dir / filename, launch_img)
+
+    launch_contents = """{
+  "images" : [
+    {
+      "filename" : "LaunchImage.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "LaunchImage@2x.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "filename" : "LaunchImage@3x.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "LaunchImage-dark.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "LaunchImage-dark@2x.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "LaunchImage-dark@3x.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
+"""
+    (launch_dir / "Contents.json").write_text(launch_contents, encoding="utf-8")
+    print(f"wrote {(launch_dir / 'Contents.json').relative_to(ROOT)}")
+
+    launch_background_dir = ROOT / "ios/Runner/Assets.xcassets/LaunchBackground.imageset"
+    _save_png(launch_background_dir / "background.png", Image.new("RGBA", (1, 1), IOS_LAUNCH_BACKGROUND_LIGHT))
+    _save_png(launch_background_dir / "background-dark.png", Image.new("RGBA", (1, 1), IOS_LAUNCH_BACKGROUND_DARK))
+    launch_background_contents = """{
+  "images" : [
+    {
+      "filename" : "background.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "idiom" : "universal",
+      "scale" : "3x"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "background-dark.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
+"""
+    (launch_background_dir / "Contents.json").write_text(launch_background_contents, encoding="utf-8")
+    print(f"wrote {(launch_background_dir / 'Contents.json').relative_to(ROOT)}")
 
     # Keep the archived imageset synced as well.
     zip_target = ROOT / "ios/Runner/Assets.xcassets/LaunchImage.imageset.zip"
     with zipfile.ZipFile(zip_target, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for name in ("Contents.json", *IOS_LAUNCH_IMAGE_SIZES.keys(), "README.md"):
-            src = launch_dir / name
-            if src.exists():
-                zf.write(src, arcname=f"LaunchImage.imageset/{name}")
+        for src in sorted(launch_dir.iterdir()):
+            if src.is_file():
+                zf.write(src, arcname=f"LaunchImage.imageset/{src.name}")
     print(f"wrote {zip_target.relative_to(ROOT)}")
 
 
@@ -559,16 +787,20 @@ def _write_tray_icons(logo: Image.Image) -> None:
 
 def main() -> None:
     logo = _render_logo()
+    startup_light_logo = _load_logo_image(STARTUP_LOGO_LIGHT_PNG)
+    startup_dark_logo = _load_logo_image(STARTUP_LOGO_DARK_PNG)
     logo_mono_white = _recolor_logo(logo, STAT_ICON_MONO_COLOR)
     master = _compose_master_icon(MASTER_ICON_SIZE, logo)
+    startup_light = _compose_startup_canvas(STARTUP_SOURCE_SIZE, startup_light_logo, STARTUP_LOGO_WIDTH_RATIO)
+    startup_dark = _compose_startup_canvas(STARTUP_SOURCE_SIZE, startup_dark_logo, STARTUP_LOGO_WIDTH_RATIO)
 
     _write_android_launcher(master)
     _write_android_stat_icons(logo_mono_white)
     _write_android_banner(master)
     _write_ios_and_macos(master)
     _write_web(master)
-    _write_windows_linux_sources(master)
-    _write_startup_splash_assets(master)
+    _write_windows_linux_sources(master, startup_light, startup_dark)
+    _write_startup_splash_assets(startup_light_logo, startup_dark_logo)
     _write_tray_icons(logo)
 
 
