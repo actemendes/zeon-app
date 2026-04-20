@@ -1,21 +1,21 @@
-display_name: Hiddify
-publisher_display_name: Hiddify
-identity_name: Hiddify.HiddifyNext
+display_name: ZEON
+publisher_display_name: ZEON
+identity_name: ZEON.ZEON
 msix_version: 4.1.2.0
 logo_path: windows\runner\resources\app_icon.ico
 capabilities: internetClient, internetClientServer, privateNetworkClientServer
 languages: ar, en-us, es-es, fa-ir, fr-fr, id-id, pt-br, ru-ru, tr-tr, zh-cn, zh-tw
-protocol_activation: hiddify, v2ray, v2rayn, v2rayng, clash, clashmeta, sing-box
-execution_alias: hiddify
+protocol_activation: zeon, hiddify, v2ray, v2rayn, v2rayng, clash, clashmeta, sing-box
+execution_alias: zeon
 certificate_path: windows\sign.pfx
 certificate_password:
-publisher: CN=8CB43675-F44B-4AA5-9372-E8727781BDC4
+publisher: CN=ZEON
 install_certificate: "false"
 enable_at_startup: "true"
 startup_task:
   parameters: --autostart
 
 # For testing with a self-signed certificate
-# publisher: CN=Hiddify-Test
+# publisher: CN=ZEON-Test
 # certificate_password: "1234"
 # install_certificate: "true"
