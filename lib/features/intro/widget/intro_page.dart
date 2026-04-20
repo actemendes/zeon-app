@@ -25,7 +25,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
   const IntroPage({super.key});
 
   static const double _maxContentWidth = 620;
-  static const bool _bindFeatureEnabled = bool.fromEnvironment('mobile_bind_enabled');
+  static const bool _bindFeatureEnabled = bool.fromEnvironment('mobile_bind_enabled', defaultValue: true);
   static bool locationInfoLoaded = false;
 
   @override

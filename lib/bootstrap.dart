@@ -261,7 +261,7 @@ Future<bool> _shouldShowNativeSplashOnThisRun() async {
 Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
   if (!PlatformUtils.isAndroid) return;
   final prefs = container.read(sharedPreferencesProvider).requireValue;
-  const seedKey = "per_app_proxy_seed_v2_done";
+  const seedKey = "per_app_proxy_seed_v3_done";
   if (prefs.getBool(seedKey) ?? false) return;
 
   const excludePkgs = <String>[
@@ -315,22 +315,37 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
   final currentInclude = container.read(Preferences.includeApps);
   final currentExclude = container.read(Preferences.excludeApps);
   final shouldApplyDefaults = currentMode == PerAppProxyMode.off && currentInclude.isEmpty && currentExclude.isEmpty;
-  if (!shouldApplyDefaults) {
+  if (shouldApplyDefaults) {
+    await container.read(Preferences.perAppProxyMode.notifier).update(PerAppProxyMode.exclude);
+    await container.read(Preferences.includeApps.notifier).update(const []);
+    await container.read(Preferences.excludeApps.notifier).update(excludePkgs);
+    await container
+        .read(appProxyDataSourceProvider)
+        .importPkgs(
+          backup: const PerAppProxyBackup(
+            include: PerAppProxyBackupMode(selected: [], deselected: []),
+            exclude: PerAppProxyBackupMode(selected: excludePkgs, deselected: []),
+          ),
+        );
     await prefs.setBool(seedKey, true);
     return;
   }
-
-  await container.read(Preferences.perAppProxyMode.notifier).update(PerAppProxyMode.exclude);
-  await container.read(Preferences.includeApps.notifier).update(const []);
-  await container.read(Preferences.excludeApps.notifier).update(excludePkgs);
-  await container
-      .read(appProxyDataSourceProvider)
-      .importPkgs(
-        backup: const PerAppProxyBackup(
-          include: PerAppProxyBackupMode(selected: [], deselected: []),
-          exclude: PerAppProxyBackupMode(selected: excludePkgs, deselected: []),
-        ),
-      );
+  // One-time self-heal for existing installs:
+  // keep user's exclude mode, append only missing default direct apps so they appear in UI.
+  if (currentMode == PerAppProxyMode.exclude) {
+    final merged = <String>[...currentExclude, ...excludePkgs.where((pkg) => !currentExclude.contains(pkg))];
+    if (merged.length != currentExclude.length) {
+      await container.read(Preferences.excludeApps.notifier).update(merged);
+      await container
+          .read(appProxyDataSourceProvider)
+          .importPkgs(
+            backup: PerAppProxyBackup(
+              include: const PerAppProxyBackupMode(selected: [], deselected: []),
+              exclude: PerAppProxyBackupMode(selected: merged, deselected: const []),
+            ),
+          );
+    }
+  }
   await prefs.setBool(seedKey, true);
 }
 

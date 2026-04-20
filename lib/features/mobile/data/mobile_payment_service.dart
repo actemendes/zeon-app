@@ -5,16 +5,17 @@ import 'package:hiddify/utils/platform_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class MobilePaymentService with InfraLogger {
-  MobilePaymentService({
-    required DioHttpClient httpClient,
-    required SharedPreferences preferences,
-  }) : _httpClient = httpClient,
-       _preferences = preferences;
+  MobilePaymentService({required DioHttpClient httpClient, required SharedPreferences preferences})
+    : _httpClient = httpClient,
+      _preferences = preferences;
 
-  static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://zeon-vps.link");
+  static const _apiBaseUrl = String.fromEnvironment(
+    "mobile_payment_api_base_url",
+    defaultValue: "https://zeon-vps.link",
+  );
   static const _apiKey = String.fromEnvironment("mobile_api_key", defaultValue: "mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7");
 
-  static const _prefUserId = "mobile_auto_import_user_id";
+  static const _prefUserId = "mobile_payment_user_id";
 
   final DioHttpClient _httpClient;
   final SharedPreferences _preferences;
@@ -70,7 +71,10 @@ class MobilePaymentService with InfraLogger {
 
   Future<int?> _ensureUserId() async {
     final cached = int.tryParse(_preferences.getString(_prefUserId) ?? "");
-    if (cached != null && cached > 0) return cached;
+    if (cached != null && cached > 0) {
+      final valid = await _isExistingMobileUser(cached);
+      if (valid) return cached;
+    }
 
     final deviceId = await _ensureDeviceId();
     if (deviceId.isEmpty) return null;
@@ -94,6 +98,21 @@ class MobilePaymentService with InfraLogger {
     } catch (e, st) {
       loggy.warning("mobile users/create failed while ensuring user id", e, st);
       return null;
+    }
+  }
+
+  Future<bool> _isExistingMobileUser(int userId) async {
+    try {
+      final uri = Uri.parse(_apiBaseUrl).resolve("/api/mobile/users/$userId/link").toString();
+      final response = await _httpClient.get<Map<String, dynamic>>(
+        uri,
+        headers: {"X-API-Key": _apiKey, "Content-Type": "application/json"},
+        directOnly: true,
+      );
+      final body = response.data;
+      return (response.statusCode ?? 0) == 200 && body != null && body["ok"] == true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -124,11 +143,7 @@ class MobilePaymentService with InfraLogger {
 }
 
 class PaymentCheckout {
-  const PaymentCheckout({
-    required this.confirmationUrl,
-    this.orderId,
-    this.paymentId,
-  });
+  const PaymentCheckout({required this.confirmationUrl, this.orderId, this.paymentId});
 
   final String confirmationUrl;
   final String? orderId;

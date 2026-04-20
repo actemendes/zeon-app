@@ -3,12 +3,16 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart';
+import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/core/http_client/http_client_provider.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
+import 'package:hiddify/features/profile/data/profile_data_source.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/data/profile_repository.dart';
+import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -18,6 +22,7 @@ final mobileBindServiceProvider = Provider<MobileBindService>((ref) {
   return MobileBindService(
     httpClient: ref.read(httpClientProvider),
     profileRepository: ref.read(profileRepositoryProvider).requireValue,
+    profileDataSource: ref.read(profileDataSourceProvider),
     preferences: ref.read(sharedPreferencesProvider).requireValue,
   );
 });
@@ -26,12 +31,14 @@ class MobileBindService with InfraLogger {
   MobileBindService({
     required DioHttpClient httpClient,
     required ProfileRepository profileRepository,
+    required ProfileDataSource profileDataSource,
     required SharedPreferences preferences,
   }) : _httpClient = httpClient,
        _profileRepository = profileRepository,
+       _profileDataSource = profileDataSource,
        _preferences = preferences;
 
-  static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://zeon-vps.link");
+  static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "http://130.49.151.173");
   static const _mobileApiKey = String.fromEnvironment(
     "mobile_api_key",
     defaultValue: "mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7",
@@ -46,6 +53,7 @@ class MobileBindService with InfraLogger {
 
   final DioHttpClient _httpClient;
   final ProfileRepository _profileRepository;
+  final ProfileDataSource _profileDataSource;
   final SharedPreferences _preferences;
   StableDeviceIdService get _stableDeviceId => StableDeviceIdService(preferences: _preferences);
 
@@ -164,6 +172,7 @@ class MobileBindService with InfraLogger {
     await _preferences.setString(_prefUserId, ownerUserId.toString());
     await _preferences.setString(_prefConnLink, effectiveConnLink);
     await _clearCachedSession();
+    await _syncActiveProfileMetaFromBind(status: status, expiresAt: expiresAt);
 
     return BindConfirmResult(
       ownerUserId: ownerUserId,
@@ -224,6 +233,8 @@ class MobileBindService with InfraLogger {
     await _preferences.setString(_prefUserId, resolvedUserId.toString());
     await _preferences.setString(_prefConnLink, effectiveConnLink);
     await _clearCachedSession();
+    final fallbackStatus = await _fetchMobileStatusByUserId(resolvedUserId);
+    await _syncActiveProfileMetaFromBind(status: fallbackStatus.status, expiresAt: fallbackStatus.expiresAt);
 
     loggy.info(
       "bind confirm fallback success: device already bound "
@@ -380,7 +391,7 @@ class MobileBindService with InfraLogger {
         loggy.info("bind response [$method $uri] status=${response.statusCode}");
         if (bodyMap == null) throw const MobileBindException("empty_response");
         if (bodyMap["ok"] == false) {
-          final serverError = bodyMap["error"]?.toString() ?? "request_failed";
+          final serverError = _extractApiErrorFromBody(bodyMap) ?? "request_failed";
           loggy.warning("bind server error [endpoint=$path status=${response.statusCode} error=$serverError]");
           throw MobileBindException(serverError);
         }
@@ -511,7 +522,7 @@ class MobileBindService with InfraLogger {
   }
 
   Future<String?> _fetchBindToken({required String deviceId, int? userId}) async {
-    final uri = Uri.parse(_apiBaseUrl).resolve("/api/mobile/bind/token").toString();
+    final uri = Uri.parse(_apiBaseUrl).resolve("/api/v1/bind/token").toString();
     final payload = <String, dynamic>{"device_id": deviceId, "sub": "mobile-client"};
     if (userId != null && userId > 0) {
       payload["user_id"] = userId;
@@ -519,16 +530,18 @@ class MobileBindService with InfraLogger {
     final response = await _httpClient.post<Map<String, dynamic>>(
       uri,
       data: payload,
-      headers: {"X-API-Key": _mobileApiKey, "Content-Type": "application/json"},
+      headers: {"x-api-key": _mobileApiKey, "Content-Type": "application/json"},
       directOnly: true,
     );
     final body = response.data;
     if (body == null || body["ok"] != true) {
       return null;
     }
-    final token = (body["token"]?.toString() ?? "").trim();
-    final expiresAt = _parseIso(body["expires_at"]?.toString());
-    final ownerUserId = _parseInt(body["user_id"]);
+    final data = body["data"];
+    if (data is! Map<String, dynamic>) return null;
+    final token = (data["token"]?.toString() ?? "").trim();
+    final expiresAt = _parseIso(data["expires_at"]?.toString());
+    final ownerUserId = _parseInt(data["user_id"]);
     if (token.isEmpty) return null;
 
     await _preferences.setString(_bindJwtPrefKey, token);
@@ -547,22 +560,30 @@ class MobileBindService with InfraLogger {
 
   Future<int?> _registerDeviceForBind(String deviceId) async {
     if (_apiBaseUrl.isEmpty || _mobileApiKey.isEmpty || deviceId.trim().isEmpty) return null;
-    final uri = Uri.parse(_apiBaseUrl).resolve("/api/mobile/users/create").toString();
+    final uri = Uri.parse(_apiBaseUrl).resolve("/api/v1/users/create").toString();
     final response = await _httpClient.post<Map<String, dynamic>>(
       uri,
-      data: {"device_id": deviceId},
-      headers: {"X-API-Key": _mobileApiKey, "Content-Type": "application/json"},
+      data: {
+        "device_id": deviceId,
+        "platform": _platformName(),
+        "subscription": {"create_if_missing": true},
+      },
+      headers: {"x-api-key": _mobileApiKey, "Content-Type": "application/json"},
       directOnly: true,
     );
     final body = response.data;
     if (body == null || body["ok"] != true) return null;
     final data = body["data"];
     if (data is! Map<String, dynamic>) return null;
-    final userId = _parseInt(data["user_id"]);
+    final userMap = data["user"];
+    final user = userMap is Map<String, dynamic> ? userMap : const <String, dynamic>{};
+    final userId = _parseInt(user["user_id"]);
     if (userId != null && userId > 0) {
       await _preferences.setString(_prefUserId, userId.toString());
     }
-    final connLink = data["conn_link"]?.toString().trim();
+    final connectionMap = data["connection"];
+    final connection = connectionMap is Map<String, dynamic> ? connectionMap : const <String, dynamic>{};
+    final connLink = connection["raw_url"]?.toString().trim();
     if (connLink != null && connLink.isNotEmpty) {
       await _preferences.setString(_prefConnLink, connLink);
     }
@@ -660,6 +681,37 @@ class MobileBindService with InfraLogger {
     return false;
   }
 
+  Future<void> _syncActiveProfileMetaFromBind({String? status, DateTime? expiresAt}) async {
+    try {
+      final active = await _profileDataSource.watchActiveProfile().first;
+      if (active == null || active.type != ProfileType.remote) return;
+
+      final normalizedStatus = status?.trim().toLowerCase();
+      final now = DateTime.now().toUtc();
+      var effectiveExpire = expiresAt?.toUtc();
+
+      if (normalizedStatus == "inactive") {
+        effectiveExpire = (effectiveExpire != null && effectiveExpire.isAfter(now))
+            ? now.subtract(const Duration(seconds: 1))
+            : (effectiveExpire ?? now.subtract(const Duration(seconds: 1)));
+      }
+
+      if (effectiveExpire == null) return;
+
+      await _profileDataSource.edit(
+        active.id,
+        ProfileEntriesCompanion(
+          upload: Value(effectiveExpire.isAfter(now) ? 0 : (active.upload ?? 0)),
+          download: Value(effectiveExpire.isAfter(now) ? 0 : (active.download ?? 0)),
+          total: Value(effectiveExpire.isAfter(now) ? 920233720369 : (active.total ?? 920233720369)),
+          expire: Value(effectiveExpire),
+        ),
+      );
+    } catch (_) {
+      // best effort
+    }
+  }
+
   String _appendPlatformHint(String link) {
     try {
       final uri = Uri.parse(link);
@@ -674,21 +726,40 @@ class MobileBindService with InfraLogger {
   Future<String?> _fetchMobileConnLinkByUserId(int userId) async {
     try {
       if (_apiBaseUrl.isEmpty || _mobileApiKey.isEmpty || userId <= 0) return null;
-      final uri = Uri.parse(_apiBaseUrl).resolve("/api/mobile/users/$userId/link").toString();
+      final uri = Uri.parse(_apiBaseUrl).resolve("/api/v1/subscriptions/lookup?user_id=$userId").toString();
       final response = await _httpClient.get<Map<String, dynamic>>(
         uri,
-        headers: {"X-API-Key": _mobileApiKey},
+        headers: {"x-api-key": _mobileApiKey},
         directOnly: true,
       );
       final body = response.data;
       if (body == null || body["ok"] != true) return null;
       final data = body["data"];
       if (data is! Map<String, dynamic>) return null;
-      final connLink = data["conn_link"]?.toString().trim() ?? "";
+      final connLink = data["connection_link"]?.toString().trim() ?? "";
       if (connLink.isEmpty || Uri.tryParse(connLink) == null) return null;
       return connLink;
     } catch (_) {
       return null;
+    }
+  }
+
+  Future<({String? status, DateTime? expiresAt})> _fetchMobileStatusByUserId(int userId) async {
+    try {
+      if (_apiBaseUrl.isEmpty || _mobileApiKey.isEmpty || userId <= 0) return (status: null, expiresAt: null);
+      final uri = Uri.parse(_apiBaseUrl).resolve("/api/v1/subscriptions/lookup?user_id=$userId").toString();
+      final response = await _httpClient.get<Map<String, dynamic>>(
+        uri,
+        headers: {"x-api-key": _mobileApiKey},
+        directOnly: true,
+      );
+      final body = response.data;
+      if (body == null || body["ok"] != true) return (status: null, expiresAt: null);
+      final data = body["data"];
+      if (data is! Map<String, dynamic>) return (status: null, expiresAt: null);
+      return (status: data["status"]?.toString(), expiresAt: _parseIso(data["expires_at"]?.toString()));
+    } catch (_) {
+      return (status: null, expiresAt: null);
     }
   }
 
@@ -832,22 +903,41 @@ int? _parseInt(dynamic value) {
 String? _extractApiErrorFromDio(DioException e) {
   if (e.type != DioExceptionType.badResponse) return null;
   final data = e.response?.data;
-  if (data is Map<String, dynamic>) {
-    final error = data["error"]?.toString().trim();
-    if (error != null && error.isNotEmpty) return error;
-  }
+  if (data is Map<String, dynamic>) return _extractApiErrorFromBody(data);
   if (data is String && data.trim().isNotEmpty) {
     try {
       final decoded = jsonDecode(data);
       if (decoded is Map<String, dynamic>) {
-        final error = decoded["error"]?.toString().trim();
-        if (error != null && error.isNotEmpty) return error;
+        return _extractApiErrorFromBody(decoded);
       }
     } catch (_) {
       return null;
     }
   }
   return null;
+}
+
+String? _extractApiErrorFromBody(Map<String, dynamic> body) {
+  final errorField = body["error"];
+  if (errorField is String) {
+    final normalized = errorField.trim();
+    return normalized.isEmpty ? null : _normalizeErrorCode(normalized);
+  }
+  if (errorField is Map<String, dynamic>) {
+    final code = errorField["code"]?.toString().trim();
+    if (code != null && code.isNotEmpty) return _normalizeErrorCode(code);
+    final message = errorField["message"]?.toString().trim();
+    if (message != null && message.isNotEmpty) return _normalizeErrorCode(message);
+  }
+  final topCode = body["code"]?.toString().trim();
+  if (topCode != null && topCode.isNotEmpty) return _normalizeErrorCode(topCode);
+  return null;
+}
+
+String _normalizeErrorCode(String raw) {
+  final code = raw.trim();
+  if (code.isEmpty) return code;
+  return code.toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
 }
 
 String _dioDebug(DioException e) {

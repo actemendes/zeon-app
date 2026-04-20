@@ -59,111 +59,127 @@ class ProfilePaymentPage extends HookConsumerWidget {
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      body: Column(
+      body: Stack(
         children: [
-          Container(
-            width: double.infinity,
-            decoration: const BoxDecoration(gradient: _headerGradient),
-            child: SafeArea(
-              bottom: false,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxContentWidth),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 20, 12, 16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: _PaymentHeaderTitle(
-                            lineOne: t.pages.profileDetails.specialServers.headerLineOne,
-                            lineTwo: t.pages.profileDetails.specialServers.headerLineTwo,
-                            color: headingColor,
-                          ),
+          Column(
+            children: [
+              Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(gradient: _headerGradient),
+                child: SafeArea(
+                  bottom: false,
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: maxContentWidth),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 20, 12, 16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _PaymentHeaderTitle(
+                                lineOne: t.pages.profileDetails.specialServers.headerLineOne,
+                                lineTwo: t.pages.profileDetails.specialServers.headerLineTwo,
+                                color: headingColor,
+                              ),
+                            ),
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+                              icon: Icon(Icons.close_rounded, color: headingColor),
+                              onPressed: isProcessingPayment.value ? null : () => Navigator.of(context).maybePop(),
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-                          icon: Icon(Icons.close_rounded, color: headingColor),
-                          onPressed: isProcessingPayment.value ? null : () => Navigator.of(context).maybePop(),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-          Expanded(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maxContentWidth),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _FeatureItem(
-                        text: t.pages.profileDetails.specialServers.features.prioritySupport,
-                        icon: Icons.support_agent_rounded,
-                      ),
-                      const SizedBox(height: 12),
-                      _FeatureItem(
-                        text: t.pages.profileDetails.specialServers.features.noSupport,
-                        icon: Icons.devices_other_rounded,
-                      ),
-                      const SizedBox(height: 12),
-                      _FeatureItem(
-                        text: t.pages.profileDetails.specialServers.features.parkingCoverage,
-                        icon: Icons.signal_cellular_alt_rounded,
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxContentWidth),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: _ServersCard(
-                              label: t.pages.profileDetails.specialServers.serversLabel,
-                              value: t.pages.profileDetails.specialServers.serversValue,
-                            ),
+                          _FeatureItem(
+                            text: t.pages.profileDetails.specialServers.features.prioritySupport,
+                            icon: Icons.support_agent_rounded,
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _OperatorsCard(
-                              label: t.pages.profileDetails.specialServers.operatorsLabel,
-                              operatorAssetPaths: _operatorAssetPaths,
-                            ),
+                          const SizedBox(height: 12),
+                          _FeatureItem(
+                            text: t.pages.profileDetails.specialServers.features.noSupport,
+                            icon: Icons.devices_other_rounded,
+                          ),
+                          const SizedBox(height: 12),
+                          _FeatureItem(
+                            text: t.pages.profileDetails.specialServers.features.parkingCoverage,
+                            icon: Icons.signal_cellular_alt_rounded,
+                          ),
+                          const SizedBox(height: 20),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: _ServersCard(
+                                  label: t.pages.profileDetails.specialServers.serversLabel,
+                                  value: t.pages.profileDetails.specialServers.serversValue,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _OperatorsCard(
+                                  label: t.pages.profileDetails.specialServers.operatorsLabel,
+                                  operatorAssetPaths: _operatorAssetPaths,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
+                    ),
+                  ),
+                ),
+              ),
+              _BottomSubscriptionPanel(
+                title: t.pages.profileDetails.specialServers.subscriptionTitle,
+                selectedPlan: selectedPlan.value,
+                optionLabels: (
+                  one: t.pages.profileDetails.specialServers.plans.oneMonth,
+                  three: t.pages.profileDetails.specialServers.plans.threeMonths,
+                  six: t.pages.profileDetails.specialServers.plans.sixMonths,
+                  twelve: t.pages.profileDetails.specialServers.plans.twelveMonths,
+                ),
+                onPlanSelected: isProcessingPayment.value ? null : (plan) => selectedPlan.value = plan,
+                connectLabel: t.pages.profileDetails.specialServers.connect,
+                isLoading: isProcessingPayment.value,
+                onConnectTap: () => _openCheckout(
+                  context,
+                  t,
+                  selectedPlan.value,
+                  paymentService: paymentService,
+                  isProcessingPayment: isProcessingPayment,
+                ),
+              ),
+            ],
+          ),
+          if (isProcessingPayment.value)
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: true,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: Colors.black.withValues(alpha: .18)),
+                  child: const Center(
+                    child: SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2.4)),
                   ),
                 ),
               ),
             ),
-          ),
-          _BottomSubscriptionPanel(
-            title: t.pages.profileDetails.specialServers.subscriptionTitle,
-            selectedPlan: selectedPlan.value,
-            optionLabels: (
-              one: t.pages.profileDetails.specialServers.plans.oneMonth,
-              three: t.pages.profileDetails.specialServers.plans.threeMonths,
-              six: t.pages.profileDetails.specialServers.plans.sixMonths,
-              twelve: t.pages.profileDetails.specialServers.plans.twelveMonths,
-            ),
-            onPlanSelected: isProcessingPayment.value ? null : (plan) => selectedPlan.value = plan,
-            connectLabel: t.pages.profileDetails.specialServers.connect,
-            isLoading: isProcessingPayment.value,
-            onConnectTap: () => _openCheckout(
-              context,
-              t,
-              selectedPlan.value,
-              paymentService: paymentService,
-              isProcessingPayment: isProcessingPayment,
-            ),
-          ),
         ],
       ),
     );

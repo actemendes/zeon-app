@@ -14,7 +14,6 @@ const _avatarEmojiAssetDir = 'assets/images/emoji/apple/64';
 const _debugSeedProfileEnabled = bool.fromEnvironment('debug_seed_profile_enabled');
 const _debugSeedProfileName = String.fromEnvironment('debug_seed_profile_name');
 const _debugSeedProfileRemainingDays = int.fromEnvironment('debug_seed_profile_remaining_days', defaultValue: -1);
-const _bindFeatureEnabled = bool.fromEnvironment('mobile_bind_enabled');
 
 int _resolveUiRemainingDays(SubscriptionInfo? subInfo) {
   if (subInfo == null) return 0;
@@ -113,8 +112,17 @@ class ProfileMenuPage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    final profile = switch (ref.watch(activeProfileProvider)) {
+      AsyncData(value: final profile?) => profile,
+      _ => null,
+    };
+    final subInfo = switch (profile) {
+      RemoteProfileEntity(:final subInfo) => subInfo,
+      _ => null,
+    };
+    final remainingDays = _resolveUiRemainingDays(subInfo);
     final sections = <({String title, IconData icon, IconData trailingIcon, VoidCallback? onTap})>[
-      if (_bindFeatureEnabled)
+      if (remainingDays > 0)
         (
           title: t.pages.profileDetails.menu.bindAccount,
           icon: Icons.link_rounded,
