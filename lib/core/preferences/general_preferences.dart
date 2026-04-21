@@ -14,6 +14,42 @@ part 'general_preferences.g.dart';
 
 bool _debugIntroPage = false;
 const _defaultWindowSize = Size(868, 668);
+const _defaultExcludedSites = <String>[
+  "gosuslugi.ru",
+  "vk.com",
+  "mail.ru",
+  "max.ru",
+  "vkvideo.ru",
+  "rustore.ru",
+  "rutube.ru",
+  "ok.ru",
+  "sber.ru",
+  "tbank.ru",
+  "alfabank.ru",
+  "vtb.ru",
+  "wildberries.ru",
+  "ozon.ru",
+  "lamoda.ru",
+  "megamarket.ru",
+  "avito.ru",
+  "samokat.ru",
+  "vkusvill.ru",
+  "lenta.com",
+  "magnit.com",
+  "kinopoisk.ru",
+  "ivi.ru",
+  "start.ru",
+  "kion.ru",
+  "wink.ru",
+  "2gis.ru",
+  "hh.ru",
+  "browser.yandex.ru",
+  "yandex.ru",
+  "pay.yandex.ru",
+  "litres.ru",
+  "rzd.ru",
+  "cian.ru",
+];
 
 abstract class Preferences {
   static final introCompleted = PreferencesNotifier.create(
@@ -59,7 +95,7 @@ abstract class Preferences {
 
   static final excludeSites = PreferencesNotifier.create<List<String>, List<String>>(
     "site_routing_exclude_list",
-    <String>[],
+    _defaultExcludedSites,
   );
 
   static final windowMaximized = PreferencesNotifier.create<bool, bool>("window_maximized", false);
@@ -105,7 +141,7 @@ abstract class Preferences {
 
   static final siteRoutingMode = PreferencesNotifier.create<SiteRoutingMode, String>(
     "site_routing_mode",
-    SiteRoutingMode.off,
+    SiteRoutingMode.exclude,
     mapFrom: SiteRoutingMode.values.byName,
     mapTo: (value) => value.name,
   );
