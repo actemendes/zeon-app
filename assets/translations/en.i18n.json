@@ -292,7 +292,7 @@
       },
       "routing": {
         "title": "Routing",
-        "hint": "The selected region and apps will bypass the VPN. Bypass for most Russian services is preconfigured.",
+        "hint": "Selected apps and sites can bypass the VPN. Bypass for most Russian services is preconfigured.",
         "perAppProxy": {
           "title": "Per-app proxy",
           "hideSysApps": "Hide system apps",
@@ -332,6 +332,26 @@
               "title": "Auto apps selection",
               "msg": "The auto selection feature for per-app proxy was disabled due to the region change to \"${region}\""
             }
+          }
+        },
+        "websites": {
+          "title": "Websites",
+          "addNew": "Add website",
+          "update": "Edit website",
+          "empty": "No websites added",
+          "clearAllSelections": "Clear all websites",
+          "clearAllSelectionsMsg": "All websites will be removed",
+          "validation": {
+            "invalid": "Enter a valid domain or URL",
+            "duplicate": "This website is already in the list"
+          },
+          "modes": {
+            "all": "All sites",
+            "proxy": "VPN",
+            "bypass": "Bypass",
+            "allMsg": "VPN for all sites",
+            "proxyMsg": "VPN only for selected sites",
+            "bypassMsg": "Bypass VPN for selected sites"
           }
         },
         "region": "Region",

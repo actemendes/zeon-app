@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/widget/tip_card.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
-import 'package:hiddify/features/per_app_proxy/overview/per_app_proxy_notifier.dart';
+import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
@@ -19,6 +17,7 @@ class RouteOptionsPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final perAppProxy = ref.watch(Preferences.perAppProxyMode).enabled;
+    final siteRouting = ref.watch(Preferences.siteRoutingMode).enabled;
     return Scaffold(
       appBar: AppBar(title: Text(t.pages.settings.routing.title.toUpperCase())),
       body: ListView(
@@ -43,31 +42,22 @@ class RouteOptionsPage extends HookConsumerWidget {
                 if (context.mounted) context.goNamed('perAppProxy');
               },
             ),
-          ChoicePreferenceWidget(
-            selected: ref.watch(ConfigOptions.region),
-            preferences: ref.watch(ConfigOptions.region.notifier),
-            choices: Region.values,
-            title: t.pages.settings.routing.region,
-            showFlag: true,
-            icon: Icons.place_rounded,
-            presentChoice: (value) => value.present(t),
-            onChanged: (val) async {
-              await ref.read(ConfigOptions.directDnsAddress.notifier).reset();
-              final autoRegion = ref.read(Preferences.autoAppsSelectionRegion);
-              final mode = ref.read(Preferences.perAppProxyMode).toAppProxy();
-              if (autoRegion != val &&
-                  autoRegion != null &&
-                  val != Region.other &&
-                  mode != null &&
-                  PlatformUtils.isAndroid) {
-                await ref
-                    .read(dialogNotifierProvider.notifier)
-                    .showOk(
-                      t.pages.settings.routing.perAppProxy.autoSelection.dialog.title,
-                      t.pages.settings.routing.perAppProxy.autoSelection.dialog.msg(region: val.name),
-                    );
-                await ref.read(PerAppProxyProvider(mode).notifier).clearAutoSelected();
+          ListTile(
+            title: Text(t.pages.settings.routing.websites.title),
+            leading: const Icon(Icons.language_rounded),
+            trailing: Switch(
+              value: siteRouting,
+              onChanged: (value) async {
+                final newMode = siteRouting ? SiteRoutingMode.off : SiteRoutingMode.exclude;
+                await ref.read(Preferences.siteRoutingMode.notifier).update(newMode);
+                if (!siteRouting && context.mounted) context.goNamed('siteRouting');
+              },
+            ),
+            onTap: () async {
+              if (!siteRouting) {
+                await ref.read(Preferences.siteRoutingMode.notifier).update(SiteRoutingMode.exclude);
               }
+              if (context.mounted) context.goNamed('siteRouting');
             },
           ),
           ChoicePreferenceWidget(

@@ -49,7 +49,7 @@
       }
 
       .cls-3 {
-        fill: #e4eff4;
+        fill: #fafbfc;
         mix-blend-mode: darken;
       }
 
@@ -58,7 +58,7 @@
       }
 
       .cls-5 {
-        fill: #d6e1e5;
+        fill: #eff4f4;
       }
     </style>
     <clipPath

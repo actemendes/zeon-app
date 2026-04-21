@@ -337,7 +337,7 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
     final daysLabel = effectiveDays == 0
         ? t.components.subscriptionInfo.premiumInactive
         : '${t.components.subscriptionInfo.remainingUsage} ${t.common.interval.day(n: effectiveDays)}';
-    final surfaceColor = theme.brightness == Brightness.dark ? const Color(0xFF1A1B1F) : const Color(0xFFD6E1E5);
+    final surfaceColor = theme.colorScheme.secondaryContainer;
     final subtitleColor = theme.brightness == Brightness.dark ? const Color(0xFF8B8B8B) : const Color(0xFF969696);
     final crownColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3A444D);
     final inactiveBackgroundColor = theme.brightness == Brightness.dark

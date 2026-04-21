@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:hiddify/core/theme/app_color_tokens.dart';
 import 'package:hiddify/core/theme/app_theme_mode.dart';
 
 class BootstrapSplashScreen extends StatefulWidget {
@@ -15,8 +16,8 @@ class BootstrapSplashScreen extends StatefulWidget {
 }
 
 class _BootstrapSplashScreenState extends State<BootstrapSplashScreen> with TickerProviderStateMixin {
-  static const _lightBackground = Color(0xFFE4EFF4);
-  static const _darkBackground = Color(0xFF000000);
+  static const _lightBackground = AppColorTokens.lightBackground;
+  static const _darkBackground = AppColorTokens.darkBackground;
   static const _logoRevealDelay = Duration(milliseconds: 420);
   static const _logoRevealDuration = Duration(milliseconds: 260);
 
@@ -31,12 +32,7 @@ class _BootstrapSplashScreenState extends State<BootstrapSplashScreen> with Tick
   late final Animation<double> _logoScale = Tween<double>(
     begin: 0.94,
     end: 1,
-  ).animate(
-    CurvedAnimation(
-      parent: _logoRevealController,
-      curve: Curves.easeOutCubic,
-    ),
-  );
+  ).animate(CurvedAnimation(parent: _logoRevealController, curve: Curves.easeOutCubic));
 
   late final AnimationController _controller = AnimationController(
     vsync: this,
@@ -94,7 +90,9 @@ class _BootstrapSplashScreenState extends State<BootstrapSplashScreen> with Tick
                     child: AnimatedBuilder(
                       animation: _logoRevealController,
                       child: _AnimatedBootstrapLogo(
-                        assetPath: isDark ? 'assets/images/SVG/big-logo-dark.svg' : 'assets/images/SVG/big-logo-light.svg',
+                        assetPath: isDark
+                            ? 'assets/images/SVG/big-logo-dark.svg'
+                            : 'assets/images/SVG/big-logo-light.svg',
                         width: logoWidth,
                         animation: _controller,
                       ),
@@ -104,10 +102,7 @@ class _BootstrapSplashScreenState extends State<BootstrapSplashScreen> with Tick
                         }
                         return Opacity(
                           opacity: _logoOpacity.value,
-                          child: Transform.scale(
-                            scale: _logoScale.value,
-                            child: child,
-                          ),
+                          child: Transform.scale(scale: _logoScale.value, child: child),
                         );
                       },
                     ),

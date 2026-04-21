@@ -11,6 +11,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/logger/logger.dart';
 import 'package:hiddify/core/logger/logger_controller.dart';
 import 'package:hiddify/core/model/environment.dart';
+import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/preferences/preferences_migration.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
@@ -24,9 +25,11 @@ import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dar
 import 'package:hiddify/features/per_app_proxy/data/selected_data_provider.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_backup.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
+import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/features/profile/data/debug_profile_bootstrap_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
 import 'package:hiddify/features/window/notifier/window_notifier.dart';
 import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
@@ -180,7 +183,9 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   });
 
   final debug = container.read(debugModeNotifierProvider) || kDebugMode;
+  await _safeInit("force routing region", () => _forceRoutingRegionToOther(container), timeout: 5000);
   await _safeInit("per-app proxy defaults", () => _seedPerAppProxyDefaults(container), timeout: 5000);
+  await _safeInit("site routing defaults", () => _seedSiteRoutingDefaults(container), timeout: 5000);
 
   if (PlatformUtils.isDesktop) {
     await _init("window controller", () => container.read(windowNotifierProvider.future));
@@ -346,6 +351,63 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
           );
     }
   }
+  await prefs.setBool(seedKey, true);
+}
+
+Future<void> _forceRoutingRegionToOther(ProviderContainer container) async {
+  final prefs = container.read(sharedPreferencesProvider).requireValue;
+  const seedKey = "routing_region_forced_other_v1_done";
+  if (prefs.getBool(seedKey) ?? false) return;
+
+  final currentRegion = container.read(ConfigOptions.region);
+  if (currentRegion != Region.other) {
+    await container.read(ConfigOptions.region.notifier).update(Region.other);
+    // Region is disabled for routing, invalidate stale auto-selection context.
+    await container.read(Preferences.autoAppsSelectionRegion.notifier).update(null);
+  }
+
+  await prefs.setBool(seedKey, true);
+}
+
+Future<void> _seedSiteRoutingDefaults(ProviderContainer container) async {
+  final prefs = container.read(sharedPreferencesProvider).requireValue;
+  const seedKey = "site_routing_seed_v1_done";
+  if (prefs.getBool(seedKey) ?? false) return;
+
+  const excludeSites = <String>[
+    "yandex.ru",
+    "ya.ru",
+    "vk.com",
+    "mail.ru",
+    "ok.ru",
+    "gosuslugi.ru",
+    "sberbank.ru",
+    "alfabank.ru",
+    "tbank.ru",
+    "vtb.ru",
+    "kinopoisk.ru",
+    "rutube.ru",
+  ];
+
+  final currentMode = container.read(Preferences.siteRoutingMode);
+  final currentInclude = container.read(Preferences.includeSites);
+  final currentExclude = container.read(Preferences.excludeSites);
+  final shouldApplyDefaults = currentMode == SiteRoutingMode.off && currentInclude.isEmpty && currentExclude.isEmpty;
+  if (shouldApplyDefaults) {
+    await container.read(Preferences.siteRoutingMode.notifier).update(SiteRoutingMode.exclude);
+    await container.read(Preferences.includeSites.notifier).update(const []);
+    await container.read(Preferences.excludeSites.notifier).update(excludeSites);
+    await prefs.setBool(seedKey, true);
+    return;
+  }
+
+  if (currentMode == SiteRoutingMode.exclude) {
+    final merged = <String>[...currentExclude, ...excludeSites.where((site) => !currentExclude.contains(site))];
+    if (merged.length != currentExclude.length) {
+      await container.read(Preferences.excludeSites.notifier).update(merged);
+    }
+  }
+
   await prefs.setBool(seedKey, true);
 }
 

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_Слой_2" data-name="Слой 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 79.14 76.09">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #fafbfc;
+      }
+
+      .cls-2 {
+        fill: url(#_Безымянный_градиент_12);
+      }
+    </style>
+    <linearGradient id="_Безымянный_градиент_12" data-name="Безымянный градиент 12" x1="0" y1="59.67" x2="79.14" y2="59.67" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3ce74f"/>
+      <stop offset="1" stop-color="#bfdd71"/>
+    </linearGradient>
+  </defs>
+  <g id="_Слой_2-2" data-name="Слой 2">
+    <g>
+      <path class="cls-1" d="M43.15,29.05v-9.34c0-2.05-1.79-3.72-3.99-3.72H3.99C1.79,16,0,14.33,0,12.28V3.72C0,1.66,1.79,0,3.99,0h71.15c3.58,0,5.35,4.06,2.78,6.38l-27.99,25.34c-2.53,2.29-6.77.62-6.77-2.67Z"/>
+      <path class="cls-2" d="M35.99,46.97v9.33c0,2.05,1.79,3.72,3.99,3.72h35.17c2.2,0,3.99,1.66,3.99,3.72v8.64c0,2.05-1.79,3.72-3.99,3.72H4c-3.58,0-5.35-4.05-2.78-6.38l28-25.4c2.53-2.29,6.77-.63,6.77,2.66Z"/>
+    </g>
+  </g>
+</svg>

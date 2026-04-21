@@ -101,7 +101,7 @@ class ProfileLinkAccountPage extends HookConsumerWidget {
     final expiresAt = session?.expiresAt;
     final remainingSeconds = expiresAt == null ? 0 : expiresAt.difference(now.value).inSeconds.clamp(0, 360000);
     final minutesUntilRefresh = (remainingSeconds / 60).ceil().clamp(0, 99);
-    final codePanelColor = theme.brightness == Brightness.dark ? const Color(0xFF1A1B1F) : const Color(0xFFD6E1E5);
+    final codePanelColor = theme.colorScheme.secondaryContainer;
     final codePanelBorderColor = theme.brightness == Brightness.dark
         ? const Color(0xFF333333)
         : const Color(0xFFC3CDD2);

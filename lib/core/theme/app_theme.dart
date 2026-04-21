@@ -1,21 +1,22 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:hiddify/core/theme/app_color_tokens.dart';
 import 'package:hiddify/core/theme/app_theme_mode.dart';
 import 'package:hiddify/core/theme/theme_extensions.dart';
 
-const Color _lightBackground = Color(0xFFE4EFF4);
-const Color _lightSurfaceAlt = Color(0xFFD6E1E5);
+const Color _lightBackground = AppColorTokens.lightBackground;
+const Color _lightSurfaceAlt = AppColorTokens.lightSurfaceAlt;
 const Color _lightAccentPrimary = Color(0xFF3CE74F);
 const Color _lightAccentSecondary = Color(0xFFBFDD71);
 const Color _lightText = Color(0xFF3B444D);
 const Color _lightNavigationIndicator = Color(0xFF586972);
 
-const Color _darkBackground = Color(0xFF000000);
-const Color _darkSurfaceAlt = Color(0xFF1A1B1F);
+const Color _darkBackground = AppColorTokens.darkBackground;
+const Color _darkSurfaceAlt = AppColorTokens.darkSurfaceAlt;
 const Color _darkAccentPrimary = Color(0xFF3CE74F);
 const Color _darkAccentSecondary = Color(0xFFBFDD71);
-const Color _darkText = Color(0xFFC3C6CF);
+const Color _darkText = Color(0xFFD8DEE6);
 const Color _darkNavigationIndicator = Color(0xFF333333);
 
 const ColorScheme _lightColorScheme = ColorScheme(

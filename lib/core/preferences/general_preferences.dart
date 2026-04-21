@@ -6,6 +6,7 @@ import 'package:hiddify/core/preferences/actions_at_closing.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
+import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -51,6 +52,16 @@ abstract class Preferences {
     <String>[],
   );
 
+  static final includeSites = PreferencesNotifier.create<List<String>, List<String>>(
+    "site_routing_include_list",
+    <String>[],
+  );
+
+  static final excludeSites = PreferencesNotifier.create<List<String>, List<String>>(
+    "site_routing_exclude_list",
+    <String>[],
+  );
+
   static final windowMaximized = PreferencesNotifier.create<bool, bool>("window_maximized", false);
 
   static final windowPosition = PreferencesNotifier.create<Offset?, String?>(
@@ -89,6 +100,13 @@ abstract class Preferences {
     "per_app_proxy_mode",
     PerAppProxyMode.off,
     mapFrom: PerAppProxyMode.values.byName,
+    mapTo: (value) => value.name,
+  );
+
+  static final siteRoutingMode = PreferencesNotifier.create<SiteRoutingMode, String>(
+    "site_routing_mode",
+    SiteRoutingMode.off,
+    mapFrom: SiteRoutingMode.values.byName,
     mapTo: (value) => value.name,
   );
 

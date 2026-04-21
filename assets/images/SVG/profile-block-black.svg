@@ -18,7 +18,7 @@
       }
 
       .cls-4 {
-        stroke: #d6e1e5;
+        stroke: #eff4f4;
         stroke-miterlimit: 10;
       }
 

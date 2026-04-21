@@ -33,7 +33,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
     final breakpoint = Breakpoint(context);
-    final baseBackgroundColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFFE4ECEF);
+    final baseBackgroundColor = theme.colorScheme.surface;
     final backgroundMapAsset = theme.brightness == Brightness.dark
         ? 'assets/images/2x/dark-back@2x.png'
         : 'assets/images/2x/light-back@2x.png';
@@ -371,7 +371,7 @@ class _IntroSecondaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final surfaceColor = theme.brightness == Brightness.dark ? const Color(0xFF1A1B1F) : const Color(0xFFD6E1E5);
+    final surfaceColor = theme.colorScheme.secondaryContainer;
     final textColor = theme.brightness == Brightness.dark ? const Color(0xFFD8DEE6) : const Color(0xFF3B444D);
     return Material(
       color: surfaceColor,

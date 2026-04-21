@@ -239,13 +239,13 @@ flutter_gen:
     flutter_svg: true
 
 flutter_native_splash:
-  color: "#E4EFF4"
+  color: "#fafbfc"
   image: assets/images/source/ic_launcher_splash.png
   color_dark: "#000000"
   image_dark: assets/images/source/ic_launcher_splash_dark.png
   android_gravity: center
   android_12:
-    color: "#E4EFF4"
+    color: "#fafbfc"
     image: assets/images/source/ic_launcher_splash_android12.png
     color_dark: "#000000"
     image_dark: assets/images/source/ic_launcher_splash_android12_dark.png

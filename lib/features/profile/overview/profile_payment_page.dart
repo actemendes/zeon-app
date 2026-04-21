@@ -411,7 +411,7 @@ class _BottomSubscriptionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final panelColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFFE4EFF4);
+    final panelColor = theme.colorScheme.surface;
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -498,7 +498,7 @@ class _PlanTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final defaultBackground = theme.brightness == Brightness.dark ? const Color(0xFF1A1B1F) : const Color(0xFFD6E1E5);
+    final defaultBackground = theme.colorScheme.secondaryContainer;
     const selectedBorderColor = Color(0xFF1AE958);
     final textColor = theme.colorScheme.onSurface;
     final priceColor = theme.brightness == Brightness.dark ? const Color(0xFFC3C6CF) : const Color(0xFF969696);

@@ -17,6 +17,7 @@ import 'package:hiddify/features/profile/overview/profile_menu_page.dart';
 import 'package:hiddify/features/profile/overview/profile_payment_page.dart';
 import 'package:hiddify/features/profile/overview/profiles_page.dart';
 import 'package:hiddify/features/proxy/overview/proxies_overview_page.dart';
+import 'package:hiddify/features/site_routing/overview/site_routing_page.dart';
 import 'package:hiddify/features/settings/overview/sections/dns_options_page.dart';
 import 'package:hiddify/features/settings/overview/sections/general_page.dart';
 import 'package:hiddify/features/settings/overview/sections/inbound_options_page.dart';
@@ -175,6 +176,12 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                           path: '/per-app-proxy',
                           pageBuilder: (_, state) =>
                               customTransition(TransitionType.slide, state.pageKey, const PerAppProxyPage()),
+                        ),
+                        GoRoute(
+                          name: 'siteRouting',
+                          path: '/site-routing',
+                          pageBuilder: (_, state) =>
+                              customTransition(TransitionType.slide, state.pageKey, const SiteRoutingPage()),
                         ),
                       ],
                     ),

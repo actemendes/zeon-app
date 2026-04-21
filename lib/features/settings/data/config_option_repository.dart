@@ -2,6 +2,7 @@ import 'package:dartx/dartx.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/model/optional_range.dart';
 import 'package:hiddify/core/model/region.dart';
+import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/utils/exception_handler.dart';
 import 'package:hiddify/core/utils/json_converters.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
@@ -370,10 +371,13 @@ abstract class ConfigOptions {
 
   static final singboxConfigOptions = Provider<SingboxConfigOption>((ref) {
     final mode = ref.watch(serviceMode);
-    final selectedRegion = ref.watch(region);
+    const selectedRegion = Region.other;
     // NOTE: core expects `rules.domains` as list, not comma-separated string.
     // Keep routing rules empty until we migrate these entries to list format.
     const rules = <SingboxRule>[];
+    final siteRoutingMode = ref.watch(Preferences.siteRoutingMode);
+    final siteRoutingInclude = _normalizeWebsites(ref.watch(Preferences.includeSites));
+    final siteRoutingExclude = _normalizeWebsites(ref.watch(Preferences.excludeSites));
 
     final currentDirectDns = ref.watch(directDnsAddress);
     const externalDnsValues = {
@@ -390,7 +394,7 @@ abstract class ConfigOptions {
     final effectiveDirectDns = selectedRegion == Region.ru && externalDnsValues.contains(currentDirectDns)
         ? "local"
         : currentDirectDns;
-    final effectiveStrictRoute = selectedRegion != Region.ru && ref.watch(strictRoute);
+    final effectiveStrictRoute = ref.watch(strictRoute);
     // final reg = ref.watch(Preferences.region.notifier).raw();
 
     return SingboxConfigOption(
@@ -426,6 +430,9 @@ abstract class ConfigOptions {
       enableFakeDns: ref.watch(enableFakeDns),
       // enableDnsRouting: ref.watch(enableDnsRouting),
       independentDnsCache: ref.watch(independentDnsCache),
+      siteRoutingMode: siteRoutingMode.name,
+      siteRoutingInclude: siteRoutingInclude,
+      siteRoutingExclude: siteRoutingExclude,
       // mux: SingboxMuxOption(
       //   enable: ref.watch(enableMux),
       //   padding: ref.watch(muxPadding),
@@ -471,6 +478,16 @@ abstract class ConfigOptions {
       rules: rules,
     );
   });
+
+  static List<String> _normalizeWebsites(List<String> rawValues) {
+    final normalized = <String>[];
+    for (final value in rawValues) {
+      final candidate = value.trim().toLowerCase();
+      if (candidate.isEmpty || normalized.contains(candidate)) continue;
+      normalized.add(candidate);
+    }
+    return normalized;
+  }
 }
 
 class ConfigOptionRepository with ExceptionHandler, InfraLogger {
