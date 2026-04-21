@@ -24,7 +24,7 @@ class MobileBootstrapImportService with InfraLogger {
        _profileDataSource = profileDataSource,
        _preferences = preferences;
 
-  static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "http://130.49.151.173");
+  static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://130.49.151.173");
   static const _apiKey = String.fromEnvironment("mobile_api_key", defaultValue: "mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7");
 
   static const _prefDone = "mobile_auto_import_done";

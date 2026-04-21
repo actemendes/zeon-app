@@ -41,6 +41,13 @@ class StableDeviceIdService {
     return generated;
   }
 
+  Future<String> rotateForRebind() async {
+    final generated = "${_platformPrefix()}_${const Uuid().v4().replaceAll('-', '')}";
+    await _preferences.setString(_prefKeyDeviceId, generated);
+    await _tryWriteSecure(generated);
+    return generated;
+  }
+
   Future<String?> _readNativeStableId() async {
     if (PlatformUtils.isWeb) return null;
     try {

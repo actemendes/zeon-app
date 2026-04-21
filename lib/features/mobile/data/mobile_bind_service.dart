@@ -9,8 +9,8 @@ import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/core/http_client/http_client_provider.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
-import 'package:hiddify/features/profile/data/profile_data_source.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
+import 'package:hiddify/features/profile/data/profile_data_source.dart';
 import 'package:hiddify/features/profile/data/profile_repository.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
@@ -38,7 +38,7 @@ class MobileBindService with InfraLogger {
        _profileDataSource = profileDataSource,
        _preferences = preferences;
 
-  static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "http://130.49.151.173");
+  static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://130.49.151.173");
   static const _mobileApiKey = String.fromEnvironment(
     "mobile_api_key",
     defaultValue: "mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7",
@@ -97,26 +97,18 @@ class MobileBindService with InfraLogger {
 
   Future<BindConfirmResult> confirmCode(String bindCode) async {
     loggy.info("bind confirm started [code_len=${bindCode.trim().length}]");
-    final deviceId = await _stableDeviceId.getOrCreate();
+    var deviceId = await _stableDeviceId.getOrCreate();
     Map<String, dynamic> payload;
     try {
-      payload = await _request(
-        method: "POST",
-        path: "/bind/session/confirm",
-        body: {
-          "device_id": deviceId,
-          "bind_code": bindCode,
-          "client_meta": {"platform": _platformName()},
-        },
-      );
+      payload = await _confirmWithDevice(deviceId: deviceId, bindCode: bindCode);
     } on MobileBindException catch (e) {
       if (e.code == "device_already_bound") {
-        final rebound = await _importAlreadyBoundDevice(deviceId);
-        if (rebound != null) {
-          return rebound;
-        }
+        loggy.warning("bind confirm: current device is already bound, rotating bind device id and retrying");
+        deviceId = await _rotateBindDeviceIdForRebind();
+        payload = await _confirmWithDevice(deviceId: deviceId, bindCode: bindCode);
+      } else {
+        rethrow;
       }
-      rethrow;
     }
 
     final ownerUserId = _parseInt(payload["owner_user_id"]);
@@ -182,71 +174,24 @@ class MobileBindService with InfraLogger {
     );
   }
 
-  Future<BindConfirmResult?> _importAlreadyBoundDevice(String deviceId) async {
-    final resolvedUserId = await _registerDeviceForBind(deviceId) ?? _parseInt(_preferences.getString(_prefUserId));
-    if (resolvedUserId == null || resolvedUserId <= 0) {
-      loggy.warning("bind already-bound fallback: user_id not resolved [device_id=$deviceId]");
-      return null;
-    }
-
-    final fetchedConnLink = await _fetchMobileConnLinkByUserId(resolvedUserId);
-    var connLink = fetchedConnLink?.trim() ?? (_preferences.getString(_prefConnLink) ?? "").trim();
-    if (connLink.isEmpty) {
-      connLink = Uri.parse(_apiBaseUrl).resolve("/open/$resolvedUserId").toString();
-      loggy.warning(
-        "bind already-bound fallback: conn_link absent, using /open fallback "
-        "[user_id=$resolvedUserId, link=${_maskLink(connLink)}]",
-      );
-    }
-
-    var effectiveConnLink = connLink;
-    var imported = false;
-    var effectiveLinkStatus = await _probeConnLinkStatus(effectiveConnLink);
-    final definitelyMissingPrimary = await _isCertainlyNotFound(effectiveConnLink);
-    loggy.info(
-      "bind already-bound fallback: import start "
-      "[device_id=$deviceId user_id=$resolvedUserId status=${effectiveLinkStatus ?? "-"} link=${_maskLink(effectiveConnLink)}]",
+  Future<Map<String, dynamic>> _confirmWithDevice({required String deviceId, required String bindCode}) {
+    return _request(
+      method: "POST",
+      path: "/bind/session/confirm",
+      body: {
+        "device_id": deviceId,
+        "bind_code": bindCode,
+        "client_meta": {"platform": _platformName()},
+      },
     );
-    if (definitelyMissingPrimary) {
-      throw const MobileBindException("bind_link_not_found");
-    }
-    imported = await _importFromConnLink(effectiveConnLink);
-    if (!imported) {
-      final fallbackConnLink = await _fetchMobileConnLinkByUserId(resolvedUserId);
-      if (fallbackConnLink != null && fallbackConnLink.trim().isNotEmpty) {
-        effectiveConnLink = fallbackConnLink.trim();
-        effectiveLinkStatus = await _probeConnLinkStatus(effectiveConnLink);
-        if (await _isCertainlyNotFound(effectiveConnLink)) {
-          throw const MobileBindException("bind_link_not_found");
-        }
-        imported = await _importFromConnLink(effectiveConnLink);
-      }
-    }
-    if (!imported) {
-      if (effectiveLinkStatus == 404) {
-        throw const MobileBindException("bind_link_not_found");
-      }
-      throw const MobileBindException("import_failed");
-    }
+  }
 
-    await _preferences.setBool(_prefDone, true);
-    await _preferences.setString(_prefUserId, resolvedUserId.toString());
-    await _preferences.setString(_prefConnLink, effectiveConnLink);
-    await _clearCachedSession();
-    final fallbackStatus = await _fetchMobileStatusByUserId(resolvedUserId);
-    await _syncActiveProfileMetaFromBind(status: fallbackStatus.status, expiresAt: fallbackStatus.expiresAt);
-
-    loggy.info(
-      "bind confirm fallback success: device already bound "
-      "[device_id=$deviceId user_id=$resolvedUserId link=${_maskLink(effectiveConnLink)}]",
-    );
-
-    return BindConfirmResult(
-      ownerUserId: resolvedUserId,
-      status: "already_bound",
-      connLink: effectiveConnLink,
-      expiresAt: null,
-    );
+  Future<String> _rotateBindDeviceIdForRebind() async {
+    await _preferences.remove(_bindJwtPrefKey);
+    await _preferences.remove(_bindJwtExpiresPrefKey);
+    final rotated = await _stableDeviceId.rotateForRebind();
+    loggy.info("bind rebind device id rotated [device_id=$rotated]");
+    return rotated;
   }
 
   Future<BindStatusResult> getStatus(String bindSessionId) async {
@@ -455,9 +400,9 @@ class MobileBindService with InfraLogger {
 
     if (_apiBaseUrl.isNotEmpty && _mobileApiKey.isNotEmpty) {
       final deviceId = await _stableDeviceId.getOrCreate();
+      final rawUserId = (_preferences.getString(_prefUserId) ?? "").trim();
+      final knownUserId = int.tryParse(rawUserId);
       try {
-        final rawUserId = (_preferences.getString(_prefUserId) ?? "").trim();
-        final knownUserId = int.tryParse(rawUserId);
         final token = await _fetchBindToken(deviceId: deviceId, userId: knownUserId);
         if (token != null && token.isNotEmpty) {
           return token;
@@ -492,9 +437,15 @@ class MobileBindService with InfraLogger {
           } catch (retryError, retryStack) {
             loggy.warning("bind token refresh retry failed [after_mismatch]", retryError, retryStack);
           }
-        } else if (apiError == "device_not_registered") {
+        } else if (apiError == "device_not_registered" || apiError == "user_id_required") {
           try {
-            final userId = await _registerDeviceForBind(deviceId);
+            final userId =
+                knownUserId ??
+                await _registerDeviceForBind(deviceId) ??
+                _parseInt(_preferences.getString(_prefUserId));
+            if (userId == null || userId <= 0) {
+              throw const MobileBindException("user_id_required");
+            }
             final token = await _fetchBindToken(deviceId: deviceId, userId: userId);
             if (token != null && token.isNotEmpty) {
               return token;
@@ -744,25 +695,6 @@ class MobileBindService with InfraLogger {
     }
   }
 
-  Future<({String? status, DateTime? expiresAt})> _fetchMobileStatusByUserId(int userId) async {
-    try {
-      if (_apiBaseUrl.isEmpty || _mobileApiKey.isEmpty || userId <= 0) return (status: null, expiresAt: null);
-      final uri = Uri.parse(_apiBaseUrl).resolve("/api/v1/subscriptions/lookup?user_id=$userId").toString();
-      final response = await _httpClient.get<Map<String, dynamic>>(
-        uri,
-        headers: {"x-api-key": _mobileApiKey},
-        directOnly: true,
-      );
-      final body = response.data;
-      if (body == null || body["ok"] != true) return (status: null, expiresAt: null);
-      final data = body["data"];
-      if (data is! Map<String, dynamic>) return (status: null, expiresAt: null);
-      return (status: data["status"]?.toString(), expiresAt: _parseIso(data["expires_at"]?.toString()));
-    } catch (_) {
-      return (status: null, expiresAt: null);
-    }
-  }
-
   Future<int?> _probeConnLinkStatus(String connLink) async {
     try {
       final response = await _httpClient.get<String>(connLink, headers: {"Accept": "text/html"}, directOnly: true);
@@ -771,19 +703,6 @@ class MobileBindService with InfraLogger {
       return e.response?.statusCode;
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<bool> _isCertainlyNotFound(String connLink) async {
-    final directStatus = await _probeConnLinkStatus(connLink);
-    if (directStatus != 404) return false;
-    try {
-      final response = await _httpClient.get<String>(connLink, headers: {"Accept": "text/html"});
-      return response.statusCode == 404;
-    } on DioException catch (e) {
-      return e.response?.statusCode == 404;
-    } catch (_) {
-      return false;
     }
   }
 
