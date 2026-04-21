@@ -10,7 +10,7 @@ class SingboxRule with _$SingboxRule {
   @JsonSerializable(fieldRename: FieldRename.kebab)
   const factory SingboxRule({
     String? ruleSetUrl,
-    String? domains,
+    @Default(<String>[]) List<String> domains,
     String? ip,
     String? port,
     String? protocol,

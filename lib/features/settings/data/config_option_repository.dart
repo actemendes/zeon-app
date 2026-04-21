@@ -7,6 +7,7 @@ import 'package:hiddify/core/utils/exception_handler.dart';
 import 'package:hiddify/core/utils/json_converters.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/log/model/log_level.dart';
+import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/features/profile/data/profile_parser.dart';
 import 'package:hiddify/features/settings/model/config_option_failure.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
@@ -372,12 +373,14 @@ abstract class ConfigOptions {
   static final singboxConfigOptions = Provider<SingboxConfigOption>((ref) {
     final mode = ref.watch(serviceMode);
     const selectedRegion = Region.other;
-    // NOTE: core expects `rules.domains` as list, not comma-separated string.
-    // Keep routing rules empty until we migrate these entries to list format.
-    const rules = <SingboxRule>[];
     final siteRoutingMode = ref.watch(Preferences.siteRoutingMode);
     final siteRoutingInclude = _normalizeWebsites(ref.watch(Preferences.includeSites));
     final siteRoutingExclude = _normalizeWebsites(ref.watch(Preferences.excludeSites));
+    final rules = _buildSiteRoutingRules(
+      mode: siteRoutingMode,
+      include: siteRoutingInclude,
+      exclude: siteRoutingExclude,
+    );
 
     final currentDirectDns = ref.watch(directDnsAddress);
     const externalDnsValues = {
@@ -409,7 +412,7 @@ abstract class ConfigOptions {
       ipv6Mode: ref.watch(ipv6Mode),
       remoteDnsAddress: ref.watch(remoteDnsAddress),
       remoteDnsDomainStrategy: ref.watch(remoteDnsDomainStrategy),
-      directDnsAddress: ref.watch(directDnsAddress),
+      directDnsAddress: effectiveDirectDns,
       directDnsDomainStrategy: ref.watch(directDnsDomainStrategy),
       mixedPort: ref.watch(mixedPort),
       tproxyPort: ref.watch(tproxyPort),
@@ -417,7 +420,7 @@ abstract class ConfigOptions {
       redirectPort: ref.watch(redirectPort),
       tunImplementation: ref.watch(tunImplementation),
       mtu: ref.watch(mtu),
-      strictRoute: ref.watch(strictRoute),
+      strictRoute: effectiveStrictRoute,
       connectionTestUrl: ref.watch(connectionTestUrl),
       urlTestInterval: ref.watch(urlTestInterval),
       enableClashApi: ref.watch(enableClashApi),
@@ -482,11 +485,39 @@ abstract class ConfigOptions {
   static List<String> _normalizeWebsites(List<String> rawValues) {
     final normalized = <String>[];
     for (final value in rawValues) {
-      final candidate = value.trim().toLowerCase();
+      var candidate = value.trim().toLowerCase();
       if (candidate.isEmpty || normalized.contains(candidate)) continue;
+      candidate = candidate
+          .replaceAll(RegExp(r'\s+'), '')
+          .replaceFirst(RegExp(r'^[a-z][a-z0-9+.-]*://'), '')
+          .replaceFirst(RegExp(r'^www\.'), '')
+          .replaceFirst(RegExp(r'^\*\.'), '')
+          .replaceFirst(RegExp(r'^/+'), '')
+          .split('/')[0]
+          .split('?')[0]
+          .split('#')[0]
+          .replaceFirst(RegExp(r'\.$'), '');
+      if (candidate.isEmpty || !isDomain(candidate) || normalized.contains(candidate)) continue;
       normalized.add(candidate);
     }
     return normalized;
+  }
+
+  static List<SingboxRule> _buildSiteRoutingRules({
+    required SiteRoutingMode mode,
+    required List<String> include,
+    required List<String> exclude,
+  }) {
+    return switch (mode) {
+      SiteRoutingMode.off => const <SingboxRule>[],
+      SiteRoutingMode.include when include.isNotEmpty => <SingboxRule>[
+        SingboxRule(domains: include, outbound: RuleOutbound.proxy),
+      ],
+      SiteRoutingMode.exclude when exclude.isNotEmpty => <SingboxRule>[
+        SingboxRule(domains: exclude, outbound: RuleOutbound.bypass),
+      ],
+      _ => const <SingboxRule>[],
+    };
   }
 }
 
