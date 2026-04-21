@@ -14,6 +14,7 @@ class PreferencesMigration with InfraLogger {
     final List<PreferencesMigrationStep> migrationSteps = [
       PreferencesVersion1Migration(sharedPreferences),
       PreferencesVersion2Migration(sharedPreferences),
+      PreferencesVersion3Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -142,6 +143,37 @@ class PreferencesVersion2Migration extends PreferencesMigrationStep with InfraLo
     if (strictRoute == null || strictRoute == true) {
       loggy.debug("RU migration: changing strict-route from [$strictRoute] to [false]");
       await sharedPreferences.setBool("strict-route", false);
+    }
+  }
+}
+
+class PreferencesVersion3Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion3Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    final persistedMtu = sharedPreferences.getInt("mtu");
+    if (persistedMtu == null || persistedMtu <= 0 || persistedMtu > 2000) {
+      loggy.debug("stability migration: changing mtu from [$persistedMtu] to [1400]");
+      await sharedPreferences.setInt("mtu", 1400);
+    }
+
+    final persistedStrategy = sharedPreferences.getString("balancer-strategy");
+    if (persistedStrategy == null || persistedStrategy == "round-robin") {
+      loggy.debug("stability migration: changing balancer-strategy from [$persistedStrategy] to [sticky-sessions]");
+      await sharedPreferences.setString("balancer-strategy", "sticky-sessions");
+    }
+
+    final persistedTunImpl = sharedPreferences.getString("tun-implementation");
+    if (persistedTunImpl == null || persistedTunImpl == "gvisor") {
+      loggy.debug("stability migration: changing tun-implementation from [$persistedTunImpl] to [mixed]");
+      await sharedPreferences.setString("tun-implementation", "mixed");
+    }
+
+    final strictRoute = sharedPreferences.getBool("strict-route");
+    if (strictRoute == null || strictRoute == false) {
+      loggy.debug("stability migration: changing strict-route from [$strictRoute] to [true]");
+      await sharedPreferences.setBool("strict-route", true);
     }
   }
 }

@@ -27,7 +27,7 @@ class TlsTricksPage extends HookConsumerWidget {
       appBar: AppBar(title: Text(t.pages.settings.tlsTricks.title.toUpperCase())),
       body: ListView(
         children: [
-          TipCard(message: t.pages.settings.tlsTricks.hint),
+          TipCard(message: t.pages.settings.tlsTricks.enable),
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.tlsTricks.enable),
             value: ref.watch(ConfigOptions.enableTlsFragment),
