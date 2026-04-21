@@ -292,7 +292,7 @@
       },
       "routing": {
         "title": "Routing",
-        "hint": "Selected apps and sites can bypass the VPN. Bypass for most Russian services is preconfigured.",
+        "hint": "Selected apps and sites will bypass the VPN. Bypass for most Russian services is already preconfigured.",
         "perAppProxy": {
           "title": "Per-app proxy",
           "hideSysApps": "Hide system apps",

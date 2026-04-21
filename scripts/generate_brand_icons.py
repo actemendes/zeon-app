@@ -445,6 +445,20 @@ def _fit_logo(logo: Image.Image, target_width: int) -> Image.Image:
     return logo.resize((target_width, h), Image.Resampling.LANCZOS)
 
 
+def _crop_visible_square(image: Image.Image, output_size: int) -> Image.Image:
+    bbox = image.getchannel("A").getbbox()
+    if not bbox:
+        return image.resize((output_size, output_size), Image.Resampling.LANCZOS)
+
+    visible = image.crop(bbox)
+    side = max(visible.width, visible.height)
+    square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    x = (side - visible.width) // 2
+    y = (side - visible.height) // 2
+    square.alpha_composite(visible, (x, y))
+    return square.resize((output_size, output_size), Image.Resampling.LANCZOS)
+
+
 def _compose_master_icon(size: int, logo: Image.Image) -> Image.Image:
     icon = _compose_container(size)
     logo_w = int(round(size * MASTER_LOGO_WIDTH_RATIO))
@@ -566,14 +580,18 @@ def _write_windows_linux_sources(master: Image.Image, startup_light: Image.Image
         master.resize((SOURCE_NOTIFY_ICON_SIZE, SOURCE_NOTIFY_ICON_SIZE), Image.Resampling.LANCZOS),
     )
 
+    # Windows shell often renders this icon with extra outer spacing.
+    # Trim transparent padding so the visible mark stays larger in Explorer/taskbar.
+    windows_icon = _crop_visible_square(master_1024, MASTER_ICON_SIZE)
+
     _save_ico(
         ROOT / "windows/runner/resources/app_icon.ico",
-        master_1024,
+        windows_icon,
         WINDOWS_ICO_SIZES,
     )
     _save_ico(
         ROOT / "assets/images/source/hiddify.ico",
-        master_1024,
+        windows_icon,
         WINDOWS_ICO_SIZES,
     )
 

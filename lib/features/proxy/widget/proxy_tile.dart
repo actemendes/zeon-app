@@ -51,12 +51,17 @@ class ProxyTile extends StatelessWidget with PresLogger {
           ),
         ),
       ),
-      leading: IPCountryFlag(
-        countryCode: resolveProxyCountryCode(
-          tagDisplay: proxy.tagDisplay,
-          fallbackCountryCode: proxy.ipinfo.countryCode,
+      leading: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        onLongPress: () {},
+        child: IPCountryFlag(
+          countryCode: resolveProxyCountryCode(
+            tagDisplay: proxy.tagDisplay,
+            fallbackCountryCode: proxy.ipinfo.countryCode,
+          ),
+          size: 40,
         ),
-        size: 40,
       ),
       trailing: hasDelay || hasDownload
           ? SizedBox(

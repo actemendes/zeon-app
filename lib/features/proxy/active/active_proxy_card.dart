@@ -77,6 +77,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                     await handleUrlTest();
                     await ref.read(dialogNotifierProvider.notifier).showProxyInfo(outboundInfo: activeProxy);
                   },
+                  onLongPress: () {},
                   borderRadius: BorderRadius.circular(_panelRadius),
                   child: IPCountryFlag(
                     countryCode: resolveProxyCountryCode(

@@ -66,7 +66,12 @@ class SettingPickerDialog<T> extends HookConsumerWidget with PresLogger {
       final match = RegExp(r'\(([^)]+)\)$').firstMatch(title);
       final countryCode = match?.group(1);
       if (countryCode == null) return null;
-      return IPCountryFlag(countryCode: countryCode, size: 32);
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        onLongPress: () {},
+        child: IPCountryFlag(countryCode: countryCode, size: 32),
+      );
     } catch (e) {
       return null;
     }
