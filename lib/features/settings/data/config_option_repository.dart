@@ -26,7 +26,7 @@ abstract class ConfigOptions {
 
   static final balancerStrategy = PreferencesNotifier.create<BalancerStrategy, String>(
     "balancer-strategy",
-    BalancerStrategy.roundRobin,
+    BalancerStrategy.stickySession,
     mapFrom: (value) => BalancerStrategy.values.firstWhere((e) => e.key == value),
     mapTo: (value) => value.key,
   );
@@ -132,12 +132,12 @@ abstract class ConfigOptions {
 
   static final tunImplementation = PreferencesNotifier.create<TunImplementation, String>(
     "tun-implementation",
-    TunImplementation.gvisor,
+    TunImplementation.mixed,
     mapFrom: TunImplementation.values.byName,
     mapTo: (value) => value.name,
   );
 
-  static final mtu = PreferencesNotifier.create<int, int>("mtu", 9000);
+  static final mtu = PreferencesNotifier.create<int, int>("mtu", 1400);
 
   static final strictRoute = PreferencesNotifier.create<bool, bool>("strict-route", true);
 
@@ -409,7 +409,7 @@ abstract class ConfigOptions {
       ipv6Mode: ref.watch(ipv6Mode),
       remoteDnsAddress: ref.watch(remoteDnsAddress),
       remoteDnsDomainStrategy: ref.watch(remoteDnsDomainStrategy),
-      directDnsAddress: effectiveDirectDns,
+      directDnsAddress: ref.watch(directDnsAddress),
       directDnsDomainStrategy: ref.watch(directDnsDomainStrategy),
       mixedPort: ref.watch(mixedPort),
       tproxyPort: ref.watch(tproxyPort),
@@ -417,7 +417,7 @@ abstract class ConfigOptions {
       redirectPort: ref.watch(redirectPort),
       tunImplementation: ref.watch(tunImplementation),
       mtu: ref.watch(mtu),
-      strictRoute: effectiveStrictRoute,
+      strictRoute: ref.watch(strictRoute),
       connectionTestUrl: ref.watch(connectionTestUrl),
       urlTestInterval: ref.watch(urlTestInterval),
       enableClashApi: ref.watch(enableClashApi),

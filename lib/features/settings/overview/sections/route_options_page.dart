@@ -22,7 +22,7 @@ class RouteOptionsPage extends HookConsumerWidget {
       appBar: AppBar(title: Text(t.pages.settings.routing.title.toUpperCase())),
       body: ListView(
         children: [
-          TipCard(message: t.pages.settings.routing.hint),
+          TipCard(message: t.pages.settings.routing.routeRule.title),
           if (PlatformUtils.isAndroid)
             ListTile(
               title: Text(t.pages.settings.routing.perAppProxy.title),
