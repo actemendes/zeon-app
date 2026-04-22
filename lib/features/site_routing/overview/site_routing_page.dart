@@ -13,16 +13,23 @@ class SiteRoutingPage extends HookConsumerWidget {
   const SiteRoutingPage({super.key});
 
   static String? _normalizeWebsite(String input) {
-    final trimmed = input.trim().toLowerCase();
-    if (trimmed.isEmpty) return null;
+    var candidate = input.trim().toLowerCase();
+    if (candidate.isEmpty) return null;
 
-    final uri = Uri.tryParse(trimmed.contains('://') ? trimmed : 'https://$trimmed');
-    var normalized = uri != null && uri.host.isNotEmpty ? uri.host.toLowerCase() : trimmed;
-    normalized = normalized.replaceFirst(RegExp(r'\.$'), '');
-
-    if (isDomain(normalized) || isDomainSuffix(normalized)) {
-      return normalized;
+    candidate = candidate.replaceAll(RegExp(r'\s+'), '');
+    final hasScheme = RegExp(r'^[a-z][a-z0-9+.-]*://').hasMatch(candidate);
+    final uri = Uri.tryParse(hasScheme ? candidate : 'https://$candidate');
+    if (uri != null && uri.host.isNotEmpty) {
+      candidate = uri.host.toLowerCase();
     }
+
+    candidate = candidate
+        .replaceFirst(RegExp(r'^\*\.'), '')
+        .replaceFirst(RegExp(r'^www\.'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+
+    if (isDomain(candidate)) return candidate;
+    if (candidate.startsWith('.') && isDomain(candidate.substring(1))) return candidate.substring(1);
     return null;
   }
 
