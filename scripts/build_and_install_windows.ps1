@@ -21,6 +21,36 @@ function Assert-Command {
     }
 }
 
+function Invoke-FlutterPubGet {
+    Write-Host "Running: flutter pub get"
+    & flutter pub get
+    if ($LASTEXITCODE -ne 0) {
+        throw "flutter pub get failed."
+    }
+}
+
+function Test-MissingWindowsFlutterWrapperSources {
+    param([Parameter(Mandatory = $true)][string]$WorkingRoot)
+
+    $wrapperDir = Join-Path $WorkingRoot "windows\flutter\ephemeral\cpp_client_wrapper"
+    $requiredSources = @(
+        "core_implementations.cc"
+        "standard_codec.cc"
+        "plugin_registrar.cc"
+        "flutter_engine.cc"
+        "flutter_view_controller.cc"
+    )
+
+    foreach ($sourceFile in $requiredSources) {
+        $sourcePath = Join-Path $wrapperDir $sourceFile
+        if (-not (Test-Path -LiteralPath $sourcePath)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function Test-PathHasFlutterBlockedCharacters {
     param([Parameter(Mandatory = $true)][string]$PathToCheck)
 
@@ -179,6 +209,7 @@ $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
 $workingRoot = $repoRoot
 $junctionPath = $null
+$shouldRunClean = -not $SkipClean
 
 Push-Location $repoRoot
 try {
@@ -188,11 +219,16 @@ try {
         $junctionPath = New-CleanPathJunction -RepoRoot $repoRoot
         $workingRoot = $junctionPath
         Write-Host "Repo path has characters blocked by Flutter. Using junction: $junctionPath"
+
+        if ($SkipClean) {
+            Write-Warning "SkipClean is not reliable when building via junction path. Running flutter clean to avoid missing wrapper sources."
+            $shouldRunClean = $true
+        }
     }
 
     Push-Location $workingRoot
     try {
-        if (-not $SkipClean) {
+        if ($shouldRunClean) {
             Write-Host "Running: flutter clean"
             & flutter clean
             if ($LASTEXITCODE -ne 0) {
@@ -200,10 +236,7 @@ try {
             }
         }
 
-        & flutter pub get
-        if ($LASTEXITCODE -ne 0) {
-            throw "flutter pub get failed."
-        }
+        Invoke-FlutterPubGet
 
         if (-not $SkipSecureStoragePatch) {
             Patch-FlutterSecureStorageWindowsPlugin -WorkingRoot $workingRoot
@@ -213,7 +246,28 @@ try {
         Write-Host ("Running: flutter " + ($buildArgs -join " "))
         & flutter @buildArgs
         if ($LASTEXITCODE -ne 0) {
-            throw "flutter build windows failed."
+            $wrapperMissingAfterBuildFailure = Test-MissingWindowsFlutterWrapperSources -WorkingRoot $workingRoot
+            if ($wrapperMissingAfterBuildFailure) {
+                Write-Warning "Windows Flutter wrapper sources became unavailable during build. Retrying after flutter clean."
+                Write-Host "Running: flutter clean"
+                & flutter clean
+                if ($LASTEXITCODE -ne 0) {
+                    throw "flutter clean failed during build retry."
+                }
+
+                Invoke-FlutterPubGet
+
+                if (-not $SkipSecureStoragePatch) {
+                    Patch-FlutterSecureStorageWindowsPlugin -WorkingRoot $workingRoot
+                }
+
+                Write-Host ("Retrying: flutter " + ($buildArgs -join " "))
+                & flutter @buildArgs
+            }
+
+            if ($LASTEXITCODE -ne 0) {
+                throw "flutter build windows failed."
+            }
         }
     }
     finally {
