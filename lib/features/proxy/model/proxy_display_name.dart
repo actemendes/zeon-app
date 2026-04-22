@@ -6,7 +6,7 @@ String formatProxyDisplayName(String raw) {
   value = value.replaceAll(RegExp(r"\s*(?:->|\u2192)\s*round-?robin\s*$", caseSensitive: false), "");
 
   if (RegExp(r"^balance$", caseSensitive: false).hasMatch(value)) {
-    return "\u0410\u0432\u0442\u043e\u0432\u044b\u0431\u043e\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u0430"; // Автовыбор сервера
+    return "\u0410\u0432\u0442\u043e\u0432\u044b\u0431\u043e\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u0432";
   }
 
   return value.trim();

@@ -133,14 +133,14 @@ abstract class ConfigOptions {
 
   static final tunImplementation = PreferencesNotifier.create<TunImplementation, String>(
     "tun-implementation",
-    TunImplementation.mixed,
+    PlatformUtils.isAndroid ? TunImplementation.system : TunImplementation.mixed,
     mapFrom: TunImplementation.values.byName,
     mapTo: (value) => value.name,
   );
 
-  static final mtu = PreferencesNotifier.create<int, int>("mtu", 1400);
+  static final mtu = PreferencesNotifier.create<int, int>("mtu", 1500);
 
-  static final strictRoute = PreferencesNotifier.create<bool, bool>("strict-route", true);
+  static final strictRoute = PreferencesNotifier.create<bool, bool>("strict-route", false);
 
   static final connectionTestUrl = PreferencesNotifier.create<String, String>(
     "connection-test-url",

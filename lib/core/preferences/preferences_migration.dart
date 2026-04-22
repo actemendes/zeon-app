@@ -16,6 +16,7 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion2Migration(sharedPreferences),
       PreferencesVersion3Migration(sharedPreferences),
       PreferencesVersion4Migration(sharedPreferences),
+      PreferencesVersion5Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -234,6 +235,33 @@ class PreferencesVersion4Migration extends PreferencesMigrationStep with InfraLo
     if (shouldSeedExcludeSites && (mode == null || mode.isEmpty || mode == "off")) {
       loggy.debug("site routing migration: changing mode from [$mode] to [exclude]");
       await sharedPreferences.setString(_siteRoutingModeKey, "exclude");
+    }
+  }
+}
+
+class PreferencesVersion5Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion5Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    if (!PlatformUtils.isAndroid) return;
+
+    final strictRoute = sharedPreferences.getBool("strict-route");
+    if (strictRoute == null || strictRoute == true) {
+      loggy.debug("android speed migration: changing strict-route from [$strictRoute] to [false]");
+      await sharedPreferences.setBool("strict-route", false);
+    }
+
+    final tunImplementation = sharedPreferences.getString("tun-implementation");
+    if (tunImplementation == null || tunImplementation == "mixed") {
+      loggy.debug("android speed migration: changing tun-implementation from [$tunImplementation] to [system]");
+      await sharedPreferences.setString("tun-implementation", "system");
+    }
+
+    final mtu = sharedPreferences.getInt("mtu");
+    if (mtu == null || mtu == 1400) {
+      loggy.debug("android speed migration: changing mtu from [$mtu] to [1500]");
+      await sharedPreferences.setInt("mtu", 1500);
     }
   }
 }
