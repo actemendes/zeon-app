@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
@@ -402,28 +401,79 @@ class _IntroSecondaryButton extends StatelessWidget {
 class _BindAccountCodeDialog extends HookConsumerWidget {
   const _BindAccountCodeDialog();
 
-  static const _codeLength = 6;
+  static const _sampleBindLink = 'https://zeon-vps.link/open/649669380';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
-    final codeController = useTextEditingController();
-    final codeFocusNode = useFocusNode();
+    final linkController = useTextEditingController();
+    final linkFocusNode = useFocusNode();
     final isSubmitting = useState(false);
 
-    useListenable(codeController);
+    useListenable(linkController);
 
     useEffect(() {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
-          codeFocusNode.requestFocus();
+          linkFocusNode.requestFocus();
         }
       });
       return null;
-    }, [codeFocusNode]);
+    }, [linkFocusNode]);
 
-    final isCodeComplete = codeController.text.length == _codeLength;
+    bool isValidBindCode(String value) => RegExp('^[A-Za-z0-9_-]{4,}\$').hasMatch(value);
+
+    String? extractBindCode(String rawInput) {
+      final input = rawInput.trim();
+      if (input.isEmpty) return null;
+
+      final deepLinkMatch = RegExp('/open/([A-Za-z0-9_-]{4,})').firstMatch(input);
+      if (deepLinkMatch != null) {
+        return deepLinkMatch.group(1);
+      }
+
+      final parsed = Uri.tryParse(input);
+      if (parsed != null) {
+        final bindCodeParam = parsed.queryParameters['bind_code']?.trim();
+        if (bindCodeParam != null && isValidBindCode(bindCodeParam)) {
+          return bindCodeParam;
+        }
+
+        final codeParam = parsed.queryParameters['code']?.trim();
+        if (codeParam != null && isValidBindCode(codeParam)) {
+          return codeParam;
+        }
+
+        final segments = parsed.pathSegments
+            .map((segment) => Uri.decodeComponent(segment).trim())
+            .where((segment) => segment.isNotEmpty)
+            .toList();
+        if (segments.isNotEmpty) {
+          final openIndex = segments.lastIndexWhere((segment) => segment.toLowerCase() == 'open');
+          if (openIndex != -1 && openIndex + 1 < segments.length) {
+            final segmentAfterOpen = segments[openIndex + 1];
+            if (isValidBindCode(segmentAfterOpen)) {
+              return segmentAfterOpen;
+            }
+          }
+
+          final lastSegment = segments.last;
+          if (isValidBindCode(lastSegment)) {
+            return lastSegment;
+          }
+        }
+      }
+
+      final normalized = input.replaceAll(RegExp(r'\s+'), '');
+      if (isValidBindCode(normalized)) {
+        return normalized;
+      }
+
+      return null;
+    }
+
+    final isInputValid = extractBindCode(linkController.text) != null;
 
     String mapBindError(String code) {
       switch (code.trim()) {
@@ -454,16 +504,16 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
     Future<void> bind() async {
       if (isSubmitting.value) return;
 
-      final code = codeController.text.trim();
+      final bindCode = extractBindCode(linkController.text);
 
-      if (!RegExp(r'^\d{6}$').hasMatch(code)) {
-        showError(t.errors.unexpected);
+      if (bindCode == null) {
+        showError(t.intro.bindAccountDialogInvalidLink);
         return;
       }
 
       isSubmitting.value = true;
       try {
-        await ref.read(mobileBindServiceProvider).confirmCode(code).timeout(const Duration(seconds: 30));
+        await ref.read(mobileBindServiceProvider).confirmCode(bindCode).timeout(const Duration(seconds: 30));
       } on MobileBindException catch (e) {
         if (!context.mounted) return;
         isSubmitting.value = false;
@@ -518,7 +568,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              t.pages.profileDetails.linkAccount.description,
+              t.intro.bindAccountDialogDescription,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: helperTextColor,
                 fontFamily: 'Montserrat',
@@ -527,35 +577,32 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
             ),
             const Gap(16),
             Text(
-              t.pages.profileDetails.linkAccount.codeLabel,
+              t.intro.bindAccountDialogLinkLabel,
               style: theme.textTheme.labelLarge?.copyWith(fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
             ),
             const Gap(10),
             SizedBox(
               width: double.infinity,
               child: TextField(
-                controller: codeController,
-                focusNode: codeFocusNode,
+                controller: linkController,
+                focusNode: linkFocusNode,
                 onSubmitted: (_) => bind(),
-                keyboardType: TextInputType.number,
+                keyboardType: TextInputType.url,
                 textInputAction: TextInputAction.done,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall?.copyWith(
+                autocorrect: false,
+                enableSuggestions: false,
+                style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: 'Montserrat',
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 10,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
                   color: titleColor,
                 ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(_codeLength),
-                ],
                 decoration: InputDecoration(
-                  hintText: '000000',
-                  hintStyle: theme.textTheme.headlineSmall?.copyWith(
+                  hintText: _sampleBindLink,
+                  hintStyle: theme.textTheme.bodySmall?.copyWith(
                     fontFamily: 'Montserrat',
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 10,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
                     color: helperTextColor.withValues(alpha: 0.6),
                   ),
                   filled: true,
@@ -584,7 +631,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
         SizedBox(
           width: double.infinity,
           child: FilledButton(
-            onPressed: isSubmitting.value || !isCodeComplete ? null : bind,
+            onPressed: isSubmitting.value || !isInputValid ? null : bind,
             child: isSubmitting.value
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : Text(t.pages.profileDetails.menu.bindAccount),

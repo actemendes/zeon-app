@@ -127,6 +127,7 @@ class IPCountryFlag extends HookConsumerWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         excludeFromSemantics: true,
+        onTap: () {},
         onLongPress: () {},
         child: Padding(
           padding: padding,

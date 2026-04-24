@@ -97,6 +97,9 @@
     "ctaTitle": "СТАРТУЕМ",
     "ctaSubtitle": "и премиум в подарок",
     "alreadyHaveAccount": "Я уже имею аккаунт",
+    "bindAccountDialogDescription": "Чтобы привязать ваш аккаунт вставьте ссылку которую прислал вам бот",
+    "bindAccountDialogLinkLabel": "Ссылка для привязки",
+    "bindAccountDialogInvalidLink": "Вставьте корректную ссылку из бота",
     "termsAndPolicyCaution(rich)": "Продолжая, вы соглашаетесь с ${tap(@:pages.about.termsAndConditions)}",
     "info(rich)": "Сделано с ❤️ ZEON - ${tap_source(Открытый исходный код)} (${tap_license(Лицензия)})"
   },
@@ -183,6 +186,11 @@
       "linkAccount": {
         "title": "Привязать аккаунт",
         "description": "Чтобы привязать новое устройство к вашей учетной записи, введите на нем 6-значный код ниже",
+        "linkHint": "Для привязки другого устройства скопируйте ссылку и вставьте её в другом приложении.",
+        "linkLabel": "Ссылка аккаунта",
+        "copyLink": "Скопировать ссылку",
+        "copySuccess": "Ссылка скопирована",
+        "changeAccount": "Сменить аккаунт",
         "codeLabel": "Код привязки",
         "updatesInMinutes": {
           "one": "Обновится через 1 минуту",

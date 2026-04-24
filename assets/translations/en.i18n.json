@@ -93,6 +93,9 @@
     "ctaTitle": "LET'S START",
     "ctaSubtitle": "and premium as a gift",
     "alreadyHaveAccount": "I already have an account",
+    "bindAccountDialogDescription": "To link your account, paste the link sent by the bot",
+    "bindAccountDialogLinkLabel": "Link for account binding",
+    "bindAccountDialogInvalidLink": "Paste a valid link sent by the bot",
     "termsAndPolicyCaution(rich)": "By continuing you agree to ${tap(@:pages.about.termsAndConditions)}",
     "info(rich)": "Made with ❤️ by ZEON - ${tap_source(Open Source)} (${tap_license(License)})"
   },
@@ -179,6 +182,11 @@
       "linkAccount": {
         "title": "Link account",
         "description": "To link a new device to your account, enter the 6-digit code below on that device",
+        "linkHint": "To link another device, copy the link and paste it in the other app.",
+        "linkLabel": "Account link",
+        "copyLink": "Copy link",
+        "copySuccess": "Link copied",
+        "changeAccount": "Switch account",
         "codeLabel": "Link code",
         "updatesInMinutes": {
           "one": "Updates in 1 minute",
