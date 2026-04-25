@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +9,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/details/json_editor.dart';
 import 'package:hiddify/features/profile/details/profile_details_notifier.dart';
@@ -62,6 +62,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
               },
             );
             return Scaffold(
+      key: const ValueKey(UiNames.screenProfileDetails),
               appBar: AppBar(
                 title: Text(t.pages.profileDetails.title.toUpperCase()),
                 actions: [
@@ -286,6 +287,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
             );
           },
           error: (error, stackTrace) => Scaffold(
+      key: const ValueKey(UiNames.screenProfileDetails),
             appBar: AppBar(title: Text(t.pages.profileDetails.title.toUpperCase())),
             body: Center(
               child: Column(
@@ -299,6 +301,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
             ),
           ),
           loading: () => Scaffold(
+      key: const ValueKey(UiNames.screenProfileDetails),
             appBar: AppBar(title: Text(t.pages.profileDetails.title.toUpperCase())),
             body: const Center(child: CircularProgressIndicator()),
           ),

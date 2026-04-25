@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
@@ -13,6 +14,7 @@ class InboundOptionsPage extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenInboundOptions),
       appBar: AppBar(title: Text(t.pages.settings.inbound.title.toUpperCase())),
       body: ListView(
         children: [

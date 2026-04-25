@@ -9,6 +9,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/core/widget/adaptive_icon.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_notifier.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_state.dart';
@@ -54,6 +55,7 @@ class AboutPage extends HookConsumerWidget {
     ];
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenAbout),
       appBar: AppBar(
         title: Text(t.pages.about.title.toUpperCase()),
         actions: [

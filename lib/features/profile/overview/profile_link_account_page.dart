@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ProfileLinkAccountPage extends ConsumerWidget {
@@ -23,6 +24,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
     final subtitleColor = theme.brightness == Brightness.dark ? const Color(0xFF8B8B8B) : const Color(0xFF5B6670);
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenProfileLinkAccount),
       appBar: AppBar(title: Text(t.pages.profileDetails.linkAccount.title.toUpperCase())),
       body: Align(
         alignment: Alignment.topCenter,
@@ -34,6 +36,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
+                  key: const ValueKey(UiNames.textProfileLinkHint),
                   t.pages.profileDetails.linkAccount.linkHint,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontFamily: 'Montserrat',
@@ -43,6 +46,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 Container(
+                  key: const ValueKey(UiNames.panelProfileLinkAccount),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.secondaryContainer,
                     borderRadius: BorderRadius.circular(16),
@@ -53,6 +57,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
+                        key: const ValueKey(UiNames.textProfileLinkLabel),
                         t.pages.profileDetails.linkAccount.linkLabel,
                         style: theme.textTheme.labelLarge?.copyWith(
                           fontFamily: 'Montserrat',
@@ -62,6 +67,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: 12),
                       SelectableText(
+                        key: const ValueKey(UiNames.textProfileLinkValue),
                         _accountLink,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontFamily: 'Montserrat',
@@ -71,6 +77,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: 16),
                       FilledButton.tonalIcon(
+                        key: const ValueKey(UiNames.buttonProfileLinkCopy),
                         onPressed: () async {
                           await Clipboard.setData(const ClipboardData(text: _accountLink));
                           notification.showSuccessToast(t.pages.profileDetails.linkAccount.copySuccess);
@@ -83,6 +90,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                 ),
                 const Spacer(),
                 FilledButton.tonalIcon(
+                  key: const ValueKey(UiNames.buttonProfileLinkChangeAccount),
                   onPressed: () async {
                     await ref.read(Preferences.introCompleted.notifier).update(false);
                     if (!context.mounted) return;

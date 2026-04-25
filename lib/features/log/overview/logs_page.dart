@@ -6,6 +6,7 @@ import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/core/widget/adaptive_icon.dart';
 import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/log/model/log_level.dart';
@@ -52,6 +53,7 @@ class LogsPage extends HookConsumerWidget with PresLogger {
         : [];
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenLogs),
       appBar: AppBar(
         title: Text(t.pages.logs.title.toUpperCase()),
         actions: [

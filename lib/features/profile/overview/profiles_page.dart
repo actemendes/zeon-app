@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
 import 'package:hiddify/features/profile/widget/profile_tile.dart';
@@ -24,6 +25,7 @@ class ProfilesPage extends HookConsumerWidget {
     });
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenProfiles),
       appBar: AppBar(
         title: Text(t.pages.profiles.title.toUpperCase()),
         actions: [

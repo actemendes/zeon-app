@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -15,6 +14,7 @@ import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/mobile/data/mobile_bind_service.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -66,6 +66,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
               ),
             ),
             Scaffold(
+              key: const ValueKey(UiNames.screenIntro),
               backgroundColor: Colors.transparent,
               appBar: AppBar(
                 backgroundColor: Colors.transparent,
@@ -109,7 +110,13 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                       child: Column(
                         children: [
                           Expanded(
-                            child: Center(child: SvgPicture.asset(logoAsset, width: logoWidth)),
+                            child: Center(
+                              child: SvgPicture.asset(
+                                logoAsset,
+                                key: const ValueKey(UiNames.imageIntroLogo),
+                                width: logoWidth,
+                              ),
+                            ),
                           ),
                           _IntroFooter(
                             isStarting: isStarting.value,
@@ -233,6 +240,7 @@ class _IntroFooter extends ConsumerWidget {
         ] else
           const Gap(16),
         Text.rich(
+          key: const ValueKey(UiNames.textIntroTermsAndPolicy),
           textAlign: TextAlign.center,
           t.intro.termsAndPolicyCaution(
             tap: (text) => TextSpan(
@@ -292,6 +300,7 @@ class _IntroStartButton extends StatelessWidget {
           image: const DecorationImage(image: AssetImage(_backgroundAsset), fit: BoxFit.cover),
         ),
         child: InkWell(
+          key: const ValueKey(UiNames.buttonIntroStart),
           onTap: isLoading ? null : onPressed,
           child: Row(
             children: [
@@ -377,6 +386,7 @@ class _IntroSecondaryButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
+        key: const ValueKey(UiNames.buttonIntroAlreadyHaveAccount),
         onTap: () {
           showDialog<void>(context: context, builder: (_) => const _BindAccountCodeDialog());
         },
@@ -552,6 +562,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
     final inputBorderColor = theme.brightness == Brightness.dark ? const Color(0xFF3B4756) : const Color(0xFFC8D3DC);
 
     return AlertDialog(
+      key: const ValueKey(UiNames.dialogIntroBindAccount),
       backgroundColor: dialogBackgroundColor,
       title: Text(
         t.pages.profileDetails.linkAccount.title,
@@ -568,6 +579,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
+              key: const ValueKey(UiNames.textIntroBindDescription),
               t.intro.bindAccountDialogDescription,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: helperTextColor,
@@ -577,6 +589,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
             ),
             const Gap(16),
             Text(
+              key: const ValueKey(UiNames.textIntroBindLinkLabel),
               t.intro.bindAccountDialogLinkLabel,
               style: theme.textTheme.labelLarge?.copyWith(fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
             ),
@@ -584,6 +597,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
             SizedBox(
               width: double.infinity,
               child: TextField(
+                key: const ValueKey(UiNames.inputIntroBindLink),
                 controller: linkController,
                 focusNode: linkFocusNode,
                 onSubmitted: (_) => bind(),
@@ -631,6 +645,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
         SizedBox(
           width: double.infinity,
           child: FilledButton(
+            key: const ValueKey(UiNames.buttonIntroBindSubmit),
             onPressed: isSubmitting.value || !isInputValid ? null : bind,
             child: isSubmitting.value
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))

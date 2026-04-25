@@ -1,10 +1,10 @@
 import 'dart:math';
-
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/proxy/overview/proxies_overview_notifier.dart';
 import 'package:hiddify/features/proxy/widget/proxy_tile.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -27,6 +27,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
     // );
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenProxiesOverview),
       appBar: AppBar(
         title: Text(t.pages.proxies.title.toUpperCase()),
         actions: [

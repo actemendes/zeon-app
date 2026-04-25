@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/utils/validators.dart';
@@ -97,6 +98,7 @@ class SiteRoutingPage extends HookConsumerWidget {
     final websitesNotifier = ref.read(websitesProvider.notifier);
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenSiteRouting),
       appBar: AppBar(
         title: Text(t.pages.settings.routing.websites.title.toUpperCase()),
         actions: [

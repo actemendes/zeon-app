@@ -1,9 +1,9 @@
 import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
@@ -148,6 +148,7 @@ class ProfileMenuPage extends HookConsumerWidget {
     ];
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenProfileMenu),
       appBar: AppBar(title: Text(t.pages.profileDetails.title.toUpperCase())),
       body: CustomMultiChildLayout(
         delegate: _ProfileMenuLayoutDelegate(),

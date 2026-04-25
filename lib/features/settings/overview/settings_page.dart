@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/settings/notifier/config_option/config_option_notifier.dart';
 import 'package:hiddify/features/settings/notifier/reset_tunnel/reset_tunnel_notifier.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -60,6 +61,7 @@ class SettingsPage extends HookConsumerWidget {
     // );
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenSettings),
       appBar: AppBar(
         title: Text(t.pages.settings.title.toUpperCase()),
         actions: [

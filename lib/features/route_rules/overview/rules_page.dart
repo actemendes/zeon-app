@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/route_rules/notifier/rules_notifier.dart';
 import 'package:hiddify/features/route_rules/overview/rule_page.dart';
 import 'package:hiddify/features/route_rules/widget/rule_tile.dart';
@@ -41,6 +42,7 @@ class RulesPage extends HookConsumerWidget {
     ];
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenRules),
       appBar: AppBar(
         title: Text(t.pages.settings.routing.routeRule.title.toUpperCase()),
         actions: [

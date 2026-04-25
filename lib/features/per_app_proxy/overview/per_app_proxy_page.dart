@@ -9,6 +9,7 @@ import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/per_app_proxy/model/app_package_info.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:hiddify/features/per_app_proxy/model/pkg_flag.dart';
@@ -121,6 +122,7 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
     }, [displayedApps]);
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenPerAppProxy),
       appBar: isSearching.value
           ? AppBar(
               title: TextFormField(

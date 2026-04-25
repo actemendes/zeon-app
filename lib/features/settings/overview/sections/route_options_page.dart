@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/core/widget/tip_card.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -19,6 +20,7 @@ class RouteOptionsPage extends HookConsumerWidget {
     final perAppProxy = ref.watch(Preferences.perAppProxyMode).enabled;
     final siteRouting = ref.watch(Preferences.siteRoutingMode).enabled;
     return Scaffold(
+      key: const ValueKey(UiNames.screenRouteOptions),
       appBar: AppBar(title: Text(t.pages.settings.routing.title.toUpperCase())),
       body: ListView(
         children: [

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/route_rules/notifier/rule_notifier.dart';
 import 'package:hiddify/features/route_rules/overview/android_apps_page.dart';
 import 'package:hiddify/features/route_rules/overview/generic_list_page.dart';
@@ -49,6 +50,7 @@ class RulePage extends HookConsumerWidget {
         }
       },
       child: Scaffold(
+      key: const ValueKey(UiNames.screenRule),
         appBar: AppBar(
           title: Text(t.pages.settings.routing.routeRule.rule.title.toUpperCase()),
           actions: [

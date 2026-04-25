@@ -3,6 +3,7 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/core/utils/ip_utils.dart';
 import 'package:hiddify/gen/fonts.gen.dart';
 import 'package:hiddify/utils/riverpod_utils.dart';
@@ -47,6 +48,7 @@ class IPText extends HookConsumerWidget {
     return Semantics(
       label: t.pages.proxies.ipInfo.address,
       child: InkWell(
+        key: ValueKey('${UiNames.tapProxyIpToggle}_$ip'),
         onTap: () {
           ref.read(_showIp.notifier).state = !isVisible;
         },
@@ -55,11 +57,18 @@ class IPText extends HookConsumerWidget {
         child: Padding(
           padding: padding,
           child: AnimatedCrossFade(
-            firstChild: Text(ip, style: ipStyle, textDirection: TextDirection.ltr, overflow: TextOverflow.ellipsis),
+            firstChild: Text(
+              ip,
+              key: ValueKey('${UiNames.textProxyIpVisible}_$ip'),
+              style: ipStyle,
+              textDirection: TextDirection.ltr,
+              overflow: TextOverflow.ellipsis,
+            ),
             secondChild: Padding(
               padding: constrained ? EdgeInsets.zero : const EdgeInsetsDirectional.only(end: 48),
               child: Text(
                 obscureIp(ip),
+                key: ValueKey('${UiNames.textProxyIpHidden}_$ip'),
                 semanticsLabel: t.common.hidden,
                 style: ipStyle,
                 textDirection: TextDirection.ltr,
@@ -100,11 +109,17 @@ class UnknownIPText extends HookConsumerWidget {
     return Semantics(
       label: t.pages.proxies.ipInfo.address,
       child: InkWell(
+        key: ValueKey('${UiNames.tapProxyUnknownIp}_$text'),
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: padding,
-          child: Text(text, style: style, overflow: TextOverflow.ellipsis),
+          child: Text(
+            text,
+            key: ValueKey('${UiNames.textProxyUnknownIp}_$text'),
+            style: style,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ),
     );
@@ -125,6 +140,7 @@ class IPCountryFlag extends HookConsumerWidget {
     return Semantics(
       label: t.pages.proxies.ipInfo.country,
       child: GestureDetector(
+        key: ValueKey('${UiNames.tapProxyIpCountryFlag}_${countryCode ?? "unknown"}'),
         behavior: HitTestBehavior.opaque,
         excludeFromSemantics: true,
         onTap: () {},

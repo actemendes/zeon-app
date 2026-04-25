@@ -4,6 +4,7 @@ import 'package:hiddify/core/http_client/http_client_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/mobile/data/mobile_payment_service.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -58,6 +59,7 @@ class ProfilePaymentPage extends HookConsumerWidget {
     };
 
     return Scaffold(
+      key: const ValueKey(UiNames.screenProfilePayment),
       backgroundColor: theme.colorScheme.surface,
       body: Stack(
         children: [

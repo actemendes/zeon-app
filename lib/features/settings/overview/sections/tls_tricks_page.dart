@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/optional_range.dart';
+import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/core/widget/tip_card.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
@@ -24,6 +25,7 @@ class TlsTricksPage extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final canChangeOption = ref.watch(ConfigOptions.enableTlsFragment);
     return Scaffold(
+      key: const ValueKey(UiNames.screenTlsTricks),
       appBar: AppBar(title: Text(t.pages.settings.tlsTricks.title.toUpperCase())),
       body: ListView(
         children: [
