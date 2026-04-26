@@ -129,14 +129,14 @@ abstract class ConfigOptions {
 
   static final tunImplementation = PreferencesNotifier.create<TunImplementation, String>(
     "tun-implementation",
-    PlatformUtils.isAndroid ? TunImplementation.system : TunImplementation.mixed,
+    TunImplementation.gvisor,
     mapFrom: TunImplementation.values.byName,
     mapTo: (value) => value.name,
   );
 
   static final mtu = PreferencesNotifier.create<int, int>("mtu", 1500);
 
-  static final strictRoute = PreferencesNotifier.create<bool, bool>("strict-route", false);
+  static final strictRoute = PreferencesNotifier.create<bool, bool>("strict-route", true);
 
   static final connectionTestUrl = PreferencesNotifier.create<String, String>(
     "connection-test-url",
@@ -377,23 +377,6 @@ abstract class ConfigOptions {
       include: siteRoutingInclude,
       exclude: siteRoutingExclude,
     );
-
-    final currentDirectDns = ref.watch(directDnsAddress);
-    const externalDnsValues = {
-      "1.1.1.1",
-      "udp://1.1.1.1",
-      "tcp://1.1.1.1",
-      "https://1.1.1.1/dns-query",
-      "https://dns.cloudflare.com/dns-query",
-      "8.8.8.8",
-      "udp://8.8.8.8",
-      "tcp://8.8.8.8",
-      "https://8.8.8.8/dns-query",
-    };
-    final effectiveDirectDns = selectedRegion == Region.ru && externalDnsValues.contains(currentDirectDns)
-        ? "local"
-        : currentDirectDns;
-    final effectiveStrictRoute = ref.watch(strictRoute);
     // final reg = ref.watch(Preferences.region.notifier).raw();
 
     return SingboxConfigOption(
@@ -402,13 +385,12 @@ abstract class ConfigOptions {
       blockAds: ref.watch(blockAds),
       useXrayCoreWhenPossible: ref.watch(useXrayCoreWhenPossible),
       executeConfigAsIs: false,
-      // logLevel is fixed to keep runtime behavior predictable.
-      logLevel: LogLevel.warn,
+      logLevel: ref.watch(logLevel),
       resolveDestination: ref.watch(resolveDestination),
       ipv6Mode: ref.watch(ipv6Mode),
       remoteDnsAddress: ref.watch(remoteDnsAddress),
       remoteDnsDomainStrategy: ref.watch(remoteDnsDomainStrategy),
-      directDnsAddress: effectiveDirectDns,
+      directDnsAddress: ref.watch(directDnsAddress),
       directDnsDomainStrategy: ref.watch(directDnsDomainStrategy),
       mixedPort: ref.watch(mixedPort),
       tproxyPort: ref.watch(tproxyPort),
@@ -416,7 +398,7 @@ abstract class ConfigOptions {
       redirectPort: ref.watch(redirectPort),
       tunImplementation: ref.watch(tunImplementation),
       mtu: ref.watch(mtu),
-      strictRoute: effectiveStrictRoute,
+      strictRoute: ref.watch(strictRoute),
       connectionTestUrl: ref.watch(connectionTestUrl),
       urlTestInterval: ref.watch(urlTestInterval),
       enableClashApi: ref.watch(enableClashApi),

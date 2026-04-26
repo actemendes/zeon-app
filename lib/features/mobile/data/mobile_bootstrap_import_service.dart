@@ -34,7 +34,6 @@ class MobileBootstrapImportService with InfraLogger {
   static const _prefUserId = "mobile_auto_import_user_id";
   static const _prefConnLink = "mobile_auto_import_conn_link";
   static const _prefManagedProfileId = "mobile_managed_profile_id";
-  static const _prefRegion = "region";
 
   final DioHttpClient _httpClient;
   final StableDeviceIdService _stableDeviceId;
@@ -128,10 +127,6 @@ class MobileBootstrapImportService with InfraLogger {
       await _preferences.setString(_prefConnLink, connLink);
       if (effectiveUserId != null && effectiveUserId > 0) {
         await _preferences.setString(_prefUserId, effectiveUserId.toString());
-      }
-      final existingRegion = _preferences.getString(_prefRegion);
-      if (existingRegion == null || existingRegion.isEmpty || existingRegion == "other") {
-        await _preferences.setString(_prefRegion, "ru");
       }
       loggy.info("mobile auto import succeeded");
       return true;

@@ -19,6 +19,7 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion5Migration(sharedPreferences),
       PreferencesVersion6Migration(sharedPreferences),
       PreferencesVersion7Migration(sharedPreferences),
+      PreferencesVersion8Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -121,33 +122,8 @@ class PreferencesVersion2Migration extends PreferencesMigrationStep with InfraLo
 
   @override
   Future<void> migrate() async {
-    final region = sharedPreferences.getString("region");
-    if (region != "ru") {
-      return;
-    }
-
-    final directDns = sharedPreferences.getString("direct-dns-address");
-    const externalDnsValues = {
-      "1.1.1.1",
-      "udp://1.1.1.1",
-      "tcp://1.1.1.1",
-      "https://1.1.1.1/dns-query",
-      "https://dns.cloudflare.com/dns-query",
-      "8.8.8.8",
-      "udp://8.8.8.8",
-      "tcp://8.8.8.8",
-      "https://8.8.8.8/dns-query",
-    };
-    if (directDns == null || externalDnsValues.contains(directDns)) {
-      loggy.debug("RU migration: changing direct-dns-address from [$directDns] to [local]");
-      await sharedPreferences.setString("direct-dns-address", "local");
-    }
-
-    final strictRoute = sharedPreferences.getBool("strict-route");
-    if (strictRoute == null || strictRoute == true) {
-      loggy.debug("RU migration: changing strict-route from [$strictRoute] to [false]");
-      await sharedPreferences.setBool("strict-route", false);
-    }
+    // Kept for compatibility with already released versions.
+    // Intentionally no-op now to preserve user-selected VPN behavior.
   }
 }
 
@@ -307,9 +283,7 @@ class PreferencesVersion6Migration extends PreferencesMigrationStep with InfraLo
 
     final balancerStrategy = sharedPreferences.getString("balancer-strategy");
     if (balancerStrategy == null || balancerStrategy == "sticky-sessions") {
-      loggy.debug(
-        "hiddify baseline migration: changing balancer-strategy from [$balancerStrategy] to [round-robin]",
-      );
+      loggy.debug("hiddify baseline migration: changing balancer-strategy from [$balancerStrategy] to [round-robin]");
       await sharedPreferences.setString("balancer-strategy", "round-robin");
     }
 
@@ -329,9 +303,9 @@ class PreferencesVersion7Migration extends PreferencesMigrationStep with InfraLo
     if (!PlatformUtils.isAndroid) return;
 
     final tunImplementation = sharedPreferences.getString("tun-implementation");
-    if (tunImplementation == null || tunImplementation != "system") {
-      loggy.debug("android stability migration: changing tun-implementation from [$tunImplementation] to [system]");
-      await sharedPreferences.setString("tun-implementation", "system");
+    if (tunImplementation == null || tunImplementation != "gvisor") {
+      loggy.debug("android stability migration: changing tun-implementation from [$tunImplementation] to [gvisor]");
+      await sharedPreferences.setString("tun-implementation", "gvisor");
     }
 
     final mtu = sharedPreferences.getInt("mtu");
@@ -341,9 +315,36 @@ class PreferencesVersion7Migration extends PreferencesMigrationStep with InfraLo
     }
 
     final strictRoute = sharedPreferences.getBool("strict-route");
-    if (strictRoute == null || strictRoute == true) {
-      loggy.debug("android stability migration: changing strict-route from [$strictRoute] to [false]");
-      await sharedPreferences.setBool("strict-route", false);
+    if (strictRoute == null || strictRoute == false) {
+      loggy.debug("android stability migration: changing strict-route from [$strictRoute] to [true]");
+      await sharedPreferences.setBool("strict-route", true);
+    }
+  }
+}
+
+class PreferencesVersion8Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion8Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    if (!PlatformUtils.isAndroid) return;
+
+    final tunImplementation = sharedPreferences.getString("tun-implementation");
+    if (tunImplementation == null || tunImplementation != "gvisor") {
+      loggy.debug("baseline v8: changing tun-implementation from [$tunImplementation] to [gvisor]");
+      await sharedPreferences.setString("tun-implementation", "gvisor");
+    }
+
+    final mtu = sharedPreferences.getInt("mtu");
+    if (mtu == null || mtu != 1500) {
+      loggy.debug("baseline v8: changing mtu from [$mtu] to [1500]");
+      await sharedPreferences.setInt("mtu", 1500);
+    }
+
+    final strictRoute = sharedPreferences.getBool("strict-route");
+    if (strictRoute == null || strictRoute == false) {
+      loggy.debug("baseline v8: changing strict-route from [$strictRoute] to [true]");
+      await sharedPreferences.setBool("strict-route", true);
     }
   }
 }
