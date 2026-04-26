@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
+import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_source.dart';
 import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/data/profile_repository.dart';
@@ -16,10 +17,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 class MobileBootstrapImportService with InfraLogger {
   MobileBootstrapImportService({
     required DioHttpClient httpClient,
+    required StableDeviceIdService stableDeviceIdService,
     required ProfileRepository profileRepository,
     required ProfileDataSource profileDataSource,
     required SharedPreferences preferences,
   }) : _httpClient = httpClient,
+       _stableDeviceId = stableDeviceIdService,
        _profileRepository = profileRepository,
        _profileDataSource = profileDataSource,
        _preferences = preferences;
@@ -30,9 +33,11 @@ class MobileBootstrapImportService with InfraLogger {
   static const _prefDone = "mobile_auto_import_done";
   static const _prefUserId = "mobile_auto_import_user_id";
   static const _prefConnLink = "mobile_auto_import_conn_link";
+  static const _prefManagedProfileId = "mobile_managed_profile_id";
   static const _prefRegion = "region";
 
   final DioHttpClient _httpClient;
+  final StableDeviceIdService _stableDeviceId;
   final ProfileRepository _profileRepository;
   final ProfileDataSource _profileDataSource;
   final SharedPreferences _preferences;
@@ -54,9 +59,14 @@ class MobileBootstrapImportService with InfraLogger {
       if (hasAnyProfile) {
         final savedConnLink = _preferences.getString(_prefConnLink);
         if (savedConnLink != null && savedConnLink.isNotEmpty) {
-          // Do not re-import on every launch: it can create duplicates/switch active profile.
-          // Keep only metadata refresh for the existing active profile.
-          await _syncMetaFromConnLink(savedConnLink);
+          // Refresh metadata only when active profile is still the bound account link.
+          final active = await _profileDataSource.watchActiveProfile().first;
+          final activeUrl = active?.url?.trim();
+          if (activeUrl != null && activeUrl.isNotEmpty && activeUrl == savedConnLink.trim()) {
+            await _syncMetaFromConnLink(savedConnLink);
+          } else {
+            loggy.debug("mobile auto import: skip bound-link meta sync, active profile was manually replaced");
+          }
         }
         return false;
       }
@@ -109,6 +119,7 @@ class MobileBootstrapImportService with InfraLogger {
       if (!imported) {
         throw const MobileBootstrapImportException("failed to import conn_link");
       }
+      await _replaceManagedProfileWithActive();
       await _syncMetaFromConnLink(connLink);
       await _syncMetaFromApiSummary(status: apiStatus, expiresAt: apiExpiresAt, login: apiLogin);
       await _syncNameFromApiLogin(apiLogin);
@@ -225,6 +236,36 @@ class MobileBootstrapImportService with InfraLogger {
 
     loggy.warning("mobile import: all import attempts failed");
     return false;
+  }
+
+  Future<void> _replaceManagedProfileWithActive() async {
+    try {
+      final active = await _profileDataSource.watchActiveProfile().first;
+      if (active == null || active.type != ProfileType.remote) return;
+
+      final previousManagedId = (_preferences.getString(_prefManagedProfileId) ?? "").trim();
+      final previousConnLink = (_preferences.getString(_prefConnLink) ?? "").trim();
+
+      await _preferences.setString(_prefManagedProfileId, active.id);
+
+      if (previousManagedId.isNotEmpty && previousManagedId != active.id) {
+        final previousManaged = await _profileDataSource.getById(previousManagedId);
+        if (previousManaged != null) {
+          await _profileRepository.deleteById(previousManaged.id, previousManaged.active).run();
+          loggy.info("mobile import: removed previous managed profile [id=${previousManaged.id}]");
+        }
+      }
+
+      if (previousConnLink.isNotEmpty) {
+        final previousByUrl = await _profileDataSource.getByUrl(previousConnLink);
+        if (previousByUrl != null && previousByUrl.id != active.id) {
+          await _profileRepository.deleteById(previousByUrl.id, previousByUrl.active).run();
+          loggy.info("mobile import: removed previous profile by conn_link [id=${previousByUrl.id}]");
+        }
+      }
+    } catch (e, st) {
+      loggy.warning("mobile import: failed to replace managed profile", e, st);
+    }
   }
 
   Future<void> _syncMetaFromConnLink(String connLink) async {
@@ -431,10 +472,23 @@ class MobileBootstrapImportService with InfraLogger {
   }
 
   Future<_CreateResult> _createOrReuseUser({int? userId}) async {
+    final deviceId = await _stableDeviceId.getOrCreate();
     final uri = Uri.parse(_apiBaseUrl).resolve("/api/v1/users/create").toString();
     final body = <String, dynamic>{
       "user": {if (userId != null && userId > 0) "user_id": userId},
       "subscription": {"create_if_missing": true},
+      "device_id": deviceId,
+      "platform": PlatformUtils.isAndroid
+          ? "android"
+          : PlatformUtils.isIOS
+          ? "ios"
+          : PlatformUtils.isWindows
+          ? "windows"
+          : PlatformUtils.isMacOS
+          ? "macos"
+          : PlatformUtils.isLinux
+          ? "linux"
+          : "unknown",
     };
     final response = await _httpClient.post<Map<String, dynamic>>(
       uri,

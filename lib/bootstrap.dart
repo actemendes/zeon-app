@@ -11,7 +11,6 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/logger/logger.dart';
 import 'package:hiddify/core/logger/logger_controller.dart';
 import 'package:hiddify/core/model/environment.dart';
-import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/preferences/preferences_migration.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
@@ -22,6 +21,7 @@ import 'package:hiddify/features/bootstrap/widget/bootstrap_splash_screen.dart';
 
 import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dart';
+import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
 import 'package:hiddify/features/per_app_proxy/data/selected_data_provider.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_backup.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
@@ -29,7 +29,6 @@ import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/features/profile/data/debug_profile_bootstrap_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
 import 'package:hiddify/features/window/notifier/window_notifier.dart';
 import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
@@ -183,7 +182,6 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   });
 
   final debug = container.read(debugModeNotifierProvider) || kDebugMode;
-  await _safeInit("force routing region", () => _forceRoutingRegionToOther(container), timeout: 5000);
   await _safeInit("per-app proxy defaults", () => _seedPerAppProxyDefaults(container), timeout: 5000);
   await _safeInit("site routing defaults", () => _seedSiteRoutingDefaults(container), timeout: 5000);
 
@@ -222,6 +220,7 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   await _init("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
   final mobileBootstrapImportService = MobileBootstrapImportService(
     httpClient: container.read(httpClientProvider),
+    stableDeviceIdService: StableDeviceIdService(preferences: preferences),
     profileRepository: profileRepository,
     profileDataSource: profileDataSource,
     preferences: preferences,
@@ -351,21 +350,6 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
           );
     }
   }
-  await prefs.setBool(seedKey, true);
-}
-
-Future<void> _forceRoutingRegionToOther(ProviderContainer container) async {
-  final prefs = container.read(sharedPreferencesProvider).requireValue;
-  const seedKey = "routing_region_forced_other_v1_done";
-  if (prefs.getBool(seedKey) ?? false) return;
-
-  final currentRegion = container.read(ConfigOptions.region);
-  if (currentRegion != Region.other) {
-    await container.read(ConfigOptions.region.notifier).update(Region.other);
-    // Region is disabled for routing, invalidate stale auto-selection context.
-    await container.read(Preferences.autoAppsSelectionRegion.notifier).update(null);
-  }
-
   await prefs.setBool(seedKey, true);
 }
 

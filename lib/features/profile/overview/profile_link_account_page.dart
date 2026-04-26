@@ -5,19 +5,29 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/ui/ui_names.dart';
+import 'package:hiddify/features/profile/model/profile_entity.dart';
+import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ProfileLinkAccountPage extends ConsumerWidget {
   const ProfileLinkAccountPage({super.key});
 
   static const _maxContentWidth = 920.0;
-  static const _accountLink = 'https://zeon-vps.link/open/649669380';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
     final notification = ref.read(inAppNotificationControllerProvider);
+    final profile = switch (ref.watch(activeProfileProvider)) {
+      AsyncData(value: final profile?) => profile,
+      _ => null,
+    };
+    final accountLink = switch (profile) {
+      RemoteProfileEntity(:final url) when url.trim().isNotEmpty => url.trim(),
+      _ => '',
+    };
+    final canCopy = accountLink.isNotEmpty;
     final linkPanelBorderColor = theme.brightness == Brightness.dark
         ? const Color(0xFF333333)
         : const Color(0xFFC3CDD2);
@@ -37,7 +47,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
               children: [
                 Text(
                   key: const ValueKey(UiNames.textProfileLinkHint),
-                  t.pages.profileDetails.linkAccount.linkHint,
+                  t.pages.profileDetails.linkAccount.description,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontFamily: 'Montserrat',
                     fontWeight: FontWeight.w500,
@@ -58,7 +68,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                     children: [
                       Text(
                         key: const ValueKey(UiNames.textProfileLinkLabel),
-                        t.pages.profileDetails.linkAccount.linkLabel,
+                        t.pages.profileDetails.linkAccount.codeLabel,
                         style: theme.textTheme.labelLarge?.copyWith(
                           fontFamily: 'Montserrat',
                           fontWeight: FontWeight.w600,
@@ -68,7 +78,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                       const SizedBox(height: 12),
                       SelectableText(
                         key: const ValueKey(UiNames.textProfileLinkValue),
-                        _accountLink,
+                        canCopy ? accountLink : '—',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontFamily: 'Montserrat',
                           fontWeight: FontWeight.w600,
@@ -78,12 +88,14 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                       const SizedBox(height: 16),
                       FilledButton.tonalIcon(
                         key: const ValueKey(UiNames.buttonProfileLinkCopy),
-                        onPressed: () async {
-                          await Clipboard.setData(const ClipboardData(text: _accountLink));
-                          notification.showSuccessToast(t.pages.profileDetails.linkAccount.copySuccess);
-                        },
+                        onPressed: canCopy
+                            ? () async {
+                                await Clipboard.setData(ClipboardData(text: accountLink));
+                                notification.showSuccessToast(t.common.done);
+                              }
+                            : null,
                         icon: const Icon(Icons.content_copy_rounded),
-                        label: Text(t.pages.profileDetails.linkAccount.copyLink),
+                        label: const Text('Копировать ссылку'),
                       ),
                     ],
                   ),
@@ -98,7 +110,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                   },
                   icon: const Icon(Icons.switch_account_rounded),
                   label: Text(
-                    t.pages.profileDetails.linkAccount.changeAccount,
+                    t.pages.profileDetails.linkAccount.deleteAccount,
                     style: theme.textTheme.titleSmall?.copyWith(fontFamily: 'Unbounded', fontWeight: FontWeight.w600),
                   ),
                 ),

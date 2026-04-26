@@ -483,7 +483,16 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
       return null;
     }
 
-    final isInputValid = extractBindCode(linkController.text) != null;
+    bool isLikelyAccountLink(String rawInput) {
+      final input = rawInput.trim();
+      if (input.isEmpty) return false;
+      final parsed = Uri.tryParse(input);
+      if (parsed == null) return false;
+      if (parsed.hasScheme && (parsed.scheme == 'http' || parsed.scheme == 'https')) return true;
+      return input.contains('/') || input.contains('?');
+    }
+
+    final isInputValid = isLikelyAccountLink(linkController.text) || extractBindCode(linkController.text) != null;
 
     String mapBindError(String code) {
       switch (code.trim()) {
@@ -497,6 +506,8 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
           return "Сервер долго отвечает. Проверьте интернет и повторите.";
         case "network_connectionError":
           return "Нет соединения с сервером.";
+        case "validation_error":
+          return "Неверная ссылка или код привязки.";
         default:
           return code.isEmpty ? t.errors.unexpected : code;
       }
@@ -505,25 +516,26 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
     void showError(String message) {
       final notification = ref.read(inAppNotificationControllerProvider);
       notification.showErrorToast(message);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red.shade700));
     }
 
     Future<void> bind() async {
       if (isSubmitting.value) return;
-
-      final bindCode = extractBindCode(linkController.text);
-
-      if (bindCode == null) {
-        showError(t.intro.bindAccountDialogInvalidLink);
-        return;
-      }
+      final rawInput = linkController.text.trim();
+      final bindCode = extractBindCode(rawInput);
 
       isSubmitting.value = true;
       try {
-        await ref.read(mobileBindServiceProvider).confirmCode(bindCode).timeout(const Duration(seconds: 30));
+        final bindService = ref.read(mobileBindServiceProvider);
+        if (isLikelyAccountLink(rawInput)) {
+          await bindService.importConnectionLink(rawInput).timeout(const Duration(seconds: 30));
+        } else {
+          if (bindCode == null) {
+            showError(t.errors.profiles.invalidUrl);
+            isSubmitting.value = false;
+            return;
+          }
+          await bindService.confirmCode(bindCode).timeout(const Duration(seconds: 30));
+        }
       } on MobileBindException catch (e) {
         if (!context.mounted) return;
         isSubmitting.value = false;
@@ -580,7 +592,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
           children: [
             Text(
               key: const ValueKey(UiNames.textIntroBindDescription),
-              t.intro.bindAccountDialogDescription,
+              t.pages.profileDetails.linkAccount.description,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: helperTextColor,
                 fontFamily: 'Montserrat',
@@ -590,7 +602,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
             const Gap(16),
             Text(
               key: const ValueKey(UiNames.textIntroBindLinkLabel),
-              t.intro.bindAccountDialogLinkLabel,
+              t.pages.profileDetails.linkAccount.codeLabel,
               style: theme.textTheme.labelLarge?.copyWith(fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
             ),
             const Gap(10),

@@ -49,6 +49,7 @@ class MobileBindService with InfraLogger {
   static const _prefDone = "mobile_auto_import_done";
   static const _prefUserId = "mobile_auto_import_user_id";
   static const _prefConnLink = "mobile_auto_import_conn_link";
+  static const _prefManagedProfileId = "mobile_managed_profile_id";
   static const _prefBindSessionCache = "mobile_bind_session_cache_v1";
 
   final DioHttpClient _httpClient;
@@ -160,6 +161,7 @@ class MobileBindService with InfraLogger {
       throw const MobileBindException("import_failed");
     }
 
+    await _replaceManagedProfileWithActive();
     await _preferences.setBool(_prefDone, true);
     await _preferences.setString(_prefUserId, ownerUserId.toString());
     await _preferences.setString(_prefConnLink, effectiveConnLink);
@@ -174,6 +176,22 @@ class MobileBindService with InfraLogger {
     );
   }
 
+  Future<void> importConnectionLink(String rawInput) async {
+    final normalizedLink = _normalizeAccountLinkInput(rawInput);
+    if (normalizedLink.isEmpty || Uri.tryParse(normalizedLink) == null) {
+      throw const MobileBindException("validation_error");
+    }
+
+    final imported = await _importFromConnLink(normalizedLink);
+    if (!imported) {
+      throw const MobileBindException("import_failed");
+    }
+
+    await _replaceManagedProfileWithActive();
+    await _preferences.setBool(_prefDone, true);
+    await _clearCachedSession();
+  }
+
   Future<Map<String, dynamic>> _confirmWithDevice({required String deviceId, required String bindCode}) {
     return _request(
       method: "POST",
@@ -184,6 +202,27 @@ class MobileBindService with InfraLogger {
         "client_meta": {"platform": _platformName()},
       },
     );
+  }
+
+  String _normalizeAccountLinkInput(String rawInput) {
+    final input = rawInput.trim();
+    if (input.isEmpty) return "";
+    final parsed = Uri.tryParse(input);
+    if (parsed != null && parsed.hasScheme && (parsed.scheme == "http" || parsed.scheme == "https")) {
+      return parsed.toString();
+    }
+
+    final codeOnly = RegExp(r'^[A-Za-z0-9_-]{4,}$');
+    if (codeOnly.hasMatch(input)) {
+      return "https://zeon-vps.link/open/$input";
+    }
+
+    String candidate = input;
+    if (candidate.startsWith('/')) {
+      candidate = candidate.substring(1);
+    }
+    if (candidate.isEmpty) return "";
+    return "https://zeon-vps.link/$candidate";
   }
 
   Future<String> _rotateBindDeviceIdForRebind() async {
@@ -630,6 +669,36 @@ class MobileBindService with InfraLogger {
     }
 
     return false;
+  }
+
+  Future<void> _replaceManagedProfileWithActive() async {
+    try {
+      final active = await _profileDataSource.watchActiveProfile().first;
+      if (active == null || active.type != ProfileType.remote) return;
+
+      final previousManagedId = (_preferences.getString(_prefManagedProfileId) ?? "").trim();
+      final previousConnLink = (_preferences.getString(_prefConnLink) ?? "").trim();
+
+      await _preferences.setString(_prefManagedProfileId, active.id);
+
+      if (previousManagedId.isNotEmpty && previousManagedId != active.id) {
+        final previousManaged = await _profileDataSource.getById(previousManagedId);
+        if (previousManaged != null) {
+          await _profileRepository.deleteById(previousManaged.id, previousManaged.active).run();
+          loggy.info("bind import: removed previous managed profile [id=${previousManaged.id}]");
+        }
+      }
+
+      if (previousConnLink.isNotEmpty) {
+        final previousByUrl = await _profileDataSource.getByUrl(previousConnLink);
+        if (previousByUrl != null && previousByUrl.id != active.id) {
+          await _profileRepository.deleteById(previousByUrl.id, previousByUrl.active).run();
+          loggy.info("bind import: removed previous profile by conn_link [id=${previousByUrl.id}]");
+        }
+      }
+    } catch (e, st) {
+      loggy.warning("bind import: failed to replace managed profile", e, st);
+    }
   }
 
   Future<void> _syncActiveProfileMetaFromBind({String? status, DateTime? expiresAt}) async {

@@ -17,6 +17,8 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion3Migration(sharedPreferences),
       PreferencesVersion4Migration(sharedPreferences),
       PreferencesVersion5Migration(sharedPreferences),
+      PreferencesVersion6Migration(sharedPreferences),
+      PreferencesVersion7Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -262,6 +264,86 @@ class PreferencesVersion5Migration extends PreferencesMigrationStep with InfraLo
     if (mtu == null || mtu == 1400) {
       loggy.debug("android speed migration: changing mtu from [$mtu] to [1500]");
       await sharedPreferences.setInt("mtu", 1500);
+    }
+  }
+}
+
+class PreferencesVersion6Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion6Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    if (!PlatformUtils.isAndroid) return;
+
+    final tunImplementation = sharedPreferences.getString("tun-implementation");
+    if (tunImplementation != "gvisor") {
+      loggy.debug("hiddify baseline migration: changing tun-implementation from [$tunImplementation] to [gvisor]");
+      await sharedPreferences.setString("tun-implementation", "gvisor");
+    }
+
+    final mtu = sharedPreferences.getInt("mtu");
+    if (mtu == null || mtu != 9000) {
+      loggy.debug("hiddify baseline migration: changing mtu from [$mtu] to [9000]");
+      await sharedPreferences.setInt("mtu", 9000);
+    }
+
+    final strictRoute = sharedPreferences.getBool("strict-route");
+    if (strictRoute == null || strictRoute == false) {
+      loggy.debug("hiddify baseline migration: changing strict-route from [$strictRoute] to [true]");
+      await sharedPreferences.setBool("strict-route", true);
+    }
+
+    final bypassLan = sharedPreferences.getBool("bypass-lan");
+    if (bypassLan == null || bypassLan == true) {
+      loggy.debug("hiddify baseline migration: changing bypass-lan from [$bypassLan] to [false]");
+      await sharedPreferences.setBool("bypass-lan", false);
+    }
+
+    final remoteDns = sharedPreferences.getString("remote-dns-address");
+    if (remoteDns == null || remoteDns == "udp://1.1.1.1") {
+      loggy.debug("hiddify baseline migration: changing remote-dns-address from [$remoteDns] to [tcp://8.8.8.8]");
+      await sharedPreferences.setString("remote-dns-address", "tcp://8.8.8.8");
+    }
+
+    final balancerStrategy = sharedPreferences.getString("balancer-strategy");
+    if (balancerStrategy == null || balancerStrategy == "sticky-sessions") {
+      loggy.debug(
+        "hiddify baseline migration: changing balancer-strategy from [$balancerStrategy] to [round-robin]",
+      );
+      await sharedPreferences.setString("balancer-strategy", "round-robin");
+    }
+
+    final fragmentPackets = sharedPreferences.getString("fragment-packets");
+    if (fragmentPackets == null || fragmentPackets == "1-5") {
+      loggy.debug("hiddify baseline migration: changing fragment-packets from [$fragmentPackets] to [tlshello]");
+      await sharedPreferences.setString("fragment-packets", "tlshello");
+    }
+  }
+}
+
+class PreferencesVersion7Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion7Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    if (!PlatformUtils.isAndroid) return;
+
+    final tunImplementation = sharedPreferences.getString("tun-implementation");
+    if (tunImplementation == null || tunImplementation != "system") {
+      loggy.debug("android stability migration: changing tun-implementation from [$tunImplementation] to [system]");
+      await sharedPreferences.setString("tun-implementation", "system");
+    }
+
+    final mtu = sharedPreferences.getInt("mtu");
+    if (mtu == null || mtu != 1500) {
+      loggy.debug("android stability migration: changing mtu from [$mtu] to [1500]");
+      await sharedPreferences.setInt("mtu", 1500);
+    }
+
+    final strictRoute = sharedPreferences.getBool("strict-route");
+    if (strictRoute == null || strictRoute == true) {
+      loggy.debug("android stability migration: changing strict-route from [$strictRoute] to [false]");
+      await sharedPreferences.setBool("strict-route", false);
     }
   }
 }

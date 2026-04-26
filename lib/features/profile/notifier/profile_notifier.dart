@@ -12,6 +12,7 @@ import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dart';
+import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
 import 'package:hiddify/features/profile/add/model/free_profiles_model.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/data/profile_repository.dart';
@@ -64,6 +65,7 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
 
   MobileBootstrapImportService get _mobileBootstrapImportService => MobileBootstrapImportService(
     httpClient: ref.read(httpClientProvider),
+    stableDeviceIdService: StableDeviceIdService(preferences: ref.read(sharedPreferencesProvider).requireValue),
     profileRepository: ref.read(profileRepositoryProvider).requireValue,
     profileDataSource: ref.read(profileDataSourceProvider),
     preferences: ref.read(sharedPreferencesProvider).requireValue,

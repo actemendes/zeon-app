@@ -7,9 +7,9 @@ import 'package:hiddify/core/utils/exception_handler.dart';
 import 'package:hiddify/core/utils/json_converters.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/log/model/log_level.dart';
-import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/features/profile/data/profile_parser.dart';
 import 'package:hiddify/features/settings/model/config_option_failure.dart';
+import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hiddify/singbox/model/singbox_config_option.dart';
 import 'package:hiddify/singbox/model/singbox_rule.dart';
@@ -27,7 +27,7 @@ abstract class ConfigOptions {
 
   static final balancerStrategy = PreferencesNotifier.create<BalancerStrategy, String>(
     "balancer-strategy",
-    BalancerStrategy.stickySession,
+    BalancerStrategy.roundRobin,
     mapFrom: (value) => BalancerStrategy.values.firstWhere((e) => e.key == value),
     mapTo: (value) => value.key,
   );
@@ -61,9 +61,6 @@ abstract class ConfigOptions {
     "tcp://8.8.8.8",
     possibleValues: List.of([
       "local",
-      // "udp://223.5.5.5",
-      // "udp://1.1.1.1",
-      // "udp://1.1.1.2",
       "tcp://8.8.8.8",
       "tcp://1.1.1.1",
       "https://1.1.1.1/dns-query",
@@ -96,7 +93,6 @@ abstract class ConfigOptions {
     ]),
     defaultValueFunction: (ref) => switch (ref.read(region)) {
       Region.cn => "223.5.5.5",
-      Region.ru => "local",
       _ => "1.1.1.1",
     },
     validator: (value) => value.isNotBlank,
@@ -175,7 +171,7 @@ abstract class ConfigOptions {
     validator: (value) => isPort(value.toString()),
   );
 
-  static final bypassLan = PreferencesNotifier.create<bool, bool>("bypass-lan", true);
+  static final bypassLan = PreferencesNotifier.create<bool, bool>("bypass-lan", false);
 
   static final allowConnectionFromLan = PreferencesNotifier.create<bool, bool>("allow-connection-from-lan", false);
 
@@ -189,7 +185,7 @@ abstract class ConfigOptions {
 
   static final fragmentPackets = PreferencesNotifier.create<String, String>(
     "fragment-packets",
-    "1-5",
+    "tlshello",
     possibleValues: ["tlshello", "1-1", "1-2", "1-3", "1-4", "1-5"],
   );
 
@@ -372,7 +368,7 @@ abstract class ConfigOptions {
 
   static final singboxConfigOptions = Provider<SingboxConfigOption>((ref) {
     final mode = ref.watch(serviceMode);
-    const selectedRegion = Region.other;
+    final selectedRegion = ref.watch(region);
     final siteRoutingMode = ref.watch(Preferences.siteRoutingMode);
     final siteRoutingInclude = _normalizeWebsites(ref.watch(Preferences.includeSites));
     final siteRoutingExclude = _normalizeWebsites(ref.watch(Preferences.excludeSites));
@@ -489,10 +485,10 @@ abstract class ConfigOptions {
       if (candidate.isEmpty || normalized.contains(candidate)) continue;
       candidate = candidate
           .replaceAll(RegExp(r'\s+'), '')
-          .replaceFirst(RegExp(r'^[a-z][a-z0-9+.-]*://'), '')
-          .replaceFirst(RegExp(r'^www\.'), '')
-          .replaceFirst(RegExp(r'^\*\.'), '')
-          .replaceFirst(RegExp(r'^/+'), '')
+          .replaceFirst(RegExp('^[a-z][a-z0-9+.-]*://'), '')
+          .replaceFirst(RegExp('^www\\.'), '')
+          .replaceFirst(RegExp('^\\*\\.'), '')
+          .replaceFirst(RegExp('^/+'), '')
           .split('/')[0]
           .split('?')[0]
           .split('#')[0]
@@ -508,13 +504,14 @@ abstract class ConfigOptions {
     required List<String> include,
     required List<String> exclude,
   }) {
+    const maxRuleDomains = 128;
+    final compactInclude = include.take(maxRuleDomains).toList();
+    final compactExclude = exclude.take(maxRuleDomains).toList();
     return switch (mode) {
       SiteRoutingMode.off => const <SingboxRule>[],
-      SiteRoutingMode.include when include.isNotEmpty => <SingboxRule>[
-        SingboxRule(domains: include, outbound: RuleOutbound.proxy),
-      ],
-      SiteRoutingMode.exclude when exclude.isNotEmpty => <SingboxRule>[
-        SingboxRule(domains: exclude, outbound: RuleOutbound.bypass),
+      SiteRoutingMode.include when compactInclude.isNotEmpty => <SingboxRule>[SingboxRule(domains: compactInclude)],
+      SiteRoutingMode.exclude when compactExclude.isNotEmpty => <SingboxRule>[
+        SingboxRule(domains: compactExclude, outbound: RuleOutbound.bypass),
       ],
       _ => const <SingboxRule>[],
     };
