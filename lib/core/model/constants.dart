@@ -8,9 +8,9 @@ abstract class Constants {
   static const openSourceLicensesUrl =
       "https://github.com/hiddify/hiddify-app?tab=License-1-ov-file#hiddify-extended-gnu-general-public-license-v3";
   static const licenseUrl = openSourceLicensesUrl;
-  static const githubReleasesApiUrl = "https://api.github.com/repos/hiddify/hiddify-next/releases";
-  static const githubLatestReleaseUrl = "https://github.com/hiddify/hiddify-app/releases/latest";
-  static const appCastUrl = "https://raw.githubusercontent.com/hiddify/hiddify-next/main/appcast.xml";
+  static const githubReleasesApiUrl = "https://api.github.com/repos/actemendes/zeon-app/releases";
+  static const githubLatestReleaseUrl = "https://github.com/actemendes/zeon-app/releases/latest";
+  static const appCastUrl = "https://raw.githubusercontent.com/actemendes/zeon-app/main/appcast.xml";
   static const privacyPolicyUrl =
       "https://zeon-vps.net/faq/?k=HHhBa3AAQleuzYt3Tl2GYycjl8HGG_a_m0lucqCqJDg#/zeon-app-privacy";
   static const termsAndConditionsUrl =

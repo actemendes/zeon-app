@@ -23,6 +23,7 @@ class AboutPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final appInfo = ref.watch(appInfoProvider).requireValue;
+    final appUpdateState = ref.watch(appUpdateNotifierProvider);
     final theme = Theme.of(context);
     final logoAsset = theme.brightness == Brightness.dark
         ? 'assets/images/SVG/big-logo-dark.svg'
@@ -135,6 +136,17 @@ class AboutPage extends HookConsumerWidget {
                 onTap: () async {
                   await UriUtils.tryLaunch(Uri.parse(Constants.privacyPolicyUrl));
                 },
+              ),
+              ListTile(
+                title: Text(t.pages.about.checkForUpdate),
+                trailing: appUpdateState is AppUpdateStateChecking
+                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(FluentIcons.arrow_clockwise_24_regular),
+                onTap: appUpdateState is AppUpdateStateChecking
+                    ? null
+                    : () async {
+                        await ref.read(appUpdateNotifierProvider.notifier).check();
+                      },
               ),
             ]),
           ),

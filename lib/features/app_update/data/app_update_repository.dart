@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/core/model/constants.dart';
@@ -29,18 +30,42 @@ class AppUpdateRepositoryImpl with ExceptionHandler, InfraLogger implements AppU
       if (!release.allowCustomUpdateChecker) {
         throw Exception("custom update checkers are not supported");
       }
-      final response = await httpClient.get<List>(Constants.githubReleasesApiUrl);
+      final response = await httpClient.get<dynamic>(Constants.githubReleasesApiUrl);
       if (response.statusCode != 200 || response.data == null) {
         loggy.warning("failed to fetch latest version info");
         return left(const AppUpdateFailure.unexpected());
       }
 
-      final releases = response.data!.map((e) => GithubReleaseParser.parse(e as Map<String, dynamic>));
+      final dynamic raw = response.data;
+      final List<dynamic> releaseList;
+      if (raw is List) {
+        releaseList = raw;
+      } else if (raw is String) {
+        final decoded = jsonDecode(raw);
+        if (decoded is! List) {
+          loggy.warning("invalid releases payload type after decode: [${decoded.runtimeType}]");
+          return left(const AppUpdateFailure.unexpected());
+        }
+        releaseList = decoded;
+      } else {
+        loggy.warning("invalid releases payload type: [${raw.runtimeType}]");
+        return left(const AppUpdateFailure.unexpected());
+      }
+
+      if (releaseList.isEmpty) {
+        loggy.warning("no releases found in repository");
+        return left(const AppUpdateFailure.unexpected());
+      }
+
+      final releases = releaseList.map((e) => GithubReleaseParser.parse(e as Map<String, dynamic>));
       late RemoteVersionEntity latest;
       if (includePreReleases) {
         latest = releases.first;
       } else {
-        latest = releases.firstWhere((e) => e.preRelease == false);
+        latest = releases.firstWhere(
+          (e) => e.preRelease == false,
+          orElse: () => releases.first,
+        );
       }
       return right(latest);
     }, AppUpdateFailure.unexpected);
