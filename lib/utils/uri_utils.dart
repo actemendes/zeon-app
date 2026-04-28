@@ -18,11 +18,18 @@ abstract class UriUtils {
   static Future<bool> tryLaunch(Uri uri) async {
     try {
       loggy.debug("launching [$uri]");
-      if (!await canLaunchUrl(uri)) {
-        loggy.warning("can't launch [$uri]");
-        return false;
+      final launchedExternal = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (launchedExternal) return true;
+
+      final launchedDefault = await launchUrl(uri, mode: LaunchMode.platformDefault);
+      if (launchedDefault) return true;
+
+      if (uri.hasScheme && (uri.scheme == "http" || uri.scheme == "https")) {
+        final launchedInApp = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+        if (launchedInApp) return true;
       }
-      return launchUrl(uri, mode: LaunchMode.externalApplication);
+      loggy.warning("can't launch [$uri]");
+      return false;
     } catch (e, stackTrace) {
       loggy.warning("error launching [$uri]", e, stackTrace);
       return false;

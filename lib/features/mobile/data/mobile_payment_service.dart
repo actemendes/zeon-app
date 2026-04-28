@@ -38,35 +38,37 @@ class MobilePaymentService with InfraLogger {
       "plan": normalizedPlan == "trial" ? "trial" : int.parse(normalizedPlan),
     };
 
-    try {
-      final response = await _httpClient.post<Map<String, dynamic>>(
-        uri,
-        data: payload,
-        headers: {"X-API-Key": _apiKey, "Content-Type": "application/json"},
-        directOnly: true,
-      );
-      final body = response.data;
-      if (body == null || body["ok"] != true) return null;
-      final data = body["data"];
-      if (data is! Map<String, dynamic>) return null;
+    for (final directOnly in const [true, false]) {
+      try {
+        final response = await _httpClient.post<Map<String, dynamic>>(
+          uri,
+          data: payload,
+          headers: {"X-API-Key": _apiKey, "Content-Type": "application/json"},
+          directOnly: directOnly,
+        );
+        final body = response.data;
+        if (body == null || body["ok"] != true) continue;
+        final data = body["data"];
+        if (data is! Map<String, dynamic>) continue;
 
-      final confirmationUrl = _firstNonEmpty([
-        data["confirmation_url"]?.toString(),
-        data["confirmationUrl"]?.toString(),
-        data["payment_url"]?.toString(),
-        data["url"]?.toString(),
-      ]);
-      if (confirmationUrl == null || Uri.tryParse(confirmationUrl) == null) return null;
+        final confirmationUrl = _firstNonEmpty([
+          data["confirmation_url"]?.toString(),
+          data["confirmationUrl"]?.toString(),
+          data["payment_url"]?.toString(),
+          data["url"]?.toString(),
+        ]);
+        if (confirmationUrl == null || Uri.tryParse(confirmationUrl) == null) continue;
 
-      return PaymentCheckout(
-        confirmationUrl: confirmationUrl,
-        orderId: _firstNonEmpty([data["order_id"]?.toString(), data["orderId"]?.toString()]),
-        paymentId: _firstNonEmpty([data["payment_id"]?.toString(), data["paymentId"]?.toString()]),
-      );
-    } catch (e, st) {
-      loggy.warning("mobile payments/create failed", e, st);
-      return null;
+        return PaymentCheckout(
+          confirmationUrl: confirmationUrl,
+          orderId: _firstNonEmpty([data["order_id"]?.toString(), data["orderId"]?.toString()]),
+          paymentId: _firstNonEmpty([data["payment_id"]?.toString(), data["paymentId"]?.toString()]),
+        );
+      } catch (e, st) {
+        loggy.warning("mobile payments/create failed [directOnly=$directOnly]", e, st);
+      }
     }
+    return null;
   }
 
   Future<int?> _ensureUserId() async {
@@ -80,25 +82,27 @@ class MobilePaymentService with InfraLogger {
     if (deviceId.isEmpty) return null;
 
     final uri = Uri.parse(_apiBaseUrl).resolve("/api/mobile/users/create").toString();
-    try {
-      final response = await _httpClient.post<Map<String, dynamic>>(
-        uri,
-        data: {"device_id": deviceId},
-        headers: {"X-API-Key": _apiKey, "Content-Type": "application/json"},
-        directOnly: true,
-      );
-      final body = response.data;
-      if (body == null || body["ok"] != true) return null;
-      final data = body["data"];
-      if (data is! Map<String, dynamic>) return null;
-      final userId = (data["user_id"] as num?)?.toInt() ?? int.tryParse(data["user_id"]?.toString() ?? "");
-      if (userId == null || userId <= 0) return null;
-      await _preferences.setString(_prefUserId, userId.toString());
-      return userId;
-    } catch (e, st) {
-      loggy.warning("mobile users/create failed while ensuring user id", e, st);
-      return null;
+    for (final directOnly in const [true, false]) {
+      try {
+        final response = await _httpClient.post<Map<String, dynamic>>(
+          uri,
+          data: {"device_id": deviceId},
+          headers: {"X-API-Key": _apiKey, "Content-Type": "application/json"},
+          directOnly: directOnly,
+        );
+        final body = response.data;
+        if (body == null || body["ok"] != true) continue;
+        final data = body["data"];
+        if (data is! Map<String, dynamic>) continue;
+        final userId = (data["user_id"] as num?)?.toInt() ?? int.tryParse(data["user_id"]?.toString() ?? "");
+        if (userId == null || userId <= 0) continue;
+        await _preferences.setString(_prefUserId, userId.toString());
+        return userId;
+      } catch (e, st) {
+        loggy.warning("mobile users/create failed while ensuring user id [directOnly=$directOnly]", e, st);
+      }
     }
+    return null;
   }
 
   Future<bool> _isExistingMobileUser(int userId) async {
