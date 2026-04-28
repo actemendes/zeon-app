@@ -13,6 +13,7 @@ import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/data/profile_data_source.dart';
 import 'package:hiddify/features/profile/data/profile_repository.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
+import 'package:hiddify/features/profile/model/profile_sort_enum.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -162,6 +163,7 @@ class MobileBindService with InfraLogger {
     }
 
     await _replaceManagedProfileWithActive();
+    await _removeExtraRemoteProfilesKeepActive();
     await _preferences.setBool(_prefDone, true);
     await _preferences.setString(_prefUserId, ownerUserId.toString());
     await _preferences.setString(_prefConnLink, effectiveConnLink);
@@ -188,7 +190,9 @@ class MobileBindService with InfraLogger {
     }
 
     await _replaceManagedProfileWithActive();
+    await _removeExtraRemoteProfilesKeepActive();
     await _preferences.setBool(_prefDone, true);
+    await _preferences.setString(_prefConnLink, normalizedLink);
     await _clearCachedSession();
   }
 
@@ -729,6 +733,29 @@ class MobileBindService with InfraLogger {
       );
     } catch (_) {
       // best effort
+    }
+  }
+
+  Future<void> _removeExtraRemoteProfilesKeepActive() async {
+    try {
+      final allProfiles = await _profileDataSource
+          .watchAll(sort: ProfilesSort.lastUpdate, sortMode: SortMode.descending)
+          .first;
+      final remoteProfiles = allProfiles.where((e) => e.type == ProfileType.remote).toList();
+      if (remoteProfiles.isEmpty) return;
+
+      final keepProfile = remoteProfiles.first;
+      await _profileRepository.setAsActive(keepProfile.id).run();
+      await _preferences.setString(_prefManagedProfileId, keepProfile.id);
+
+      for (final profile in remoteProfiles) {
+        final shouldDelete = profile.id != keepProfile.id;
+        if (!shouldDelete) continue;
+        await _profileRepository.deleteById(profile.id, profile.active).run();
+        loggy.info("bind import: removed extra remote profile [id=${profile.id}]");
+      }
+    } catch (e, st) {
+      loggy.warning("bind import: failed to remove extra remote profiles", e, st);
     }
   }
 

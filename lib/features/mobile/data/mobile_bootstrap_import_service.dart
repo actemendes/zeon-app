@@ -9,6 +9,7 @@ import 'package:hiddify/features/profile/data/profile_data_source.dart';
 import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/data/profile_repository.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
+import 'package:hiddify/features/profile/model/profile_sort_enum.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/link_parsers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
@@ -119,6 +120,7 @@ class MobileBootstrapImportService with InfraLogger {
         throw const MobileBootstrapImportException("failed to import conn_link");
       }
       await _replaceManagedProfileWithActive();
+      await _removeExtraRemoteProfilesKeepActive();
       await _syncMetaFromConnLink(connLink);
       await _syncMetaFromApiSummary(status: apiStatus, expiresAt: apiExpiresAt, login: apiLogin);
       await _syncNameFromApiLogin(apiLogin);
@@ -315,6 +317,29 @@ class MobileBootstrapImportService with InfraLogger {
       );
     } catch (e, st) {
       loggy.warning("mobile import: failed to sync conn_link meta", e, st);
+    }
+  }
+
+  Future<void> _removeExtraRemoteProfilesKeepActive() async {
+    try {
+      final allProfiles = await _profileDataSource
+          .watchAll(sort: ProfilesSort.lastUpdate, sortMode: SortMode.descending)
+          .first;
+      final remoteProfiles = allProfiles.where((e) => e.type == ProfileType.remote).toList();
+      if (remoteProfiles.isEmpty) return;
+
+      final keepProfile = remoteProfiles.first;
+      await _profileRepository.setAsActive(keepProfile.id).run();
+      await _preferences.setString(_prefManagedProfileId, keepProfile.id);
+
+      for (final profile in remoteProfiles) {
+        final shouldDelete = profile.id != keepProfile.id;
+        if (!shouldDelete) continue;
+        await _profileRepository.deleteById(profile.id, profile.active).run();
+        loggy.info("mobile import: removed extra remote profile [id=${profile.id}]");
+      }
+    } catch (e, st) {
+      loggy.warning("mobile import: failed to remove extra remote profiles", e, st);
     }
   }
 

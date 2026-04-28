@@ -5,6 +5,9 @@ import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/ui/ui_names.dart';
+import 'package:hiddify/features/profile/model/profile_entity.dart';
+import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
 import 'package:hiddify/features/proxy/overview/proxies_overview_notifier.dart';
 import 'package:hiddify/features/proxy/widget/proxy_tile.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -31,6 +34,15 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
       appBar: AppBar(
         title: Text(t.pages.proxies.title.toUpperCase()),
         actions: [
+          IconButton(
+            tooltip: 'Обновить подписку',
+            onPressed: () async {
+              final active = await ref.read(activeProfileProvider.future);
+              if (active is! RemoteProfileEntity) return;
+              await ref.read(updateProfileNotifierProvider(active.id).notifier).updateProfile(active);
+            },
+            icon: const Icon(FluentIcons.arrow_sync_24_regular),
+          ),
           PopupMenuButton<ProxiesSort>(
             initialValue: sortBy,
             onSelected: ref.read(proxiesSortNotifierProvider.notifier).update,

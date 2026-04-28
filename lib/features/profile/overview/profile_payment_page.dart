@@ -197,21 +197,27 @@ class ProfilePaymentPage extends HookConsumerWidget {
     if (isProcessingPayment.value) return;
     isProcessingPayment.value = true;
     try {
-      final checkout = await paymentService.createPayment(plan: plan.code);
-      if (!context.mounted || checkout == null) {
-        if (context.mounted) {
-          CustomToast.error(t.pages.profileDetails.specialServers.paymentLaunchError).show(context);
+      const retryDelaysSeconds = <int>[3, 5, 10, 15, 20, 25, 30, 35, 40];
+      const maxAttempts = 10;
+
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        final checkout = await paymentService.createPayment(plan: plan.code);
+        if (checkout != null) {
+          final paymentUri = Uri.tryParse(checkout.confirmationUrl);
+          if (paymentUri != null) {
+            final opened = await UriUtils.tryLaunch(paymentUri);
+            if (!context.mounted || opened) return;
+          }
         }
-        return;
+
+        if (attempt < maxAttempts) {
+          await Future.delayed(Duration(seconds: retryDelaysSeconds[attempt - 1]));
+        }
       }
-      final paymentUri = Uri.tryParse(checkout.confirmationUrl);
-      if (paymentUri == null) {
+
+      if (context.mounted) {
         CustomToast.error(t.pages.profileDetails.specialServers.paymentLaunchError).show(context);
-        return;
       }
-      final opened = await UriUtils.tryLaunch(paymentUri);
-      if (!context.mounted || opened) return;
-      CustomToast.error(t.pages.profileDetails.specialServers.paymentLaunchError).show(context);
     } finally {
       isProcessingPayment.value = false;
     }
