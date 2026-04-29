@@ -113,14 +113,14 @@
     "proxies": {
       "title": "Сервера",
       "sort": "Сортировать сервера",
-      "testDelay": "Проверить задержку",
+      "testDelay": "Проверить подключения",
       "empty": "Нет доступных серверов",
       "activeProxy": "Активный сервер",
       "unknownIp": "Неизвестный IP",
       "sortOptions": {
         "unsorted": "По умолчанию",
         "name": "По алфавиту",
-        "delay": "По задержке",
+        "delay": "По скорости",
         "usage": "По использованию"
       },
       "ipInfo": {
@@ -144,7 +144,7 @@
       "freeSubNotFound": "Бесплатная подписка не найдена",
       "freeSubNotFoundForRegion": "Бесплатная подписка для региона \"${region}\" не найдена",
       "failedToLoad": "Не удалось загрузить",
-      "updateSubscriptions": "Обновить подписки",
+      "updateSubscriptions": "Обновить профили",
       "share": {
         "urlToClipboard": "URL в буфер обмена",
         "showUrlQr": "Показать QR-код URL",

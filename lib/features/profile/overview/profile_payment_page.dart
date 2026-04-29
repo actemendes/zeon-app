@@ -115,11 +115,6 @@ class ProfilePaymentPage extends HookConsumerWidget {
                           ),
                           const SizedBox(height: 12),
                           _FeatureItem(
-                            text: t.pages.profileDetails.specialServers.features.noSupport,
-                            icon: Icons.devices_other_rounded,
-                          ),
-                          const SizedBox(height: 12),
-                          _FeatureItem(
                             text: t.pages.profileDetails.specialServers.features.parkingCoverage,
                             icon: Icons.signal_cellular_alt_rounded,
                           ),

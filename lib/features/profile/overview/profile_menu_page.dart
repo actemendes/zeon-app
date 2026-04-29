@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
+import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
@@ -14,8 +16,12 @@ const _avatarEmojiAssetDir = 'assets/images/emoji/apple/64';
 const _debugSeedProfileEnabled = bool.fromEnvironment('debug_seed_profile_enabled');
 const _debugSeedProfileName = String.fromEnvironment('debug_seed_profile_name');
 const _debugSeedProfileRemainingDays = int.fromEnvironment('debug_seed_profile_remaining_days', defaultValue: -1);
+const _debugSeedProfilesCount = int.fromEnvironment('debug_seed_profiles_count', defaultValue: 4);
 
 int _resolveUiRemainingDays(SubscriptionInfo? subInfo) {
+  const useSingleProfileOverride =
+      kDebugMode && _debugSeedProfileEnabled && _debugSeedProfileRemainingDays >= 0 && _debugSeedProfilesCount <= 1;
+  if (useSingleProfileOverride) return _debugSeedProfileRemainingDays;
   if (subInfo == null) return 0;
   final remaining = subInfo.remaining;
   if (remaining.inSeconds <= 0) return 0;
@@ -327,14 +333,12 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
     final avatarSeedName = (kDebugMode && _debugSeedProfileEnabled && _debugSeedProfileName.trim().isNotEmpty)
         ? _debugSeedProfileName
         : rawProfileName;
-    final normalizedDays = _resolveUiRemainingDays(subInfo);
-    final effectiveDays = (kDebugMode && _debugSeedProfileEnabled && _debugSeedProfileRemainingDays >= 0)
-        ? _debugSeedProfileRemainingDays
-        : normalizedDays;
+    final effectiveDays = _resolveUiRemainingDays(subInfo);
     final isPremiumActive = subInfo != null && !subInfo.isExpired && subInfo.ratio < 1 && effectiveDays > 0;
     final profileName = rawProfileName.isNotEmpty ? rawProfileName : t.common.unknown;
     final avatarEmoji = pickAvatarEmoji(avatarSeedName);
     final avatarEmojiAsset = pickAvatarEmojiAsset(avatarSeedName);
+    final hasAnyProfile = ref.watch(hasAnyProfileProvider).value ?? false;
     final daysLabel = effectiveDays == 0
         ? t.components.subscriptionInfo.premiumInactive
         : '${t.components.subscriptionInfo.remainingUsage} ${t.common.interval.day(n: effectiveDays)}';
@@ -345,67 +349,83 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
         ? const Color(0xFF2E3136)
         : const Color(0xFFE4ECCB);
 
-    return Container(
-      height: height,
-      decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(16)),
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
-      child: Row(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: _textHorizontalPadding, vertical: _textVerticalPadding),
-              child: Row(
-                children: [
-                  SizedBox.square(
-                    dimension: _avatarSize,
-                    child: Image.asset(
-                      avatarEmojiAsset,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) =>
-                          FittedBox(child: Text(avatarEmoji, textAlign: TextAlign.center)),
-                    ),
+      child: Ink(
+        height: height,
+        decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(16)),
+        child: InkWell(
+          onTap: () {
+            if (Breakpoint(context).isMobile() || !hasAnyProfile) {
+              ref.read(bottomSheetsNotifierProvider.notifier).showProfilesOverview();
+            } else {
+              context.goNamed('profiles');
+            }
+          },
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: _textHorizontalPadding,
+                    vertical: _textVerticalPadding,
                   ),
-                  const SizedBox(width: _avatarGap),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          profileName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600),
+                  child: Row(
+                    children: [
+                      SizedBox.square(
+                        dimension: _avatarSize,
+                        child: Image.asset(
+                          avatarEmojiAsset,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) =>
+                              FittedBox(child: Text(avatarEmoji, textAlign: TextAlign.center)),
                         ),
-                        Text(
-                          daysLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontFamily: 'Montserrat',
-                            fontWeight: FontWeight.w500,
-                            color: subtitleColor,
-                          ),
+                      ),
+                      const SizedBox(width: _avatarGap),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              profileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              daysLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'Montserrat',
+                                fontWeight: FontWeight.w500,
+                                color: subtitleColor,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+              // Container(
+              //   width: _rightSegmentWidth,
+              //   height: height,
+              //   decoration: BoxDecoration(
+              //     gradient: isPremiumActive ? const LinearGradient(colors: [Color(0xFFBFDD71), Color(0xFF3CE74F)]) : null,
+              //     color: isPremiumActive ? null : inactiveBackgroundColor,
+              //     borderRadius: BorderRadius.circular(16),
+              //   ),
+              //   padding: const EdgeInsets.all(_crownPadding),
+              //   child: _ProfileCrownIcon(size: _crownSize, color: crownColor),
+              // ),
+            ],
           ),
-          // Container(
-          //   width: _rightSegmentWidth,
-          //   height: height,
-          //   decoration: BoxDecoration(
-          //     gradient: isPremiumActive ? const LinearGradient(colors: [Color(0xFFBFDD71), Color(0xFF3CE74F)]) : null,
-          //     color: isPremiumActive ? null : inactiveBackgroundColor,
-          //     borderRadius: BorderRadius.circular(16),
-          //   ),
-          //   padding: const EdgeInsets.all(_crownPadding),
-          //   child: _ProfileCrownIcon(size: _crownSize, color: crownColor),
-          // ),
-        ],
+        ),
       ),
     );
   }
