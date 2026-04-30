@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
@@ -9,7 +8,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
 const _debugSeedProfileRemainingDays = int.fromEnvironment("debug_seed_profile_remaining_days", defaultValue: -1);
-const _debugSeedProfilesCount = int.fromEnvironment("debug_seed_profiles_count", defaultValue: 4);
 
 class HomePremiumAccessButton extends ConsumerWidget {
   const HomePremiumAccessButton({super.key});
@@ -268,9 +266,7 @@ class _PremiumCrownPainter extends CustomPainter {
 }
 
 int? _resolveRemainingDays(SubscriptionInfo? subInfo) {
-  const useSingleProfileOverride =
-      kDebugMode && _debugSeedProfileEnabled && _debugSeedProfileRemainingDays >= 0 && _debugSeedProfilesCount <= 1;
-  if (useSingleProfileOverride) {
+  if (_debugSeedProfileEnabled && _debugSeedProfileRemainingDays != -1) {
     return _debugSeedProfileRemainingDays;
   }
   if (subInfo == null) return null;

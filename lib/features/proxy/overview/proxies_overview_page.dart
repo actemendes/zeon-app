@@ -35,7 +35,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
         title: Text(t.pages.proxies.title.toUpperCase()),
         actions: [
           IconButton(
-            tooltip: 'Обновить список',
+            tooltip: 'Обновить подписку',
             onPressed: () async {
               final active = await ref.read(activeProfileProvider.future);
               if (active is! RemoteProfileEntity) return;
