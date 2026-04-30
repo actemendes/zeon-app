@@ -192,7 +192,13 @@ class MobileBindService with InfraLogger {
     await _replaceManagedProfileWithActive();
     await _removeExtraRemoteProfilesKeepActive();
     await _preferences.setBool(_prefDone, true);
-    await _preferences.setString(_prefConnLink, normalizedLink);
+    final existingBoundConnLink = (_preferences.getString(_prefConnLink) ?? "").trim();
+    if (existingBoundConnLink.isEmpty) {
+      await _preferences.setString(_prefConnLink, normalizedLink);
+      loggy.info("bind import: saved bound conn_link (initial)");
+    } else {
+      loggy.info("bind import: manual link imported without replacing bound conn_link");
+    }
     await _clearCachedSession();
   }
 

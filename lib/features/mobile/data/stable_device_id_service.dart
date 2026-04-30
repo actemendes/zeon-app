@@ -1,3 +1,4 @@
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hiddify/utils/platform_utils.dart';
@@ -58,8 +59,38 @@ class StableDeviceIdService {
       final short = normalized.length > 32 ? normalized.substring(0, 32) : normalized;
       return "${_platformPrefix()}_$short";
     } catch (_) {
-      return null;
+      // Fall through to platform SDK fallback below.
     }
+
+    // Fallback for Android/iOS when platform channel is unavailable.
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      if (PlatformUtils.isAndroid) {
+        final info = await deviceInfo.androidInfo;
+        final raw = info.id.trim();
+        if (raw.isNotEmpty) {
+          final normalized = raw.replaceAll(RegExp('[^A-Za-z0-9]'), '').toLowerCase();
+          if (normalized.isNotEmpty) {
+            final short = normalized.length > 32 ? normalized.substring(0, 32) : normalized;
+            return "${_platformPrefix()}_$short";
+          }
+        }
+      } else if (PlatformUtils.isIOS) {
+        final info = await deviceInfo.iosInfo;
+        final raw = (info.identifierForVendor ?? "").trim();
+        if (raw.isNotEmpty) {
+          final normalized = raw.replaceAll(RegExp('[^A-Za-z0-9]'), '').toLowerCase();
+          if (normalized.isNotEmpty) {
+            final short = normalized.length > 32 ? normalized.substring(0, 32) : normalized;
+            return "${_platformPrefix()}_$short";
+          }
+        }
+      }
+    } catch (_) {
+      // Ignore and continue to secure storage / UUID fallback.
+    }
+
+    return null;
   }
 
   Future<String?> _tryReadSecure() async {
