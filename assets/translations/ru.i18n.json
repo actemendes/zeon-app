@@ -204,8 +204,8 @@
         "removeDevice": "Удалить устройство",
         "removeDeviceTitle": "Удалить устройство",
         "removeDeviceMessage": "Вы действительно хотите удалить \"$name\"?",
-        "deleteAccount": "Удалить аккаунт",
-        "deleteAccountTitle": "Удалить аккаунт",
+        "deleteAccount": "Сменить аккаунт",
+        "deleteAccountTitle": "Сменить аккаунт",
         "deleteAccountMessage": "Вы действительно хотите удалить этот аккаунт с этого устройства? Вам потребуется перезайти в приложение.",
         "yes": "Да",
         "no": "Нет"

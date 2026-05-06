@@ -120,10 +120,25 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
 }
 
 String getRealOutboundTag(OutboundInfo group) {
+  if (_isBalancerGroup(group)) {
+    return "Автовыбор сервера";
+  }
+
   var tag = formatProxyDisplayName(group.tagDisplay);
   final selected = formatProxyDisplayName(group.groupSelectedTagDisplay);
   if (selected.isNotEmpty && selected != tag && selected.toLowerCase() != 'round-robin') {
     tag = '$tag → $selected';
   }
   return tag;
+}
+
+bool _isBalancerGroup(OutboundInfo group) {
+  final tag = group.tag.trim().toLowerCase();
+  if (tag == "balance") return true;
+
+  final type = group.type.trim().toLowerCase();
+  if (type == "balancer") return true;
+
+  final display = group.tagDisplay.trim().toLowerCase();
+  return RegExp(r'^balance(\s*(?:->|>|→).*)?$').hasMatch(display);
 }

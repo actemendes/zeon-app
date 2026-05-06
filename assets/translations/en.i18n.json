@@ -198,8 +198,8 @@
         "removeDevice": "Remove device",
         "removeDeviceTitle": "Remove device",
         "removeDeviceMessage": "Are you sure you want to remove \"$name\"?",
-        "deleteAccount": "Delete account",
-        "deleteAccountTitle": "Delete account",
+        "deleteAccount": "Change account",
+        "deleteAccountTitle": "Change account",
         "deleteAccountMessage": "Are you sure you want to remove this account from this device? You will need to sign in to the app again.",
         "yes": "Yes",
         "no": "No"
