@@ -41,6 +41,7 @@ class MobileBootstrapImportService with InfraLogger {
   final ProfileRepository _profileRepository;
   final ProfileDataSource _profileDataSource;
   final SharedPreferences _preferences;
+  Future<bool>? _runInFlight;
 
   Future<bool> run({bool skipIfAlreadyDone = true}) async {
     try {
@@ -51,6 +52,22 @@ class MobileBootstrapImportService with InfraLogger {
   }
 
   Future<bool> runOrThrow({bool skipIfAlreadyDone = true}) async {
+    final inFlight = _runInFlight;
+    if (inFlight != null) {
+      return await inFlight;
+    }
+    final future = _runOrThrowInternal(skipIfAlreadyDone: skipIfAlreadyDone);
+    _runInFlight = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_runInFlight, future)) {
+        _runInFlight = null;
+      }
+    }
+  }
+
+  Future<bool> _runOrThrowInternal({bool skipIfAlreadyDone = true}) async {
     if (PlatformUtils.isWeb) {
       return false;
     }
@@ -120,7 +137,7 @@ class MobileBootstrapImportService with InfraLogger {
         throw const MobileBootstrapImportException("failed to import conn_link");
       }
       await _replaceManagedProfileWithActive();
-      await _removeExtraRemoteProfilesKeepActive();
+      await _removeExtraProfilesKeepActive();
       await _syncMetaFromConnLink(connLink);
       await _syncMetaFromApiSummary(status: apiStatus, expiresAt: apiExpiresAt, login: apiLogin);
       await _syncNameFromApiLogin(apiLogin);
@@ -265,6 +282,17 @@ class MobileBootstrapImportService with InfraLogger {
     }
   }
 
+  Future<void> pruneToSingleProfileIfManaged() async {
+    final managedId = (_preferences.getString(_prefManagedProfileId) ?? "").trim();
+    final done = _preferences.getBool(_prefDone) ?? false;
+    if (!done && managedId.isEmpty) return;
+    await _removeExtraProfilesKeepActive();
+  }
+
+  Future<void> enforceSingleProfile() async {
+    await _removeExtraProfilesKeepActive();
+  }
+
   Future<void> _syncMetaFromConnLink(String connLink) async {
     try {
       final meta = await _fetchConnLinkMeta(connLink);
@@ -320,26 +348,25 @@ class MobileBootstrapImportService with InfraLogger {
     }
   }
 
-  Future<void> _removeExtraRemoteProfilesKeepActive() async {
+  Future<void> _removeExtraProfilesKeepActive() async {
     try {
       final allProfiles = await _profileDataSource
           .watchAll(sort: ProfilesSort.lastUpdate, sortMode: SortMode.descending)
           .first;
-      final remoteProfiles = allProfiles.where((e) => e.type == ProfileType.remote).toList();
-      if (remoteProfiles.isEmpty) return;
-
-      final keepProfile = remoteProfiles.first;
+      if (allProfiles.isEmpty) return;
+      final activeProfile = await _profileDataSource.watchActiveProfile().first;
+      final keepProfile = activeProfile ?? allProfiles.first;
       await _profileRepository.setAsActive(keepProfile.id).run();
       await _preferences.setString(_prefManagedProfileId, keepProfile.id);
 
-      for (final profile in remoteProfiles) {
+      for (final profile in allProfiles) {
         final shouldDelete = profile.id != keepProfile.id;
         if (!shouldDelete) continue;
         await _profileRepository.deleteById(profile.id, profile.active).run();
-        loggy.info("mobile import: removed extra remote profile [id=${profile.id}]");
+        loggy.info("mobile import: removed extra profile [id=${profile.id}]");
       }
     } catch (e, st) {
-      loggy.warning("mobile import: failed to remove extra remote profiles", e, st);
+      loggy.warning("mobile import: failed to remove extra profiles", e, st);
     }
   }
 

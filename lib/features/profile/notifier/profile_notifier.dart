@@ -97,6 +97,7 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
             },
             (_) {
               loggy.info("successfully added profile");
+              unawaited(_mobileBootstrapImportService.pruneToSingleProfileIfManaged());
               return unit;
             },
           )
@@ -117,6 +118,7 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
             },
             (r) {
               loggy.info("successfully added profile, mark as active? [true]");
+              unawaited(_mobileBootstrapImportService.pruneToSingleProfileIfManaged());
               return r;
             },
           )

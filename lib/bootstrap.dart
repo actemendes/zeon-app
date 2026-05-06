@@ -225,6 +225,13 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
     profileDataSource: profileDataSource,
     preferences: preferences,
   );
+  if (PlatformUtils.isMobile) {
+    await _safeInit(
+      "mobile single profile cleanup",
+      () => mobileBootstrapImportService.enforceSingleProfile(),
+      timeout: 5000,
+    );
+  }
   unawaited(_safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 15000));
   unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
   await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);

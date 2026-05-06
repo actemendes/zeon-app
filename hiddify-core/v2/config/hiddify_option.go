@@ -42,6 +42,7 @@ type DNSOptions struct {
 	DirectDnsAddress        string                `json:"direct-dns-address,omitempty" overridable:"true"`
 	DirectDnsDomainStrategy option.DomainStrategy `json:"direct-dns-domain-strategy,omitempty" overridable:"true"`
 	IndependentDNSCache     bool                  `json:"independent-dns-cache,omitempty"`
+	DisableDNSExpire        bool                  `json:"disable-dns-expire,omitempty" overridable:"true"`
 	EnableFakeDNS           bool                  `json:"enable-fake-dns,omitempty"`
 	// EnableDNSRouting        bool                  `json:"enable-dns-routing,omitempty"`
 }
@@ -72,6 +73,17 @@ type RouteOptions struct {
 	BypassLAN              bool                  `json:"bypass-lan,omitempty"`
 	AllowConnectionFromLAN bool                  `json:"allow-connection-from-lan,omitempty"`
 	BlockQuic              bool                  `json:"block-quic,omitempty"`
+	PinMainOutbound        bool                  `json:"pin-main-outbound,omitempty" overridable:"true"`
+	StableVPNRouting       bool                  `json:"stable-vpn-routing,omitempty" overridable:"true"`
+	StableTransportMode    bool                  `json:"stable-transport-mode,omitempty" overridable:"true"`
+	StableTransportProfile string                `json:"stable-transport-profile,omitempty" overridable:"true"` // auto|fast|stable
+	StableTransportNetwork string                `json:"stable-transport-network,omitempty" overridable:"true"` // wifi|cellular|unknown
+	StableTransportHealth  string                `json:"stable-transport-health,omitempty" overridable:"true"`  // good|degraded|bad
+	RecentDisconnects      uint32                `json:"recent-disconnects,omitempty" overridable:"true"`
+	RecentTimeouts         uint32                `json:"recent-timeouts,omitempty" overridable:"true"`
+	RecentFlowBreaks       uint32                `json:"recent-flow-breaks,omitempty" overridable:"true"`
+	RecentPacketLossPct    uint32                `json:"recent-packet-loss-pct,omitempty" overridable:"true"`
+	RecentJitterMs         uint32                `json:"recent-jitter-ms,omitempty" overridable:"true"`
 }
 
 type TLSTricks struct {
@@ -114,6 +126,7 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 			DirectDnsAddress:        "1.1.1.1",
 			DirectDnsDomainStrategy: option.DomainStrategy(dns.DomainStrategyAsIS),
 			IndependentDNSCache:     false,
+			DisableDNSExpire:        false,
 			EnableFakeDNS:           false,
 			// EnableDNSRouting:        false,
 		},
@@ -138,6 +151,17 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 			IPv6Mode:               option.DomainStrategy(dns.DomainStrategyAsIS),
 			BypassLAN:              false,
 			AllowConnectionFromLAN: false,
+			PinMainOutbound:        true,
+			StableVPNRouting:       false,
+			StableTransportMode:    false,
+			StableTransportProfile: "auto",
+			StableTransportNetwork: "unknown",
+			StableTransportHealth:  "good",
+			RecentDisconnects:      0,
+			RecentTimeouts:         0,
+			RecentFlowBreaks:       0,
+			RecentPacketLossPct:    0,
+			RecentJitterMs:         0,
 		},
 		LogLevel: "warn",
 		// LogFile:        "/dev/null",

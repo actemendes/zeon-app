@@ -100,7 +100,7 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 		RawDNSOptions: option.RawDNSOptions{
 			DNSClientOptions: option.DNSClientOptions{
 				IndependentCache: opt.IndependentDNSCache && !C.IsIos,
-				DisableExpire:    true,
+				DisableExpire:    opt.DisableDNSExpire,
 			},
 			Final: DNSMultiRemoteTag,
 
@@ -247,6 +247,11 @@ func addForceDirect(options *option.Options, hopt *HiddifyOptions) ([]option.Def
 	dnsMap["api.cloudflareclient.com"] = ""
 	for _, url := range hopt.ConnectionTestUrls { //To avoid dns bug when using urltest
 		if host, err := getHostnameIfNotIP(url); err == nil {
+			// In stable-vpn-routing mode, keep critical domains (e.g. google.com)
+			// on remote DNS rule path to avoid dns-direct precedence conflicts.
+			if hopt.RouteOptions.StableVPNRouting && contains(CriticalDomainSuffixes, host) {
+				continue
+			}
 			dnsMap[host] = ""
 		}
 	}

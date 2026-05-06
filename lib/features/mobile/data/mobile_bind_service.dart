@@ -163,7 +163,7 @@ class MobileBindService with InfraLogger {
     }
 
     await _replaceManagedProfileWithActive();
-    await _removeExtraRemoteProfilesKeepActive();
+    await _removeExtraProfilesKeepActive();
     await _preferences.setBool(_prefDone, true);
     await _preferences.setString(_prefUserId, ownerUserId.toString());
     await _preferences.setString(_prefConnLink, effectiveConnLink);
@@ -190,7 +190,7 @@ class MobileBindService with InfraLogger {
     }
 
     await _replaceManagedProfileWithActive();
-    await _removeExtraRemoteProfilesKeepActive();
+    await _removeExtraProfilesKeepActive();
     await _preferences.setBool(_prefDone, true);
     final existingBoundConnLink = (_preferences.getString(_prefConnLink) ?? "").trim();
     if (existingBoundConnLink.isEmpty) {
@@ -489,9 +489,7 @@ class MobileBindService with InfraLogger {
         } else if (apiError == "device_not_registered" || apiError == "user_id_required") {
           try {
             final userId =
-                knownUserId ??
-                await _registerDeviceForBind(deviceId) ??
-                _parseInt(_preferences.getString(_prefUserId));
+                knownUserId ?? await _registerDeviceForBind(deviceId) ?? _parseInt(_preferences.getString(_prefUserId));
             if (userId == null || userId <= 0) {
               throw const MobileBindException("user_id_required");
             }
@@ -742,26 +740,25 @@ class MobileBindService with InfraLogger {
     }
   }
 
-  Future<void> _removeExtraRemoteProfilesKeepActive() async {
+  Future<void> _removeExtraProfilesKeepActive() async {
     try {
       final allProfiles = await _profileDataSource
           .watchAll(sort: ProfilesSort.lastUpdate, sortMode: SortMode.descending)
           .first;
-      final remoteProfiles = allProfiles.where((e) => e.type == ProfileType.remote).toList();
-      if (remoteProfiles.isEmpty) return;
-
-      final keepProfile = remoteProfiles.first;
+      if (allProfiles.isEmpty) return;
+      final activeProfile = await _profileDataSource.watchActiveProfile().first;
+      final keepProfile = activeProfile ?? allProfiles.first;
       await _profileRepository.setAsActive(keepProfile.id).run();
       await _preferences.setString(_prefManagedProfileId, keepProfile.id);
 
-      for (final profile in remoteProfiles) {
+      for (final profile in allProfiles) {
         final shouldDelete = profile.id != keepProfile.id;
         if (!shouldDelete) continue;
         await _profileRepository.deleteById(profile.id, profile.active).run();
-        loggy.info("bind import: removed extra remote profile [id=${profile.id}]");
+        loggy.info("bind import: removed extra profile [id=${profile.id}]");
       }
     } catch (e, st) {
-      loggy.warning("bind import: failed to remove extra remote profiles", e, st);
+      loggy.warning("bind import: failed to remove extra profiles", e, st);
     }
   }
 

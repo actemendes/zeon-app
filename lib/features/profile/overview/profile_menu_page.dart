@@ -3,10 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
+import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -112,6 +115,7 @@ class ProfileMenuPage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    final profilesCount = ref.watch(profilesNotifierProvider).valueOrNull?.length ?? 0;
     final profile = switch (ref.watch(activeProfileProvider)) {
       AsyncData(value: final profile?) => profile,
       _ => null,
@@ -122,6 +126,19 @@ class ProfileMenuPage extends HookConsumerWidget {
     };
     final remainingDays = _resolveUiRemainingDays(subInfo);
     final sections = <({String title, IconData icon, IconData trailingIcon, VoidCallback? onTap})>[
+      if (profilesCount > 1)
+        (
+          title: t.pages.profiles.viewAllProfiles,
+          icon: Icons.list_alt_rounded,
+          trailingIcon: Icons.chevron_right_rounded,
+          onTap: () {
+            if (Breakpoint(context).isMobile()) {
+              ref.read(bottomSheetsNotifierProvider.notifier).showProfilesOverview();
+            } else {
+              context.goNamed('profiles');
+            }
+          },
+        ),
       if (remainingDays > 0)
         (
           title: t.pages.profileDetails.menu.bindAccount,
