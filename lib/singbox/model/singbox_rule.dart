@@ -28,8 +28,9 @@ class SingboxRule with _$SingboxRule {
       "outbound": outbound.toCoreValue(),
     };
 
-    if (domains.isNotEmpty) {
-      map["domains"] = List<String>.from(domains);
+    final domainSuffixes = _toDomainSuffixes(domains);
+    if (domainSuffixes.isNotEmpty) {
+      map["domain_suffixes"] = domainSuffixes;
     }
 
     final ruleSet = ruleSetUrl?.trim();
@@ -63,6 +64,23 @@ class SingboxRule with _$SingboxRule {
   static List<String> _splitCsv(String? value) {
     if (value == null) return const <String>[];
     return value.split(",").map((item) => item.trim()).where((item) => item.isNotEmpty).toList();
+  }
+
+  static List<String> _toDomainSuffixes(List<String> values) {
+    if (values.isEmpty) return const <String>[];
+    final suffixes = <String>[];
+    for (final value in values) {
+      var candidate = value.trim().toLowerCase();
+      if (candidate.isEmpty) continue;
+      if (candidate.startsWith("*.")) {
+        candidate = candidate.substring(2);
+      } else if (candidate.startsWith(".")) {
+        candidate = candidate.substring(1);
+      }
+      if (candidate.isEmpty || suffixes.contains(candidate)) continue;
+      suffixes.add(candidate);
+    }
+    return suffixes;
   }
 
   static List<int> _parseProtocols(String? value) {

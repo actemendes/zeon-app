@@ -10,14 +10,14 @@ void main() {
 
       expect(json["enabled"], isTrue);
       expect(json["outbound"], equals(0));
-      expect(json["domains"], equals(const ["example.com"]));
+      expect(json["domain_suffixes"], equals(const ["example.com"]));
       expect(json.containsKey("network"), isFalse);
     });
 
     test("serializes optional fields and enum mappings", () {
       const rule = SingboxRule(
         ruleSetUrl: "https://example.com/rules.srs",
-        domains: ["example.org"],
+        domains: ["*.example.org", ".example.net", "www.example.io"],
         ip: "1.1.1.1/32, 8.8.8.0/24",
         port: "80,443",
         protocol: "tls,dns",
@@ -29,6 +29,7 @@ void main() {
 
       expect(json["enabled"], isTrue);
       expect(json["outbound"], equals(1));
+      expect(json["domain_suffixes"], equals(const ["example.org", "example.net", "www.example.io"]));
       expect(json["rule_sets"], equals(const ["https://example.com/rules.srs"]));
       expect(json["ip_cidrs"], equals(const ["1.1.1.1/32", "8.8.8.0/24"]));
       expect(json["port_ranges"], equals(const ["80", "443"]));

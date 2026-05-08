@@ -1117,7 +1117,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			DNSRuleAction: rejectDnsAction,
 		})
 	}
-	if hopt.Region != "other" {
+	if legacyRegionRoutingEnabled(hopt) {
 		dnsRules = append(dnsRules, option.DefaultDNSRule{
 			RawDefaultDNSRule: option.RawDefaultDNSRule{
 				DomainSuffix: []string{"." + hopt.Region},
@@ -1350,6 +1350,10 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	}
 	// }
 	return nil
+}
+
+func legacyRegionRoutingEnabled(hopt *HiddifyOptions) bool {
+	return hopt.Region != "other" && strings.TrimSpace(hopt.SiteRoutingMode) == ""
 }
 
 func buildUserRuleActions(r Rule) (option.RawDefaultRule, option.RuleAction, *option.DNSRuleAction, bool) {

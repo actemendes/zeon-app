@@ -468,14 +468,13 @@ abstract class ConfigOptions {
       candidate = candidate
           .replaceAll(RegExp(r'\s+'), '')
           .replaceFirst(RegExp('^[a-z][a-z0-9+.-]*://'), '')
-          .replaceFirst(RegExp('^www\\.'), '')
-          .replaceFirst(RegExp('^\\*\\.'), '')
           .replaceFirst(RegExp('^/+'), '')
           .split('/')[0]
           .split('?')[0]
           .split('#')[0]
           .replaceFirst(RegExp(r'\.$'), '');
-      if (candidate.isEmpty || !isDomain(candidate) || normalized.contains(candidate)) continue;
+      final domainForValidation = candidate.startsWith('*.') ? candidate.substring(2) : candidate;
+      if (candidate.isEmpty || !isDomain(domainForValidation) || normalized.contains(candidate)) continue;
       normalized.add(candidate);
     }
     return normalized;

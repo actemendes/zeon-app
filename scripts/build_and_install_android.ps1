@@ -7,7 +7,7 @@ param(
 
     [string]$DeviceId,
 
-    [string]$PackageId = "com.actemendes.zeon",
+    [string]$PackageId,
 
     [switch]$CleanInstall,
 
@@ -106,6 +106,87 @@ function Resolve-ApkPath {
     return $fallbackApk.FullName
 }
 
+function Resolve-AndroidSdkRoot {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $candidates = @()
+    if ($env:ANDROID_HOME) { $candidates += $env:ANDROID_HOME }
+    if ($env:ANDROID_SDK_ROOT) { $candidates += $env:ANDROID_SDK_ROOT }
+
+    $localPropertiesPath = Join-Path $RepoRoot "android\local.properties"
+    if (Test-Path -LiteralPath $localPropertiesPath) {
+        $sdkLine = Get-Content -LiteralPath $localPropertiesPath |
+            Where-Object { $_ -match '^sdk\.dir=' } |
+            Select-Object -First 1
+        if ($sdkLine) {
+            $sdkDir = ($sdkLine -replace '^sdk\.dir=', '').Replace('\\', '\')
+            if ($sdkDir) { $candidates += $sdkDir }
+        }
+    }
+
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    throw "Android SDK path was not found. Set ANDROID_HOME/ANDROID_SDK_ROOT or android/local.properties sdk.dir."
+}
+
+function Resolve-AaptPath {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $aaptCommand = Get-Command "aapt" -ErrorAction SilentlyContinue
+    if ($aaptCommand) {
+        return $aaptCommand.Source
+    }
+
+    $sdkRoot = Resolve-AndroidSdkRoot -RepoRoot $RepoRoot
+    $buildToolsDir = Join-Path $sdkRoot "build-tools"
+    if (-not (Test-Path -LiteralPath $buildToolsDir)) {
+        throw "Android build-tools directory was not found: $buildToolsDir"
+    }
+
+    $aapt = Get-ChildItem -LiteralPath $buildToolsDir -Filter "aapt.exe" -Recurse |
+        Sort-Object FullName -Descending |
+        Select-Object -First 1
+
+    if (-not $aapt) {
+        throw "aapt.exe was not found under Android SDK build-tools: $buildToolsDir"
+    }
+
+    return $aapt.FullName
+}
+
+function Resolve-ApkPackageId {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$ApkPath
+    )
+
+    $aaptPath = Resolve-AaptPath -RepoRoot $RepoRoot
+    $badging = & $aaptPath dump badging $ApkPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to inspect APK package id via aapt."
+    }
+
+    $packageLine = $badging | Where-Object { $_ -match '^package:' } | Select-Object -First 1
+    if ($packageLine -and $packageLine -match "name='([^']+)'") {
+        return $Matches[1]
+    }
+
+    throw "Failed to parse APK package id from aapt output."
+}
+
+function Get-InstalledPackagePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$DeviceId,
+        [Parameter(Mandatory = $true)][string]$PackageId
+    )
+
+    return ((& adb -s $DeviceId shell pm path $PackageId 2>$null) | Out-String).Trim()
+}
+
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
 
@@ -147,17 +228,30 @@ try {
     $apkPath = Resolve-ApkPath -RepoRoot $repoRoot -Mode $BuildMode
     Write-Host "APK: $apkPath"
 
+    $apkPackageId = Resolve-ApkPackageId -RepoRoot $repoRoot -ApkPath $apkPath
+    Write-Host "APK package id: $apkPackageId"
+
+    if ($PackageId) {
+        if ($PackageId -ne $apkPackageId) {
+            throw "Requested package id '$PackageId' does not match APK package id '$apkPackageId'. Remove -PackageId or pass the APK package id."
+        }
+        $effectivePackageId = $PackageId
+    }
+    else {
+        $effectivePackageId = $apkPackageId
+    }
+
     if ($CleanInstall) {
-        $installedPackagePath = ((& adb -s $resolvedDeviceId shell pm path $PackageId 2>$null) | Out-String).Trim()
+        $installedPackagePath = Get-InstalledPackagePath -DeviceId $resolvedDeviceId -PackageId $effectivePackageId
         if ($installedPackagePath) {
-            Write-Host "Removing installed package: $PackageId"
-            & adb -s $resolvedDeviceId uninstall $PackageId
+            Write-Host "Removing installed package: $effectivePackageId"
+            & adb -s $resolvedDeviceId uninstall $effectivePackageId
             if ($LASTEXITCODE -ne 0) {
-                throw "adb uninstall failed for package '$PackageId'."
+                throw "adb uninstall failed for package '$effectivePackageId'."
             }
         }
         else {
-            Write-Host "Package is not installed, skipping uninstall: $PackageId"
+            Write-Host "Package is not installed, skipping uninstall: $effectivePackageId"
         }
 
         $installArgs = @("-s", $resolvedDeviceId, "install", $apkPath)
@@ -172,12 +266,28 @@ try {
         throw "adb install failed."
     }
 
+    $installedPackagePath = Get-InstalledPackagePath -DeviceId $resolvedDeviceId -PackageId $effectivePackageId
+    if (-not $installedPackagePath) {
+        throw "adb install returned success, but package '$effectivePackageId' is not installed or not visible to adb."
+    }
+    Write-Host "Installed package: $effectivePackageId"
+
+    $legacyPackageIds = @("app.hiddify.com")
+    foreach ($legacyPackageId in $legacyPackageIds) {
+        if ($legacyPackageId -ne $effectivePackageId) {
+            $legacyPackagePath = Get-InstalledPackagePath -DeviceId $resolvedDeviceId -PackageId $legacyPackageId
+            if ($legacyPackagePath) {
+                Write-Warning "Legacy package '$legacyPackageId' is also installed. If you open it manually from launcher, you will test the old app, not '$effectivePackageId'."
+            }
+        }
+    }
+
     if ($Launch) {
-        $launchArgs = @("-s", $resolvedDeviceId, "shell", "monkey", "-p", $PackageId, "-c", "android.intent.category.LAUNCHER", "1")
+        $launchArgs = @("-s", $resolvedDeviceId, "shell", "monkey", "-p", $effectivePackageId, "-c", "android.intent.category.LAUNCHER", "1")
         Write-Host ("Running: adb " + ($launchArgs -join " "))
         & adb @launchArgs
         if ($LASTEXITCODE -ne 0) {
-            throw "App install succeeded, but launch failed for package '$PackageId'."
+            throw "App install succeeded, but launch failed for package '$effectivePackageId'."
         }
     }
 

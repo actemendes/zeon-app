@@ -7,7 +7,7 @@ param(
 
     [string]$DeviceId,
 
-    [string]$PackageId = "com.actemendes.zeon",
+    [string]$PackageId,
 
     [switch]$CleanInstall,
 
@@ -27,9 +27,9 @@ if (-not (Test-Path -LiteralPath $innerScript)) {
 $params = @{
     BuildMode   = $BuildMode
     BuildTarget = $BuildTarget
-    PackageId   = $PackageId
 }
 
+if ($PackageId) { $params.PackageId = $PackageId }
 if ($DeviceId) { $params.DeviceId = $DeviceId }
 if ($CleanInstall) { $params.CleanInstall = $true }
 if ($Launch) { $params.Launch = $true }
@@ -41,4 +41,3 @@ Write-Host "Build target: $BuildTarget"
 if ($LASTEXITCODE -ne 0) {
     throw "Android build/install script failed."
 }
-
