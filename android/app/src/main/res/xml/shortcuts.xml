@@ -8,6 +8,6 @@
         <intent
             android:action="android.intent.action.MAIN"
             android:targetClass="com.hiddify.hiddify.ShortcutActivity"
-            android:targetPackage="com.actemendes.zeon" />
+            android:targetPackage="com.zeon.hiddify" />
     </shortcut>
 </shortcuts>

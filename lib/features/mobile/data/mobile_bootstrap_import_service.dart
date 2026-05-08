@@ -95,13 +95,26 @@ class MobileBootstrapImportService with InfraLogger {
 
     try {
       final savedUserId = int.tryParse((_preferences.getString(_prefUserId) ?? "").trim());
+      final savedConnLink = (_preferences.getString(_prefConnLink) ?? "").trim();
       var effectiveUserId = savedUserId;
       String? apiLogin;
       String? apiStatus;
       DateTime? apiExpiresAt;
 
       var connLink = "";
-      if (savedUserId != null && savedUserId > 0) {
+      var importedFromSavedConnLink = false;
+
+      if (savedConnLink.isNotEmpty && Uri.tryParse(savedConnLink) != null) {
+        loggy.info("mobile auto import: trying saved conn_link");
+        importedFromSavedConnLink = await _importFromConnLink(savedConnLink);
+        if (importedFromSavedConnLink) {
+          connLink = savedConnLink;
+        } else {
+          throw const MobileBootstrapImportException("saved connection_link import failed");
+        }
+      }
+
+      if (connLink.isEmpty && savedUserId != null && savedUserId > 0) {
         final lookup = await _lookupSubscriptionByUserId(savedUserId);
         if (lookup != null) {
           connLink = lookup.connectionLink;
@@ -132,7 +145,7 @@ class MobileBootstrapImportService with InfraLogger {
         throw const MobileBootstrapImportException("connection_link is missing");
       }
 
-      final imported = await _importFromConnLink(connLink);
+      final imported = importedFromSavedConnLink || await _importFromConnLink(connLink);
       if (!imported) {
         throw const MobileBootstrapImportException("failed to import conn_link");
       }

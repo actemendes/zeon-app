@@ -68,7 +68,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                     children: [
                       Text(
                         key: const ValueKey(UiNames.textProfileLinkLabel),
-                        t.pages.profileDetails.linkAccount.codeLabel,
+                        t.pages.profileDetails.linkAccount.linkLabel,
                         style: theme.textTheme.labelLarge?.copyWith(
                           fontFamily: 'Montserrat',
                           fontWeight: FontWeight.w600,
@@ -95,7 +95,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                               }
                             : null,
                         icon: const Icon(Icons.content_copy_rounded),
-                        label: const Text('Копировать ссылку'),
+                        label: Text(t.pages.profileDetails.linkAccount.copyLink),
                       ),
                     ],
                   ),

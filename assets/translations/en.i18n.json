@@ -181,7 +181,7 @@
       },
       "linkAccount": {
         "title": "Link account",
-        "description": "To link a new device to your account, enter the 6-digit code below on that device",
+        "description": "To link a new device to your account, paste the link for binding on that device. You can copy it below.",
         "linkHint": "To link another device, copy the link and paste it in the other app.",
         "linkLabel": "Account link",
         "copyLink": "Copy link",
@@ -736,4 +736,3 @@
     }
   }
 }
-

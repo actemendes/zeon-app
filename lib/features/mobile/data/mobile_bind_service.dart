@@ -11,11 +11,11 @@ import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/data/profile_data_source.dart';
+import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/data/profile_repository.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/model/profile_sort_enum.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
-import 'package:hiddify/utils/platform_utils.dart';
+import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -184,21 +184,33 @@ class MobileBindService with InfraLogger {
       throw const MobileBindException("validation_error");
     }
 
-    final imported = await _importFromConnLink(normalizedLink);
+    var effectiveConnLink = normalizedLink;
+    var imported = await _importFromConnLink(effectiveConnLink);
+    if (!imported) {
+      final legacyLink = _legacyAccountLinkInput(rawInput);
+      if (legacyLink != null && legacyLink != effectiveConnLink) {
+        loggy.warning("bind import: api-base open link failed, trying legacy open host fallback");
+        imported = await _importFromConnLink(legacyLink);
+        if (imported) {
+          effectiveConnLink = legacyLink;
+        }
+      }
+    }
     if (!imported) {
       throw const MobileBindException("import_failed");
     }
 
     await _replaceManagedProfileWithActive();
     await _removeExtraProfilesKeepActive();
-    await _preferences.setBool(_prefDone, true);
-    final existingBoundConnLink = (_preferences.getString(_prefConnLink) ?? "").trim();
-    if (existingBoundConnLink.isEmpty) {
-      await _preferences.setString(_prefConnLink, normalizedLink);
-      loggy.info("bind import: saved bound conn_link (initial)");
-    } else {
-      loggy.info("bind import: manual link imported without replacing bound conn_link");
+    await _syncActiveProfileMetaFromConnLink(effectiveConnLink);
+    final resolvedConnLink = await _resolveImportUrl(effectiveConnLink);
+    if (resolvedConnLink.isNotEmpty && resolvedConnLink != effectiveConnLink) {
+      await _syncActiveProfileMetaFromConnLink(resolvedConnLink);
     }
+    await _preferences.setBool(_prefDone, true);
+    await _preferences.setString(_prefConnLink, effectiveConnLink);
+    await _preferences.remove(_prefUserId);
+    loggy.info("bind import: saved bound conn_link (manual override)");
     await _clearCachedSession();
   }
 
@@ -217,14 +229,24 @@ class MobileBindService with InfraLogger {
   String _normalizeAccountLinkInput(String rawInput) {
     final input = rawInput.trim();
     if (input.isEmpty) return "";
+
+    String? asOpenLink(String source) {
+      final openId = _extractOpenId(source);
+      if (openId == null || openId.isEmpty) return null;
+      return Uri.parse(_apiBaseUrl).resolve("/open/$openId").toString();
+    }
+
+    final rewrittenOpen = asOpenLink(input);
+    if (rewrittenOpen != null) return rewrittenOpen;
+
     final parsed = Uri.tryParse(input);
     if (parsed != null && parsed.hasScheme && (parsed.scheme == "http" || parsed.scheme == "https")) {
       return parsed.toString();
     }
 
-    final codeOnly = RegExp(r'^[A-Za-z0-9_-]{4,}$');
+    final codeOnly = RegExp('^[A-Za-z0-9_-]{4,}\$');
     if (codeOnly.hasMatch(input)) {
-      return "https://zeon-vps.link/open/$input";
+      return Uri.parse(_apiBaseUrl).resolve("/open/$input").toString();
     }
 
     String candidate = input;
@@ -232,7 +254,31 @@ class MobileBindService with InfraLogger {
       candidate = candidate.substring(1);
     }
     if (candidate.isEmpty) return "";
-    return "https://zeon-vps.link/$candidate";
+    return Uri.parse(_apiBaseUrl).resolve("/$candidate").toString();
+  }
+
+  String? _legacyAccountLinkInput(String rawInput) {
+    final input = rawInput.trim();
+    if (input.isEmpty) return null;
+    final openId = _extractOpenId(input);
+    if (openId != null && openId.isNotEmpty) {
+      return "https://zeon-vps.link/open/$openId";
+    }
+
+    final parsed = Uri.tryParse(input);
+    if (parsed != null && parsed.hasScheme && (parsed.scheme == "http" || parsed.scheme == "https")) {
+      return parsed.toString();
+    }
+    return null;
+  }
+
+  String? _extractOpenId(String input) {
+    final normalized = input.trim();
+    if (normalized.isEmpty) return null;
+    final direct = RegExp('^[A-Za-z0-9_-]{4,}\$').firstMatch(normalized);
+    if (direct != null) return direct.group(0);
+    final match = RegExp('/open/([A-Za-z0-9_-]{4,})').firstMatch(normalized);
+    return match?.group(1);
   }
 
   Future<String> _rotateBindDeviceIdForRebind() async {
@@ -740,6 +786,169 @@ class MobileBindService with InfraLogger {
     }
   }
 
+  Future<void> _syncActiveProfileMetaFromConnLink(String connLink) async {
+    try {
+      final meta = await _fetchConnLinkMeta(connLink);
+      if (meta == null) return;
+
+      final active = await _profileDataSource.watchActiveProfile().first;
+      if (active == null || active.type != ProfileType.remote) return;
+
+      final now = DateTime.now().toUtc();
+      final normalizedStatus = meta.status?.trim().toLowerCase();
+      DateTime? effectiveExpire = meta.expiresAt?.toUtc();
+      if (normalizedStatus == "inactive") {
+        effectiveExpire = (effectiveExpire != null && effectiveExpire.isAfter(now))
+            ? now.subtract(const Duration(seconds: 1))
+            : (effectiveExpire ?? now.subtract(const Duration(seconds: 1)));
+      }
+
+      if (effectiveExpire == null && (meta.login == null || meta.login!.isEmpty)) {
+        return;
+      }
+
+      await _profileDataSource.edit(
+        active.id,
+        ProfileEntriesCompanion(
+          name: () {
+            final normalizedName = parseProfileName(meta.login).trim();
+            if (normalizedName.isEmpty || _looksObfuscatedName(normalizedName)) {
+              return const Value<String>.absent();
+            }
+            return Value(normalizedName);
+          }(),
+          upload: Value(effectiveExpire == null ? (active.upload ?? 0) : 0),
+          download: Value(effectiveExpire == null ? (active.download ?? 0) : 0),
+          total: Value(effectiveExpire == null ? (active.total ?? 920233720369) : 920233720369),
+          expire: Value(effectiveExpire ?? active.expire),
+        ),
+      );
+    } catch (e, st) {
+      loggy.warning("bind import: failed to sync conn_link meta", e, st);
+    }
+  }
+
+  Future<_BindConnLinkMeta?> _fetchConnLinkMeta(String connLink) async {
+    try {
+      final response = await _httpClient.get<String>(connLink, headers: {"Accept": "text/html"});
+      final content = response.data?.trim();
+      if (content == null || content.isEmpty) return null;
+
+      Map<String, dynamic>? root = _decodeAsJsonMap(content);
+      root ??= _extractZeonScriptJson(content);
+      if (root == null) return null;
+
+      final profile = root["profile"];
+      final profileMap = profile is Map<String, dynamic> ? profile : const <String, dynamic>{};
+      final ok24 = root["ok24_meta"];
+      final ok24Map = ok24 is Map<String, dynamic> ? ok24 : const <String, dynamic>{};
+
+      final status = _firstNonEmpty([
+        _decodeMaybeBase64(ok24Map["status"]),
+        _decodeMaybeBase64(root["status"]),
+        _decodeMaybeBase64(profileMap["status"]),
+      ])?.toLowerCase();
+
+      final expiresAtRaw = _firstNonEmpty([
+        _decodeMaybeBase64(ok24Map["expires_at"]),
+        _decodeMaybeBase64(root["expires_at"]),
+        _decodeMaybeBase64(root["expiresAt"]),
+        _decodeMaybeBase64(profileMap["expires_at"]),
+        _decodeMaybeBase64(profileMap["expiresAt"]),
+      ]);
+
+      final login = _firstNonEmpty([
+        _decodeMaybeBase64(ok24Map["login"]),
+        _decodeMaybeBase64(root["login"]),
+        _decodeMaybeBase64(profileMap["login"]),
+      ]);
+
+      final expiresAt = expiresAtRaw == null ? null : _parseFlexibleExpire(expiresAtRaw);
+      if (status == null && expiresAt == null && (login == null || login.isEmpty)) {
+        return null;
+      }
+
+      return _BindConnLinkMeta(status: status, expiresAt: expiresAt, login: login);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String? _firstNonEmpty(List<String?> values) {
+    for (final value in values) {
+      if (value != null && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
+
+  static String? _decodeMaybeBase64(dynamic value) {
+    final raw = value?.toString().trim();
+    if (raw == null || raw.isEmpty) return null;
+    final lower = raw.toLowerCase();
+    if (lower == "active" || lower == "inactive") return lower;
+    if (raw.contains("-") || raw.contains(":") || raw.contains("T") || raw.contains(" ")) return raw;
+    final base64Like = RegExp(r'^[A-Za-z0-9+/_=-]+$').hasMatch(raw);
+    if (!base64Like) return raw;
+    return safeDecodeBase64(raw).trim();
+  }
+
+  static DateTime? _parseFlexibleExpire(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return null;
+    final parsed = DateTime.tryParse(value);
+    if (parsed != null) return parsed.toUtc();
+    final asInt = int.tryParse(value);
+    if (asInt == null) return null;
+    final ms = asInt >= 1_000_000_000_000 ? asInt : asInt * 1000;
+    return DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
+  }
+
+  static Map<String, dynamic>? _decodeAsJsonMap(String content) {
+    try {
+      final normalized = _decodeOuterBase64Json(content);
+      final decoded = jsonDecode(normalized);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _decodeOuterBase64Json(String content) {
+    final raw = content.trim();
+    if (raw.isEmpty) return raw;
+    if (raw.startsWith("{") || raw.startsWith("[")) return raw;
+    final decoded = safeDecodeBase64(raw).trim();
+    if (decoded.startsWith("{") || decoded.startsWith("[")) return decoded;
+    return raw;
+  }
+
+  static Map<String, dynamic>? _extractZeonScriptJson(String content) {
+    try {
+      final idIndex = content.indexOf('id="zeon-data"');
+      final altIdIndex = content.indexOf("id='zeon-data'");
+      final targetIndex = idIndex >= 0 ? idIndex : altIdIndex;
+      if (targetIndex < 0) return null;
+      final openTagEnd = content.indexOf(">", targetIndex);
+      if (openTagEnd < 0) return null;
+      final closeTagIndex = content.indexOf("</script>", openTagEnd + 1);
+      if (closeTagIndex < 0) return null;
+      final jsonText = content.substring(openTagEnd + 1, closeTagIndex).trim();
+      if (jsonText.isEmpty) return null;
+      final parsed = jsonDecode(jsonText);
+      return parsed is Map<String, dynamic> ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static bool _looksObfuscatedName(String value) {
+    final v = value.trim();
+    if (v.length < 14) return false;
+    if (v.contains(' ')) return false;
+    if (!RegExp(r'^[A-Za-z0-9]+$').hasMatch(v)) return false;
+    return RegExp('[A-Za-z]').hasMatch(v) && RegExp('[0-9]').hasMatch(v);
+  }
+
   Future<void> _removeExtraProfilesKeepActive() async {
     try {
       final allProfiles = await _profileDataSource
@@ -905,6 +1114,14 @@ class BindWsConnection {
 
   final Stream<BindWsEvent> events;
   final Future<void> Function() close;
+}
+
+class _BindConnLinkMeta {
+  const _BindConnLinkMeta({required this.status, required this.expiresAt, required this.login});
+
+  final String? status;
+  final DateTime? expiresAt;
+  final String? login;
 }
 
 DateTime? _parseIso(String? raw) {

@@ -521,20 +521,16 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
     Future<void> bind() async {
       if (isSubmitting.value) return;
       final rawInput = linkController.text.trim();
-      final bindCode = extractBindCode(rawInput);
 
       isSubmitting.value = true;
       try {
         final bindService = ref.read(mobileBindServiceProvider);
-        if (isLikelyAccountLink(rawInput)) {
+        if (isLikelyAccountLink(rawInput) || extractBindCode(rawInput) != null) {
           await bindService.importConnectionLink(rawInput).timeout(const Duration(seconds: 30));
         } else {
-          if (bindCode == null) {
-            showError(t.errors.profiles.invalidUrl);
-            isSubmitting.value = false;
-            return;
-          }
-          await bindService.confirmCode(bindCode).timeout(const Duration(seconds: 30));
+          showError(t.errors.profiles.invalidUrl);
+          isSubmitting.value = false;
+          return;
         }
       } on MobileBindException catch (e) {
         if (!context.mounted) return;
