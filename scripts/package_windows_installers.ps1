@@ -3,7 +3,7 @@ param(
     [ValidateSet("exe", "msix", "all")]
     [string]$Target = "all",
 
-    [string]$BuildTarget = "lib/main.dart",
+    [string]$BuildTarget = "lib/main_prod.dart",
 
     [string]$SentryDsn = "",
 

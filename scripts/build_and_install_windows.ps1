@@ -3,6 +3,8 @@ param(
     [ValidateSet("release", "debug", "profile")]
     [string]$BuildMode = "release",
 
+    [string]$BuildTarget = "lib/main_prod.dart",
+
     [switch]$Launch,
 
     [switch]$SkipSecureStoragePatch,
@@ -214,6 +216,9 @@ $shouldRunClean = -not $SkipClean
 Push-Location $repoRoot
 try {
     Assert-Command "flutter"
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $BuildTarget))) {
+        throw "Build target not found: $BuildTarget"
+    }
 
     if (Test-PathHasFlutterBlockedCharacters -PathToCheck $repoRoot) {
         $junctionPath = New-CleanPathJunction -RepoRoot $repoRoot
@@ -242,7 +247,8 @@ try {
             Patch-FlutterSecureStorageWindowsPlugin -WorkingRoot $workingRoot
         }
 
-        $buildArgs = @("build", "windows", "--$BuildMode")
+        $buildArgs = @("build", "windows", "--$BuildMode", "--target", $BuildTarget)
+        Write-Host "Build target: $BuildTarget"
         Write-Host ("Running: flutter " + ($buildArgs -join " "))
         & flutter @buildArgs
         if ($LASTEXITCODE -ne 0) {

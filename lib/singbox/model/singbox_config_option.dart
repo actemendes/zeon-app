@@ -62,6 +62,12 @@ class SingboxConfigOption with _$SingboxConfigOption {
     return encoder.convert(toJson());
   }
 
+  Map<String, dynamic> toCoreJson() {
+    final map = Map<String, dynamic>.from(toJson());
+    map["rules"] = rules.map((rule) => rule.toCoreJson()).toList();
+    return map;
+  }
+
   factory SingboxConfigOption.fromJson(Map<String, dynamic> json) => _$SingboxConfigOptionFromJson(json);
 }
 

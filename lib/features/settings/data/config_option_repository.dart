@@ -185,7 +185,7 @@ abstract class ConfigOptions {
 
   static final fragmentPackets = PreferencesNotifier.create<String, String>(
     "fragment-packets",
-    "tlshello",
+    "1-5",
     possibleValues: ["tlshello", "1-1", "1-2", "1-3", "1-4", "1-5"],
   );
 
@@ -203,7 +203,7 @@ abstract class ConfigOptions {
     mapTo: const OptionalRangeJsonConverter().toJson,
   );
 
-  static final enableTlsMixedSniCase = PreferencesNotifier.create<bool, bool>("enable-tls-mixed-sni-case", false);
+  static final enableTlsMixedSniCase = PreferencesNotifier.create<bool, bool>("enable-tls-mixed-sni-case", true);
 
   static final enableTlsPadding = PreferencesNotifier.create<bool, bool>("enable-tls-padding", false);
 

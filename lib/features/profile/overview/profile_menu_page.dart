@@ -116,15 +116,6 @@ class ProfileMenuPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final profilesCount = ref.watch(profilesNotifierProvider).valueOrNull?.length ?? 0;
-    final profile = switch (ref.watch(activeProfileProvider)) {
-      AsyncData(value: final profile?) => profile,
-      _ => null,
-    };
-    final subInfo = switch (profile) {
-      RemoteProfileEntity(:final subInfo) => subInfo,
-      _ => null,
-    };
-    final remainingDays = _resolveUiRemainingDays(subInfo);
     final sections = <({String title, IconData icon, IconData trailingIcon, VoidCallback? onTap})>[
       if (profilesCount > 1)
         (
@@ -139,13 +130,12 @@ class ProfileMenuPage extends HookConsumerWidget {
             }
           },
         ),
-      if (remainingDays > 0)
-        (
-          title: t.pages.profileDetails.menu.bindAccount,
-          icon: Icons.link_rounded,
-          trailingIcon: Icons.chevron_right_rounded,
-          onTap: () => context.pushNamed('profileLinkAccount'),
-        ),
+      (
+        title: t.pages.profileDetails.menu.bindAccount,
+        icon: Icons.link_rounded,
+        trailingIcon: Icons.chevron_right_rounded,
+        onTap: () => context.pushNamed('profileLinkAccount'),
+      ),
       (
         title: t.pages.profileDetails.menu.community,
         icon: Icons.groups_rounded,

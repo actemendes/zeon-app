@@ -3,6 +3,8 @@ param(
     [ValidateSet("release", "debug", "profile")]
     [string]$BuildMode = "release",
 
+    [string]$BuildTarget = "lib/main_prod.dart",
+
     [string]$DeviceId,
 
     [string]$PackageId = "com.actemendes.zeon",
@@ -111,6 +113,9 @@ Push-Location $repoRoot
 try {
     Assert-Command "flutter"
     Assert-Command "adb"
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $BuildTarget))) {
+        throw "Build target not found: $BuildTarget"
+    }
 
     $resolvedDeviceId = Resolve-DeviceId -RequestedDeviceId $DeviceId
     $deviceState = ((& adb -s $resolvedDeviceId get-state) | Out-String).Trim()
@@ -129,9 +134,10 @@ try {
     Write-Host "Device ABI: $deviceAbi"
     Write-Host "Target platform: $targetPlatform"
     Write-Host "Build mode: $BuildMode"
+    Write-Host "Build target: $BuildTarget"
     Write-Host ""
 
-    $buildArgs = @("build", "apk", "--$BuildMode", "--target-platform", $targetPlatform)
+    $buildArgs = @("build", "apk", "--$BuildMode", "--target", $BuildTarget, "--target-platform", $targetPlatform)
     Write-Host ("Running: flutter " + ($buildArgs -join " "))
     & flutter @buildArgs
     if ($LASTEXITCODE -ne 0) {

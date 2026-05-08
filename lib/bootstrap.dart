@@ -232,7 +232,12 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
       timeout: 5000,
     );
   }
-  unawaited(_safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 15000));
+  await _safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 45000);
+  await _safeInit(
+    "wait active profile after mobile auto import",
+    () => profileDataSource.watchActiveProfile().firstWhere((profile) => profile != null),
+    timeout: 5000,
+  );
   unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
   await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
 

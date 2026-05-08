@@ -288,9 +288,9 @@ class PreferencesVersion6Migration extends PreferencesMigrationStep with InfraLo
     }
 
     final fragmentPackets = sharedPreferences.getString("fragment-packets");
-    if (fragmentPackets == null || fragmentPackets == "1-5") {
-      loggy.debug("hiddify baseline migration: changing fragment-packets from [$fragmentPackets] to [tlshello]");
-      await sharedPreferences.setString("fragment-packets", "tlshello");
+    if (fragmentPackets == null || fragmentPackets == "tlshello") {
+      loggy.debug("hiddify baseline migration: changing fragment-packets from [$fragmentPackets] to [1-5]");
+      await sharedPreferences.setString("fragment-packets", "1-5");
     }
   }
 }
