@@ -3,18 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart';
-import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/core/http_client/http_client_provider.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
+import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
-import 'package:hiddify/features/profile/data/profile_data_providers.dart';
-import 'package:hiddify/features/profile/data/profile_data_source.dart';
-import 'package:hiddify/features/profile/data/profile_name_parser.dart';
-import 'package:hiddify/features/profile/data/profile_repository.dart';
-import 'package:hiddify/features/profile/model/profile_entity.dart';
-import 'package:hiddify/features/profile/model/profile_sort_enum.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,8 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 final mobileBindServiceProvider = Provider<MobileBindService>((ref) {
   return MobileBindService(
     httpClient: ref.read(httpClientProvider),
-    profileRepository: ref.read(profileRepositoryProvider).requireValue,
-    profileDataSource: ref.read(profileDataSourceProvider),
+    connLinkImportService: ref.read(mobileConnLinkImportServiceProvider),
     preferences: ref.read(sharedPreferencesProvider).requireValue,
   );
 });
@@ -31,12 +23,10 @@ final mobileBindServiceProvider = Provider<MobileBindService>((ref) {
 class MobileBindService with InfraLogger {
   MobileBindService({
     required DioHttpClient httpClient,
-    required ProfileRepository profileRepository,
-    required ProfileDataSource profileDataSource,
+    required MobileConnLinkImportService connLinkImportService,
     required SharedPreferences preferences,
   }) : _httpClient = httpClient,
-       _profileRepository = profileRepository,
-       _profileDataSource = profileDataSource,
+       _connLinkImportService = connLinkImportService,
        _preferences = preferences;
 
   static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://130.49.151.173");
@@ -47,15 +37,12 @@ class MobileBindService with InfraLogger {
   static const _bindJwtEnv = String.fromEnvironment("mobile_bind_jwt");
   static const _bindJwtPrefKey = "mobile_bind_jwt";
   static const _bindJwtExpiresPrefKey = "mobile_bind_jwt_expires_at";
-  static const _prefDone = "mobile_auto_import_done";
-  static const _prefUserId = "mobile_auto_import_user_id";
-  static const _prefConnLink = "mobile_auto_import_conn_link";
-  static const _prefManagedProfileId = "mobile_managed_profile_id";
+  static const _prefUserId = MobileConnLinkImportService.prefUserId;
+  static const _prefConnLink = MobileConnLinkImportService.prefConnLink;
   static const _prefBindSessionCache = "mobile_bind_session_cache_v1";
 
   final DioHttpClient _httpClient;
-  final ProfileRepository _profileRepository;
-  final ProfileDataSource _profileDataSource;
+  final MobileConnLinkImportService _connLinkImportService;
   final SharedPreferences _preferences;
   StableDeviceIdService get _stableDeviceId => StableDeviceIdService(preferences: _preferences);
 
@@ -129,89 +116,60 @@ class MobileBindService with InfraLogger {
       throw const MobileBindException("invalid_confirm_response");
     }
 
-    var effectiveConnLink = connLink;
-    var imported = false;
-    var effectiveLinkStatus = await _probeConnLinkStatus(effectiveConnLink);
-    imported = await _importFromConnLink(effectiveConnLink);
-    if (!imported && effectiveLinkStatus == 404) {
-      loggy.warning("bind confirm: conn_link probe returned 404 [link=${_maskLink(effectiveConnLink)}]");
-    }
-    if (!imported && ownerUserId > 0) {
+    MobileConnLinkImportResult importResult;
+    try {
+      importResult = await _connLinkImportService.importConnectionLink(
+        connLink,
+        userId: ownerUserId,
+        apiStatus: status,
+        apiExpiresAt: expiresAt,
+        clearUserIdWhenMissing: false,
+      );
+    } on MobileConnLinkImportException catch (e, st) {
       final fetchedConnLink = await _fetchMobileConnLinkByUserId(ownerUserId);
       if (fetchedConnLink != null && fetchedConnLink.isNotEmpty) {
         loggy.warning(
           "bind confirm: primary import failed, trying mobile link fallback "
           "[owner_user_id=$ownerUserId, link=$fetchedConnLink]",
         );
-        effectiveConnLink = fetchedConnLink;
-        effectiveLinkStatus = await _probeConnLinkStatus(effectiveConnLink);
-        imported = await _importFromConnLink(effectiveConnLink);
-        if (!imported && effectiveLinkStatus == 404) {
-          loggy.warning("bind confirm: fallback conn_link probe returned 404 [link=${_maskLink(effectiveConnLink)}]");
+        try {
+          importResult = await _connLinkImportService.importConnectionLink(
+            fetchedConnLink,
+            userId: ownerUserId,
+            apiStatus: status,
+            apiExpiresAt: expiresAt,
+            clearUserIdWhenMissing: false,
+          );
+        } on MobileConnLinkImportException catch (fallbackError, fallbackStack) {
+          loggy.warning(
+            "bind confirm import failed after mobile link fallback "
+            "[owner_user_id=$ownerUserId, conn_link=${_maskLink(fetchedConnLink)}]",
+            fallbackError,
+            fallbackStack,
+          );
+          throw MobileBindException(
+            fallbackError.code == "validation_error" ? "invalid_confirm_response" : "import_failed",
+          );
         }
+      } else {
+        loggy.warning(
+          "bind confirm import failed "
+          "[owner_user_id=$ownerUserId, conn_link=${_maskLink(connLink)}]",
+          e,
+          st,
+        );
+        throw MobileBindException(e.code == "validation_error" ? "invalid_confirm_response" : "import_failed");
       }
-    }
-    if (!imported) {
-      if (effectiveLinkStatus == 404) {
-        throw const MobileBindException("bind_link_not_found");
-      }
-      loggy.warning(
-        "bind confirm import failed after all attempts "
-        "[owner_user_id=$ownerUserId, conn_link=${_maskLink(effectiveConnLink)}]",
-      );
-      throw const MobileBindException("import_failed");
     }
 
-    await _replaceManagedProfileWithActive();
-    await _removeExtraProfilesKeepActive();
-    await _preferences.setBool(_prefDone, true);
-    await _preferences.setString(_prefUserId, ownerUserId.toString());
-    await _preferences.setString(_prefConnLink, effectiveConnLink);
     await _clearCachedSession();
-    await _syncActiveProfileMetaFromBind(status: status, expiresAt: expiresAt);
 
     return BindConfirmResult(
       ownerUserId: ownerUserId,
       status: status ?? "confirmed",
-      connLink: effectiveConnLink,
+      connLink: importResult.connLink,
       expiresAt: expiresAt,
     );
-  }
-
-  Future<void> importConnectionLink(String rawInput) async {
-    final normalizedLink = _normalizeAccountLinkInput(rawInput);
-    if (normalizedLink.isEmpty || Uri.tryParse(normalizedLink) == null) {
-      throw const MobileBindException("validation_error");
-    }
-
-    var effectiveConnLink = normalizedLink;
-    var imported = await _importFromConnLink(effectiveConnLink);
-    if (!imported) {
-      final legacyLink = _legacyAccountLinkInput(rawInput);
-      if (legacyLink != null && legacyLink != effectiveConnLink) {
-        loggy.warning("bind import: api-base open link failed, trying legacy open host fallback");
-        imported = await _importFromConnLink(legacyLink);
-        if (imported) {
-          effectiveConnLink = legacyLink;
-        }
-      }
-    }
-    if (!imported) {
-      throw const MobileBindException("import_failed");
-    }
-
-    await _replaceManagedProfileWithActive();
-    await _removeExtraProfilesKeepActive();
-    await _syncActiveProfileMetaFromConnLink(effectiveConnLink);
-    final resolvedConnLink = await _resolveImportUrl(effectiveConnLink);
-    if (resolvedConnLink.isNotEmpty && resolvedConnLink != effectiveConnLink) {
-      await _syncActiveProfileMetaFromConnLink(resolvedConnLink);
-    }
-    await _preferences.setBool(_prefDone, true);
-    await _preferences.setString(_prefConnLink, effectiveConnLink);
-    await _preferences.remove(_prefUserId);
-    loggy.info("bind import: saved bound conn_link (manual override)");
-    await _clearCachedSession();
   }
 
   Future<Map<String, dynamic>> _confirmWithDevice({required String deviceId, required String bindCode}) {
@@ -224,61 +182,6 @@ class MobileBindService with InfraLogger {
         "client_meta": {"platform": _platformName()},
       },
     );
-  }
-
-  String _normalizeAccountLinkInput(String rawInput) {
-    final input = rawInput.trim();
-    if (input.isEmpty) return "";
-
-    String? asOpenLink(String source) {
-      final openId = _extractOpenId(source);
-      if (openId == null || openId.isEmpty) return null;
-      return Uri.parse(_apiBaseUrl).resolve("/open/$openId").toString();
-    }
-
-    final rewrittenOpen = asOpenLink(input);
-    if (rewrittenOpen != null) return rewrittenOpen;
-
-    final parsed = Uri.tryParse(input);
-    if (parsed != null && parsed.hasScheme && (parsed.scheme == "http" || parsed.scheme == "https")) {
-      return parsed.toString();
-    }
-
-    final codeOnly = RegExp('^[A-Za-z0-9_-]{4,}\$');
-    if (codeOnly.hasMatch(input)) {
-      return Uri.parse(_apiBaseUrl).resolve("/open/$input").toString();
-    }
-
-    String candidate = input;
-    if (candidate.startsWith('/')) {
-      candidate = candidate.substring(1);
-    }
-    if (candidate.isEmpty) return "";
-    return Uri.parse(_apiBaseUrl).resolve("/$candidate").toString();
-  }
-
-  String? _legacyAccountLinkInput(String rawInput) {
-    final input = rawInput.trim();
-    if (input.isEmpty) return null;
-    final openId = _extractOpenId(input);
-    if (openId != null && openId.isNotEmpty) {
-      return "https://zeon-vps.link/open/$openId";
-    }
-
-    final parsed = Uri.tryParse(input);
-    if (parsed != null && parsed.hasScheme && (parsed.scheme == "http" || parsed.scheme == "https")) {
-      return parsed.toString();
-    }
-    return null;
-  }
-
-  String? _extractOpenId(String input) {
-    final normalized = input.trim();
-    if (normalized.isEmpty) return null;
-    final direct = RegExp('^[A-Za-z0-9_-]{4,}\$').firstMatch(normalized);
-    if (direct != null) return direct.group(0);
-    final match = RegExp('/open/([A-Za-z0-9_-]{4,})').firstMatch(normalized);
-    return match?.group(1);
   }
 
   Future<String> _rotateBindDeviceIdForRebind() async {
@@ -629,7 +532,10 @@ class MobileBindService with InfraLogger {
     final connection = connectionMap is Map<String, dynamic> ? connectionMap : const <String, dynamic>{};
     final connLink = connection["raw_url"]?.toString().trim();
     if (connLink != null && connLink.isNotEmpty) {
-      await _preferences.setString(_prefConnLink, connLink);
+      await _preferences.setString(
+        _prefConnLink,
+        _connLinkImportService.normalizeConnectionLink(connLink).primaryConnLink,
+      );
     }
     loggy.info("bind token preflight: device registered [device_id=$deviceId user_id=${userId ?? "-"}]");
     return userId;
@@ -666,322 +572,6 @@ class MobileBindService with InfraLogger {
     await _preferences.remove(_prefBindSessionCache);
   }
 
-  Future<bool> _importFromConnLink(String connLink) async {
-    final attempts = <String>[connLink, _appendPlatformHint(connLink)].where((e) => e.isNotEmpty).toSet().toList();
-
-    for (final attemptLink in attempts) {
-      loggy.info("bind import attempt [link=${_maskLink(attemptLink)}]");
-      final directImport = await _profileRepository.upsertRemote(attemptLink).run();
-      if (directImport.isRight()) {
-        loggy.info("bind import success: upsertRemote(default)");
-        return true;
-      }
-      loggy.warning("bind import fail: upsertRemote(default) ${_eitherError(directImport)}");
-
-      final importUrl = await _resolveImportUrl(attemptLink);
-      if (importUrl.isNotEmpty && importUrl != attemptLink) {
-        loggy.info("bind import resolved url [from=${_maskLink(attemptLink)} to=${_maskLink(importUrl)}]");
-        final resolvedImport = await _profileRepository.upsertRemote(importUrl).run();
-        if (resolvedImport.isRight()) {
-          loggy.info("bind import success: upsertRemote(resolved/default)");
-          return true;
-        }
-        loggy.warning("bind import fail: upsertRemote(resolved/default) ${_eitherError(resolvedImport)}");
-      }
-
-      final directOnlyImport = await _profileRepository.upsertRemote(attemptLink, directOnly: true).run();
-      if (directOnlyImport.isRight()) {
-        loggy.info("bind import success: upsertRemote(directOnly)");
-        return true;
-      }
-      loggy.warning("bind import fail: upsertRemote(directOnly) ${_eitherError(directOnlyImport)}");
-
-      if (importUrl.isNotEmpty && importUrl != attemptLink) {
-        final resolvedDirectOnlyImport = await _profileRepository.upsertRemote(importUrl, directOnly: true).run();
-        if (resolvedDirectOnlyImport.isRight()) {
-          loggy.info("bind import success: upsertRemote(resolved/directOnly)");
-          return true;
-        }
-        loggy.warning("bind import fail: upsertRemote(resolved/directOnly) ${_eitherError(resolvedDirectOnlyImport)}");
-      }
-
-      final fallbackDirect = await _profileRepository.upsertRemote(attemptLink, validateConfigOnImport: false).run();
-      if (fallbackDirect.isRight()) {
-        loggy.info("bind import success: upsertRemote(no-validate)");
-        return true;
-      }
-      loggy.warning("bind import fail: upsertRemote(no-validate) ${_eitherError(fallbackDirect)}");
-
-      if (importUrl.isNotEmpty && importUrl != attemptLink) {
-        final fallbackResolved = await _profileRepository.upsertRemote(importUrl, validateConfigOnImport: false).run();
-        if (fallbackResolved.isRight()) {
-          loggy.info("bind import success: upsertRemote(resolved/no-validate)");
-          return true;
-        }
-        loggy.warning("bind import fail: upsertRemote(resolved/no-validate) ${_eitherError(fallbackResolved)}");
-      }
-    }
-
-    return false;
-  }
-
-  Future<void> _replaceManagedProfileWithActive() async {
-    try {
-      final active = await _profileDataSource.watchActiveProfile().first;
-      if (active == null || active.type != ProfileType.remote) return;
-
-      final previousManagedId = (_preferences.getString(_prefManagedProfileId) ?? "").trim();
-      final previousConnLink = (_preferences.getString(_prefConnLink) ?? "").trim();
-
-      await _preferences.setString(_prefManagedProfileId, active.id);
-
-      if (previousManagedId.isNotEmpty && previousManagedId != active.id) {
-        final previousManaged = await _profileDataSource.getById(previousManagedId);
-        if (previousManaged != null) {
-          await _profileRepository.deleteById(previousManaged.id, previousManaged.active).run();
-          loggy.info("bind import: removed previous managed profile [id=${previousManaged.id}]");
-        }
-      }
-
-      if (previousConnLink.isNotEmpty) {
-        final previousByUrl = await _profileDataSource.getByUrl(previousConnLink);
-        if (previousByUrl != null && previousByUrl.id != active.id) {
-          await _profileRepository.deleteById(previousByUrl.id, previousByUrl.active).run();
-          loggy.info("bind import: removed previous profile by conn_link [id=${previousByUrl.id}]");
-        }
-      }
-    } catch (e, st) {
-      loggy.warning("bind import: failed to replace managed profile", e, st);
-    }
-  }
-
-  Future<void> _syncActiveProfileMetaFromBind({String? status, DateTime? expiresAt}) async {
-    try {
-      final active = await _profileDataSource.watchActiveProfile().first;
-      if (active == null || active.type != ProfileType.remote) return;
-
-      final normalizedStatus = status?.trim().toLowerCase();
-      final now = DateTime.now().toUtc();
-      var effectiveExpire = expiresAt?.toUtc();
-
-      if (normalizedStatus == "inactive") {
-        effectiveExpire = (effectiveExpire != null && effectiveExpire.isAfter(now))
-            ? now.subtract(const Duration(seconds: 1))
-            : (effectiveExpire ?? now.subtract(const Duration(seconds: 1)));
-      }
-
-      if (effectiveExpire == null) return;
-
-      await _profileDataSource.edit(
-        active.id,
-        ProfileEntriesCompanion(
-          upload: Value(effectiveExpire.isAfter(now) ? 0 : (active.upload ?? 0)),
-          download: Value(effectiveExpire.isAfter(now) ? 0 : (active.download ?? 0)),
-          total: Value(effectiveExpire.isAfter(now) ? 920233720369 : (active.total ?? 920233720369)),
-          expire: Value(effectiveExpire),
-        ),
-      );
-    } catch (_) {
-      // best effort
-    }
-  }
-
-  Future<void> _syncActiveProfileMetaFromConnLink(String connLink) async {
-    try {
-      final meta = await _fetchConnLinkMeta(connLink);
-      if (meta == null) return;
-
-      final active = await _profileDataSource.watchActiveProfile().first;
-      if (active == null || active.type != ProfileType.remote) return;
-
-      final now = DateTime.now().toUtc();
-      final normalizedStatus = meta.status?.trim().toLowerCase();
-      DateTime? effectiveExpire = meta.expiresAt?.toUtc();
-      if (normalizedStatus == "inactive") {
-        effectiveExpire = (effectiveExpire != null && effectiveExpire.isAfter(now))
-            ? now.subtract(const Duration(seconds: 1))
-            : (effectiveExpire ?? now.subtract(const Duration(seconds: 1)));
-      }
-
-      if (effectiveExpire == null && (meta.login == null || meta.login!.isEmpty)) {
-        return;
-      }
-
-      await _profileDataSource.edit(
-        active.id,
-        ProfileEntriesCompanion(
-          name: () {
-            final normalizedName = parseProfileName(meta.login).trim();
-            if (normalizedName.isEmpty || _looksObfuscatedName(normalizedName)) {
-              return const Value<String>.absent();
-            }
-            return Value(normalizedName);
-          }(),
-          upload: Value(effectiveExpire == null ? (active.upload ?? 0) : 0),
-          download: Value(effectiveExpire == null ? (active.download ?? 0) : 0),
-          total: Value(effectiveExpire == null ? (active.total ?? 920233720369) : 920233720369),
-          expire: Value(effectiveExpire ?? active.expire),
-        ),
-      );
-    } catch (e, st) {
-      loggy.warning("bind import: failed to sync conn_link meta", e, st);
-    }
-  }
-
-  Future<_BindConnLinkMeta?> _fetchConnLinkMeta(String connLink) async {
-    try {
-      final response = await _httpClient.get<String>(connLink, headers: {"Accept": "text/html"});
-      final content = response.data?.trim();
-      if (content == null || content.isEmpty) return null;
-
-      Map<String, dynamic>? root = _decodeAsJsonMap(content);
-      root ??= _extractZeonScriptJson(content);
-      if (root == null) return null;
-
-      final profile = root["profile"];
-      final profileMap = profile is Map<String, dynamic> ? profile : const <String, dynamic>{};
-      final ok24 = root["ok24_meta"];
-      final ok24Map = ok24 is Map<String, dynamic> ? ok24 : const <String, dynamic>{};
-
-      final status = _firstNonEmpty([
-        _decodeMaybeBase64(ok24Map["status"]),
-        _decodeMaybeBase64(root["status"]),
-        _decodeMaybeBase64(profileMap["status"]),
-      ])?.toLowerCase();
-
-      final expiresAtRaw = _firstNonEmpty([
-        _decodeMaybeBase64(ok24Map["expires_at"]),
-        _decodeMaybeBase64(root["expires_at"]),
-        _decodeMaybeBase64(root["expiresAt"]),
-        _decodeMaybeBase64(profileMap["expires_at"]),
-        _decodeMaybeBase64(profileMap["expiresAt"]),
-      ]);
-
-      final login = _firstNonEmpty([
-        _decodeMaybeBase64(ok24Map["login"]),
-        _decodeMaybeBase64(root["login"]),
-        _decodeMaybeBase64(profileMap["login"]),
-      ]);
-
-      final expiresAt = expiresAtRaw == null ? null : _parseFlexibleExpire(expiresAtRaw);
-      if (status == null && expiresAt == null && (login == null || login.isEmpty)) {
-        return null;
-      }
-
-      return _BindConnLinkMeta(status: status, expiresAt: expiresAt, login: login);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static String? _firstNonEmpty(List<String?> values) {
-    for (final value in values) {
-      if (value != null && value.trim().isNotEmpty) return value.trim();
-    }
-    return null;
-  }
-
-  static String? _decodeMaybeBase64(dynamic value) {
-    final raw = value?.toString().trim();
-    if (raw == null || raw.isEmpty) return null;
-    final lower = raw.toLowerCase();
-    if (lower == "active" || lower == "inactive") return lower;
-    if (raw.contains("-") || raw.contains(":") || raw.contains("T") || raw.contains(" ")) return raw;
-    final base64Like = RegExp(r'^[A-Za-z0-9+/_=-]+$').hasMatch(raw);
-    if (!base64Like) return raw;
-    return safeDecodeBase64(raw).trim();
-  }
-
-  static DateTime? _parseFlexibleExpire(String raw) {
-    final value = raw.trim();
-    if (value.isEmpty) return null;
-    final parsed = DateTime.tryParse(value);
-    if (parsed != null) return parsed.toUtc();
-    final asInt = int.tryParse(value);
-    if (asInt == null) return null;
-    final ms = asInt >= 1_000_000_000_000 ? asInt : asInt * 1000;
-    return DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
-  }
-
-  static Map<String, dynamic>? _decodeAsJsonMap(String content) {
-    try {
-      final normalized = _decodeOuterBase64Json(content);
-      final decoded = jsonDecode(normalized);
-      return decoded is Map<String, dynamic> ? decoded : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static String _decodeOuterBase64Json(String content) {
-    final raw = content.trim();
-    if (raw.isEmpty) return raw;
-    if (raw.startsWith("{") || raw.startsWith("[")) return raw;
-    final decoded = safeDecodeBase64(raw).trim();
-    if (decoded.startsWith("{") || decoded.startsWith("[")) return decoded;
-    return raw;
-  }
-
-  static Map<String, dynamic>? _extractZeonScriptJson(String content) {
-    try {
-      final idIndex = content.indexOf('id="zeon-data"');
-      final altIdIndex = content.indexOf("id='zeon-data'");
-      final targetIndex = idIndex >= 0 ? idIndex : altIdIndex;
-      if (targetIndex < 0) return null;
-      final openTagEnd = content.indexOf(">", targetIndex);
-      if (openTagEnd < 0) return null;
-      final closeTagIndex = content.indexOf("</script>", openTagEnd + 1);
-      if (closeTagIndex < 0) return null;
-      final jsonText = content.substring(openTagEnd + 1, closeTagIndex).trim();
-      if (jsonText.isEmpty) return null;
-      final parsed = jsonDecode(jsonText);
-      return parsed is Map<String, dynamic> ? parsed : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static bool _looksObfuscatedName(String value) {
-    final v = value.trim();
-    if (v.length < 14) return false;
-    if (v.contains(' ')) return false;
-    if (!RegExp(r'^[A-Za-z0-9]+$').hasMatch(v)) return false;
-    return RegExp('[A-Za-z]').hasMatch(v) && RegExp('[0-9]').hasMatch(v);
-  }
-
-  Future<void> _removeExtraProfilesKeepActive() async {
-    try {
-      final allProfiles = await _profileDataSource
-          .watchAll(sort: ProfilesSort.lastUpdate, sortMode: SortMode.descending)
-          .first;
-      if (allProfiles.isEmpty) return;
-      final activeProfile = await _profileDataSource.watchActiveProfile().first;
-      final keepProfile = activeProfile ?? allProfiles.first;
-      await _profileRepository.setAsActive(keepProfile.id).run();
-      await _preferences.setString(_prefManagedProfileId, keepProfile.id);
-
-      for (final profile in allProfiles) {
-        final shouldDelete = profile.id != keepProfile.id;
-        if (!shouldDelete) continue;
-        await _profileRepository.deleteById(profile.id, profile.active).run();
-        loggy.info("bind import: removed extra profile [id=${profile.id}]");
-      }
-    } catch (e, st) {
-      loggy.warning("bind import: failed to remove extra profiles", e, st);
-    }
-  }
-
-  String _appendPlatformHint(String link) {
-    try {
-      final uri = Uri.parse(link);
-      final q = Map<String, String>.from(uri.queryParameters);
-      q.putIfAbsent("platform", () => "hiddify");
-      return uri.replace(queryParameters: q).toString();
-    } catch (_) {
-      return link;
-    }
-  }
-
   Future<String?> _fetchMobileConnLinkByUserId(int userId) async {
     try {
       if (_apiBaseUrl.isEmpty || _mobileApiKey.isEmpty || userId <= 0) return null;
@@ -1000,51 +590,6 @@ class MobileBindService with InfraLogger {
       return connLink;
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<int?> _probeConnLinkStatus(String connLink) async {
-    try {
-      final response = await _httpClient.get<String>(connLink, headers: {"Accept": "text/html"}, directOnly: true);
-      return response.statusCode;
-    } on DioException catch (e) {
-      return e.response?.statusCode;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<String> _resolveImportUrl(String connLink) async {
-    try {
-      final response = await _httpClient.get<String>(connLink, headers: {"Accept": "text/html"});
-      loggy.info("bind resolveImportUrl fetched [link=${_maskLink(connLink)}, status=${response.statusCode}]");
-      final content = response.data;
-      if (content == null || content.isEmpty) {
-        loggy.warning("bind resolveImportUrl empty content [link=${_maskLink(connLink)}]");
-        return connLink;
-      }
-
-      final idIndex = content.indexOf('id="zeon-data"');
-      final altIdIndex = content.indexOf("id='zeon-data'");
-      final targetIndex = idIndex >= 0 ? idIndex : altIdIndex;
-      if (targetIndex < 0) return connLink;
-
-      final openTagEnd = content.indexOf(">", targetIndex);
-      if (openTagEnd < 0) return connLink;
-      final closeTagIndex = content.indexOf("</script>", openTagEnd + 1);
-      if (closeTagIndex < 0) return connLink;
-
-      final jsonText = content.substring(openTagEnd + 1, closeTagIndex).trim();
-      if (jsonText.isEmpty) return connLink;
-      final parsed = jsonDecode(jsonText);
-      if (parsed is! Map<String, dynamic>) return connLink;
-
-      final subscriptionUrl = parsed["subscriptionUrl"]?.toString() ?? "";
-      if (subscriptionUrl.isEmpty || Uri.tryParse(subscriptionUrl) == null) return connLink;
-      return subscriptionUrl;
-    } catch (_) {
-      loggy.warning("bind resolveImportUrl failed [link=${_maskLink(connLink)}]");
-      return connLink;
     }
   }
 }
@@ -1114,14 +659,6 @@ class BindWsConnection {
 
   final Stream<BindWsEvent> events;
   final Future<void> Function() close;
-}
-
-class _BindConnLinkMeta {
-  const _BindConnLinkMeta({required this.status, required this.expiresAt, required this.login});
-
-  final String? status;
-  final DateTime? expiresAt;
-  final String? login;
 }
 
 DateTime? _parseIso(String? raw) {
@@ -1201,10 +738,6 @@ String _maskLink(String link) {
   } catch (_) {
     return link.length > 80 ? "${link.substring(0, 80)}..." : link;
   }
-}
-
-String _eitherError(dynamic either) {
-  return "[result=$either]";
 }
 
 bool _isJwtExpired(String token) {

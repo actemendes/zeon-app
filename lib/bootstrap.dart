@@ -18,17 +18,17 @@ import 'package:hiddify/core/theme/app_theme_mode.dart';
 import 'package:hiddify/features/app/widget/app.dart';
 import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
 import 'package:hiddify/features/bootstrap/widget/bootstrap_splash_screen.dart';
-
 import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dart';
+import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
 import 'package:hiddify/features/per_app_proxy/data/selected_data_provider.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_backup.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
-import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/features/profile/data/debug_profile_bootstrap_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
 import 'package:hiddify/features/window/notifier/window_notifier.dart';
 import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
@@ -218,11 +218,17 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   await _init("translations", () => container.read(translationsProvider.future));
 
   await _init("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
+  final mobileConnLinkImportService = MobileConnLinkImportService(
+    httpClient: container.read(httpClientProvider),
+    profileRepository: profileRepository,
+    profileDataSource: profileDataSource,
+    preferences: preferences,
+  );
   final mobileBootstrapImportService = MobileBootstrapImportService(
     httpClient: container.read(httpClientProvider),
     stableDeviceIdService: StableDeviceIdService(preferences: preferences),
-    profileRepository: profileRepository,
     profileDataSource: profileDataSource,
+    connLinkImportService: mobileConnLinkImportService,
     preferences: preferences,
   );
   if (PlatformUtils.isMobile) {
@@ -232,7 +238,7 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
       timeout: 5000,
     );
   }
-  await _safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 45000);
+  await _safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 90000);
   await _safeInit(
     "wait active profile after mobile auto import",
     () => profileDataSource.watchActiveProfile().firstWhere((profile) => profile != null),
