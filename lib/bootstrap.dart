@@ -323,14 +323,13 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
     "ru.tele2.mytele2",
     "ru.vk.store",
     "ru.yandex.disk",
-    "ru.yandex.music",
     "ru.yandex.taxi",
     "ru.yandex.taximeter",
     "ru.yandex.telemost",
-    "ru.yandex.yandexmaps",
     "ru.zenmoney.androidsub",
     "shop.tornado.store",
     "youdrive.today",
+    "com.magnit.delivery.courier",
   ];
 
   final currentMode = container.read(Preferences.perAppProxyMode);
