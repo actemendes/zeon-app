@@ -1,4 +1,5 @@
 import 'package:hiddify/core/http_client/dio_http_client.dart';
+import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
@@ -15,7 +16,8 @@ class MobilePaymentService with InfraLogger {
   );
   static const _apiKey = String.fromEnvironment("mobile_api_key", defaultValue: "mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7");
 
-  static const _prefUserId = "mobile_payment_user_id";
+  static const _prefCanonicalUserId = MobileConnLinkImportService.prefUserId;
+  static const _prefLegacyPaymentUserId = "mobile_payment_user_id";
 
   final DioHttpClient _httpClient;
   final SharedPreferences _preferences;
@@ -38,8 +40,17 @@ class MobilePaymentService with InfraLogger {
       "plan": normalizedPlan == "trial" ? "trial" : int.parse(normalizedPlan),
     };
 
+    loggy.info(
+      "mobile payment create request prepared "
+      "[canonical_user_id=$userId, device_id=$deviceId, plan=${payload["plan"]}]",
+    );
+
     for (final directOnly in const [true, false]) {
       try {
+        loggy.info(
+          "mobile payments/create attempt "
+          "[directOnly=$directOnly, user_id=${payload["user_id"]}, device_id=${payload["device_id"]}, plan=${payload["plan"]}]",
+        );
         final response = await _httpClient.post<Map<String, dynamic>>(
           uri,
           data: payload,
@@ -72,10 +83,21 @@ class MobilePaymentService with InfraLogger {
   }
 
   Future<int?> _ensureUserId() async {
-    final cached = int.tryParse(_preferences.getString(_prefUserId) ?? "");
-    if (cached != null && cached > 0) {
-      final valid = await _isExistingMobileUser(cached);
-      if (valid) return cached;
+    final canonical = int.tryParse((_preferences.getString(_prefCanonicalUserId) ?? "").trim());
+    if (canonical != null && canonical > 0) {
+      await _cleanupLegacyPaymentUserId(canonical);
+      loggy.info("mobile payment user_id resolved [source=canonical user_id=$canonical]");
+      return canonical;
+    }
+
+    final legacy = int.tryParse((_preferences.getString(_prefLegacyPaymentUserId) ?? "").trim());
+    if (legacy != null && legacy > 0) {
+      await _storeCanonicalUserId(legacy, source: "legacy_payment_pref");
+      loggy.warning(
+        "mobile payment user_id migrated from legacy key "
+        "[legacy_key=$_prefLegacyPaymentUserId user_id=$legacy]",
+      );
+      return legacy;
     }
 
     final deviceId = await _ensureDeviceId();
@@ -96,7 +118,7 @@ class MobilePaymentService with InfraLogger {
         if (data is! Map<String, dynamic>) continue;
         final userId = (data["user_id"] as num?)?.toInt() ?? int.tryParse(data["user_id"]?.toString() ?? "");
         if (userId == null || userId <= 0) continue;
-        await _preferences.setString(_prefUserId, userId.toString());
+        await _storeCanonicalUserId(userId, source: "mobile_users_create");
         return userId;
       } catch (e, st) {
         loggy.warning("mobile users/create failed while ensuring user id [directOnly=$directOnly]", e, st);
@@ -105,19 +127,29 @@ class MobilePaymentService with InfraLogger {
     return null;
   }
 
-  Future<bool> _isExistingMobileUser(int userId) async {
-    try {
-      final uri = Uri.parse(_apiBaseUrl).resolve("/api/mobile/users/$userId/link").toString();
-      final response = await _httpClient.get<Map<String, dynamic>>(
-        uri,
-        headers: {"X-API-Key": _apiKey, "Content-Type": "application/json"},
-        directOnly: true,
-      );
-      final body = response.data;
-      return (response.statusCode ?? 0) == 200 && body != null && body["ok"] == true;
-    } catch (_) {
-      return false;
+  Future<void> _storeCanonicalUserId(int userId, {required String source}) async {
+    await _preferences.setString(_prefCanonicalUserId, userId.toString());
+    await _preferences.remove(_prefLegacyPaymentUserId);
+    loggy.info("mobile payment user_id stored [source=$source canonical_key=$_prefCanonicalUserId user_id=$userId]");
+  }
+
+  Future<void> _cleanupLegacyPaymentUserId(int canonicalUserId) async {
+    final legacyRaw = (_preferences.getString(_prefLegacyPaymentUserId) ?? "").trim();
+    if (legacyRaw.isEmpty) return;
+    final legacyUserId = int.tryParse(legacyRaw);
+    await _preferences.remove(_prefLegacyPaymentUserId);
+    if (legacyUserId == null || legacyUserId <= 0) {
+      loggy.info("mobile payment legacy user_id key removed [reason=invalid_value]");
+      return;
     }
+    if (legacyUserId != canonicalUserId) {
+      loggy.warning(
+        "mobile payment legacy user_id key removed due canonical mismatch "
+        "[canonical_user_id=$canonicalUserId legacy_user_id=$legacyUserId]",
+      );
+      return;
+    }
+    loggy.info("mobile payment legacy user_id key removed [reason=already_migrated user_id=$legacyUserId]");
   }
 
   Future<String> _ensureDeviceId() {

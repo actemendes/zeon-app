@@ -138,8 +138,9 @@ class MobileConnLinkImportService with InfraLogger {
 
     await _preferences.setBool(prefDone, true);
     await _preferences.setString(prefConnLink, normalized.primaryConnLink);
-    if (userId != null && userId > 0) {
-      await _preferences.setString(prefUserId, userId.toString());
+    final effectiveUserId = _resolveCanonicalUserId(userId: userId, openId: normalized.openId);
+    if (effectiveUserId != null && effectiveUserId > 0) {
+      await _preferences.setString(prefUserId, effectiveUserId.toString());
     } else if (clearUserIdWhenMissing) {
       await _preferences.remove(prefUserId);
     }
@@ -152,7 +153,7 @@ class MobileConnLinkImportService with InfraLogger {
       connLink: normalized.primaryConnLink,
       importedUrl: importedUrl,
       openId: normalized.openId,
-      userId: userId,
+      userId: effectiveUserId,
     );
   }
 
@@ -631,6 +632,18 @@ class MobileConnLinkImportService with InfraLogger {
     if (v.contains(' ')) return false;
     if (!RegExp(r'^[A-Za-z0-9]+$').hasMatch(v)) return false;
     return RegExp('[A-Za-z]').hasMatch(v) && RegExp('[0-9]').hasMatch(v);
+  }
+
+  int? _resolveCanonicalUserId({required int? userId, required String? openId}) {
+    if (userId != null && userId > 0) {
+      return userId;
+    }
+    final parsedOpenId = int.tryParse(openId?.trim() ?? "");
+    if (parsedOpenId != null && parsedOpenId > 0) {
+      loggy.info("mobile conn_link import: canonical user_id resolved from open_id [user_id=$parsedOpenId]");
+      return parsedOpenId;
+    }
+    return null;
   }
 }
 

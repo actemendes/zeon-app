@@ -15,6 +15,7 @@
 - Публичная open-ссылка: `https://zeon-vps.link/open/$openId`. Это fallback, если основной `api_link/open/$openId` недоступен, возвращает 404 или импорт по нему не проходит.
 - `subscriptionUrl`: технический URL из `<script id="zeon-data">`, который может указывать на фактическую подписку. Это не бизнес-термин и не заменяет `conn_link`.
 - `user_id`: id пользователя в мобильном API. Хранится в `mobile_auto_import_user_id`, если был получен через авто-импорт или bind confirm.
+- Каноническое правило (обновлено 11 мая 2026): при импорте `open/<id>` `MobileConnLinkImportService` извлекает numeric `openId` и сохраняет его в `mobile_auto_import_user_id`; далее этот же ключ должен использоваться в оплате.
 - `device_id`: стабильный id устройства. Берется из SharedPreferences, Android/iOS native id, secure storage или генерируется как UUID.
 - Manual rebind sync: best-effort POST `/api/v1/devices/rebind` после успешного ручного импорта в Intro, чтобы зафиксировать серверную привязку `device_id -> owner_user_id` для восстановления после `pm clear`/переустановки.
 - Intro completed: флаг `Preferences.introCompleted`; отвечает только за то, показывать Intro или сразу Home. Не равен факту наличия профиля.
@@ -115,6 +116,10 @@ flowchart TD
    - для каждого шага также вариант `platform=hiddify`.
 3. Если validate-проход неуспешен на всех candidates, прогнать второй no-validate-проход (`validateConfigOnImport: false`) в том же порядке.
 4. Если primary не импортировался и есть fallback, фиксировать warning про переключение на fallback.
+5. При сохранении `mobile_auto_import_user_id` приоритет источников такой:
+   - сначала явный `userId` из аргумента `importConnectionLink(...)`;
+   - если его нет, используется numeric `openId` из `/open/<id>`;
+   - если оба отсутствуют и `clearUserIdWhenMissing=true`, ключ `mobile_auto_import_user_id` удаляется.
 
 В `mobile_auto_import_conn_link` сохраняется основной `conn_link` (`api_link/open/$openId`), даже если конкретный импорт прошел через public fallback.
 
@@ -220,7 +225,7 @@ Intro открывается, когда `Preferences.introCompleted == false`.
 1. Открывается `_BindAccountCodeDialog`.
 2. Пользователь вводит `conn_link`, public open-ссылку или open id.
 3. Dialog валидирует ввод как ссылку/код.
-4. Вызывает `MobileConnLinkImportService.importConnectionLink(rawInput).timeout(90 секунд)`.
+4. Вызывает `MobileConnLinkImportService.importConnectionLink(rawInput).timeout(90 секунд)`. Для ввода вида `/open/<id>` этот шаг дополнительно записывает канонический `mobile_auto_import_user_id` из numeric `openId`.
 5. При успехе:
    - делает best-effort `MobileDeviceRebindService.syncManualImportRebind(...).timeout(15 секунд)`; ошибка rebind не ломает импорт;
    - показывает success toast;

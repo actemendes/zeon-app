@@ -542,7 +542,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
           children: [
             Text(
               key: const ValueKey(UiNames.textIntroBindDescription),
-              t.pages.profileDetails.linkAccount.description,
+              t.intro.bindAccountDialogDescription,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: helperTextColor,
                 fontFamily: 'Montserrat',
