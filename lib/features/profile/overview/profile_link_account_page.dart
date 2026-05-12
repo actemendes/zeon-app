@@ -7,6 +7,7 @@ import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/utils/link_parsers.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ProfileLinkAccountPage extends ConsumerWidget {
@@ -24,7 +25,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
       _ => null,
     };
     final accountLink = switch (profile) {
-      RemoteProfileEntity(:final url) when url.trim().isNotEmpty => url.trim(),
+      RemoteProfileEntity(:final url) when url.trim().isNotEmpty => LinkParser.toPublicOpenProfileLink(url),
       _ => '',
     };
     final canCopy = accountLink.isNotEmpty;

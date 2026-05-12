@@ -29,6 +29,7 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>zeon</string>
 				<string>hiddify</string>
 				<string>v2ray</string>
 				<string>v2rayn</string>

@@ -6,8 +6,15 @@ typedef ProfileLink = ({String url, String name});
 
 // TODO: test and improve
 abstract class LinkParser {
+  static const _mobileApiBaseUrl = String.fromEnvironment(
+    "mobile_api_base_url",
+    defaultValue: "https://130.49.151.173",
+  );
+  static const _mobilePublicOpenBaseUrl = "https://zeon-vps.link";
+
   static String generateSubShareLink(String url, [String? name]) {
-    final uri = Uri.tryParse(url);
+    final publicUrl = toPublicOpenProfileLink(url);
+    final uri = Uri.tryParse(publicUrl);
     if (uri == null) return '';
     final modifiedUri = Uri(
       scheme: uri.scheme,
@@ -20,8 +27,33 @@ abstract class LinkParser {
     return '$modifiedUri';
   }
 
+  static String toPublicOpenProfileLink(String rawUrl) {
+    final input = rawUrl.trim();
+    if (input.isEmpty) return input;
+    final uri = Uri.tryParse(input);
+    if (uri == null) return input;
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https') return input;
+    if (!uri.path.toLowerCase().startsWith('/open/')) return input;
+
+    final apiBase = Uri.tryParse(_mobileApiBaseUrl);
+    final publicBase = Uri.tryParse(_mobilePublicOpenBaseUrl);
+    if (apiBase == null || publicBase == null) return input;
+
+    final isApiHost = uri.host.toLowerCase() == apiBase.host.toLowerCase();
+    if (!isApiHost) return input;
+
+    return uri
+        .replace(
+          scheme: publicBase.scheme.isEmpty ? uri.scheme : publicBase.scheme,
+          host: publicBase.host,
+          port: publicBase.hasPort ? publicBase.port : null,
+        )
+        .toString();
+  }
+
   // protocols schemas
-  static const protocols = ['hiddify', 'v2ray', 'v2rayn', 'v2rayng', 'clash', 'clashmeta', 'sing-box'];
+  static const protocols = ['zeon', 'hiddify', 'v2ray', 'v2rayn', 'v2rayng', 'clash', 'clashmeta', 'sing-box'];
 
   static ProfileLink? parse(String link) {
     return simple(link) ?? deep(link);
@@ -38,7 +70,7 @@ abstract class LinkParser {
     if (uri == null || !uri.hasScheme || !uri.hasAuthority) return null;
     final queryParams = uri.queryParameters;
     switch (uri.scheme) {
-      case 'hiddify':
+      case 'zeon' || 'hiddify':
         if (queryParams.containsKey('url')) {
           return (url: queryParams['url']!, name: queryParams['name'] ?? '');
         } else {

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/http_client/http_client_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/ui/ui_names.dart';
+import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:hiddify/features/mobile/data/mobile_payment_service.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -44,13 +46,33 @@ class ProfilePaymentPage extends HookConsumerWidget {
     final breakpoint = Breakpoint(context);
     final selectedPlan = useState(_SubscriptionPlan.one);
     final isProcessingPayment = useState(false);
+    final paymentResultState = useState<_PaymentResultState?>(null);
+    final lastHandledSid = useRef<String?>(null);
     final paymentService = useMemoized(
       () => MobilePaymentService(
         httpClient: ref.read(httpClientProvider),
         preferences: ref.read(sharedPreferencesProvider).requireValue,
+        connLinkImportService: ref.read(mobileConnLinkImportServiceProvider),
       ),
       const [],
     );
+    final sidFromRoute = GoRouterState.of(context).uri.queryParameters["sid"]?.trim();
+
+    useEffect(() {
+      if (sidFromRoute == null || sidFromRoute.isEmpty) return null;
+      if (lastHandledSid.value == sidFromRoute) return null;
+      lastHandledSid.value = sidFromRoute;
+      Future<void>(() async {
+        await _processPaymentReturn(
+          sidFromRoute,
+          paymentService: paymentService,
+          isProcessingPayment: isProcessingPayment,
+          paymentResultState: paymentResultState,
+        );
+      });
+      return null;
+    }, [sidFromRoute, paymentService]);
+
     final headingColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
     final maxContentWidth = switch (breakpoint.activeBreakpoint) {
       Breakpoints.mobile => double.infinity,
@@ -173,7 +195,6 @@ class ProfilePaymentPage extends HookConsumerWidget {
           if (isProcessingPayment.value)
             Positioned.fill(
               child: IgnorePointer(
-                ignoring: true,
                 child: DecoratedBox(
                   decoration: BoxDecoration(color: Colors.black.withValues(alpha: .18)),
                   child: const Center(
@@ -182,9 +203,49 @@ class ProfilePaymentPage extends HookConsumerWidget {
                 ),
               ),
             ),
+          if (paymentResultState.value != null)
+            Positioned.fill(
+              child: _PaymentResultOverlay(
+                state: paymentResultState.value!,
+                onClose: paymentResultState.value == _PaymentResultState.waiting && isProcessingPayment.value
+                    ? null
+                    : () => paymentResultState.value = null,
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _processPaymentReturn(
+    String sid, {
+    required MobilePaymentService paymentService,
+    required ValueNotifier<bool> isProcessingPayment,
+    required ValueNotifier<_PaymentResultState?> paymentResultState,
+  }) async {
+    if (sid.trim().isEmpty) return;
+    if (isProcessingPayment.value) return;
+
+    isProcessingPayment.value = true;
+    paymentResultState.value = _PaymentResultState.waiting;
+
+    try {
+      final result = await paymentService.processPaymentSessionReturn(sid: sid);
+      switch (result.state) {
+        case PaymentSessionState.pending:
+          paymentResultState.value = _PaymentResultState.waiting;
+        case PaymentSessionState.succeeded:
+          paymentResultState.value = _PaymentResultState.succeeded;
+        case PaymentSessionState.canceled:
+          paymentResultState.value = _PaymentResultState.canceled;
+        case PaymentSessionState.failed:
+          paymentResultState.value = _PaymentResultState.failed;
+      }
+    } catch (_) {
+      paymentResultState.value = _PaymentResultState.failed;
+    } finally {
+      isProcessingPayment.value = false;
+    }
   }
 
   Future<void> _openCheckout(
@@ -221,6 +282,93 @@ class ProfilePaymentPage extends HookConsumerWidget {
     } finally {
       isProcessingPayment.value = false;
     }
+  }
+}
+
+enum _PaymentResultState { waiting, succeeded, canceled, failed }
+
+class _PaymentResultOverlay extends StatelessWidget {
+  const _PaymentResultOverlay({required this.state, required this.onClose});
+
+  final _PaymentResultState state;
+  final VoidCallback? onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = switch (state) {
+      _PaymentResultState.waiting => "Waiting for confirmation",
+      _PaymentResultState.succeeded => "Payment successful",
+      _PaymentResultState.canceled => "Payment canceled",
+      _PaymentResultState.failed => "Payment failed",
+    };
+    final subtitle = switch (state) {
+      _PaymentResultState.waiting => "We are checking the payment status.",
+      _PaymentResultState.succeeded => "Your subscription data is being refreshed.",
+      _PaymentResultState.canceled => "The payment was canceled. You can try again.",
+      _PaymentResultState.failed => "Unable to confirm payment right now. Please try again.",
+    };
+    final icon = switch (state) {
+      _PaymentResultState.waiting => null,
+      _PaymentResultState.succeeded => Icons.check_circle_rounded,
+      _PaymentResultState.canceled => Icons.remove_circle_outline_rounded,
+      _PaymentResultState.failed => Icons.error_outline_rounded,
+    };
+    final iconColor = switch (state) {
+      _PaymentResultState.waiting => theme.colorScheme.primary,
+      _PaymentResultState.succeeded => const Color(0xFF1DAE4D),
+      _PaymentResultState.canceled => const Color(0xFFAC7C19),
+      _PaymentResultState.failed => theme.colorScheme.error,
+    };
+
+    return ColoredBox(
+      color: Colors.black.withValues(alpha: .35),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Material(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon == null)
+                    const SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 2.4))
+                  else
+                    Icon(icon, size: 28, color: iconColor),
+                  const SizedBox(height: 12),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    subtitle,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: .8),
+                    ),
+                  ),
+                  if (onClose != null) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: onClose,
+                        child: Text(MaterialLocalizations.of(context).okButtonLabel),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -119,7 +119,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
                                 ),
                                 const Gap(4),
                                 SelectableText(
-                                  url,
+                                  LinkParser.toPublicOpenProfileLink(url),
                                   style: theme.textTheme.bodySmall!.copyWith(color: theme.colorScheme.onSurfaceVariant),
                                 ),
                               ],
@@ -273,7 +273,6 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
                               ref.read(provider.notifier).setContent(value);
                             },
                             maxLines: null,
-                            minLines: null,
                             expands: true,
                             textAlignVertical: TextAlignVertical.top,
                             decoration: const InputDecoration(
