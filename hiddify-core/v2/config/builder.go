@@ -82,6 +82,7 @@ var (
 // TODO include selectors
 func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptions) (*option.Options, error) {
 	applyStableTransportMode(hopts)
+	resolvedMTU := applyNetworkProfile(hopts)
 
 	input, err := ReadSingOptions(ctx, inputOpt)
 	if err != nil {
@@ -112,12 +113,34 @@ func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptio
 	if err := setRoutingOptions(&options, hopts); err != nil {
 		return nil, err
 	}
+	if err := validateRoutingInvariants(&options); err != nil {
+		return nil, err
+	}
 	if err := validateStableRouting(&options, hopts); err != nil {
 		return nil, err
 	}
 	emitRouteDiagnostics(&options, hopts)
+	if err := writeNetworkDiagnosticsSnapshot(hopts, &options, resolvedMTU); err != nil {
+		fmt.Println("network diagnostics write failed:", err)
+	}
 
 	return &options, nil
+}
+
+func validateRoutingInvariants(options *option.Options) error {
+	if options.Route == nil {
+		return fmt.Errorf("routing invariant violation: route options missing")
+	}
+	if options.DNS == nil {
+		return fmt.Errorf("routing invariant violation: dns options missing")
+	}
+	if options.Route.Final != OutboundSelectTag {
+		return fmt.Errorf("routing invariant violation: route.final must be %q, got %q", OutboundSelectTag, options.Route.Final)
+	}
+	if options.DNS.Final != DNSMultiRemoteTag {
+		return fmt.Errorf("routing invariant violation: dns.final must be %q, got %q", DNSMultiRemoteTag, options.DNS.Final)
+	}
+	return nil
 }
 
 func applyStableTransportMode(hopt *HiddifyOptions) {
@@ -177,8 +200,8 @@ func applyStableTransportMode(hopt *HiddifyOptions) {
 		hopt.MTU = targetMTU
 	}
 
-	if hopt.TUNStack == "" || hopt.TUNStack == "gvisor" {
-		hopt.TUNStack = "system"
+	if hopt.TUNStack == "" {
+		hopt.TUNStack = "mixed"
 	}
 
 	// Prefer DNS stability over frequent re-resolution in stable mode.
@@ -366,6 +389,19 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 	// 		InterruptExistConnections: true,
 	// 	},
 	// }
+	selectorInterrupt := !opt.RouteOptions.StableTransportMode
+	if opt.RouteOptions.SelectorInterrupt != nil {
+		selectorInterrupt = *opt.RouteOptions.SelectorInterrupt
+	}
+	selectorTolerance := uint16(max(int(opt.RouteOptions.SelectorTolerance), 1))
+	if opt.RouteOptions.StableTransportMode && selectorTolerance < 2 {
+		selectorTolerance = 2
+	}
+	balancerStrategy := opt.BalancerStrategy
+	if opt.RouteOptions.StableTransportMode && opt.RouteOptions.SelectorUseSticky && balancerStrategy == "round-robin" {
+		balancerStrategy = "sticky-sessions"
+	}
+
 	urlTest := option.Outbound{
 		Type: C.TypeBalancer,
 		Tag:  OutboundURLTestTag,
@@ -377,9 +413,9 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			// URLs:      opt.ConnectionTestUrls,
 			// Interval:  badoption.Duration(opt.URLTestInterval.Duration()),
 			// IdleTimeout: badoption.Duration(opt.URLTestIdleTimeout.Duration()),
-			Tolerance: 1,
+			Tolerance: selectorTolerance,
 			// IdleTimeout:               badoption.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
-			InterruptExistConnections: !opt.RouteOptions.StableTransportMode,
+			InterruptExistConnections: selectorInterrupt,
 		},
 	}
 
@@ -388,15 +424,15 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 		Tag:  OutboundRoundRobinTag,
 		Options: &option.BalancerOutboundOptions{
 			Outbounds:            tags,
-			Strategy:             opt.BalancerStrategy,
+			Strategy:             balancerStrategy,
 			DelayAcceptableRatio: 2,
 			// URL:       opt.ConnectionTestUrl,
 			// URLs:      opt.ConnectionTestUrls,
 			// Interval:  badoption.Duration(opt.URLTestInterval.Duration()),
 			// IdleTimeout: badoption.Duration(opt.URLTestIdleTimeout.Duration()),
-			Tolerance: 1,
+			Tolerance: selectorTolerance,
 			// IdleTimeout:               badoption.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
-			InterruptExistConnections: !opt.RouteOptions.StableTransportMode,
+			InterruptExistConnections: selectorInterrupt,
 		},
 	}
 	defaultSelect := tags[0]
@@ -426,7 +462,7 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 		Options: &option.SelectorOutboundOptions{
 			Outbounds:                 selectorTags,
 			Default:                   defaultSelect,
-			InterruptExistConnections: !opt.RouteOptions.StableTransportMode,
+			InterruptExistConnections: selectorInterrupt,
 		},
 	}
 	outbounds = append([]option.Outbound{selector}, outbounds...)
@@ -523,6 +559,11 @@ func emitRouteDiagnostics(options *option.Options, hopt *HiddifyOptions) {
 		hopt.TLSTricks.EnableFragment,
 		hopt.DisableDNSExpire,
 	)
+	fmt.Printf("[route-debug] selector tuning tolerance=%d use-sticky=%v interrupt-override=%v\n",
+		hopt.RouteOptions.SelectorTolerance,
+		hopt.RouteOptions.SelectorUseSticky,
+		hopt.RouteOptions.SelectorInterrupt,
+	)
 	if hopt.RouteOptions.StableTransportMode {
 		reasons := []string{}
 		if hopt.RouteOptions.StableTransportNetwork == "cellular" {
@@ -578,6 +619,46 @@ func emitRouteDiagnostics(options *option.Options, hopt *HiddifyOptions) {
 			fmt.Printf("[route-debug] rule#%d -> %s (%s)\n", idx, outbound, reason)
 		}
 	}
+}
+
+func emitRuleSetSourceDiagnostics(hopt *HiddifyOptions, source RuleSetSource) {
+	if hopt.LogLevel != "debug" && hopt.LogLevel != "trace" {
+		return
+	}
+	fmt.Printf("[route-debug] ruleset tag=%s url=%s interval=%s detour=%s fallback_candidates=%d\n",
+		source.Tag,
+		source.PrimaryURL,
+		time.Duration(source.UpdateInterval).String(),
+		source.DownloadDetour,
+		len(source.FallbackURLs),
+	)
+}
+
+func prepareRUCachedRuleSet(ctx context.Context, hopt *HiddifyOptions, source RuleSetSource) error {
+	if source.Tag != "geosite-ru" && source.Tag != "geoip-ru" {
+		return nil
+	}
+	if hopt.LogLevel == "debug" || hopt.LogLevel == "trace" {
+		fmt.Printf("[route-debug] ruleset-cache start tag=%s primary=%s fallback_count=%d\n", source.Tag, source.PrimaryURL, len(source.FallbackURLs))
+	}
+	resolved, meta, err := ensureRuleSetCachedFunc(ctx, source, runtimeDataDir(hopt))
+	if err != nil {
+		if hopt.LogLevel == "debug" || hopt.LogLevel == "trace" {
+			fmt.Printf("[route-debug] ruleset-cache fail tag=%s err=%s\n", source.Tag, shortErr(err))
+		}
+		return fmt.Errorf("ruleset %s update failed: %w", source.Tag, err)
+	}
+	hopt.ResolvedRuleSetPaths[source.Tag] = resolved.LocalPath
+	if hopt.LogLevel == "debug" || hopt.LogLevel == "trace" {
+		if resolved.UsedCache {
+			fmt.Printf("[route-debug] ruleset-cache used-cache tag=%s path=%s last_error=%s\n", source.Tag, resolved.LocalPath, meta.LastError)
+		} else if resolved.FallbackUsed {
+			fmt.Printf("[route-debug] ruleset-cache fallback-success tag=%s url=%s\n", source.Tag, resolved.ActiveURL)
+		} else {
+			fmt.Printf("[route-debug] ruleset-cache primary-success tag=%s url=%s\n", source.Tag, resolved.ActiveURL)
+		}
+	}
+	return nil
 }
 
 func isBlockedConnectionTestUrl(d string) bool {
@@ -831,35 +912,6 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	}
 
 	dnsRules = append(dnsRules, forceDirectRules...)
-	dnsRules = append(dnsRules, option.DefaultDNSRule{
-		RawDefaultDNSRule: option.RawDefaultDNSRule{
-			DomainSuffix: CriticalDomainSuffixes,
-		},
-		DNSRuleAction: option.DNSRuleAction{
-			Action: C.RuleActionTypeRoute,
-			RouteOptions: option.DNSRouteActionOptions{
-				Server:         DNSMultiRemoteTag,
-				Strategy:       hopt.RemoteDnsDomainStrategy,
-				RewriteTTL:     func() *uint32 { ttl := uint32(300); return &ttl }(),
-				DisableCache:   false,
-				BypassIfFailed: false,
-			},
-		},
-	})
-	routeRules = append(routeRules, option.Rule{
-		Type: C.RuleTypeDefault,
-		DefaultOptions: option.DefaultRule{
-			RawDefaultRule: option.RawDefaultRule{
-				DomainSuffix: CriticalDomainSuffixes,
-			},
-			RuleAction: option.RuleAction{
-				Action: C.RuleActionTypeRoute,
-				RouteOptions: option.RouteActionOptions{
-					Outbound: OutboundMainDetour,
-				},
-			},
-		},
-	})
 
 	routeRules = append(routeRules, option.Rule{
 		Type: C.RuleTypeDefault,
@@ -956,6 +1008,12 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 		})
 
 		if dnsAction != nil {
+			dnsActionCopy := *dnsAction
+			if contains([]string{DNSMultiDirectTag, DNSLocalTag, DNSTricksDirectTag}, dnsActionCopy.RouteOptions.Server) {
+				dnsActionCopy.RouteOptions.Strategy = hopt.DirectDnsDomainStrategy
+			} else if contains([]string{DNSMultiRemoteTag, DNSRemoteTagFallback, DNSRemoteNoWarpTag}, dnsActionCopy.RouteOptions.Server) {
+				dnsActionCopy.RouteOptions.Strategy = hopt.RemoteDnsDomainStrategy
+			}
 			dnsRules = append(dnsRules, option.DefaultDNSRule{
 				RawDefaultDNSRule: option.RawDefaultDNSRule{
 					Domain:        append([]string{}, defaultRule.Domain...),
@@ -963,7 +1021,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 					DomainKeyword: append([]string{}, defaultRule.DomainKeyword...),
 					DomainRegex:   append([]string{}, defaultRule.DomainRegex...),
 				},
-				DNSRuleAction: *dnsAction,
+				DNSRuleAction: dnsActionCopy,
 			})
 		}
 	}
@@ -1022,66 +1080,20 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 		},
 	}
 	if hopt.BlockAds {
-		rulesets = append(rulesets, option.RuleSet{
-			Type:   C.RuleSetTypeRemote,
-			Tag:    "geosite-ads",
-			Format: C.RuleSetFormatBinary,
-			RemoteOptions: option.RemoteRuleSet{
-				URL:            "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/block/geosite-category-ads-all.srs",
-				UpdateInterval: badoption.Duration(5 * time.Hour * 24),
-				DownloadDetour: OutboundSelectTag,
-			},
-		})
-		rulesets = append(rulesets, option.RuleSet{
-			Type:   C.RuleSetTypeRemote,
-			Tag:    "geosite-malware",
-			Format: C.RuleSetFormatBinary,
-			RemoteOptions: option.RemoteRuleSet{
-				URL:            "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/block/geosite-malware.srs",
-				UpdateInterval: badoption.Duration(5 * time.Hour * 24),
-				DownloadDetour: OutboundSelectTag,
-			},
-		})
-		rulesets = append(rulesets, option.RuleSet{
-			Type:   C.RuleSetTypeRemote,
-			Tag:    "geosite-phishing",
-			Format: C.RuleSetFormatBinary,
-			RemoteOptions: option.RemoteRuleSet{
-				URL:            "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/block/geosite-phishing.srs",
-				UpdateInterval: badoption.Duration(5 * time.Hour * 24),
-				DownloadDetour: OutboundSelectTag,
-			},
-		})
-		rulesets = append(rulesets, option.RuleSet{
-			Type:   C.RuleSetTypeRemote,
-			Tag:    "geosite-cryptominers",
-			Format: C.RuleSetFormatBinary,
-			RemoteOptions: option.RemoteRuleSet{
-				URL:            "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/block/geosite-cryptominers.srs",
-				UpdateInterval: badoption.Duration(5 * time.Hour * 24),
-				DownloadDetour: OutboundSelectTag,
-			},
-		})
-		rulesets = append(rulesets, option.RuleSet{
-			Type:   C.RuleSetTypeRemote,
-			Tag:    "geoip-phishing",
-			Format: C.RuleSetFormatBinary,
-			RemoteOptions: option.RemoteRuleSet{
-				URL:            "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/block/geoip-phishing.srs",
-				UpdateInterval: badoption.Duration(5 * time.Hour * 24),
-				DownloadDetour: OutboundSelectTag,
-			},
-		})
-		rulesets = append(rulesets, option.RuleSet{
-			Type:   C.RuleSetTypeRemote,
-			Tag:    "geoip-malware",
-			Format: C.RuleSetFormatBinary,
-			RemoteOptions: option.RemoteRuleSet{
-				URL:            "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/block/geoip-malware.srs",
-				UpdateInterval: badoption.Duration(5 * time.Hour * 24),
-				DownloadDetour: OutboundSelectTag,
-			},
-		})
+		blockSources := []RuleSetSource{
+			buildBlockRuleSetSource("geosite-category-ads-all"),
+			buildBlockRuleSetSource("geosite-malware"),
+			buildBlockRuleSetSource("geosite-phishing"),
+			buildBlockRuleSetSource("geosite-cryptominers"),
+			buildBlockRuleSetSource("geoip-phishing"),
+			buildBlockRuleSetSource("geoip-malware"),
+		}
+		blockSources[0].Tag = "geosite-ads"
+
+		for _, src := range blockSources {
+			emitRuleSetSourceDiagnostics(hopt, src)
+			rulesets = append(rulesets, ruleSetToOptionWithLocalOverride(src, hopt))
+		}
 
 		routeRules = append(routeRules, option.Rule{
 			Type: C.RuleTypeDefault,
@@ -1117,10 +1129,21 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			DNSRuleAction: rejectDnsAction,
 		})
 	}
-	if legacyRegionRoutingEnabled(hopt) {
+	ruRoutingMode := resolveRuRoutingMode(hopt)
+	if ruRoutingMode != RuRoutingModeOff {
+		if hopt.ResolvedRuleSetPaths == nil {
+			hopt.ResolvedRuleSetPaths = map[string]string{}
+		}
+		geositeRUSource := buildCountryGeositeRuleSetSource("ru")
+		emitRuleSetSourceDiagnostics(hopt, geositeRUSource)
+		if err := prepareRUCachedRuleSet(context.Background(), hopt, geositeRUSource); err != nil {
+			return err
+		}
+		rulesets = append(rulesets, ruleSetToOptionWithLocalOverride(geositeRUSource, hopt))
+
 		dnsRules = append(dnsRules, option.DefaultDNSRule{
 			RawDefaultDNSRule: option.RawDefaultDNSRule{
-				DomainSuffix: []string{"." + hopt.Region},
+				RuleSet: []string{"geosite-ru"},
 			},
 			DNSRuleAction: option.DNSRuleAction{
 				Action: C.RuleActionTypeRoute,
@@ -1132,68 +1155,23 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 				},
 			},
 		})
-		routeRules = append(routeRules, option.Rule{
-			Type: C.RuleTypeDefault,
-			DefaultOptions: option.DefaultRule{
-				RawDefaultRule: option.RawDefaultRule{
-					DomainSuffix: []string{"." + hopt.Region},
-				},
-				RuleAction: option.RuleAction{
-					Action: C.RuleActionTypeRoute,
-					RouteOptions: option.RouteActionOptions{
-						Outbound: OutboundDirectTag,
-					},
-				},
-			},
-		})
+		routeRuleSets := []string{"geosite-ru"}
 
-		dnsRules = append(dnsRules, option.DefaultDNSRule{
-			RawDefaultDNSRule: option.RawDefaultDNSRule{
-
-				RuleSet: []string{
-					"geosite-" + hopt.Region,
-				},
-			},
-			DNSRuleAction: option.DNSRuleAction{
-				Action: C.RuleActionTypeRoute,
-				RouteOptions: option.DNSRouteActionOptions{
-					Server:         DNSMultiDirectTag,
-					Strategy:       hopt.DirectDnsDomainStrategy,
-					RewriteTTL:     &DEFAULT_DNS_TTL,
-					BypassIfFailed: false,
-				},
-			},
-		})
-
-		rulesets = append(rulesets, option.RuleSet{
-			Type:   C.RuleSetTypeRemote,
-			Tag:    "geoip-" + hopt.Region,
-			Format: C.RuleSetFormatBinary,
-			RemoteOptions: option.RemoteRuleSet{
-				URL:            "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/country/geoip-" + hopt.Region + ".srs",
-				UpdateInterval: badoption.Duration(5 * time.Hour * 24),
-				DownloadDetour: OutboundSelectTag,
-			},
-		})
-		rulesets = append(rulesets, option.RuleSet{
-			Type:   C.RuleSetTypeRemote,
-			Tag:    "geosite-" + hopt.Region,
-			Format: C.RuleSetFormatBinary,
-			RemoteOptions: option.RemoteRuleSet{
-				URL:            "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/country/geosite-" + hopt.Region + ".srs",
-				UpdateInterval: badoption.Duration(5 * time.Hour * 24),
-				DownloadDetour: OutboundSelectTag,
-			},
-		})
+		if ruRoutingMode == RuRoutingModeGeositeGeoIPAggressive {
+			geoipRUSource := buildCountryGeoIPRuleSetSource("ru")
+			emitRuleSetSourceDiagnostics(hopt, geoipRUSource)
+			if err := prepareRUCachedRuleSet(context.Background(), hopt, geoipRUSource); err != nil {
+				return err
+			}
+			rulesets = append(rulesets, ruleSetToOptionWithLocalOverride(geoipRUSource, hopt))
+			routeRuleSets = append(routeRuleSets, "geoip-ru")
+		}
 
 		routeRules = append(routeRules, option.Rule{
 			Type: C.RuleTypeDefault,
 			DefaultOptions: option.DefaultRule{
 				RawDefaultRule: option.RawDefaultRule{
-					RuleSet: []string{
-						"geoip-" + hopt.Region,
-						"geosite-" + hopt.Region,
-					},
+					RuleSet: routeRuleSets,
 				},
 				RuleAction: option.RuleAction{
 					Action: C.RuleActionTypeRoute,
@@ -1220,9 +1198,41 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			},
 		})
 	}
+	if criticalDomainsFallbackEnabled(hopt) {
+		// Compatibility fallback kept below explicit user/UI/regional rules.
+		dnsRules = append(dnsRules, option.DefaultDNSRule{
+			RawDefaultDNSRule: option.RawDefaultDNSRule{
+				DomainSuffix: CriticalDomainSuffixes,
+			},
+			DNSRuleAction: option.DNSRuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.DNSRouteActionOptions{
+					Server:         DNSMultiRemoteTag,
+					Strategy:       hopt.RemoteDnsDomainStrategy,
+					RewriteTTL:     func() *uint32 { ttl := uint32(300); return &ttl }(),
+					DisableCache:   false,
+					BypassIfFailed: false,
+				},
+			},
+		})
+		routeRules = append(routeRules, option.Rule{
+			Type: C.RuleTypeDefault,
+			DefaultOptions: option.DefaultRule{
+				RawDefaultRule: option.RawDefaultRule{
+					DomainSuffix: CriticalDomainSuffixes,
+				},
+				RuleAction: option.RuleAction{
+					Action: C.RuleActionTypeRoute,
+					RouteOptions: option.RouteActionOptions{
+						Outbound: OutboundMainDetour,
+					},
+				},
+			},
+		})
+	}
 	options.Route = &option.RouteOptions{
 		Rules:               routeRules,
-		Final:               OutboundMainDetour,
+		Final:               OutboundSelectTag,
 		AutoDetectInterface: (!C.IsAndroid && !C.IsIos) && (hopt.EnableTun || hopt.EnableTunService),
 		DefaultDomainResolver: &option.DomainResolveOptions{
 			Server: func() string {
@@ -1352,8 +1362,35 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	return nil
 }
 
+const (
+	RuRoutingModeOff                    = "off"
+	RuRoutingModeGeosite                = "geosite"
+	RuRoutingModeGeositeGeoIPAggressive = "geosite_geoip_aggressive"
+)
+
+func resolveRuRoutingMode(hopt *HiddifyOptions) string {
+	mode := strings.TrimSpace(hopt.RuRoutingMode)
+	switch mode {
+	case RuRoutingModeOff, RuRoutingModeGeosite, RuRoutingModeGeositeGeoIPAggressive:
+		return mode
+	}
+	// Backward compatibility for older clients that don't send ru-routing-mode:
+	// legacy behavior was region direct routing when region != other and site mode unset.
+	if legacyRegionRoutingEnabled(hopt) {
+		return RuRoutingModeGeositeGeoIPAggressive
+	}
+	return RuRoutingModeOff
+}
+
 func legacyRegionRoutingEnabled(hopt *HiddifyOptions) bool {
 	return hopt.Region != "other" && strings.TrimSpace(hopt.SiteRoutingMode) == ""
+}
+
+func criticalDomainsFallbackEnabled(hopt *HiddifyOptions) bool {
+	if hopt == nil {
+		return false
+	}
+	return hopt.RouteOptions.CriticalDomainsFallbackEnabled
 }
 
 func buildUserRuleActions(r Rule) (option.RawDefaultRule, option.RuleAction, *option.DNSRuleAction, bool) {
@@ -1417,64 +1454,64 @@ func buildUserRuleActions(r Rule) (option.RawDefaultRule, option.RuleAction, *op
 	switch r.Outbound {
 	case Outbound_direct:
 		return defaultRule, option.RuleAction{
-			Action: C.RuleActionTypeRoute,
-			RouteOptions: option.RouteActionOptions{
-				Outbound: OutboundDirectTag,
-			},
-		}, &option.DNSRuleAction{
-			Action: C.RuleActionTypeRoute,
-			RouteOptions: option.DNSRouteActionOptions{
-				Server:         DNSMultiDirectTag,
-				RewriteTTL:     &DEFAULT_DNS_TTL,
-				DisableCache:   false,
-				BypassIfFailed: false,
-			},
-		}, true
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.RouteActionOptions{
+					Outbound: OutboundDirectTag,
+				},
+			}, &option.DNSRuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.DNSRouteActionOptions{
+					Server:         DNSMultiDirectTag,
+					RewriteTTL:     &DEFAULT_DNS_TTL,
+					DisableCache:   false,
+					BypassIfFailed: false,
+				},
+			}, true
 	case Outbound_direct_with_fragment:
 		return defaultRule, option.RuleAction{
-			Action: C.RuleActionTypeRoute,
-			RouteOptions: option.RouteActionOptions{
-				Outbound: OutboundDirectFragmentTag,
-			},
-		}, &option.DNSRuleAction{
-			Action: C.RuleActionTypeRoute,
-			RouteOptions: option.DNSRouteActionOptions{
-				Server:         DNSMultiDirectTag,
-				RewriteTTL:     &DEFAULT_DNS_TTL,
-				DisableCache:   false,
-				BypassIfFailed: false,
-			},
-		}, true
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.RouteActionOptions{
+					Outbound: OutboundDirectFragmentTag,
+				},
+			}, &option.DNSRuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.DNSRouteActionOptions{
+					Server:         DNSMultiDirectTag,
+					RewriteTTL:     &DEFAULT_DNS_TTL,
+					DisableCache:   false,
+					BypassIfFailed: false,
+				},
+			}, true
 	case Outbound_block:
 		return defaultRule, option.RuleAction{
-			Action: C.RuleActionTypeReject,
-			RejectOptions: option.RejectActionOptions{
-				Method: C.RuleActionRejectMethodDefault,
-			},
-		}, &option.DNSRuleAction{
-			Action: C.RuleActionTypePredefined,
-			PredefinedOptions: option.DNSRouteActionPredefined{
-				Rcode: func() *option.DNSRCode {
-					rejectRCode := option.DNSRCode(sdns.RcodeRefused)
-					return &rejectRCode
-				}(),
-			},
-		}, true
+				Action: C.RuleActionTypeReject,
+				RejectOptions: option.RejectActionOptions{
+					Method: C.RuleActionRejectMethodDefault,
+				},
+			}, &option.DNSRuleAction{
+				Action: C.RuleActionTypePredefined,
+				PredefinedOptions: option.DNSRouteActionPredefined{
+					Rcode: func() *option.DNSRCode {
+						rejectRCode := option.DNSRCode(sdns.RcodeRefused)
+						return &rejectRCode
+					}(),
+				},
+			}, true
 	default:
 		return defaultRule, option.RuleAction{
-			Action: C.RuleActionTypeRoute,
-			RouteOptions: option.RouteActionOptions{
-				Outbound: OutboundMainDetour,
-			},
-		}, &option.DNSRuleAction{
-			Action: C.RuleActionTypeRoute,
-			RouteOptions: option.DNSRouteActionOptions{
-				Server:         DNSMultiRemoteTag,
-				RewriteTTL:     &DEFAULT_DNS_TTL,
-				DisableCache:   false,
-				BypassIfFailed: false,
-			},
-		}, true
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.RouteActionOptions{
+					Outbound: OutboundMainDetour,
+				},
+			}, &option.DNSRuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.DNSRouteActionOptions{
+					Server:         DNSMultiRemoteTag,
+					RewriteTTL:     &DEFAULT_DNS_TTL,
+					DisableCache:   false,
+					BypassIfFailed: false,
+				},
+			}, true
 	}
 }
 

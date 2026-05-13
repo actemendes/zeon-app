@@ -161,6 +161,9 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
             }
 
             if (Settings.perAppProxyEnabled) {
+                if (Settings.hasPerAppProxyConflict) {
+                    Log.e(TAG, "Per-app proxy include/exclude lists are both populated; applying only active mode: ${Settings.perAppProxyMode}")
+                }
                 val appList = Settings.perAppProxyList
                 if (Settings.perAppProxyMode == PerAppProxyMode.INCLUDE) {
                     appList.forEach {

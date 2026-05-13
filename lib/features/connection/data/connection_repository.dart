@@ -114,7 +114,21 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
                 }
               }
               _configOptionsSnapshot = overridedOptions;
-              await singbox.changeOptions(overridedOptions).run();
+              loggy.info(
+                "apply config option (safe): "
+                "profile=${overridedOptions.networkProfile}, "
+                "mtuMode=${overridedOptions.networkMtuMode}, "
+                "fragmentMode=${overridedOptions.fragmentMode}, "
+                "profileDns=${overridedOptions.profileDnsStrategy}, "
+                "mtu=${overridedOptions.mtu}, "
+                "tun=${overridedOptions.tunImplementation.name}, "
+                "strictRoute=${overridedOptions.strictRoute}",
+              );
+              final changeResult = await singbox.changeOptions(overridedOptions).run();
+              changeResult.match(
+                (err) => throw ConnectionFailure.unexpected("failed to apply core options: $err"),
+                (_) => unit,
+              );
               return unit;
             }, (err, st) => err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st)),
           );

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/localization/locale_preferences.dart';
 import 'package:hiddify/core/model/constants.dart';
@@ -17,24 +16,23 @@ import 'package:version/version.dart';
 
 part 'app_update_notifier.g.dart';
 
-const _debugUpgrader = true;
-
 @riverpod
-Upgrader upgrader(Ref ref) => Upgrader(
-  storeController: UpgraderStoreController(
-    onAndroid: () => ref.read(appInfoProvider).requireValue.release.allowCustomUpdateChecker
-        ? UpgraderAppcastStore(appcastURL: Constants.appCastUrl)
-        : UpgraderPlayStore(),
-    oniOS: () => UpgraderAppStore(),
-    onLinux: () => UpgraderAppcastStore(appcastURL: Constants.appCastUrl),
-    onWindows: () => UpgraderAppcastStore(appcastURL: Constants.appCastUrl),
-    onMacOS: () => UpgraderAppcastStore(appcastURL: Constants.appCastUrl),
-    onWeb: () => UpgraderAppcastStore(appcastURL: Constants.appCastUrl),
-  ),
-  debugLogging: false && _debugUpgrader && kDebugMode,
-  // durationUntilAlertAgain: const Duration(hours: 12),
-  messages: UpgraderMessages(code: ref.watch(localePreferencesProvider).languageCode),
-);
+Upgrader upgrader(Ref ref) {
+  final updateChannel = UpdateChannel.read();
+  final appCastUrl = Constants.appCastUrl(updateChannel);
+  return Upgrader(
+    storeController: UpgraderStoreController(
+      onAndroid: () => UpgraderAppcastStore(appcastURL: appCastUrl),
+      oniOS: () => UpgraderAppStore(),
+      onLinux: () => UpgraderAppcastStore(appcastURL: appCastUrl),
+      onWindows: () => UpgraderAppcastStore(appcastURL: appCastUrl),
+      onMacOS: () => UpgraderAppcastStore(appcastURL: appCastUrl),
+      onWeb: () => UpgraderAppcastStore(appcastURL: appCastUrl),
+    ),
+    // durationUntilAlertAgain: const Duration(hours: 12),
+    messages: UpgraderMessages(code: ref.watch(localePreferencesProvider).languageCode),
+  );
+}
 
 @Riverpod(keepAlive: true)
 class AppUpdateNotifier extends _$AppUpdateNotifier with AppLogger {
@@ -50,6 +48,7 @@ class AppUpdateNotifier extends _$AppUpdateNotifier with AppLogger {
   Future<AppUpdateState> check() async {
     loggy.debug("checking for update");
     state = const AppUpdateState.checking();
+    final updateChannel = UpdateChannel.read();
     final appInfo = ref.watch(appInfoProvider).requireValue;
     if (!appInfo.release.allowCustomUpdateChecker) {
       loggy.debug("custom update checkers are not allowed for [${appInfo.release.name}] release");
@@ -57,7 +56,7 @@ class AppUpdateNotifier extends _$AppUpdateNotifier with AppLogger {
     }
     return ref
         .watch(appUpdateRepositoryProvider)
-        .getLatestVersion()
+        .getLatestVersion(includePreReleases: updateChannel.includePreReleases)
         .match(
           (err) {
             loggy.warning("failed to get latest version", err);
@@ -65,6 +64,10 @@ class AppUpdateNotifier extends _$AppUpdateNotifier with AppLogger {
           },
           (remote) {
             try {
+              if (!updateChannel.includePreReleases && remote.preRelease) {
+                loggy.info("stable channel ignores pre-release [${remote.releaseTag}]");
+                return state = const AppUpdateState.notAvailable();
+              }
               final latestVersion = Version.parse(remote.version);
               final currentVersion = Version.parse(appInfo.version);
               if (latestVersion > currentVersion) {

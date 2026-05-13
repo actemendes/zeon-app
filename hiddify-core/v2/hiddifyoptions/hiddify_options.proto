@@ -30,6 +30,13 @@ message HiddifyOptions {
   InboundOptions inbound_options = 16; // Inbound connection options.
   URLTestOptions url_test_options = 17; // URL test configuration options.
   RouteOptions route_options = 18; // Routing-related options.
+  RuRoutingMode ru_routing_mode = 19; // Explicit RU routing mode.
+}
+
+enum RuRoutingMode {
+  ru_routing_off = 0;
+  ru_routing_geosite = 1;
+  ru_routing_geosite_geoip_aggressive = 2;
 }
 
 /**

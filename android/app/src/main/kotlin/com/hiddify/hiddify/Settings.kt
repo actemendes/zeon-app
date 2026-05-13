@@ -29,6 +29,13 @@ object Settings {
     val perAppProxyEnabled: Boolean
         get() = perAppProxyMode != PerAppProxyMode.OFF
 
+    val hasPerAppProxyConflict: Boolean
+        get() {
+            val includeRaw = preferences.getString(SettingsKey.PER_APP_PROXY_INCLUDE_LIST, "") ?: ""
+            val excludeRaw = preferences.getString(SettingsKey.PER_APP_PROXY_EXCLUDE_LIST, "") ?: ""
+            return includeRaw.isNotBlank() && excludeRaw.isNotBlank() && perAppProxyMode != PerAppProxyMode.OFF
+        }
+
     val perAppProxyList: List<String>
         get() {
             val stringValue = if (perAppProxyMode == PerAppProxyMode.INCLUDE) {
@@ -160,4 +167,3 @@ object Settings {
 
 
 }
-

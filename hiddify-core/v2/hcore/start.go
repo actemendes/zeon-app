@@ -96,6 +96,9 @@ func StartService(ctx context.Context, in *StartRequest) (coreResponse *CoreInfo
 	if err != nil {
 		return errorWrapper(MessageType_ERROR_BUILDING_CONFIG, err)
 	}
+	if static.HiddifyOptions != nil {
+		static.HiddifyOptions.RuntimeDataDir = filepath.Join(sWorkingPath, "data")
+	}
 
 	static.previousStartRequest = in
 	options, err := BuildConfig(ctx, in)

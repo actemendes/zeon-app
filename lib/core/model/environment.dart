@@ -23,3 +23,17 @@ enum Release {
   static Release read() =>
       Release.values.firstOrNullWhere((e) => e.key == const String.fromEnvironment("release")) ?? Release.general;
 }
+
+enum UpdateChannel {
+  stable("stable", includePreReleases: false),
+  beta("beta", includePreReleases: true);
+
+  const UpdateChannel(this.key, {required this.includePreReleases});
+
+  final String key;
+  final bool includePreReleases;
+
+  static UpdateChannel read() =>
+      UpdateChannel.values.firstOrNullWhere((e) => e.key == const String.fromEnvironment("update_channel")) ??
+      UpdateChannel.stable;
+}

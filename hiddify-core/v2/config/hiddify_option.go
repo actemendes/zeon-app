@@ -19,6 +19,7 @@ type HiddifyOptions struct {
 	ClashApiSecret          string `json:"web-secret,omitempty"`
 	Region                  string `json:"region,omitempty"`
 	SiteRoutingMode         string `json:"site-routing-mode,omitempty"`
+	RuRoutingMode           string `json:"ru-routing-mode,omitempty"`
 	BlockAds                bool   `json:"block-ads,omitempty" overridable:"true"`
 	UseXrayCoreWhenPossible bool   `json:"use-xray-core-when-possible,omitempty" overridable:"true"`
 	BalancerStrategy        string `json:"balancer-strategy,omitempty" overridable:"true"`
@@ -35,6 +36,13 @@ type HiddifyOptions struct {
 	InboundOptions
 	URLTestOptions
 	RouteOptions
+
+	// Runtime-only cache prepared paths for rule-sets.
+	// Not serialized and not user-configurable.
+	ResolvedRuleSetPaths map[string]string `json:"-"`
+	// Runtime-only absolute data directory used for diagnostics/cache files.
+	// Not serialized and not user-configurable.
+	RuntimeDataDir string `json:"-"`
 }
 
 type DNSOptions struct {
@@ -69,22 +77,33 @@ type URLTestOptions struct {
 }
 
 type RouteOptions struct {
-	ResolveDestination     bool                  `json:"resolve-destination,omitempty"`
-	IPv6Mode               option.DomainStrategy `json:"ipv6-mode,omitempty"`
-	BypassLAN              bool                  `json:"bypass-lan,omitempty"`
-	AllowConnectionFromLAN bool                  `json:"allow-connection-from-lan,omitempty"`
-	BlockQuic              bool                  `json:"block-quic,omitempty"`
-	PinMainOutbound        bool                  `json:"pin-main-outbound,omitempty" overridable:"true"`
-	StableVPNRouting       bool                  `json:"stable-vpn-routing,omitempty" overridable:"true"`
-	StableTransportMode    bool                  `json:"stable-transport-mode,omitempty" overridable:"true"`
-	StableTransportProfile string                `json:"stable-transport-profile,omitempty" overridable:"true"` // auto|fast|stable
-	StableTransportNetwork string                `json:"stable-transport-network,omitempty" overridable:"true"` // wifi|cellular|unknown
-	StableTransportHealth  string                `json:"stable-transport-health,omitempty" overridable:"true"`  // good|degraded|bad
-	RecentDisconnects      uint32                `json:"recent-disconnects,omitempty" overridable:"true"`
-	RecentTimeouts         uint32                `json:"recent-timeouts,omitempty" overridable:"true"`
-	RecentFlowBreaks       uint32                `json:"recent-flow-breaks,omitempty" overridable:"true"`
-	RecentPacketLossPct    uint32                `json:"recent-packet-loss-pct,omitempty" overridable:"true"`
-	RecentJitterMs         uint32                `json:"recent-jitter-ms,omitempty" overridable:"true"`
+	ResolveDestination             bool                  `json:"resolve-destination,omitempty"`
+	IPv6Mode                       option.DomainStrategy `json:"ipv6-mode,omitempty"`
+	BypassLAN                      bool                  `json:"bypass-lan,omitempty"`
+	AllowConnectionFromLAN         bool                  `json:"allow-connection-from-lan,omitempty"`
+	BlockQuic                      bool                  `json:"block-quic,omitempty"`
+	PinMainOutbound                bool                  `json:"pin-main-outbound,omitempty" overridable:"true"`
+	StableVPNRouting               bool                  `json:"stable-vpn-routing,omitempty" overridable:"true"`
+	StableTransportMode            bool                  `json:"stable-transport-mode,omitempty" overridable:"true"`
+	StableTransportProfile         string                `json:"stable-transport-profile,omitempty" overridable:"true"` // auto|fast|stable
+	StableTransportNetwork         string                `json:"stable-transport-network,omitempty" overridable:"true"` // wifi|cellular|unknown
+	StableTransportHealth          string                `json:"stable-transport-health,omitempty" overridable:"true"`  // good|degraded|bad
+	RecentDisconnects              uint32                `json:"recent-disconnects,omitempty" overridable:"true"`
+	RecentTimeouts                 uint32                `json:"recent-timeouts,omitempty" overridable:"true"`
+	RecentFlowBreaks               uint32                `json:"recent-flow-breaks,omitempty" overridable:"true"`
+	RecentPacketLossPct            uint32                `json:"recent-packet-loss-pct,omitempty" overridable:"true"`
+	RecentJitterMs                 uint32                `json:"recent-jitter-ms,omitempty" overridable:"true"`
+	SelectorTolerance              uint32                `json:"selector-tolerance,omitempty" overridable:"true"`
+	SelectorUseSticky              bool                  `json:"selector-use-sticky,omitempty" overridable:"true"`
+	SelectorInterrupt              *bool                 `json:"selector-interrupt-exist-connections,omitempty" overridable:"true"`
+	CriticalDomainsFallbackEnabled bool                  `json:"critical-domains-fallback-enabled,omitempty" overridable:"true"`
+	NetworkProfile                 string                `json:"network-profile,omitempty" overridable:"true"`        // default|stable_mobile|wifi_high_mtu|low_mtu_diagnostic|direct_ipv4_only_diagnostic|ipv4_only_diagnostic|no_fragment_diagnostic|lan_friendly
+	NetworkMTUMode                 string                `json:"network-mtu-mode,omitempty" overridable:"true"`       // fixed|adaptive|diagnostic_low|diagnostic_high
+	NetworkTransportType           string                `json:"network-transport-type,omitempty" overridable:"true"` // unknown|wifi|cellular|ethernet
+	NetworkInterfaceMTU            uint32                `json:"network-interface-mtu,omitempty" overridable:"true"`
+	FragmentMode                   string                `json:"fragment-mode,omitempty" overridable:"true"`        // default|off
+	ProfileDNSStrategy             string                `json:"profile-dns-strategy,omitempty" overridable:"true"` // default|prefer_ipv4|ipv4_only
+	ApplyOnNetworkChange           bool                  `json:"apply-on-network-change,omitempty" overridable:"true"`
 }
 
 type TLSTricks struct {
@@ -148,26 +167,38 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 			// URLTestIdleTimeout: DurationInSeconds(6000),
 		},
 		RouteOptions: RouteOptions{
-			ResolveDestination:     false,
-			IPv6Mode:               option.DomainStrategy(dns.DomainStrategyAsIS),
-			BypassLAN:              false,
-			AllowConnectionFromLAN: false,
-			PinMainOutbound:        false,
-			StableVPNRouting:       false,
-			StableTransportMode:    false,
-			StableTransportProfile: "auto",
-			StableTransportNetwork: "unknown",
-			StableTransportHealth:  "good",
-			RecentDisconnects:      0,
-			RecentTimeouts:         0,
-			RecentFlowBreaks:       0,
-			RecentPacketLossPct:    0,
-			RecentJitterMs:         0,
+			ResolveDestination:             false,
+			IPv6Mode:                       option.DomainStrategy(dns.DomainStrategyAsIS),
+			BypassLAN:                      false,
+			AllowConnectionFromLAN:         false,
+			PinMainOutbound:                false,
+			StableVPNRouting:               false,
+			StableTransportMode:            false,
+			StableTransportProfile:         "auto",
+			StableTransportNetwork:         "unknown",
+			StableTransportHealth:          "good",
+			RecentDisconnects:              0,
+			RecentTimeouts:                 0,
+			RecentFlowBreaks:               0,
+			RecentPacketLossPct:            0,
+			RecentJitterMs:                 0,
+			SelectorTolerance:              1,
+			SelectorUseSticky:              false,
+			SelectorInterrupt:              nil,
+			CriticalDomainsFallbackEnabled: false,
+			NetworkProfile:                 "stable_mobile",
+			NetworkMTUMode:                 "fixed",
+			NetworkTransportType:           "unknown",
+			NetworkInterfaceMTU:            0,
+			FragmentMode:                   "default",
+			ProfileDNSStrategy:             "default",
+			ApplyOnNetworkChange:           false,
 		},
 		LogLevel: "warn",
 		// LogFile:        "/dev/null",
 		LogFile:        "data/box.log",
 		Region:         "other",
+		RuRoutingMode:  "off",
 		EnableClashApi: true,
 
 		ClashApiPort:   16756,

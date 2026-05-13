@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>ZEON Beta</title>
+    <item>
+      <title>Version 0.0.1-beta</title>
+      <pubDate>Wed, 06 May 2026 13:24:46 +0000</pubDate>
+      <enclosure
+        url="https://github.com/actemendes/zeon-app/releases/download/v0.0.1-beta/android-zeon.apk"
+        sparkle:version="0.0.1-beta"
+        sparkle:os="android" />
+    </item>
+    <item>
+      <title>Version 0.0.1-beta</title>
+      <pubDate>Wed, 06 May 2026 13:24:46 +0000</pubDate>
+      <enclosure
+        url="https://github.com/actemendes/zeon-app/releases/download/v0.0.1-beta/windows-zeon.zip"
+        sparkle:version="0.0.1-beta"
+        sparkle:os="windows" />
+    </item>
+    <item>
+      <title>Version 0.0.1-beta</title>
+      <pubDate>Wed, 06 May 2026 13:24:46 +0000</pubDate>
+      <enclosure
+        url="https://github.com/actemendes/zeon-app/releases/tag/v0.0.1-beta"
+        sparkle:version="0.0.1-beta"
+        sparkle:os="macos" />
+    </item>
+  </channel>
+</rss>

@@ -69,9 +69,13 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 	if err != nil {
 		return err
 	}
-	trick_dns, err := getDNSServerOptions(DNSTricksDirectTag, "https://dns.cloudflare.com/dns-query#fragment=300", DNSDirectTag, OutboundDirectFragmentTag)
-	if err != nil {
-		return err
+	enableDNSTrickDirect := shouldEnableDNSTrickDirect(opt)
+	var trickDNS *option.DNSServerOptions
+	if enableDNSTrickDirect {
+		trickDNS, err = getDNSServerOptions(DNSTricksDirectTag, "https://dns.cloudflare.com/dns-query#fragment=300", DNSDirectTag, OutboundDirectFragmentTag)
+		if err != nil {
+			return err
+		}
 	}
 	local_dns, err := getDNSServerOptions(DNSLocalTag, "local", "", "")
 	if err != nil {
@@ -108,7 +112,6 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 				*static_dns,
 				*remote_dns,
 				*remote_dns_fallback,
-				*trick_dns,
 				*direct_dns,
 				*local_dns,
 				*remote_no_warp_dns,
@@ -118,6 +121,9 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 			},
 			Rules: []option.DNSRule{},
 		},
+	}
+	if enableDNSTrickDirect && trickDNS != nil {
+		dnsOptions.Servers = append(dnsOptions.Servers, *trickDNS)
 	}
 	if opt.EnableFakeDNS {
 		inet4Range := badoption.Prefix(netip.MustParsePrefix("198.18.0.0/15"))

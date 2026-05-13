@@ -38,20 +38,32 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async {
+Future<void> lazyBootstrap(
+  WidgetsBinding widgetsBinding,
+  Environment env,
+) async {
   final shouldPreserveNativeSplash = await _shouldShowNativeSplashOnThisRun();
   if (shouldPreserveNativeSplash) {
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   }
   LoggerController.preInit();
   FlutterError.onError = Logger.logFlutterError;
-  WidgetsBinding.instance.platformDispatcher.onError = Logger.logPlatformDispatcherError;
+  WidgetsBinding.instance.platformDispatcher.onError =
+      Logger.logPlatformDispatcherError;
 
-  runApp(_BootstrapHost(environment: env, shouldRemoveNativeSplash: shouldPreserveNativeSplash));
+  runApp(
+    _BootstrapHost(
+      environment: env,
+      shouldRemoveNativeSplash: shouldPreserveNativeSplash,
+    ),
+  );
 }
 
 class _BootstrapHost extends StatefulWidget {
-  const _BootstrapHost({required this.environment, required this.shouldRemoveNativeSplash});
+  const _BootstrapHost({
+    required this.environment,
+    required this.shouldRemoveNativeSplash,
+  });
 
   final Environment environment;
   final bool shouldRemoveNativeSplash;
@@ -88,7 +100,10 @@ class _BootstrapHostState extends State<_BootstrapHost> {
       final themeMode = switch (persisted) {
         null => AppThemeMode.system,
         "black" => AppThemeMode.dark,
-        _ => AppThemeMode.values.firstWhere((mode) => mode.name == persisted, orElse: () => AppThemeMode.system),
+        _ => AppThemeMode.values.firstWhere(
+          (mode) => mode.name == persisted,
+          orElse: () => AppThemeMode.system,
+        ),
       };
       if (!mounted) return;
       setState(() {
@@ -129,7 +144,10 @@ class _BootstrapSplashApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(debugShowCheckedModeBanner: false, home: BootstrapSplashScreen(themeMode: themeMode));
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: BootstrapSplashScreen(themeMode: themeMode),
+    );
   }
 }
 
@@ -162,17 +180,32 @@ class _BootstrapFailureApp extends StatelessWidget {
 Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   final stopWatch = Stopwatch()..start();
 
-  final container = ProviderContainer(overrides: [environmentProvider.overrideWithValue(env)]);
+  final container = ProviderContainer(
+    overrides: [environmentProvider.overrideWithValue(env)],
+  );
 
-  await _init("directories", () => container.read(appDirectoriesProvider.future));
+  await _init(
+    "directories",
+    () => container.read(appDirectoriesProvider.future),
+  );
   LoggerController.init(container.read(logPathResolverProvider).appFile().path);
 
-  final appInfo = await _init("app info", () => container.read(appInfoProvider.future));
-  await _init("preferences", () => container.read(sharedPreferencesProvider.future));
+  final appInfo = await _init(
+    "app info",
+    () => container.read(appInfoProvider.future),
+  );
+  await _init(
+    "preferences",
+    () => container.read(sharedPreferencesProvider.future),
+  );
 
   await _init("preferences migration", () async {
     try {
-      await PreferencesMigration(sharedPreferences: container.read(sharedPreferencesProvider).requireValue).migrate();
+      await PreferencesMigration(
+        sharedPreferences: container
+            .read(sharedPreferencesProvider)
+            .requireValue,
+      ).migrate();
     } catch (e, stackTrace) {
       Logger.bootstrap.error("preferences migration failed", e, stackTrace);
       if (env == Environment.dev) rethrow;
@@ -182,28 +215,52 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   });
 
   final debug = container.read(debugModeNotifierProvider) || kDebugMode;
-  await _safeInit("per-app proxy defaults", () => _seedPerAppProxyDefaults(container), timeout: 5000);
-  await _safeInit("site routing defaults", () => _seedSiteRoutingDefaults(container), timeout: 5000);
+  await _safeInit(
+    "per-app proxy defaults",
+    () => _seedPerAppProxyDefaults(container),
+    timeout: 5000,
+  );
+  await _safeInit(
+    "site routing defaults",
+    () => _seedSiteRoutingDefaults(container),
+    timeout: 5000,
+  );
 
   if (PlatformUtils.isDesktop) {
-    await _init("window controller", () => container.read(windowNotifierProvider.future));
+    await _init(
+      "window controller",
+      () => container.read(windowNotifierProvider.future),
+    );
 
     final silentStart = container.read(Preferences.silentStart);
-    Logger.bootstrap.debug("silent start [${silentStart ? "Enabled" : "Disabled"}]");
+    Logger.bootstrap.debug(
+      "silent start [${silentStart ? "Enabled" : "Disabled"}]",
+    );
     if (!silentStart) {
       await container.read(windowNotifierProvider.notifier).show(focus: false);
     } else {
       Logger.bootstrap.debug("silent start, remain hidden accessible via tray");
     }
-    await _init("auto start service", () => container.read(autoStartNotifierProvider.future));
+    await _init(
+      "auto start service",
+      () => container.read(autoStartNotifierProvider.future),
+    );
   }
-  await _init("logs repository", () => container.read(logRepositoryProvider.future));
+  await _init(
+    "logs repository",
+    () => container.read(logRepositoryProvider.future),
+  );
   await _init("logger controller", () => LoggerController.postInit(debug));
 
   Logger.bootstrap.info(appInfo.format());
 
-  await _init("profile repository", () => container.read(profileRepositoryProvider.future));
-  final profileRepository = container.read(profileRepositoryProvider).requireValue;
+  await _init(
+    "profile repository",
+    () => container.read(profileRepositoryProvider.future),
+  );
+  final profileRepository = container
+      .read(profileRepositoryProvider)
+      .requireValue;
   final profileDataSource = container.read(profileDataSourceProvider);
   final preferences = container.read(sharedPreferencesProvider).requireValue;
 
@@ -213,11 +270,21 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
     profileDataSource: profileDataSource,
     preferences: preferences,
   );
-  await _safeInit("debug profile bootstrap", () => debugProfileBootstrapService.run(), timeout: 10000);
+  await _safeInit(
+    "debug profile bootstrap",
+    () => debugProfileBootstrapService.run(),
+    timeout: 10000,
+  );
 
-  await _init("translations", () => container.read(translationsProvider.future));
+  await _init(
+    "translations",
+    () => container.read(translationsProvider.future),
+  );
 
-  await _init("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
+  await _init(
+    "hiddify-core",
+    () => container.read(hiddifyCoreServiceProvider).init(),
+  );
   final mobileConnLinkImportService = MobileConnLinkImportService(
     httpClient: container.read(httpClientProvider),
     profileRepository: profileRepository,
@@ -238,14 +305,24 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
       timeout: 5000,
     );
   }
-  await _safeInit("mobile auto import", () => mobileBootstrapImportService.run(), timeout: 90000);
+  await _safeInit(
+    "mobile auto import",
+    () => mobileBootstrapImportService.run(),
+    timeout: 90000,
+  );
   await _safeInit(
     "wait active profile after mobile auto import",
-    () => profileDataSource.watchActiveProfile().firstWhere((profile) => profile != null),
+    () => profileDataSource.watchActiveProfile().firstWhere(
+      (profile) => profile != null,
+    ),
     timeout: 5000,
   );
   unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
-  await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
+  await _safeInit(
+    "active profile",
+    () => container.read(activeProfileProvider.future),
+    timeout: 1000,
+  );
 
   if (!kIsWeb) {
     // await _safeInit(
@@ -255,7 +332,11 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
     // );
 
     if (PlatformUtils.isDesktop) {
-      await _safeInit("system tray", () => container.read(systemTrayNotifierProvider.future), timeout: 1000);
+      await _safeInit(
+        "system tray",
+        () => container.read(systemTrayNotifierProvider.future),
+        timeout: 1000,
+      );
     }
 
     if (PlatformUtils.isAndroid) {
@@ -335,17 +416,28 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
   final currentMode = container.read(Preferences.perAppProxyMode);
   final currentInclude = container.read(Preferences.includeApps);
   final currentExclude = container.read(Preferences.excludeApps);
-  final shouldApplyDefaults = currentMode == PerAppProxyMode.off && currentInclude.isEmpty && currentExclude.isEmpty;
+  final shouldApplyDefaults =
+      currentMode == PerAppProxyMode.off &&
+      currentInclude.isEmpty &&
+      currentExclude.isEmpty;
   if (shouldApplyDefaults) {
-    await container.read(Preferences.perAppProxyMode.notifier).update(PerAppProxyMode.exclude);
+    await container
+        .read(Preferences.perAppProxyMode.notifier)
+        .update(PerAppProxyMode.exclude);
     await container.read(Preferences.includeApps.notifier).update(const []);
     await container.read(Preferences.excludeApps.notifier).update(excludePkgs);
+    await container
+        .read(Preferences.seededExcludeApps.notifier)
+        .update(excludePkgs);
     await container
         .read(appProxyDataSourceProvider)
         .importPkgs(
           backup: const PerAppProxyBackup(
             include: PerAppProxyBackupMode(selected: [], deselected: []),
-            exclude: PerAppProxyBackupMode(selected: excludePkgs, deselected: []),
+            exclude: PerAppProxyBackupMode(
+              selected: excludePkgs,
+              deselected: [],
+            ),
           ),
         );
     await prefs.setBool(seedKey, true);
@@ -354,15 +446,27 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
   // One-time self-heal for existing installs:
   // keep user's exclude mode, append only missing default direct apps so they appear in UI.
   if (currentMode == PerAppProxyMode.exclude) {
-    final merged = <String>[...currentExclude, ...excludePkgs.where((pkg) => !currentExclude.contains(pkg))];
+    final merged = <String>[
+      ...currentExclude,
+      ...excludePkgs.where((pkg) => !currentExclude.contains(pkg)),
+    ];
     if (merged.length != currentExclude.length) {
       await container.read(Preferences.excludeApps.notifier).update(merged);
+      await container
+          .read(Preferences.seededExcludeApps.notifier)
+          .update(excludePkgs);
       await container
           .read(appProxyDataSourceProvider)
           .importPkgs(
             backup: PerAppProxyBackup(
-              include: const PerAppProxyBackupMode(selected: [], deselected: []),
-              exclude: PerAppProxyBackupMode(selected: merged, deselected: const []),
+              include: const PerAppProxyBackupMode(
+                selected: [],
+                deselected: [],
+              ),
+              exclude: PerAppProxyBackupMode(
+                selected: merged,
+                deselected: const [],
+              ),
             ),
           );
     }
@@ -393,26 +497,44 @@ Future<void> _seedSiteRoutingDefaults(ProviderContainer container) async {
   final currentMode = container.read(Preferences.siteRoutingMode);
   final currentInclude = container.read(Preferences.includeSites);
   final currentExclude = container.read(Preferences.excludeSites);
-  final shouldApplyDefaults = currentMode == SiteRoutingMode.off && currentInclude.isEmpty && currentExclude.isEmpty;
+  final shouldApplyDefaults =
+      currentMode == SiteRoutingMode.off &&
+      currentInclude.isEmpty &&
+      currentExclude.isEmpty;
   if (shouldApplyDefaults) {
-    await container.read(Preferences.siteRoutingMode.notifier).update(SiteRoutingMode.exclude);
+    await container
+        .read(Preferences.siteRoutingMode.notifier)
+        .update(SiteRoutingMode.exclude);
     await container.read(Preferences.includeSites.notifier).update(const []);
-    await container.read(Preferences.excludeSites.notifier).update(excludeSites);
+    await container
+        .read(Preferences.excludeSites.notifier)
+        .update(excludeSites);
+    await container
+        .read(Preferences.seededExcludeSites.notifier)
+        .update(excludeSites);
     await prefs.setBool(seedKey, true);
     return;
   }
 
   if (currentMode == SiteRoutingMode.exclude) {
-    final merged = <String>[...currentExclude, ...excludeSites.where((site) => !currentExclude.contains(site))];
+    final merged = <String>[
+      ...currentExclude,
+      ...excludeSites.where((site) => !currentExclude.contains(site)),
+    ];
     if (merged.length != currentExclude.length) {
       await container.read(Preferences.excludeSites.notifier).update(merged);
+      await container
+          .read(Preferences.seededExcludeSites.notifier)
+          .update(excludeSites);
     }
   }
 
   await prefs.setBool(seedKey, true);
 }
 
-Future<void> _retryMobileAutoImport(MobileBootstrapImportService service) async {
+Future<void> _retryMobileAutoImport(
+  MobileBootstrapImportService service,
+) async {
   const retryDelays = <Duration>[
     Duration(seconds: 5),
     Duration(seconds: 10),
@@ -429,13 +551,21 @@ Future<void> _retryMobileAutoImport(MobileBootstrapImportService service) async 
   }
 }
 
-Future<T> _init<T>(String name, Future<T> Function() initializer, {int? timeout}) async {
+Future<T> _init<T>(
+  String name,
+  Future<T> Function() initializer, {
+  int? timeout,
+}) async {
   final stopWatch = Stopwatch()..start();
   Logger.bootstrap.info("initializing [$name]");
-  Future<T> func() => timeout != null ? initializer().timeout(Duration(milliseconds: timeout)) : initializer();
+  Future<T> func() => timeout != null
+      ? initializer().timeout(Duration(milliseconds: timeout))
+      : initializer();
   try {
     final result = await func();
-    Logger.bootstrap.debug("[$name] initialized in ${stopWatch.elapsedMilliseconds}ms");
+    Logger.bootstrap.debug(
+      "[$name] initialized in ${stopWatch.elapsedMilliseconds}ms",
+    );
     return result;
   } catch (e, stackTrace) {
     Logger.bootstrap.error("[$name] error initializing", e, stackTrace);
@@ -445,7 +575,11 @@ Future<T> _init<T>(String name, Future<T> Function() initializer, {int? timeout}
   }
 }
 
-Future<T?> _safeInit<T>(String name, Future<T> Function() initializer, {int? timeout}) async {
+Future<T?> _safeInit<T>(
+  String name,
+  Future<T> Function() initializer, {
+  int? timeout,
+}) async {
   try {
     return await _init(name, initializer, timeout: timeout);
   } catch (e) {

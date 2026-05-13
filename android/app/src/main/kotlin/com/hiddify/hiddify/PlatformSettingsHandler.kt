@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Base64
 import com.google.gson.Gson
@@ -24,6 +25,7 @@ import io.flutter.plugin.common.StandardMethodCodec
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
+import java.net.NetworkInterface
 
 
 class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
@@ -44,6 +46,7 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
             GetInstalledPackages("get_installed_packages"),
             GetPackagesIcon("get_package_icon"),
             GetStableDeviceId("get_stable_device_id"),
+            GetNetworkRuntimeInfo("get_network_runtime_info"),
         }
     }
 
@@ -191,6 +194,46 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
                         android.provider.Settings.Secure.ANDROID_ID
                     ).orEmpty().trim()
                     success(androidId)
+                }
+            }
+            Trigger.GetNetworkRuntimeInfo.method -> {
+                result.runCatching {
+                    val network = Application.connectivity.activeNetwork
+                    if (network == null) {
+                        success(
+                            mapOf(
+                                "network-transport-type" to "unknown",
+                                "network-interface-mtu" to 0
+                            )
+                        )
+                        return@runCatching
+                    }
+                    val capabilities = Application.connectivity.getNetworkCapabilities(network)
+                    val linkProps = Application.connectivity.getLinkProperties(network)
+                    val transport = when {
+                        capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "wifi"
+                        capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "cellular"
+                        capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true -> "ethernet"
+                        else -> "unknown"
+                    }
+                    val ifaceName = linkProps?.interfaceName
+                    val mtu = runCatching {
+                        if (ifaceName.isNullOrBlank()) 0 else NetworkInterface.getByName(ifaceName)?.mtu ?: 0
+                    }.getOrDefault(0).coerceAtLeast(0)
+
+                    success(
+                        mapOf(
+                            "network-transport-type" to transport,
+                            "network-interface-mtu" to mtu
+                        )
+                    )
+                }.onFailure {
+                    result.success(
+                        mapOf(
+                            "network-transport-type" to "unknown",
+                            "network-interface-mtu" to 0
+                        )
+                    )
                 }
             }
 

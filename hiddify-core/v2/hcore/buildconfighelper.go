@@ -3,6 +3,7 @@ package hcore
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/hiddify/hiddify-core/v2/config"
@@ -30,6 +31,9 @@ func BuildConfig(ctx context.Context, in *StartRequest) (*option.Options, error)
 
 	readOpt := &config.ReadOptions{Content: in.ConfigContent, Path: in.ConfigPath}
 	if !in.EnableRawConfig {
+		if static.HiddifyOptions != nil {
+			Log(LogLevel_INFO, LogType_CORE, safeOptionsSummary("buildconfig input", static.HiddifyOptions))
+		}
 		// hcontent, err := json.MarshalIndent(static.HiddifyOptions, "", " ")
 		// if err != nil {
 		// 	return nil, err
@@ -122,6 +126,7 @@ func ChangeHiddifySettings(in *ChangeHiddifySettingsRequest, insert bool) (*Core
 	if err != nil {
 		return nil, err
 	}
+	Log(LogLevel_INFO, LogType_CORE, safeOptionsSummary("change settings parsed", static.HiddifyOptions))
 
 	if static.HiddifyOptions.Warp.WireguardConfigStr != "" {
 		err := json.Unmarshal([]byte(static.HiddifyOptions.Warp.WireguardConfigStr), &static.HiddifyOptions.Warp.WireguardConfig)
@@ -136,6 +141,34 @@ func ChangeHiddifySettings(in *ChangeHiddifySettingsRequest, insert bool) (*Core
 		}
 	}
 	return &CoreInfoResponse{}, nil
+}
+
+func safeOptionsSummary(prefix string, h *config.HiddifyOptions) string {
+	if h == nil {
+		return prefix + ": <nil>"
+	}
+	selectorInterrupt := "nil"
+	if h.RouteOptions.SelectorInterrupt != nil {
+		selectorInterrupt = fmt.Sprintf("%v", *h.RouteOptions.SelectorInterrupt)
+	}
+	return fmt.Sprintf(
+		"%s: profile=%s mtu_mode=%s transport=%s iface_mtu=%d fragment_mode=%s profile_dns=%s selector_interrupt=%s selector_tolerance=%d selector_sticky=%v mtu=%d tun_stack=%s strict_route=%v critical_fallback=%v runtime_data_dir=%s",
+		prefix,
+		h.RouteOptions.NetworkProfile,
+		h.RouteOptions.NetworkMTUMode,
+		h.RouteOptions.NetworkTransportType,
+		h.RouteOptions.NetworkInterfaceMTU,
+		h.RouteOptions.FragmentMode,
+		h.RouteOptions.ProfileDNSStrategy,
+		selectorInterrupt,
+		h.RouteOptions.SelectorTolerance,
+		h.RouteOptions.SelectorUseSticky,
+		h.MTU,
+		h.TUNStack,
+		h.StrictRoute,
+		h.RouteOptions.CriticalDomainsFallbackEnabled,
+		h.RuntimeDataDir,
+	)
 }
 
 func (s *CoreService) GenerateConfig(ctx context.Context, in *GenerateConfigRequest) (*GenerateConfigResponse, error) {

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dartx/dartx.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/model/optional_range.dart';
@@ -137,6 +139,10 @@ abstract class ConfigOptions {
   static final mtu = PreferencesNotifier.create<int, int>("mtu", 1500);
 
   static final strictRoute = PreferencesNotifier.create<bool, bool>("strict-route", true);
+  static final networkProfile = PreferencesNotifier.create<String, String>("network-profile", "stable_mobile");
+  static final networkMtuMode = PreferencesNotifier.create<String, String>("network-mtu-mode", "fixed");
+  static final fragmentMode = PreferencesNotifier.create<String, String>("fragment-mode", "default");
+  static final profileDnsStrategy = PreferencesNotifier.create<String, String>("profile-dns-strategy", "default");
 
   static final connectionTestUrl = PreferencesNotifier.create<String, String>(
     "connection-test-url",
@@ -325,6 +331,10 @@ abstract class ConfigOptions {
     "tun-implementation": tunImplementation,
     "mtu": mtu,
     "strict-route": strictRoute,
+    "network-profile": networkProfile,
+    "network-mtu-mode": networkMtuMode,
+    "fragment-mode": fragmentMode,
+    "profile-dns-strategy": profileDnsStrategy,
     "connection-test-url": connectionTestUrl,
     "url-test-interval": urlTestInterval,
     "clash-api-port": clashApiPort,
@@ -399,6 +409,10 @@ abstract class ConfigOptions {
       tunImplementation: ref.watch(tunImplementation),
       mtu: ref.watch(mtu),
       strictRoute: ref.watch(strictRoute),
+      networkProfile: ref.watch(networkProfile),
+      networkMtuMode: ref.watch(networkMtuMode),
+      fragmentMode: ref.watch(fragmentMode),
+      profileDnsStrategy: ref.watch(profileDnsStrategy),
       connectionTestUrl: ref.watch(connectionTestUrl),
       urlTestInterval: ref.watch(urlTestInterval),
       enableClashApi: ref.watch(enableClashApi),
@@ -513,7 +527,56 @@ class ConfigOptionRepository with ExceptionHandler, InfraLogger {
       Either.tryCatch(() => _getConfigOptions(), ConfigOptionFailure.unexpected).flatMap(
         (options) => Either.tryCatch(() {
           final json = ProfileParser.applyProfileOverride(options.toJson(), profileOverride);
-          return SingboxConfigOption.fromJson(json);
+          return SingboxConfigOption.fromJson(_normalizeConfigJsonForFromJson(json));
         }, ConfigOptionFailure.unexpected),
       );
+
+  static Map<String, dynamic> _normalizeConfigJsonForFromJson(Map<String, dynamic> json) {
+    final normalized = Map<String, dynamic>.from(json);
+    normalized['site-routing-include'] = _normalizeStringList(normalized['site-routing-include']);
+    normalized['site-routing-exclude'] = _normalizeStringList(normalized['site-routing-exclude']);
+    normalized['rules'] = _normalizeRuleList(normalized['rules']);
+    return normalized;
+  }
+
+  static List<String> _normalizeStringList(dynamic raw) {
+    if (raw is List) {
+      return raw.map((e) => e.toString()).where((e) => e.isNotBlank).toList();
+    }
+    if (raw is String) {
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty) return const <String>[];
+      if (trimmed.startsWith('[')) {
+        try {
+          final decoded = jsonDecode(trimmed);
+          if (decoded is List) {
+            return decoded.map((e) => e.toString()).where((e) => e.isNotBlank).toList();
+          }
+        } catch (_) {
+          // Fallback to token split below.
+        }
+      }
+      return trimmed.split(RegExp(r'[;,\n]+')).map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    }
+    return const <String>[];
+  }
+
+  static List<Map<String, dynamic>> _normalizeRuleList(dynamic raw) {
+    if (raw is List) {
+      return raw.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList();
+    }
+    if (raw is String) {
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty) return const <Map<String, dynamic>>[];
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is List) {
+          return decoded.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList();
+        }
+      } catch (_) {
+        // Ignore invalid JSON and fall back to empty rule list.
+      }
+    }
+    return const <Map<String, dynamic>>[];
+  }
 }

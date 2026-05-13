@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:grpc/grpc.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
@@ -34,6 +35,11 @@ class HiddifyCoreService with InfraLogger {
   HiddifyCoreService(this.ref);
   final Ref ref;
   static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
+  static const _debugNetworkProfile = String.fromEnvironment("debug_network_profile");
+  static const _debugNetworkMtuMode = String.fromEnvironment("debug_network_mtu_mode");
+  static const _debugFragmentMode = String.fromEnvironment("debug_fragment_mode");
+  static const _debugProfileDnsStrategy = String.fromEnvironment("debug_profile_dns_strategy");
+  static const _debugTunImplementation = String.fromEnvironment("debug_tun_implementation");
 
   bool get _useMockCore => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
 
@@ -45,6 +51,7 @@ class HiddifyCoreService with InfraLogger {
   final logController = BehaviorSubject<List<LogMessage>>();
   final CallOptions? grpcOptions = null; //CallOptions(timeout: const Duration(milliseconds: 10000));
   final Map<String, StreamSubscription?> subscriptions = {};
+  static const _platformChannel = MethodChannel("com.hiddify.app/platform");
   List<OutboundGroup> latest = [];
   final BehaviorSubject<List<OutboundGroup>> _mockGroupsController = BehaviorSubject<List<OutboundGroup>>();
 
@@ -213,13 +220,15 @@ class HiddifyCoreService with InfraLogger {
       }
       loggy.debug("changing options");
       // latestOptions = options;
+      final payload = await _buildCoreOptionsPayload(options);
+      loggy.info("core payload (safe): ${_safeCorePayload(payload)}");
       try {
         final res = await core.fgClient.changeHiddifySettings(
-          ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(options.toCoreJson())),
+          ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(payload)),
         );
         if (res.messageType != MessageType.EMPTY) return left("${res.messageType} ${res.message}");
         await core.bgClient.changeHiddifySettings(
-          ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(options.toCoreJson())),
+          ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(payload)),
         );
       } on GrpcError catch (e) {
         if (e.code == StatusCode.unavailable) {
@@ -231,6 +240,72 @@ class HiddifyCoreService with InfraLogger {
 
       return right(unit);
     });
+  }
+
+  Future<Map<String, dynamic>> _buildCoreOptionsPayload(SingboxConfigOption options) async {
+    final map = Map<String, dynamic>.from(options.toCoreJson());
+    if (_debugNetworkProfile.isNotEmpty) {
+      map["network-profile"] = _debugNetworkProfile;
+    }
+    if (_debugNetworkMtuMode.isNotEmpty) {
+      map["network-mtu-mode"] = _debugNetworkMtuMode;
+    }
+    if (_debugFragmentMode.isNotEmpty) {
+      map["fragment-mode"] = _debugFragmentMode;
+    }
+    if (_debugProfileDnsStrategy.isNotEmpty) {
+      map["profile-dns-strategy"] = _debugProfileDnsStrategy;
+    }
+    if (_debugTunImplementation.isNotEmpty) {
+      map["tun-implementation"] = _debugTunImplementation;
+    }
+    final runtime = await _readRuntimeNetworkInfo();
+    map["network-transport-type"] = runtime.$1;
+    map["network-interface-mtu"] = runtime.$2;
+    return map;
+  }
+
+  Map<String, dynamic> _safeCorePayload(Map<String, dynamic> payload) {
+    final safe = <String, dynamic>{
+      "network-profile": payload["network-profile"],
+      "network-mtu-mode": payload["network-mtu-mode"],
+      "network-transport-type": payload["network-transport-type"],
+      "network-interface-mtu": payload["network-interface-mtu"],
+      "fragment-mode": payload["fragment-mode"],
+      "profile-dns-strategy": payload["profile-dns-strategy"],
+      "selector-interrupt-exist-connections": payload["selector-interrupt-exist-connections"],
+      "selector-tolerance": payload["selector-tolerance"],
+      "selector-use-sticky": payload["selector-use-sticky"],
+      "critical-domains-fallback-enabled": payload["critical-domains-fallback-enabled"],
+      "mtu": payload["mtu"],
+      "tun-implementation": payload["tun-implementation"],
+      "strict-route": payload["strict-route"],
+    };
+    return safe;
+  }
+
+  Future<(String, int)> _readRuntimeNetworkInfo() async {
+    if (!PlatformUtils.isAndroid) return ("unknown", 0);
+    try {
+      final info = await _platformChannel.invokeMapMethod<String, dynamic>("get_network_runtime_info");
+      final transportRaw = (info?["network-transport-type"] ?? "unknown").toString().toLowerCase().trim();
+      final transport = switch (transportRaw) {
+        "wifi" => "wifi",
+        "cellular" => "cellular",
+        "ethernet" => "ethernet",
+        _ => "unknown",
+      };
+      final mtuDynamic = info?["network-interface-mtu"];
+      final mtu = switch (mtuDynamic) {
+        final int v => v,
+        final num v => v.toInt(),
+        final String v => int.tryParse(v) ?? 0,
+        _ => 0,
+      };
+      return (transport, mtu < 0 ? 0 : mtu);
+    } catch (_) {
+      return ("unknown", 0);
+    }
   }
 
   TaskEither<ConnectionFailure, Unit> start(String path, String name, bool disableMemoryLimit) {
