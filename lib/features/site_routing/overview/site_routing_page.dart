@@ -27,10 +27,10 @@ class SiteRoutingPage extends HookConsumerWidget {
     candidate = candidate
         .replaceFirst(RegExp(r'^\*\.'), '')
         .replaceFirst(RegExp(r'^www\.'), '')
+        .replaceFirst(RegExp(r'^\.'), '')
         .replaceFirst(RegExp(r'\.$'), '');
 
     if (isDomain(candidate)) return candidate;
-    if (candidate.startsWith('.') && isDomain(candidate.substring(1))) return candidate.substring(1);
     return null;
   }
 

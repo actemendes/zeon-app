@@ -194,6 +194,11 @@ func applyNetworkProfile(hopt *HiddifyOptions) ResolvedMTU {
 		if !explicitDirectStrategy {
 			hopt.DirectDnsDomainStrategy = option.DomainStrategy(C.DomainStrategyPreferIPv4)
 		}
+		// Mobile networks often rate-limit/drop plain UDP DNS on direct path.
+		// In stable_mobile, upgrade default/UDP direct DNS to DoH for resilience.
+		if strings.HasPrefix(hopt.DirectDnsAddress, "udp://") || !strings.Contains(hopt.DirectDnsAddress, "://") {
+			hopt.DirectDnsAddress = "https://1.1.1.1/dns-query"
+		}
 		if hopt.RouteOptions.SelectorInterrupt == nil {
 			v := false
 			hopt.RouteOptions.SelectorInterrupt = &v
@@ -218,6 +223,9 @@ func applyNetworkProfile(hopt *HiddifyOptions) ResolvedMTU {
 		// Keep default VPN-first routing and remote DNS behavior intact.
 		// Only force direct-domain DNS answers to IPv4 to avoid broken direct IPv6 paths.
 		hopt.DirectDnsDomainStrategy = option.DomainStrategy(C.DomainStrategyIPv4Only)
+		if strings.HasPrefix(hopt.DirectDnsAddress, "udp://") || !strings.Contains(hopt.DirectDnsAddress, "://") {
+			hopt.DirectDnsAddress = "https://1.1.1.1/dns-query"
+		}
 		if hopt.RouteOptions.NetworkMTUMode == NetworkMTUModeFixed {
 			hopt.RouteOptions.NetworkMTUMode = NetworkMTUModeDiagnosticLow
 			mtu = resolveMTU(hopt)

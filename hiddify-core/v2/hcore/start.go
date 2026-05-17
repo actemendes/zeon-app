@@ -115,6 +115,10 @@ func StartService(ctx context.Context, in *StartRequest) (coreResponse *CoreInfo
 	Log(LogLevel_DEBUG, LogType_CORE, "Saving config to ", currentBuildConfigPath)
 
 	config.SaveCurrentConfig(ctx, currentBuildConfigPath, *options)
+	// Keep a user-facing snapshot with the fully built runtime config.
+	activeConfigPath := filepath.Join(sWorkingPath, "active_config.json")
+	Log(LogLevel_DEBUG, LogType_CORE, "Saving active config to ", activeConfigPath)
+	config.SaveCurrentConfig(ctx, activeConfigPath, *options)
 	if static.debug {
 		pout, err := options.MarshalJSONContext(ctx)
 		if err != nil {

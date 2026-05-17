@@ -60,9 +60,11 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 		return err
 	}
 
-	direct_detour := OutboundDirectFragmentTag
-	if strings.HasPrefix(opt.DirectDnsAddress, "udp://") || !strings.Contains(opt.DirectDnsAddress, "://") {
-		direct_detour = ""
+	direct_detour := ""
+	// Use direct-fragment detour for direct DNS only when fragment path is active
+	// and the DNS transport is connection-oriented.
+	if shouldEnableDNSTrickDirect(opt) && strings.Contains(opt.DirectDnsAddress, "://") && !strings.HasPrefix(opt.DirectDnsAddress, "udp://") {
+		direct_detour = OutboundDirectFragmentTag
 	}
 
 	direct_dns, err := getDNSServerOptions(DNSDirectTag, opt.DirectDnsAddress, DNSLocalTag, direct_detour)

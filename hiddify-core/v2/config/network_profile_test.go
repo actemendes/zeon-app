@@ -89,6 +89,9 @@ func TestApplyNetworkProfileStableMobileSelectorAndDNS(t *testing.T) {
 	if h.DirectDnsDomainStrategy != option.DomainStrategy(C.DomainStrategyPreferIPv4) {
 		t.Fatalf("expected direct prefer_ipv4, got %s", h.DirectDnsDomainStrategy)
 	}
+	if h.DirectDnsAddress != "https://1.1.1.1/dns-query" {
+		t.Fatalf("expected stable_mobile direct dns doh, got %s", h.DirectDnsAddress)
+	}
 }
 
 func TestApplyNetworkProfileIPv4OnlyDiagnostic(t *testing.T) {
@@ -124,6 +127,9 @@ func TestApplyNetworkProfileDirectIPv4OnlyDiagnostic(t *testing.T) {
 	}
 	if h.RouteOptions.SelectorTolerance < 2 {
 		t.Fatalf("expected selector tolerance >=2, got %d", h.RouteOptions.SelectorTolerance)
+	}
+	if h.DirectDnsAddress != "https://1.1.1.1/dns-query" {
+		t.Fatalf("expected direct ipv4 profile direct dns doh, got %s", h.DirectDnsAddress)
 	}
 }
 

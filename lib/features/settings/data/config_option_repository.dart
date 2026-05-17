@@ -486,9 +486,11 @@ abstract class ConfigOptions {
           .split('/')[0]
           .split('?')[0]
           .split('#')[0]
+          .replaceFirst(RegExp(r'^\*\.'), '')
+          .replaceFirst(RegExp(r'^www\.'), '')
+          .replaceFirst(RegExp(r'^\.'), '')
           .replaceFirst(RegExp(r'\.$'), '');
-      final domainForValidation = candidate.startsWith('*.') ? candidate.substring(2) : candidate;
-      if (candidate.isEmpty || !isDomain(domainForValidation) || normalized.contains(candidate)) continue;
+      if (candidate.isEmpty || !isDomain(candidate) || normalized.contains(candidate)) continue;
       normalized.add(candidate);
     }
     return normalized;
@@ -499,9 +501,8 @@ abstract class ConfigOptions {
     required List<String> include,
     required List<String> exclude,
   }) {
-    const maxRuleDomains = 128;
-    final compactInclude = include.take(maxRuleDomains).toList();
-    final compactExclude = exclude.take(maxRuleDomains).toList();
+    final compactInclude = include;
+    final compactExclude = exclude;
     return switch (mode) {
       SiteRoutingMode.off => const <SingboxRule>[],
       SiteRoutingMode.include when compactInclude.isNotEmpty => <SingboxRule>[SingboxRule(domains: compactInclude)],
