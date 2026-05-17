@@ -144,6 +144,50 @@ function Get-PubspecVersion {
     return $line.Matches[0].Groups[1].Value.Trim()
 }
 
+function Convert-PubspecVersionToMsix {
+    param([Parameter(Mandatory = $true)][string]$PubspecVersion)
+
+    $versionPattern = '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:-[0-9A-Za-z\.-]+)?(?:\+(?<build>\d+))?$'
+    $match = [regex]::Match($PubspecVersion, $versionPattern)
+    if (-not $match.Success) {
+        throw "Unsupported pubspec version format '$PubspecVersion'. Expected semantic version like '1.2.3' or '1.2.3+45'."
+    }
+
+    $major = [int]$match.Groups["major"].Value
+    $minor = [int]$match.Groups["minor"].Value
+    $patch = [int]$match.Groups["patch"].Value
+    $build = 0
+    if ($match.Groups["build"].Success) {
+        $build = [int]$match.Groups["build"].Value
+    }
+
+    foreach ($value in @($major, $minor, $patch, $build)) {
+        if ($value -lt 0 -or $value -gt 65535) {
+            throw "MSIX version segment '$value' is out of range (0..65535). pubspec version: $PubspecVersion"
+        }
+    }
+
+    return "$major.$minor.$patch.$build"
+}
+
+function Sync-MsixVersionWithPubspec {
+    param([Parameter(Mandatory = $true)][string]$WorkingRoot)
+
+    $configPath = Join-Path $WorkingRoot "windows\packaging\msix\make_config.yaml"
+    if (-not (Test-Path -LiteralPath $configPath)) {
+        throw "MSIX config was not found: $configPath"
+    }
+
+    $pubspecVersion = Get-PubspecVersion -WorkingRoot $WorkingRoot
+    $msixVersion = Convert-PubspecVersionToMsix -PubspecVersion $pubspecVersion
+    $currentMsixVersion = Get-YamlScalar -Path $configPath -Key "msix_version"
+
+    if ($currentMsixVersion -ne $msixVersion) {
+        Set-YamlScalar -Path $configPath -Key "msix_version" -Value $msixVersion
+        Write-Host "Synced MSIX version from pubspec: $pubspecVersion -> $msixVersion"
+    }
+}
+
 function Build-WindowsRelease {
     param(
         [Parameter(Mandatory = $true)][string]$BuildTarget,
@@ -541,6 +585,10 @@ try {
     }
 
     $targets = if ($Target -eq "all") { @("exe", "msix") } else { @($Target) }
+    if (($targets -contains "msix") -and ($workingRoot -ne $repoRoot)) {
+        # Keep repository config aligned even when packaging in isolated workspace.
+        Sync-MsixVersionWithPubspec -WorkingRoot $repoRoot
+    }
 
     Push-Location $workingRoot
     try {
@@ -568,6 +616,7 @@ try {
         }
 
         if ($targets -contains "msix") {
+            Sync-MsixVersionWithPubspec -WorkingRoot $workingRoot
             Ensure-Fastforge
             Ensure-MsixCertificate -WorkingRoot $workingRoot -Password $CertificatePassword -UseExistingOnly:$UseExistingCertificateOnly
         }
@@ -611,8 +660,8 @@ try {
             }
         }
 
-        $workingOutDir = Join-Path $workingRoot "out"
-        $repoOutDir = Join-Path $repoRoot "out"
+        $workingOutDir = Join-Path $workingRoot "out\installers\win"
+        $repoOutDir = Join-Path $repoRoot "out\installers\win"
         New-Item -ItemType Directory -Force -Path $workingOutDir | Out-Null
         New-Item -ItemType Directory -Force -Path $repoOutDir | Out-Null
 
@@ -640,7 +689,7 @@ try {
         Pop-Location
     }
 
-    $finalOut = Join-Path $repoRoot "out"
+    $finalOut = Join-Path $repoRoot "out\installers\win"
     Write-Host ""
     Write-Host "Windows installer packaging completed successfully."
     if (Test-Path -LiteralPath (Join-Path $finalOut "ZEON-Windows-Setup-x64.exe")) {

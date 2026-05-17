@@ -65,6 +65,49 @@ function Ensure-AndroidCoreAar {
     Write-Host "Android core library ready: $aarPath"
 }
 
+function Copy-AndroidInstallersToOut {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$Artifacts,
+        [Parameter(Mandatory = $true)][string]$BuildMode
+    )
+
+    $apkDir = Join-Path $RepoRoot "build\app\outputs\flutter-apk"
+    if (-not (Test-Path -LiteralPath $apkDir)) {
+        throw "APK output directory not found: $apkDir"
+    }
+
+    $outDir = Join-Path $RepoRoot "out\installers\android"
+    New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+    $patterns = @()
+    if ($Artifacts -in @("split", "both")) {
+        $patterns += @(
+            "app-armeabi-v7a-$BuildMode.apk",
+            "app-arm64-v8a-$BuildMode.apk",
+            "app-x86_64-$BuildMode.apk"
+        )
+    }
+    if ($Artifacts -in @("universal", "both")) {
+        $patterns += "app-$BuildMode.apk"
+    }
+
+    foreach ($pattern in $patterns) {
+        $sourcePath = Join-Path $apkDir $pattern
+        if (-not (Test-Path -LiteralPath $sourcePath)) {
+            throw "Expected APK was not found: $sourcePath"
+        }
+        Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $outDir $pattern) -Force
+    }
+
+    Write-Host ""
+    Write-Host "Android installers copied to: $outDir"
+    Get-ChildItem -LiteralPath $outDir -Filter "*.apk" |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object Name, Length, LastWriteTime |
+        Format-Table -AutoSize
+}
+
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
 
@@ -112,6 +155,8 @@ try {
             Select-Object Name, Length, LastWriteTime |
             Format-Table -AutoSize
     }
+
+    Copy-AndroidInstallersToOut -RepoRoot $repoRoot -Artifacts $Artifacts -BuildMode $BuildMode
 }
 finally {
     Pop-Location

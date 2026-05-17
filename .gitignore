@@ -73,3 +73,4 @@ app.*.map.json
 windows/sign.pfx
 windows/sign.cer
 out/ZEON-Windows-Setup-x64.exe
+out/installers/
