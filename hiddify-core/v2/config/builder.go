@@ -194,6 +194,17 @@ func applyStableTransportMode(hopt *HiddifyOptions) {
 
 	if unstable {
 		targetMTU = 1280
+		// Step 4: adapt client behavior without permanently excluding nodes.
+		// Increase hysteresis/stickiness under unstable conditions to reduce
+		// reselect churn and closed-connection cascades.
+		if hopt.RouteOptions.SelectorTolerance < 3 {
+			hopt.RouteOptions.SelectorTolerance = 3
+		}
+		hopt.RouteOptions.SelectorUseSticky = true
+		if hopt.RouteOptions.SelectorInterrupt == nil {
+			v := false
+			hopt.RouteOptions.SelectorInterrupt = &v
+		}
 	}
 
 	if hopt.MTU == 0 || hopt.MTU > targetMTU {

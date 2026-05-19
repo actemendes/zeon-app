@@ -42,6 +42,8 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 	if remoteAddr == fallbackAddr {
 		fallbackAddr = "https://1.0.0.1/dns-query"
 	}
+	directPrimaryAddr := getDnsAddress(opt.DirectDnsAddress)
+	directSecondaryAddr := directDNSSecondaryAddress(directPrimaryAddr)
 
 	// if strings.HasPrefix(remoteAddr, "udp://") {
 	// 	remoteAddr = strings.Replace(remoteAddr, "udp://", "tcp://", 1)
@@ -67,7 +69,15 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 		direct_detour = OutboundDirectFragmentTag
 	}
 
-	direct_dns, err := getDNSServerOptions(DNSDirectTag, opt.DirectDnsAddress, DNSLocalTag, direct_detour)
+	direct_dns_primary, err := getDNSServerOptions(DNSDirectTag+"-primary", directPrimaryAddr, DNSLocalTag, direct_detour)
+	if err != nil {
+		return err
+	}
+	direct_dns_secondary, err := getDNSServerOptions(DNSDirectTag+"-secondary", directSecondaryAddr, DNSLocalTag, direct_detour)
+	if err != nil {
+		return err
+	}
+	direct_dns_multi, err := getMultiDnsServerOptions(DNSDirectTag, []string{DNSDirectTag + "-primary", DNSDirectTag + "-secondary"}, false)
 	if err != nil {
 		return err
 	}
@@ -114,7 +124,9 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 				*static_dns,
 				*remote_dns,
 				*remote_dns_fallback,
-				*direct_dns,
+				*direct_dns_primary,
+				*direct_dns_secondary,
+				*direct_dns_multi,
 				*local_dns,
 				*remote_no_warp_dns,
 				// *multi_dns_direct,
@@ -153,6 +165,22 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 	// options.DNS.StaticIPs["ipapi.co"] = []string{"www.speedtest.net", "cloudflare.com"}
 	// options.DNS.StaticIPs["api.ip.sb"] = []string{"www.speedtest.net", "cloudflare.com"}
 	return nil
+}
+
+func directDNSSecondaryAddress(primary string) string {
+	p := strings.ToLower(strings.TrimSpace(primary))
+	if p == "" {
+		return "https://dns.cloudflare.com/dns-query"
+	}
+	// Keep secondary on a different provider/address family target.
+	switch {
+	case strings.Contains(p, "1.1.1.1"), strings.Contains(p, "dns.cloudflare.com"):
+		return "https://8.8.8.8/dns-query"
+	case strings.Contains(p, "8.8.8.8"), strings.Contains(p, "dns.google"):
+		return "https://dns.cloudflare.com/dns-query"
+	default:
+		return "https://dns.cloudflare.com/dns-query"
+	}
 }
 func getAllOutboundsOptions(options *option.Options) []any {
 	outbounds := []any{}
