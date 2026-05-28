@@ -1,0 +1,531 @@
+{
+  "log": {
+    "level": "warn",
+    "output": "data/box.log"
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "hosts",
+        "tag": "dns-static"
+      },
+      {
+        "type": "tcp",
+        "tag": "dns-remote",
+        "detour": "select",
+        "server": "8.8.8.8"
+      },
+      {
+        "type": "https",
+        "tag": "dns-remote-fallback",
+        "detour": "select",
+        "server": "8.8.8.8",
+        "tls": {
+          "enabled": true
+        }
+      },
+      {
+        "type": "https",
+        "tag": "dns-direct",
+        "detour": "direct-fragment §hide§",
+        "server": "1.1.1.1",
+        "tls": {
+          "enabled": true
+        }
+      },
+      {
+        "type": "local",
+        "tag": "dns-local",
+        "prefer_go": true
+      },
+      {
+        "type": "tcp",
+        "tag": "dns-remote-no-warp",
+        "detour": "direct-fragment §hide§",
+        "server": "8.8.8.8"
+      },
+      {
+        "type": "https",
+        "tag": "dns-trick-direct",
+        "detour": "direct-fragment §hide§",
+        "domain_resolver": {
+          "server": "dns-direct",
+          "strategy": "prefer_ipv4"
+        },
+        "server": "dns.cloudflare.com",
+        "tls": {
+          "enabled": true,
+          "fragment": true,
+          "fragment_fallback_delay": "300ms",
+          "record_fragment": true
+        }
+      }
+    ],
+    "rules": [
+      {
+        "domain": "api.cloudflareclient.com",
+        "server": "dns-remote-no-warp",
+        "strategy": "prefer_ipv4",
+        "rewrite_ttl": 86400
+      },
+      {
+        "domain": [
+          "api.cloudflareclient.com",
+          "captive.apple.com",
+          "cp.cloudflare.com",
+          "google.com"
+        ],
+        "server": "dns-direct",
+        "strategy": "prefer_ipv4",
+        "rewrite_ttl": 86400
+      },
+      {
+        "domain_suffix": [
+          "gosuslugi.ru",
+          "vk.com",
+          "mail.ru",
+          "max.ru",
+          "vkvideo.ru",
+          "rustore.ru",
+          "rutube.ru",
+          "ok.ru",
+          "sber.ru",
+          "tbank.ru",
+          "alfabank.ru",
+          "vtb.ru",
+          "wildberries.ru",
+          "wb.ru",
+          "rwb.ru",
+          "wb-basket.ru",
+          "wbbasket.ru",
+          "wbcontent.net",
+          "wbstatic.net",
+          "wibes.ru",
+          "global.wildberries.ru",
+          "seller.wildberries.ru",
+          "digital.wildberries.ru",
+          "dev.wildberries.ru",
+          "pro.wildberries.ru",
+          "public-feedbacks.wildberries.ru",
+          "a.wb.ru",
+          "service.wb.ru",
+          "splitter.wb.ru",
+          "marketplace-sentry.wb.ru",
+          "user-storage-01.wb.ru",
+          "nel.wb.ru",
+          "xc.wb.ru",
+          "mediabasket-static-02e.xc.wb.ru",
+          "static-basket-01.wbbasket.ru",
+          "static-basket-02.wbbasket.ru",
+          "static-basket-03.wbbasket.ru",
+          "static-basket-07.wbbasket.ru",
+          "wibes-06.wbbasket.ru",
+          "static-basket-01.wb.ru",
+          "static-basket-02.wb.ru",
+          "ozon.ru",
+          "lamoda.ru",
+          "megamarket.ru",
+          "avito.ru",
+          "samokat.ru",
+          "vkusvill.ru",
+          "lenta.com",
+          "magnit.com",
+          "kinopoisk.ru",
+          "ivi.ru",
+          "start.ru",
+          "kion.ru",
+          "wink.ru",
+          "2gis.ru",
+          "hh.ru",
+          "browser.yandex.ru",
+          "yandex.ru",
+          "pay.yandex.ru",
+          "litres.ru",
+          "rzd.ru",
+          "cian.ru",
+          "ya.ru",
+          "sberbank.ru"
+        ],
+        "server": "dns-direct",
+        "strategy": "prefer_ipv4",
+        "rewrite_ttl": 86400
+      },
+      {
+        "server": "dns-remote",
+        "strategy": "prefer_ipv4",
+        "rewrite_ttl": 86400
+      }
+    ],
+    "final": "dns-remote",
+    "independent_cache": true
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "mtu": 1500,
+      "address": [
+        "172.19.0.1/28",
+        "fdfe:dcba:9876::1/126"
+      ],
+      "auto_route": true,
+      "strict_route": true,
+      "stack": "gvisor"
+    },
+    {
+      "type": "mixed",
+      "tag": "mixed-in::1",
+      "listen": "::1",
+      "listen_port": 12334
+    },
+    {
+      "type": "direct",
+      "tag": "dns-in::1",
+      "listen": "::1",
+      "listen_port": 12337
+    },
+    {
+      "type": "mixed",
+      "tag": "mixed-in127.0.0.1",
+      "listen": "127.0.0.1",
+      "listen_port": 12334
+    },
+    {
+      "type": "direct",
+      "tag": "dns-in127.0.0.1",
+      "listen": "127.0.0.1",
+      "listen_port": 12337
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "selector",
+      "tag": "select",
+      "outbounds": [
+        "lowest",
+        "balance",
+        "🇳🇱Нидерланды10 | БЫСТРЫЙ⚡",
+        "🇫🇮Финляндия9 | БЫСТРЫЙ⚡",
+        "🇸🇪Швеция | БЫСТРЫЙ⚡",
+        "🇸🇪Швеция4 | БЫСТРЫЙ⚡",
+        "🇱🇻Латвия2 | БЫСТРЫЙ⚡",
+        "🇨🇾Кипр | БЫСТРЫЙ⚡",
+        "🇪🇪Эстония | БЫСТРЫЙ⚡"
+      ],
+      "default": "balance"
+    },
+    {
+      "type": "balancer",
+      "tag": "balance",
+      "outbounds": [
+        "🇳🇱Нидерланды10 | БЫСТРЫЙ⚡",
+        "🇫🇮Финляндия9 | БЫСТРЫЙ⚡",
+        "🇸🇪Швеция | БЫСТРЫЙ⚡",
+        "🇸🇪Швеция4 | БЫСТРЫЙ⚡",
+        "🇱🇻Латвия2 | БЫСТРЫЙ⚡",
+        "🇨🇾Кипр | БЫСТРЫЙ⚡",
+        "🇪🇪Эстония | БЫСТРЫЙ⚡"
+      ],
+      "tolerance": 2,
+      "strategy": "round-robin",
+      "delay_acceptable_ratio": 2
+    },
+    {
+      "type": "balancer",
+      "tag": "lowest",
+      "outbounds": [
+        "🇳🇱Нидерланды10 | БЫСТРЫЙ⚡",
+        "🇫🇮Финляндия9 | БЫСТРЫЙ⚡",
+        "🇸🇪Швеция | БЫСТРЫЙ⚡",
+        "🇸🇪Швеция4 | БЫСТРЫЙ⚡",
+        "🇱🇻Латвия2 | БЫСТРЫЙ⚡",
+        "🇨🇾Кипр | БЫСТРЫЙ⚡",
+        "🇪🇪Эстония | БЫСТРЫЙ⚡"
+      ],
+      "tolerance": 2,
+      "strategy": "lowest-delay",
+      "delay_acceptable_ratio": 2
+    },
+    {
+      "type": "vless",
+      "tag": "🇳🇱Нидерланды10 | БЫСТРЫЙ⚡",
+      "server": "72.57.78.174",
+      "server_port": 7443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "neth.speedload.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/ws",
+        "headers": {
+          "Host": "neth.speedload.ru"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇫🇮Финляндия9 | БЫСТРЫЙ⚡",
+      "server": "95.213.143.210",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "ru.nice-chat.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇸🇪Швеция | БЫСТРЫЙ⚡",
+      "server": "41.216.182.242",
+      "server_port": 443,
+      "uuid": "d0a1e719-7cad-438f-85a7-7b38b24fc725",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "m.vk.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "cgC5bbhd5yBux640jhO_KBlkHnWTNwBrT1Y9_H8lgXA",
+          "short_id": "e974bf7a9f09e198"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇸🇪Швеция4 | БЫСТРЫЙ⚡",
+      "server": "peekfun.top",
+      "server_port": 8443,
+      "uuid": "a934ba8d-4ffa-4d11-8461-ecc5f1a0d9f7",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "giphy.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "xZqIZMz9cdHNjM8k4d0t5y0ihahzn45-qIz5qKv96Dc",
+          "short_id": "631ab0df"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇱🇻Латвия2 | БЫСТРЫЙ⚡",
+      "server": "84.32.83.115",
+      "server_port": 8443,
+      "uuid": "256a3187-3914-4cfd-a5ba-4c7755a51bb0",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "dl.google.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "random"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "LHS7el2FpTZnJkvC1PW8ZBZMJLilRWbO2gJD9VZYJm4"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇨🇾Кипр | БЫСТРЫЙ⚡",
+      "server": "144.31.130.244",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "cypr.speedload.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇪🇪Эстония | БЫСТРЫЙ⚡",
+      "server": "69.12.83.2",
+      "server_port": 4249,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "est.speedload.ru",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      }
+    },
+    {
+      "type": "direct",
+      "tag": "direct §hide§"
+    },
+    {
+      "type": "direct",
+      "tag": "direct-fragment §hide§",
+      "tls_fragment": {
+        "enabled": true,
+        "size": "10-30",
+        "sleep": "2-8"
+      }
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "ip_cidr": [
+          "10.10.34.0/24",
+          "2001:4188:2:600:10:10:34:0/120"
+        ],
+        "outbound": "select"
+      },
+      {
+        "domain_suffix": [
+          "gosuslugi.ru",
+          "vk.com",
+          "mail.ru",
+          "max.ru",
+          "vkvideo.ru",
+          "rustore.ru",
+          "rutube.ru",
+          "ok.ru",
+          "sber.ru",
+          "tbank.ru",
+          "alfabank.ru",
+          "vtb.ru",
+          "wildberries.ru",
+          "wb.ru",
+          "rwb.ru",
+          "wb-basket.ru",
+          "wbbasket.ru",
+          "wbcontent.net",
+          "wbstatic.net",
+          "wibes.ru",
+          "global.wildberries.ru",
+          "seller.wildberries.ru",
+          "digital.wildberries.ru",
+          "dev.wildberries.ru",
+          "pro.wildberries.ru",
+          "public-feedbacks.wildberries.ru",
+          "a.wb.ru",
+          "service.wb.ru",
+          "splitter.wb.ru",
+          "marketplace-sentry.wb.ru",
+          "user-storage-01.wb.ru",
+          "nel.wb.ru",
+          "xc.wb.ru",
+          "mediabasket-static-02e.xc.wb.ru",
+          "static-basket-01.wbbasket.ru",
+          "static-basket-02.wbbasket.ru",
+          "static-basket-03.wbbasket.ru",
+          "static-basket-07.wbbasket.ru",
+          "wibes-06.wbbasket.ru",
+          "static-basket-01.wb.ru",
+          "static-basket-02.wb.ru",
+          "ozon.ru",
+          "lamoda.ru",
+          "megamarket.ru",
+          "avito.ru",
+          "samokat.ru",
+          "vkusvill.ru",
+          "lenta.com",
+          "magnit.com",
+          "kinopoisk.ru",
+          "ivi.ru",
+          "start.ru",
+          "kion.ru",
+          "wink.ru",
+          "2gis.ru",
+          "hh.ru",
+          "browser.yandex.ru",
+          "yandex.ru",
+          "pay.yandex.ru",
+          "litres.ru",
+          "rzd.ru",
+          "cian.ru",
+          "ya.ru",
+          "sberbank.ru"
+        ],
+        "outbound": "direct §hide§"
+      }
+    ],
+    "final": "select",
+    "default_domain_resolver": {
+      "server": "dns-direct",
+      "strategy": "prefer_ipv4"
+    }
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true,
+      "path": "data/clash.db",
+      "store_warp_config": true
+    },
+    "clash_api": {
+      "external_controller": "127.0.0.1:16756",
+      "secret": "JIfupSmxcsVjILv0"
+    },
+    "unified_delay": {
+      "enabled": true
+    },
+    "monitoring": {
+      "interval": "10m0s",
+      "urls": [
+        "http://captive.apple.com/hotspot-detect.html",
+        "http://captive.apple.com/generate_204",
+        "https://cp.cloudflare.com",
+        "https://google.com/generate_204"
+      ],
+      "debounce_window": "500ms",
+      "idle_timeout": "30m0s"
+    }
+  }
+}

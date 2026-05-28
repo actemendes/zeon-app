@@ -1,0 +1,21 @@
+# UTC 2026-05-20T23:15:19.9549366+03:00
+v=4 domain=ya.ru code=302 ip=77.88.55.242 time=0.127180 err=
+v=6 domain=ya.ru code=000 ip= time=0.019948 err=TLS connect error: error:00000000:invalid library (0):OPENSSL_internal:invalid library (0)
+v=4 domain=vk.com code=418 ip=93.186.225.194 time=0.121616 err=
+v=6 domain=vk.com code=000 ip= time=0.005720 err=Could not resolve host: vk.com
+v=4 domain=mail.ru code=200 ip=185.180.201.1 time=0.146158 err=
+v=6 domain=mail.ru code=000 ip= time=0.006183 err=Could not resolve host: mail.ru
+v=4 domain=gosuslugi.ru code=200 ip=213.59.254.7 time=0.114603 err=
+v=6 domain=gosuslugi.ru code=000 ip= time=0.010359 err=Could not resolve host: gosuslugi.ru
+v=4 domain=wildberries.ru code=307 ip=185.62.202.2 time=0.140370 err=
+v=6 domain=wildberries.ru code=000 ip= time=0.019120 err=TLS connect error: error:00000000:invalid library (0):OPENSSL_internal:invalid library (0)
+v=4 domain=ozon.ru code=307 ip=185.73.194.82 time=0.100048 err=
+v=6 domain=ozon.ru code=000 ip= time=0.003259 err=Could not resolve host: ozon.ru
+v=4 domain=avito.ru code=301 ip=176.114.124.24 time=0.114933 err=
+v=6 domain=avito.ru code=000 ip= time=0.000433 err=Could not resolve host: avito.ru
+v=4 domain=rutube.ru code=403 ip=109.238.90.239 time=0.100098 err=
+v=6 domain=rutube.ru code=000 ip= time=0.000819 err=Could not resolve host: rutube.ru
+v=4 domain=x5.ru code=000 ip= time=0.109820 err=TLS connect error: error:00000000:invalid library (0):OPENSSL_internal:invalid library (0)
+v=6 domain=x5.ru code=000 ip= time=0.000797 err=Could not resolve host: x5.ru
+v=4 domain=dns.ru code=403 ip=90.156.201.90 time=0.530300 err=
+v=6 domain=dns.ru code=000 ip= time=0.003444 err=Could not resolve host: dns.ru

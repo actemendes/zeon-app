@@ -638,6 +638,9 @@ func prepareRUCachedRuleSet(ctx context.Context, hopt *HiddifyOptions, source Ru
 	if source.Tag != "geosite-ru" && source.Tag != "geoip-ru" {
 		return nil
 	}
+	if hopt.ResolvedRuleSetPaths == nil {
+		hopt.ResolvedRuleSetPaths = map[string]string{}
+	}
 	if hopt.LogLevel == "debug" || hopt.LogLevel == "trace" {
 		fmt.Printf("[route-debug] ruleset-cache start tag=%s primary=%s fallback_count=%d\n", source.Tag, source.PrimaryURL, len(source.FallbackURLs))
 	}
@@ -1134,53 +1137,95 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 		if hopt.ResolvedRuleSetPaths == nil {
 			hopt.ResolvedRuleSetPaths = map[string]string{}
 		}
+		ruRuleSetFallbackEnabled := false
 		geositeRUSource := buildCountryGeositeRuleSetSource("ru")
 		emitRuleSetSourceDiagnostics(hopt, geositeRUSource)
 		if err := prepareRUCachedRuleSet(context.Background(), hopt, geositeRUSource); err != nil {
-			return err
+			ruRuleSetFallbackEnabled = true
+			if hopt.LogLevel == "debug" || hopt.LogLevel == "trace" {
+				fmt.Printf("[route-debug] ruleset-cache fallback-to-domain-suffix reason=%s\n", shortErr(err))
+			}
+		} else {
+			rulesets = append(rulesets, ruleSetToOptionWithLocalOverride(geositeRUSource, hopt))
 		}
-		rulesets = append(rulesets, ruleSetToOptionWithLocalOverride(geositeRUSource, hopt))
-
-		dnsRules = append(dnsRules, option.DefaultDNSRule{
-			RawDefaultDNSRule: option.RawDefaultDNSRule{
-				RuleSet: []string{"geosite-ru"},
-			},
-			DNSRuleAction: option.DNSRuleAction{
-				Action: C.RuleActionTypeRoute,
-				RouteOptions: option.DNSRouteActionOptions{
-					Server:         DNSMultiDirectTag,
-					Strategy:       hopt.DirectDnsDomainStrategy,
-					RewriteTTL:     &DEFAULT_DNS_TTL,
-					BypassIfFailed: false,
+		routeRuleSets := []string{}
+		if !ruRuleSetFallbackEnabled {
+			dnsRules = append(dnsRules, option.DefaultDNSRule{
+				RawDefaultDNSRule: option.RawDefaultDNSRule{
+					RuleSet: []string{"geosite-ru"},
 				},
-			},
-		})
-		routeRuleSets := []string{"geosite-ru"}
+				DNSRuleAction: option.DNSRuleAction{
+					Action: C.RuleActionTypeRoute,
+					RouteOptions: option.DNSRouteActionOptions{
+						Server:         DNSMultiDirectTag,
+						Strategy:       hopt.DirectDnsDomainStrategy,
+						RewriteTTL:     &DEFAULT_DNS_TTL,
+						BypassIfFailed: false,
+					},
+				},
+			})
+			routeRuleSets = append(routeRuleSets, "geosite-ru")
+		}
 
 		if ruRoutingMode == RuRoutingModeGeositeGeoIPAggressive {
 			geoipRUSource := buildCountryGeoIPRuleSetSource("ru")
 			emitRuleSetSourceDiagnostics(hopt, geoipRUSource)
 			if err := prepareRUCachedRuleSet(context.Background(), hopt, geoipRUSource); err != nil {
-				return err
+				ruRuleSetFallbackEnabled = true
+				if hopt.LogLevel == "debug" || hopt.LogLevel == "trace" {
+					fmt.Printf("[route-debug] ruleset-cache fallback-to-domain-suffix reason=%s\n", shortErr(err))
+				}
+			} else {
+				rulesets = append(rulesets, ruleSetToOptionWithLocalOverride(geoipRUSource, hopt))
+				routeRuleSets = append(routeRuleSets, "geoip-ru")
 			}
-			rulesets = append(rulesets, ruleSetToOptionWithLocalOverride(geoipRUSource, hopt))
-			routeRuleSets = append(routeRuleSets, "geoip-ru")
 		}
-
-		routeRules = append(routeRules, option.Rule{
-			Type: C.RuleTypeDefault,
-			DefaultOptions: option.DefaultRule{
-				RawDefaultRule: option.RawDefaultRule{
-					RuleSet: routeRuleSets,
+		if ruRuleSetFallbackEnabled && len(routeRuleSets) == 0 {
+			ruSuffixes := []string{"ru", "xn--p1ai"}
+			dnsRules = append(dnsRules, option.DefaultDNSRule{
+				RawDefaultDNSRule: option.RawDefaultDNSRule{
+					DomainSuffix: ruSuffixes,
 				},
-				RuleAction: option.RuleAction{
+				DNSRuleAction: option.DNSRuleAction{
 					Action: C.RuleActionTypeRoute,
-					RouteOptions: option.RouteActionOptions{
-						Outbound: OutboundDirectTag,
+					RouteOptions: option.DNSRouteActionOptions{
+						Server:         DNSMultiDirectTag,
+						Strategy:       hopt.DirectDnsDomainStrategy,
+						RewriteTTL:     &DEFAULT_DNS_TTL,
+						BypassIfFailed: false,
 					},
 				},
-			},
-		})
+			})
+			routeRules = append(routeRules, option.Rule{
+				Type: C.RuleTypeDefault,
+				DefaultOptions: option.DefaultRule{
+					RawDefaultRule: option.RawDefaultRule{
+						DomainSuffix: ruSuffixes,
+					},
+					RuleAction: option.RuleAction{
+						Action: C.RuleActionTypeRoute,
+						RouteOptions: option.RouteActionOptions{
+							Outbound: OutboundDirectTag,
+						},
+					},
+				},
+			})
+		} else if len(routeRuleSets) > 0 {
+			routeRules = append(routeRules, option.Rule{
+				Type: C.RuleTypeDefault,
+				DefaultOptions: option.DefaultRule{
+					RawDefaultRule: option.RawDefaultRule{
+						RuleSet: routeRuleSets,
+					},
+					RuleAction: option.RuleAction{
+						Action: C.RuleActionTypeRoute,
+						RouteOptions: option.RouteActionOptions{
+							Outbound: OutboundDirectTag,
+						},
+					},
+				},
+			})
+		}
 	}
 	if hopt.RouteOptions.BlockQuic {
 		routeRules = append(routeRules, option.Rule{
@@ -1358,8 +1403,32 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			)
 		}
 	}
+	normalizeDNSRuleStrategies(options, hopt)
 	// }
 	return nil
+}
+
+func normalizeDNSRuleStrategies(options *option.Options, hopt *HiddifyOptions) {
+	if options == nil || options.DNS == nil || hopt == nil {
+		return
+	}
+	for i := range options.DNS.Rules {
+		action := options.DNS.Rules[i].DefaultOptions.DNSRuleAction
+		if action.Action != C.RuleActionTypeRoute {
+			continue
+		}
+		route := &options.DNS.Rules[i].DefaultOptions.DNSRuleAction.RouteOptions
+		if route.Strategy != option.DomainStrategy(C.DomainStrategyAsIS) {
+			continue
+		}
+		if contains([]string{DNSDirectTag, DNSMultiDirectTag, DNSLocalTag, DNSTricksDirectTag}, route.Server) {
+			route.Strategy = hopt.DirectDnsDomainStrategy
+			continue
+		}
+		if contains([]string{DNSRemoteTag, DNSRemoteTagFallback, DNSRemoteNoWarpTag, DNSMultiRemoteTag}, route.Server) {
+			route.Strategy = hopt.RemoteDnsDomainStrategy
+		}
+	}
 }
 
 const (

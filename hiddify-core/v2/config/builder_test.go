@@ -130,6 +130,8 @@ func TestSetRoutingOptionsLegacyFallbackKeepsRegionRulesForOldSettings(t *testin
 	})
 	hopt := DefaultHiddifyOptions()
 	hopt.Region = "ru"
+	hopt.RuRoutingMode = ""
+	hopt.SiteRoutingMode = ""
 
 	options := newRoutingTestOptions()
 	if err := setRoutingOptions(options, hopt); err != nil {
@@ -232,6 +234,29 @@ func TestSetRoutingOptionsRuRoutingAggressiveAddsGeositeAndGeoip(t *testing.T) {
 	}
 	if got := getRuleSetLocalPathByTag(options, "geoip-ru"); got == "" {
 		t.Fatal("expected local geoip-ru path")
+	}
+}
+
+func TestSetRoutingOptionsRuRoutingFallbackToDomainSuffixWhenRuleSetUnavailable(t *testing.T) {
+	withRuleSetCacheStub(t, func(ctx context.Context, source RuleSetSource, dataDir string) (ResolvedRuleSet, RuleSetRuntimeMetadata, error) {
+		return ResolvedRuleSet{}, RuleSetRuntimeMetadata{Tag: source.Tag}, context.DeadlineExceeded
+	})
+	hopt := DefaultHiddifyOptions()
+	hopt.Region = "ru"
+	hopt.RuRoutingMode = RuRoutingModeGeosite
+
+	options := newRoutingTestOptions()
+	if err := setRoutingOptions(options, hopt); err != nil {
+		t.Fatalf("setRoutingOptions should not fail when RU ruleset is unavailable: %v", err)
+	}
+	if !hasRouteDomainSuffix(options, "ru", OutboundDirectTag) {
+		t.Fatal("expected ru domain suffix fallback route")
+	}
+	if !hasDNSDomainSuffix(options, "ru", DNSMultiDirectTag) {
+		t.Fatal("expected ru domain suffix fallback dns-direct")
+	}
+	if hasRouteRuleSet(options, "geosite-ru", OutboundDirectTag) {
+		t.Fatal("did not expect geosite-ru ruleset route when ruleset download fails")
 	}
 }
 
@@ -343,6 +368,39 @@ func TestStableMobileSetsDirectDNSStrategyPreferIPv4(t *testing.T) {
 	got := firstDNSStrategyForDomain(options, "yandex.ru")
 	if got != option.DomainStrategy(C.DomainStrategyPreferIPv4).String() {
 		t.Fatalf("expected direct DNS strategy prefer_ipv4, got %q", got)
+	}
+}
+
+func TestExistingDirectDNSRuleGetsStrategyNormalized(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.RouteOptions.NetworkProfile = NetworkProfileStableMobile
+	applyNetworkProfile(hopt)
+
+	options := newRoutingTestOptions()
+	options.DNS.Rules = append(options.DNS.Rules, option.DNSRule{
+		Type: C.RuleTypeDefault,
+		DefaultOptions: option.DefaultDNSRule{
+			RawDefaultDNSRule: option.RawDefaultDNSRule{
+				DomainSuffix: []string{"yandex.ru"},
+			},
+			DNSRuleAction: option.DNSRuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.DNSRouteActionOptions{
+					Server:         DNSDirectTag,
+					RewriteTTL:     &DEFAULT_DNS_TTL,
+					BypassIfFailed: false,
+				},
+			},
+		},
+	})
+
+	if err := setRoutingOptions(options, hopt); err != nil {
+		t.Fatalf("setRoutingOptions failed: %v", err)
+	}
+
+	got := firstDNSStrategyForDomain(options, "yandex.ru")
+	if got != option.DomainStrategy(C.DomainStrategyPreferIPv4).String() {
+		t.Fatalf("expected existing direct dns rule strategy prefer_ipv4, got %q", got)
 	}
 }
 
@@ -549,7 +607,11 @@ func TestBuildCountryGeoIPRuleSetSourceRU(t *testing.T) {
 
 func newRoutingTestOptions() *option.Options {
 	return &option.Options{
-		DNS: &option.DNSOptions{},
+		DNS: &option.DNSOptions{
+			RawDNSOptions: option.RawDNSOptions{
+				Final: DNSMultiRemoteTag,
+			},
+		},
 	}
 }
 

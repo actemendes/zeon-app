@@ -265,7 +265,12 @@ func applyNetworkProfile(hopt *HiddifyOptions) ResolvedMTU {
 }
 
 func shouldEnableDNSTrickDirect(hopt *HiddifyOptions) bool {
-	return normalizeFragmentMode(hopt.RouteOptions.FragmentMode) != FragmentModeOff
+	if hopt == nil {
+		return false
+	}
+	// DNS trick/fragment path must only be enabled when TLS fragment is
+	// explicitly enabled. Fragment mode alone is not enough.
+	return normalizeFragmentMode(hopt.RouteOptions.FragmentMode) != FragmentModeOff && hopt.TLSTricks.EnableFragment
 }
 
 func profileDNSStrategySummary(strategy option.DomainStrategy) string {
