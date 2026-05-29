@@ -1,0 +1,21 @@
+﻿HTTP/1.1 302 Found
+
+Server: nginx/1.24.0 (Ubuntu)
+
+Date: Thu, 28 May 2026 18:37:55 GMT
+
+Content-Length: 0
+
+Connection: keep-alive
+
+location: https://130.49.151.173/subscription/93c53af4-5f29-43c9-b9e0-7401039e59ab
+
+
+
+curl: (3) URL rejected: Bad hostname
+curl: (3) URL rejected: Bad hostname
+curl: (3) URL rejected: Bad hostname
+curl: (3) URL rejected: Bad hostname
+curl: (3) URL rejected: Bad hostname
+curl: (3) URL rejected: Bad hostname
+nHTTPnHTTPnHTTPnHTTPnHTTPnHTTPnHTTP

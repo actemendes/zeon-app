@@ -38,20 +38,26 @@ class MobileBootstrapImportService with InfraLogger {
   final SharedPreferences _preferences;
   Future<bool>? _runInFlight;
 
-  Future<bool> run({bool skipIfAlreadyDone = true}) async {
+  Future<bool> run({
+    bool skipIfAlreadyDone = true,
+    MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard,
+  }) async {
     try {
-      return await runOrThrow(skipIfAlreadyDone: skipIfAlreadyDone);
+      return await runOrThrow(skipIfAlreadyDone: skipIfAlreadyDone, mode: mode);
     } catch (_) {
       return false;
     }
   }
 
-  Future<bool> runOrThrow({bool skipIfAlreadyDone = true}) async {
+  Future<bool> runOrThrow({
+    bool skipIfAlreadyDone = true,
+    MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard,
+  }) async {
     final inFlight = _runInFlight;
     if (inFlight != null) {
       return await inFlight;
     }
-    final future = _runOrThrowInternal(skipIfAlreadyDone: skipIfAlreadyDone);
+    final future = _runOrThrowInternal(skipIfAlreadyDone: skipIfAlreadyDone, mode: mode);
     _runInFlight = future;
     try {
       return await future;
@@ -62,7 +68,10 @@ class MobileBootstrapImportService with InfraLogger {
     }
   }
 
-  Future<bool> _runOrThrowInternal({bool skipIfAlreadyDone = true}) async {
+  Future<bool> _runOrThrowInternal({
+    bool skipIfAlreadyDone = true,
+    MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard,
+  }) async {
     if (PlatformUtils.isWeb) {
       return false;
     }
@@ -101,6 +110,7 @@ class MobileBootstrapImportService with InfraLogger {
           savedConnLink,
           userId: effectiveUserId,
           clearUserIdWhenMissing: effectiveUserId == null,
+          mode: mode,
         );
         loggy.info("mobile auto import succeeded from saved conn_link");
         return true;
@@ -108,7 +118,10 @@ class MobileBootstrapImportService with InfraLogger {
 
       var connLink = "";
       if (savedUserId != null && savedUserId > 0) {
-        final lookup = await _lookupSubscriptionByUserId(savedUserId);
+        final lookup = await _lookupSubscriptionByUserId(
+          savedUserId,
+          disableRetry: mode == MobileConnLinkImportMode.fast,
+        );
         if (lookup != null) {
           connLink = lookup.connectionLink;
           apiStatus = lookup.status;
@@ -117,7 +130,10 @@ class MobileBootstrapImportService with InfraLogger {
       }
 
       if (connLink.isEmpty) {
-        final created = await _createOrReuseUser(userId: savedUserId);
+        final created = await _createOrReuseUser(
+          userId: savedUserId,
+          disableRetry: mode == MobileConnLinkImportMode.fast,
+        );
         effectiveUserId = created.userId ?? effectiveUserId;
         apiLogin = created.login;
         apiStatus = created.status ?? apiStatus;
@@ -126,7 +142,10 @@ class MobileBootstrapImportService with InfraLogger {
       }
 
       if (connLink.isEmpty && effectiveUserId != null && effectiveUserId > 0) {
-        final lookup = await _lookupSubscriptionByUserId(effectiveUserId);
+        final lookup = await _lookupSubscriptionByUserId(
+          effectiveUserId,
+          disableRetry: mode == MobileConnLinkImportMode.fast,
+        );
         if (lookup != null) {
           connLink = lookup.connectionLink;
           apiStatus = lookup.status ?? apiStatus;
@@ -145,6 +164,7 @@ class MobileBootstrapImportService with InfraLogger {
         apiExpiresAt: apiExpiresAt,
         apiLogin: apiLogin,
         clearUserIdWhenMissing: false,
+        mode: mode,
       );
 
       loggy.info("mobile auto import succeeded");
@@ -188,7 +208,7 @@ class MobileBootstrapImportService with InfraLogger {
     );
   }
 
-  Future<_LookupSummary?> _lookupSubscriptionByUserId(int userId) async {
+  Future<_LookupSummary?> _lookupSubscriptionByUserId(int userId, {bool disableRetry = false}) async {
     try {
       final uri = Uri.parse(
         _apiBaseUrl,
@@ -197,6 +217,7 @@ class MobileBootstrapImportService with InfraLogger {
         uri.toString(),
         headers: {"x-api-key": _apiKey, "Content-Type": "application/json"},
         directOnly: true,
+        disableRetry: disableRetry,
       );
       if ((response.statusCode ?? 0) != 200) return null;
       final body = response.data;
@@ -217,7 +238,7 @@ class MobileBootstrapImportService with InfraLogger {
     }
   }
 
-  Future<_CreateResult> _createOrReuseUser({int? userId}) async {
+  Future<_CreateResult> _createOrReuseUser({int? userId, bool disableRetry = false}) async {
     final deviceId = await _stableDeviceId.getOrCreate();
     final uri = Uri.parse(_apiBaseUrl).resolve("/api/v1/users/create").toString();
     final body = <String, dynamic>{
@@ -231,6 +252,7 @@ class MobileBootstrapImportService with InfraLogger {
       data: body,
       headers: {"x-api-key": _apiKey, "Content-Type": "application/json"},
       directOnly: true,
+      disableRetry: disableRetry,
     );
     final statusCode = response.statusCode ?? 0;
     if (statusCode != 200 && statusCode != 201) {

@@ -479,7 +479,9 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
         final importService = ref.read(mobileConnLinkImportServiceProvider);
         MobileConnLinkImportResult importResult;
         if (isLikelyAccountLink(rawInput) || extractBindCode(rawInput) != null) {
-          importResult = await importService.importConnectionLink(rawInput).timeout(const Duration(seconds: 90));
+          importResult = await importService
+              .importConnectionLink(rawInput, mode: MobileConnLinkImportMode.fast)
+              .timeout(const Duration(seconds: 25));
           await ref.read(mobileDeviceRebindServiceProvider).syncManualImportRebind(importResult);
         } else {
           showError(t.errors.profiles.invalidUrl);

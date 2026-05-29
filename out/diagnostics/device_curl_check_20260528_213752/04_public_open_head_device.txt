@@ -1,0 +1,51 @@
+﻿HTTP/1.1 302 FOUND
+
+Server: nginx/1.18.0 (Ubuntu)
+
+Date: Thu, 28 May 2026 18:38:02 GMT
+
+Content-Type: text/plain; charset=utf-8; charset=utf-8
+
+Content-Length: 93
+
+Connection: keep-alive
+
+Location: https://ok24-server.com/.netlify/functions/subscription/93c53af4-5f29-43c9-b9e0-7401039e59ab
+
+Cache-Control: no-store, max-age=0
+
+Vary: User-Agent, Accept
+
+Profile-Title: base64:WkVPTiB8IGhhcHB5X2ZveF8xNTM=
+
+Content-Disposition: attachment; filename="ZEON _ happy_fox_153.txt"; filename*=UTF-8''ZEON%20_%20happy_fox_153.txt
+
+Profile-Update-Interval: 1
+
+X-Profile-Update-Interval: 1
+
+Profile-Web-Page-Url: https://zeon-vps.link/open/649669380
+
+X-Profile-Web-Page-Url: https://zeon-vps.link/open/649669380
+
+Support-Url: https://t.me/zvo_net_support_bot
+
+X-Support-Url: https://t.me/zvo_net_support_bot
+
+Announce: base64:WkVPTg==
+
+X-Announce: base64:WkVPTg==
+
+Announce-Url: https://zeon-vps.link/open/649669380
+
+X-Announce-Url: https://zeon-vps.link/open/649669380
+
+
+
+curl: (3) URL rejected: Bad hostname
+curl: (3) URL rejected: Bad hostname
+curl: (3) URL rejected: Bad hostname
+curl: (3) URL rejected: Bad hostname
+curl: (3) URL rejected: Bad hostname
+curl: (3) URL rejected: Bad hostname
+nHTTPnHTTPnHTTPnHTTPnHTTPnHTTPnHTTP

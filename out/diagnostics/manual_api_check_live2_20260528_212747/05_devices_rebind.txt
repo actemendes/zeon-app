@@ -1,0 +1,7 @@
+﻿{"ok":false,"error":{"code":"BIND_AUDIT_INSERT_FAILED","message":"Failed to write bind audit record.","details":{"message":"duplicate key value violates unique constraint \"bind_audit_pkey\""}}}
+HTTP 502
+DNS 0.000048s
+CONNECT 0.023568s
+TLS 0.055520s
+TTFB 0.095336s
+TOTAL 0.095367s

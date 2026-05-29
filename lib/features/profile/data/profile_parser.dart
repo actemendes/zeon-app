@@ -95,7 +95,8 @@ class ProfileParser {
     required UserOverride? userOverride,
     CancelToken? cancelToken,
     bool directOnly = false,
-  }) => _downloadProfile(url, tempFilePath, cancelToken, directOnly: directOnly).flatMap(
+    bool disableRetry = false,
+  }) => _downloadProfile(url, tempFilePath, cancelToken, directOnly: directOnly, disableRetry: disableRetry).flatMap(
     (remoteHeaders) =>
         TaskEither.fromEither(
           populateHeaders(content: File(tempFilePath).readAsStringSync(), remoteHeaders: remoteHeaders),
@@ -122,7 +123,8 @@ class ProfileParser {
     required String tempFilePath,
     CancelToken? cancelToken,
     bool directOnly = false,
-  }) => _downloadProfile(rp.url, tempFilePath, cancelToken, directOnly: directOnly).flatMap(
+    bool disableRetry = false,
+  }) => _downloadProfile(rp.url, tempFilePath, cancelToken, directOnly: directOnly, disableRetry: disableRetry).flatMap(
     (remoteHeaders) =>
         TaskEither.fromEither(
           populateHeaders(content: File(tempFilePath).readAsStringSync(), remoteHeaders: remoteHeaders),
@@ -151,6 +153,7 @@ class ProfileParser {
     String tempFilePath,
     CancelToken? cancelToken, {
     bool directOnly = false,
+    bool disableRetry = false,
   }) => TaskEither.tryCatch(() async {
     // if (url.startsWith("http://"))
     //   throw const ProfileFailure.invalidUrl('HTTP is not supported. Please use HTTPS for secure connection.');
@@ -164,6 +167,7 @@ class ProfileParser {
               ? _httpClient.userAgent.replaceAll("HiddifyNext", "HiddifyNextX")
               : null,
           directOnly: directOnly,
+          disableRetry: disableRetry,
         )
         .catchError((err) {
           if (CancelToken.isCancel(err as DioException)) {
@@ -188,6 +192,7 @@ class ProfileParser {
       cancelToken: cancelToken ?? CancelToken(),
       ref: _ref,
       directOnly: directOnly,
+      disableRetry: disableRetry,
     );
     final rawContent = File(tempFilePath).readAsStringSync();
     final ok24MetaHeaders = _extractOk24MetaHeaders(rawContent);
@@ -348,6 +353,7 @@ class ProfileParser {
     required Ref ref,
     int parallelism = 4,
     bool directOnly = false,
+    bool disableRetry = false,
   }) async {
     final content = await File(tempFilePath).readAsString();
     final lines = content.split('\n');
@@ -382,6 +388,7 @@ class ProfileParser {
                 ? httpClient.userAgent.replaceAll('HiddifyNext', 'HiddifyNextX')
                 : null,
             directOnly: directOnly,
+            disableRetry: disableRetry,
           );
 
           results[currentIndex] = (await File(tmpPath).readAsString()).trim();
@@ -494,11 +501,7 @@ class ProfileParser {
     final profile = root["profile"];
     final ok24Map = ok24 is Map<String, dynamic> ? ok24 : const <String, dynamic>{};
     final profileMap = profile is Map<String, dynamic> ? profile : const <String, dynamic>{};
-    final candidates = <dynamic>[
-      ok24Map["status"],
-      root["status"],
-      profileMap["status"],
-    ];
+    final candidates = <dynamic>[ok24Map["status"], root["status"], profileMap["status"]];
     for (final candidate in candidates) {
       final raw = candidate?.toString().trim();
       if (raw == null || raw.isEmpty) continue;
