@@ -6,7 +6,6 @@ import 'package:hiddify/core/preferences/actions_at_closing.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
-import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -14,70 +13,6 @@ part 'general_preferences.g.dart';
 
 bool _debugIntroPage = false;
 const _defaultWindowSize = Size(868, 668);
-const _defaultExcludedSites = <String>[
-  "gosuslugi.ru",
-  "vk.com",
-  "mail.ru",
-  "max.ru",
-  "vkvideo.ru",
-  "rustore.ru",
-  "rutube.ru",
-  "ok.ru",
-  "sber.ru",
-  "tbank.ru",
-  "alfabank.ru",
-  "vtb.ru",
-  "wildberries.ru",
-  "wb.ru",
-  "rwb.ru",
-  "wb-basket.ru",
-  "wbbasket.ru",
-  "wbcontent.net",
-  "wbstatic.net",
-  "wibes.ru",
-  "global.wildberries.ru",
-  "seller.wildberries.ru",
-  "digital.wildberries.ru",
-  "dev.wildberries.ru",
-  "pro.wildberries.ru",
-  "public-feedbacks.wildberries.ru",
-  "a.wb.ru",
-  "service.wb.ru",
-  "splitter.wb.ru",
-  "marketplace-sentry.wb.ru",
-  "user-storage-01.wb.ru",
-  "nel.wb.ru",
-  "xc.wb.ru",
-  "mediabasket-static-02e.xc.wb.ru",
-  "static-basket-01.wbbasket.ru",
-  "static-basket-02.wbbasket.ru",
-  "static-basket-03.wbbasket.ru",
-  "static-basket-07.wbbasket.ru",
-  "wibes-06.wbbasket.ru",
-  "static-basket-01.wb.ru",
-  "static-basket-02.wb.ru",
-  "ozon.ru",
-  "lamoda.ru",
-  "megamarket.ru",
-  "avito.ru",
-  "samokat.ru",
-  "vkusvill.ru",
-  "lenta.com",
-  "magnit.com",
-  "kinopoisk.ru",
-  "ivi.ru",
-  "start.ru",
-  "kion.ru",
-  "wink.ru",
-  "2gis.ru",
-  "hh.ru",
-  "browser.yandex.ru",
-  "yandex.ru",
-  "pay.yandex.ru",
-  "litres.ru",
-  "rzd.ru",
-  "cian.ru",
-];
 
 abstract class Preferences {
   static final introCompleted = PreferencesNotifier.create(
@@ -87,70 +22,41 @@ abstract class Preferences {
   );
 
   // Null means that auto selection has not been performed yet.
-  static final autoAppsSelectionRegion =
-      PreferencesNotifier.create<Region?, String?>(
-        "auto_apps_selection_region",
-        null,
-        mapFrom: (value) =>
-            value == null || value.isEmpty ? null : Region.values.byName(value),
-        mapTo: (value) => value == null ? '' : value.name,
-      );
-
-  static final autoAppsSelectionUpdateInterval =
-      PreferencesNotifier.create<double, double>(
-        "auto_apps_selection_update_interval",
-        1.0,
-      );
-
-  static final autoAppsSelectionLastUpdate =
-      PreferencesNotifier.create<DateTime?, String?>(
-        "auto_apps_selection_last_update",
-        null,
-        mapFrom: (value) => value == null ? null : DateTime.tryParse(value),
-        mapTo: (value) => value?.toIso8601String(),
-      );
-
-  static final includeApps =
-      PreferencesNotifier.create<List<String>, List<String>>(
-        "per_app_proxy_include_list",
-        <String>[],
-      );
-
-  static final excludeApps =
-      PreferencesNotifier.create<List<String>, List<String>>(
-        "per_app_proxy_exclude_list",
-        <String>[],
-      );
-
-  static final includeSites =
-      PreferencesNotifier.create<List<String>, List<String>>(
-        "site_routing_include_list",
-        <String>[],
-      );
-
-  static final excludeSites =
-      PreferencesNotifier.create<List<String>, List<String>>(
-        "site_routing_exclude_list",
-        _defaultExcludedSites,
-      );
-
-  // Stage 2E placeholders for UI/diagnostics split between generated(seed) and manual rules.
-  static final seededExcludeSites =
-      PreferencesNotifier.create<List<String>, List<String>>(
-        "site_routing_seeded_exclude_list",
-        <String>[],
-      );
-
-  static final seededExcludeApps =
-      PreferencesNotifier.create<List<String>, List<String>>(
-        "per_app_proxy_seeded_exclude_list",
-        <String>[],
-      );
-
-  static final windowMaximized = PreferencesNotifier.create<bool, bool>(
-    "window_maximized",
-    false,
+  static final autoAppsSelectionRegion = PreferencesNotifier.create<Region?, String?>(
+    "auto_apps_selection_region",
+    null,
+    mapFrom: (value) => value == null || value.isEmpty ? null : Region.values.byName(value),
+    mapTo: (value) => value == null ? '' : value.name,
   );
+
+  static final autoAppsSelectionUpdateInterval = PreferencesNotifier.create<double, double>(
+    "auto_apps_selection_update_interval",
+    1.0,
+  );
+
+  static final autoAppsSelectionLastUpdate = PreferencesNotifier.create<DateTime?, String?>(
+    "auto_apps_selection_last_update",
+    null,
+    mapFrom: (value) => value == null ? null : DateTime.tryParse(value),
+    mapTo: (value) => value?.toIso8601String(),
+  );
+
+  static final includeApps = PreferencesNotifier.create<List<String>, List<String>>(
+    "per_app_proxy_include_list",
+    <String>[],
+  );
+
+  static final excludeApps = PreferencesNotifier.create<List<String>, List<String>>(
+    "per_app_proxy_exclude_list",
+    <String>[],
+  );
+
+  static final seededExcludeApps = PreferencesNotifier.create<List<String>, List<String>>(
+    "per_app_proxy_seeded_exclude_list",
+    <String>[],
+  );
+
+  static final windowMaximized = PreferencesNotifier.create<bool, bool>("window_maximized", false);
 
   static final windowPosition = PreferencesNotifier.create<Offset?, String?>(
     "window_position",
@@ -176,10 +82,7 @@ abstract class Preferences {
     mapTo: (value) => "${value.width},${value.height}",
   );
 
-  static final silentStart = PreferencesNotifier.create<bool, bool>(
-    "silent_start",
-    false,
-  );
+  static final silentStart = PreferencesNotifier.create<bool, bool>("silent_start", false);
 
   static final disableMemoryLimit = PreferencesNotifier.create<bool, bool>(
     "disable_memory_limit",
@@ -187,55 +90,29 @@ abstract class Preferences {
     PlatformUtils.isDesktop,
   );
 
-  static final perAppProxyMode =
-      PreferencesNotifier.create<PerAppProxyMode, String>(
-        "per_app_proxy_mode",
-        PerAppProxyMode.off,
-        mapFrom: PerAppProxyMode.values.byName,
-        mapTo: (value) => value.name,
-      );
-
-  static final siteRoutingMode =
-      PreferencesNotifier.create<SiteRoutingMode, String>(
-        "site_routing_mode",
-        SiteRoutingMode.exclude,
-        mapFrom: SiteRoutingMode.values.byName,
-        mapTo: (value) => value.name,
-      );
-
-  static final markNewProfileActive = PreferencesNotifier.create<bool, bool>(
-    "mark_new_profile_active",
-    true,
+  static final perAppProxyMode = PreferencesNotifier.create<PerAppProxyMode, String>(
+    "per_app_proxy_mode",
+    PerAppProxyMode.off,
+    mapFrom: PerAppProxyMode.values.byName,
+    mapTo: (value) => value.name,
   );
 
-  static final dynamicNotification = PreferencesNotifier.create<bool, bool>(
-    "dynamic_notification",
-    true,
-  );
+  static final markNewProfileActive = PreferencesNotifier.create<bool, bool>("mark_new_profile_active", true);
 
-  static final autoCheckIp = PreferencesNotifier.create<bool, bool>(
-    "auto_check_ip",
-    true,
-    overrideValue: true,
-  );
+  static final dynamicNotification = PreferencesNotifier.create<bool, bool>("dynamic_notification", true);
 
-  static final startedByUser = PreferencesNotifier.create<bool, bool>(
-    "started_by_user",
-    false,
-  );
+  static final autoCheckIp = PreferencesNotifier.create<bool, bool>("auto_check_ip", true, overrideValue: true);
 
-  static final storeReviewedByUser = PreferencesNotifier.create<bool, bool>(
-    "store_reviewed_by_user",
-    false,
-  );
+  static final startedByUser = PreferencesNotifier.create<bool, bool>("started_by_user", false);
 
-  static final actionAtClose =
-      PreferencesNotifier.create<ActionsAtClosing, String>(
-        "action_at_close",
-        ActionsAtClosing.ask,
-        mapFrom: ActionsAtClosing.values.byName,
-        mapTo: (value) => value.name,
-      );
+  static final storeReviewedByUser = PreferencesNotifier.create<bool, bool>("store_reviewed_by_user", false);
+
+  static final actionAtClose = PreferencesNotifier.create<ActionsAtClosing, String>(
+    "action_at_close",
+    ActionsAtClosing.ask,
+    mapFrom: ActionsAtClosing.values.byName,
+    mapTo: (value) => value.name,
+  );
 }
 
 @Riverpod(keepAlive: true)

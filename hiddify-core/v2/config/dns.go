@@ -60,24 +60,18 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 		return err
 	}
 
-	direct_detour := ""
-	// Use direct-fragment detour for direct DNS only when fragment path is active
-	// and the DNS transport is connection-oriented.
-	if shouldEnableDNSTrickDirect(opt) && strings.Contains(opt.DirectDnsAddress, "://") && !strings.HasPrefix(opt.DirectDnsAddress, "udp://") {
-		direct_detour = OutboundDirectFragmentTag
+	direct_detour := OutboundDirectFragmentTag
+	if strings.HasPrefix(opt.DirectDnsAddress, "udp://") || !strings.Contains(opt.DirectDnsAddress, "://") {
+		direct_detour = ""
 	}
 
 	direct_dns, err := getDNSServerOptions(DNSDirectTag, opt.DirectDnsAddress, DNSLocalTag, direct_detour)
 	if err != nil {
 		return err
 	}
-	enableDNSTrickDirect := shouldEnableDNSTrickDirect(opt)
-	var trickDNS *option.DNSServerOptions
-	if enableDNSTrickDirect {
-		trickDNS, err = getDNSServerOptions(DNSTricksDirectTag, "https://dns.cloudflare.com/dns-query#fragment=300", DNSDirectTag, OutboundDirectFragmentTag)
-		if err != nil {
-			return err
-		}
+	trick_dns, err := getDNSServerOptions(DNSTricksDirectTag, "https://dns.cloudflare.com/dns-query#fragment=300", DNSDirectTag, OutboundDirectFragmentTag)
+	if err != nil {
+		return err
 	}
 	local_dns, err := getDNSServerOptions(DNSLocalTag, "local", "", "")
 	if err != nil {
@@ -106,7 +100,7 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 		RawDNSOptions: option.RawDNSOptions{
 			DNSClientOptions: option.DNSClientOptions{
 				IndependentCache: opt.IndependentDNSCache && !C.IsIos,
-				DisableExpire:    opt.DisableDNSExpire,
+				DisableExpire:    true,
 			},
 			Final: DNSMultiRemoteTag,
 
@@ -114,6 +108,7 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 				*static_dns,
 				*remote_dns,
 				*remote_dns_fallback,
+				*trick_dns,
 				*direct_dns,
 				*local_dns,
 				*remote_no_warp_dns,
@@ -123,9 +118,6 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 			},
 			Rules: []option.DNSRule{},
 		},
-	}
-	if enableDNSTrickDirect && trickDNS != nil {
-		dnsOptions.Servers = append(dnsOptions.Servers, *trickDNS)
 	}
 	if opt.EnableFakeDNS {
 		inet4Range := badoption.Prefix(netip.MustParsePrefix("198.18.0.0/15"))
@@ -255,11 +247,6 @@ func addForceDirect(options *option.Options, hopt *HiddifyOptions) ([]option.Def
 	dnsMap["api.cloudflareclient.com"] = ""
 	for _, url := range hopt.ConnectionTestUrls { //To avoid dns bug when using urltest
 		if host, err := getHostnameIfNotIP(url); err == nil {
-			// In stable-vpn-routing mode, keep critical domains (e.g. google.com)
-			// on remote DNS rule path to avoid dns-direct precedence conflicts.
-			if hopt.RouteOptions.StableVPNRouting && contains(CriticalDomainSuffixes, host) {
-				continue
-			}
 			dnsMap[host] = ""
 		}
 	}

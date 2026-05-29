@@ -68,6 +68,9 @@ class SingboxConfigOption with _$SingboxConfigOption {
 
   Map<String, dynamic> toCoreJson() {
     final map = Map<String, dynamic>.from(toJson());
+    map.remove("site-routing-mode");
+    map.remove("site-routing-include");
+    map.remove("site-routing-exclude");
     map["rules"] = rules.map((rule) => rule.toCoreJson()).toList();
     return map;
   }

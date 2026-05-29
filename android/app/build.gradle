@@ -71,7 +71,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.zeon.hiddify"
+        applicationId "com.zeon.app"
         minSdkVersion flutter.minSdkVersion
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()

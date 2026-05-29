@@ -175,17 +175,6 @@ class ProfileParser {
           }
           throw err;
         });
-    // Some providers return the profile payload as outer base64 text.
-    // Normalize early so core validation and metadata parsing work on real JSON.
-    try {
-      final downloaded = File(tempFilePath).readAsStringSync();
-      final normalized = _decodeOuterBase64Json(downloaded);
-      if (normalized != downloaded) {
-        File(tempFilePath).writeAsStringSync(normalized);
-      }
-    } catch (_) {
-      // Keep original content if normalization fails.
-    }
     await expandRemoteLinesInParallel(
       tempFilePath: tempFilePath,
       httpClient: _httpClient,
@@ -196,6 +185,10 @@ class ProfileParser {
     );
     final rawContent = File(tempFilePath).readAsStringSync();
     final ok24MetaHeaders = _extractOk24MetaHeaders(rawContent);
+    final normalizedForCore = _normalizeContentForCoreImport(rawContent);
+    if (normalizedForCore != rawContent) {
+      File(tempFilePath).writeAsStringSync(normalizedForCore);
+    }
     _sanitizeUnsupportedConfigFields(tempFilePath);
     // fixing headers before return
     final responseHeaders = rs.headers.map.map((key, value) {
@@ -217,93 +210,406 @@ class ProfileParser {
     try {
       final decodedContent = _decodeOuterBase64Json(content);
       final decoded = jsonDecode(decodedContent);
-      if (decoded is! Map<String, dynamic>) return const {};
-      final ok24 = decoded["ok24_meta"];
-      final ok24Map = ok24 is Map<String, dynamic> ? ok24 : const <String, dynamic>{};
-      final profile = decoded["profile"];
-      final profileMap = profile is Map<String, dynamic> ? profile : const <String, dynamic>{};
-
-      String? decodeMaybeBase64(dynamic value) {
-        final raw = value?.toString();
-        if (raw == null || raw.trim().isEmpty) return null;
-        final v = raw.trim();
-
-        // Keep plain status/date fields as-is.
-        final lower = v.toLowerCase();
-        if (lower == "active" || lower == "inactive") return lower;
-        if (v.contains("-") || v.contains(":") || v.contains("T") || v.contains(" ")) return v;
-
-        // Decode only if it really looks like base64/base64url token.
-        final base64Like = RegExp(r'^[A-Za-z0-9+/_=-]+$').hasMatch(v);
-        if (!base64Like) return v;
-
-        return safeDecodeBase64(v).trim();
+      final decodedMap = _asMap(decoded);
+      if (decodedMap != null) {
+        return _extractOk24MetaHeadersFromMap(decodedMap);
       }
-
-      String? firstNonEmpty(List<String?> values) {
-        for (final v in values) {
-          if (v != null && v.isNotEmpty) return v;
-        }
-        return null;
-      }
-
-      final login = firstNonEmpty([
-        decodeMaybeBase64(ok24Map["login"]),
-        decodeMaybeBase64(decoded["login"]),
-        decodeMaybeBase64(profileMap["login"]),
-      ]);
-      final status = firstNonEmpty([
-        decodeMaybeBase64(ok24Map["status"]),
-        decodeMaybeBase64(decoded["status"]),
-        decodeMaybeBase64(profileMap["status"]),
-      ]);
-      final expiresAt = firstNonEmpty([
-        decodeMaybeBase64(ok24Map["expires_at"]),
-        decodeMaybeBase64(decoded["expires_at"]),
-        decodeMaybeBase64(profileMap["expires_at"]),
-        decodeMaybeBase64(profileMap["expiresAt"]),
-      ]);
-
-      final headers = <String, String>{};
-      if (login != null && login.isNotEmpty) {
-        headers["profile-title"] = login;
-      }
-      if (status != null && status.isNotEmpty) {
-        headers["ok24-status"] = status.toLowerCase();
-      }
-      if (expiresAt != null && expiresAt.isNotEmpty) {
-        headers["ok24-expires-at"] = expiresAt;
-      }
-      final parsedExpire = expiresAt == null ? null : _parseFlexibleExpire(expiresAt);
-      if (parsedExpire != null) {
-        final now = DateTime.now().toUtc();
-        final normalizedStatus = (status ?? "").toLowerCase();
-        final effectiveExpire = normalizedStatus == "inactive" && parsedExpire.isAfter(now)
-            ? now.subtract(const Duration(seconds: 1))
-            : parsedExpire;
-        final expireSeconds = (effectiveExpire.millisecondsSinceEpoch / 1000).floor();
-        // Route metadata through the canonical parser path used by UI contract.
-        headers["subscription-userinfo"] =
-            "upload=0; download=0; total=${infiniteTrafficThreshold + 1}; expire=$expireSeconds";
-      }
-      final profileWebPageUrl =
-          decoded["profile-web-page-url"]?.toString() ??
-          decoded["profileWebPageUrl"]?.toString() ??
-          decoded["openUrl"]?.toString();
-      if (profileWebPageUrl != null && profileWebPageUrl.isNotEmpty && isUrl(profileWebPageUrl)) {
-        headers["profile-web-page-url"] = profileWebPageUrl;
-      }
-      final supportUrl =
-          decoded["support-url"]?.toString() ??
-          decoded["supportUrl"]?.toString() ??
-          decoded["siteFaqTroubleshootingUrl"]?.toString();
-      if (supportUrl != null && supportUrl.isNotEmpty && isUrl(supportUrl)) {
-        headers["support-url"] = supportUrl;
-      }
-      return headers;
     } catch (_) {
-      return const {};
+      // Fallback for line-by-line payloads.
     }
+
+    final lines = _decodeOuterBase64Json(content).split('\n');
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty || !trimmed.startsWith('{')) continue;
+      try {
+        final map = _asMap(jsonDecode(trimmed));
+        if (map == null) continue;
+        final headers = _extractOk24MetaHeadersFromMap(map);
+        if (headers.isNotEmpty) {
+          return headers;
+        }
+      } catch (_) {
+        // Ignore malformed lines.
+      }
+    }
+    return const {};
+  }
+
+  static Map<String, String> _extractOk24MetaHeadersFromMap(Map<String, dynamic> decoded) {
+    final ok24Map = _asMap(decoded["ok24_meta"]) ?? const <String, dynamic>{};
+    final profileMap = _asMap(decoded["profile"]) ?? const <String, dynamic>{};
+
+    final login = _firstNonEmpty([
+      _decodeMaybeBase64Token(ok24Map["login"]),
+      _decodeMaybeBase64Token(decoded["login"]),
+      _decodeMaybeBase64Token(profileMap["login"]),
+    ]);
+    final status = _firstNonEmpty([
+      _decodeMaybeBase64Token(ok24Map["status"]),
+      _decodeMaybeBase64Token(decoded["status"]),
+      _decodeMaybeBase64Token(profileMap["status"]),
+    ]);
+    final expiresAt = _firstNonEmpty([
+      _decodeMaybeBase64Token(ok24Map["expires_at"]),
+      _decodeMaybeBase64Token(decoded["expires_at"]),
+      _decodeMaybeBase64Token(profileMap["expires_at"]),
+      _decodeMaybeBase64Token(profileMap["expiresAt"]),
+    ]);
+
+    final headers = <String, String>{};
+    if (login != null && login.isNotEmpty) {
+      headers["profile-title"] = login;
+    }
+    if (status != null && status.isNotEmpty) {
+      headers["ok24-status"] = status.toLowerCase();
+    }
+    if (expiresAt != null && expiresAt.isNotEmpty) {
+      headers["ok24-expires-at"] = expiresAt;
+    }
+
+    final parsedExpire = expiresAt == null ? null : _parseFlexibleExpire(expiresAt);
+    if (parsedExpire != null) {
+      final now = DateTime.now().toUtc();
+      final normalizedStatus = (status ?? "").toLowerCase();
+      final effectiveExpire = normalizedStatus == "inactive" && parsedExpire.isAfter(now)
+          ? now.subtract(const Duration(seconds: 1))
+          : parsedExpire;
+      final expireSeconds = (effectiveExpire.millisecondsSinceEpoch / 1000).floor();
+      headers["subscription-userinfo"] =
+          "upload=0; download=0; total=${infiniteTrafficThreshold + 1}; expire=$expireSeconds";
+    }
+
+    final profileWebPageUrl =
+        decoded["profile-web-page-url"]?.toString() ??
+        decoded["profileWebPageUrl"]?.toString() ??
+        decoded["openUrl"]?.toString();
+    if (profileWebPageUrl != null && profileWebPageUrl.isNotEmpty && isUrl(profileWebPageUrl)) {
+      headers["profile-web-page-url"] = profileWebPageUrl;
+    }
+
+    final supportUrl =
+        decoded["support-url"]?.toString() ??
+        decoded["supportUrl"]?.toString() ??
+        decoded["siteFaqTroubleshootingUrl"]?.toString();
+    if (supportUrl != null && supportUrl.isNotEmpty && isUrl(supportUrl)) {
+      headers["support-url"] = supportUrl;
+    }
+
+    return headers;
+  }
+
+  static String _normalizeContentForCoreImport(String content) {
+    final normalized = _decodeOuterBase64Json(content).trim();
+    if (normalized.isEmpty) return content;
+    final converted = _convertXrayJsonLinesToUriList(normalized);
+    return converted ?? normalized;
+  }
+
+  static String? _convertXrayJsonLinesToUriList(String content) {
+    final output = <String>[];
+    var convertedAny = false;
+
+    for (final rawLine in content.split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      if (_isUriLine(line)) {
+        output.add(line);
+        continue;
+      }
+
+      if (!line.startsWith('{')) {
+        continue;
+      }
+
+      try {
+        final map = _asMap(jsonDecode(line));
+        if (map == null) continue;
+        final uri = _convertXrayJsonLineToUri(map);
+        if (uri == null || uri.isEmpty) continue;
+        output.add(uri);
+        convertedAny = true;
+      } catch (_) {
+        // Ignore invalid JSON lines.
+      }
+    }
+
+    if (!convertedAny) {
+      return null;
+    }
+    if (output.isEmpty) {
+      return null;
+    }
+
+    return output.join('\n');
+  }
+
+  static bool _isUriLine(String line) {
+    return RegExp('^[a-zA-Z][a-zA-Z0-9+.-]*://').hasMatch(line);
+  }
+
+  static String? _convertXrayJsonLineToUri(Map<String, dynamic> root) {
+    final outboundsRaw = root["outbounds"];
+    if (outboundsRaw is! List || outboundsRaw.isEmpty) return null;
+
+    final outbound = _pickPrimaryXrayProxyOutbound(outboundsRaw);
+    if (outbound == null) return null;
+
+    final protocol = _stringValue(outbound["protocol"])?.toLowerCase();
+    if (protocol == null || protocol.isEmpty) return null;
+
+    final remarks = _stringValue(root["remarks"]) ?? _stringValue(outbound["tag"]) ?? "proxy";
+
+    switch (protocol) {
+      case "vless":
+        return _buildVlessUri(outbound, remarks);
+      case "trojan":
+        return _buildTrojanUri(outbound, remarks);
+      case "hysteria":
+      case "hysteria2":
+      case "hy2":
+        return _buildHysteriaUri(outbound, remarks, protocol: protocol);
+      default:
+        return null;
+    }
+  }
+
+  static Map<String, dynamic>? _pickPrimaryXrayProxyOutbound(List<dynamic> outbounds) {
+    final proxyProtocols = <String>{"vless", "trojan", "hysteria", "hysteria2", "hy2"};
+
+    Map<String, dynamic>? fallback;
+    for (final item in outbounds) {
+      final outbound = _asMap(item);
+      if (outbound == null) continue;
+      final protocol = _stringValue(outbound["protocol"])?.toLowerCase();
+      if (protocol == null || !proxyProtocols.contains(protocol)) continue;
+      fallback ??= outbound;
+      final tag = _stringValue(outbound["tag"])?.toLowerCase() ?? "";
+      if (tag == "proxy") return outbound;
+      if (tag.startsWith("proxy")) return outbound;
+    }
+    return fallback;
+  }
+
+  static String? _buildVlessUri(Map<String, dynamic> outbound, String remarks) {
+    final settings = _asMap(outbound["settings"]);
+    final vnext = _asList(settings?["vnext"]);
+    final server = vnext.isNotEmpty ? _asMap(vnext.first) : null;
+    final users = _asList(server?["users"]);
+    final user = users.isNotEmpty ? _asMap(users.first) : null;
+    final uuid = _stringValue(user?["id"]);
+    final host = _stringValue(server?["address"]);
+    final port = _intValue(server?["port"]);
+    if (uuid == null || host == null || port == null) return null;
+
+    final params = <String, String>{};
+    final flow = _stringValue(user?["flow"]);
+    if (flow != null && flow.isNotEmpty) params["flow"] = flow;
+    final encryption = _stringValue(user?["encryption"]);
+    if (encryption != null && encryption.isNotEmpty && encryption.toLowerCase() != "none") {
+      params["encryption"] = encryption;
+    }
+    params.addAll(_xrayTransportParams(outbound));
+
+    final uri = Uri(
+      scheme: "vless",
+      userInfo: uuid,
+      host: host,
+      port: port,
+      queryParameters: params.isEmpty ? null : params,
+      fragment: remarks,
+    );
+    return uri.toString();
+  }
+
+  static String? _buildTrojanUri(Map<String, dynamic> outbound, String remarks) {
+    final settings = _asMap(outbound["settings"]);
+    final servers = _asList(settings?["servers"]);
+    final server = servers.isNotEmpty ? _asMap(servers.first) : null;
+    final password = _stringValue(server?["password"]);
+    final host = _stringValue(server?["address"]);
+    final port = _intValue(server?["port"]);
+    if (password == null || host == null || port == null) return null;
+
+    final params = _xrayTransportParams(outbound);
+    final uri = Uri(
+      scheme: "trojan",
+      userInfo: password,
+      host: host,
+      port: port,
+      queryParameters: params.isEmpty ? null : params,
+      fragment: remarks,
+    );
+    return uri.toString();
+  }
+
+  static String? _buildHysteriaUri(Map<String, dynamic> outbound, String remarks, {required String protocol}) {
+    final settings = _asMap(outbound["settings"]);
+    final host = _stringValue(settings?["address"]);
+    final port = _intValue(settings?["port"]);
+    if (host == null || port == null) return null;
+
+    final stream = _asMap(outbound["streamSettings"]);
+    final tls = _asMap(stream?["tlsSettings"]);
+    final hysteria = _asMap(stream?["hysteriaSettings"]);
+
+    final auth = _stringValue(hysteria?["auth"]);
+    final insecure = _boolValue(tls?["allowInsecure"]);
+    final sni = _stringValue(tls?["serverName"]);
+    final version = _intValue(settings?["version"]);
+
+    final useHy2 = protocol == "hysteria2" || protocol == "hy2" || version == 2;
+    if (useHy2) {
+      final uri = Uri(
+        scheme: "hy2",
+        userInfo: auth ?? "",
+        host: host,
+        port: port,
+        queryParameters: <String, String>{
+          if (sni != null && sni.isNotEmpty) "sni": sni,
+          if (insecure == true) "insecure": "1",
+        },
+        fragment: remarks,
+      );
+      return uri.toString();
+    }
+
+    final uri = Uri(
+      scheme: "hysteria",
+      host: host,
+      port: port,
+      queryParameters: <String, String>{
+        if (auth != null && auth.isNotEmpty) "auth": auth,
+        if (sni != null && sni.isNotEmpty) "peer": sni,
+        if (insecure == true) "insecure": "1",
+      },
+      fragment: remarks,
+    );
+    return uri.toString();
+  }
+
+  static Map<String, String> _xrayTransportParams(Map<String, dynamic> outbound) {
+    final params = <String, String>{};
+    final stream = _asMap(outbound["streamSettings"]);
+    if (stream == null) return params;
+
+    final security = _stringValue(stream["security"]);
+    if (security != null && security.isNotEmpty && security.toLowerCase() != "none") {
+      params["security"] = security;
+    }
+
+    final network = _stringValue(stream["network"]);
+    if (network != null && network.isNotEmpty && network != "tcp") {
+      params["type"] = network;
+    }
+
+    final tlsSettings = _asMap(stream["tlsSettings"]);
+    final realitySettings = _asMap(stream["realitySettings"]);
+    final sni = _stringValue(realitySettings?["serverName"]) ?? _stringValue(tlsSettings?["serverName"]);
+    if (sni != null && sni.isNotEmpty) params["sni"] = sni;
+
+    final fp = _stringValue(realitySettings?["fingerprint"]) ?? _stringValue(tlsSettings?["fingerprint"]);
+    if (fp != null && fp.isNotEmpty) params["fp"] = fp;
+
+    final allowInsecure = _boolValue(tlsSettings?["allowInsecure"]);
+    if (allowInsecure == true) {
+      params["allowInsecure"] = "1";
+    }
+
+    final alpnValue = tlsSettings?["alpn"];
+    if (alpnValue is List) {
+      final values = alpnValue.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+      if (values.isNotEmpty) params["alpn"] = values.join(",");
+    } else if (alpnValue != null) {
+      final alpn = alpnValue.toString().trim();
+      if (alpn.isNotEmpty) params["alpn"] = alpn.replaceAll(' ', ',');
+    }
+
+    final pbk = _stringValue(realitySettings?["publicKey"]);
+    if (pbk != null && pbk.isNotEmpty) params["pbk"] = pbk;
+    final sid = _stringValue(realitySettings?["shortId"]);
+    if (sid != null && sid.isNotEmpty) params["sid"] = sid;
+
+    final wsSettings = _asMap(stream["wsSettings"]);
+    final wsHost = _stringValue(_asMap(wsSettings?["headers"])?["Host"]);
+    final wsPath = _stringValue(wsSettings?["path"]);
+    if (wsHost != null && wsHost.isNotEmpty) params["host"] = wsHost;
+    if (wsPath != null && wsPath.isNotEmpty) params["path"] = wsPath;
+
+    final grpcSettings = _asMap(stream["grpcSettings"]);
+    final serviceName = _stringValue(grpcSettings?["serviceName"]);
+    if (serviceName != null && serviceName.isNotEmpty) {
+      params["serviceName"] = serviceName;
+    }
+
+    final xhttpSettings = _asMap(stream["xhttpSettings"]);
+    final xhttpHost = _stringValue(xhttpSettings?["host"]);
+    final xhttpPath = _stringValue(xhttpSettings?["path"]);
+    final xhttpMode = _stringValue(xhttpSettings?["mode"]);
+    if (xhttpHost != null && xhttpHost.isNotEmpty) params["host"] = xhttpHost;
+    if (xhttpPath != null && xhttpPath.isNotEmpty) params["path"] = xhttpPath;
+    if (xhttpMode != null && xhttpMode.isNotEmpty) params["mode"] = xhttpMode;
+
+    return params;
+  }
+
+  static String? _decodeMaybeBase64Token(dynamic value) {
+    final raw = value?.toString();
+    if (raw == null || raw.trim().isEmpty) return null;
+    final v = raw.trim();
+    final lower = v.toLowerCase();
+    if (lower == "active" || lower == "inactive") return lower;
+    if (v.contains("-") || v.contains(":") || v.contains("T") || v.contains(" ")) return v;
+    final base64Like = RegExp(r'^[A-Za-z0-9+/_=-]+$').hasMatch(v);
+    if (!base64Like) return v;
+    return safeDecodeBase64(v).trim();
+  }
+
+  static String? _firstNonEmpty(List<String?> values) {
+    for (final v in values) {
+      if (v != null && v.isNotEmpty) return v;
+    }
+    return null;
+  }
+
+  static Map<String, dynamic>? _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      final out = <String, dynamic>{};
+      for (final entry in value.entries) {
+        out[entry.key.toString()] = entry.value;
+      }
+      return out;
+    }
+    return null;
+  }
+
+  static List<dynamic> _asList(dynamic value) {
+    if (value is List) return value;
+    return const [];
+  }
+
+  static String? _stringValue(dynamic value) {
+    final str = value?.toString();
+    if (str == null) return null;
+    final trimmed = str.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static int? _intValue(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? "");
+  }
+
+  static bool? _boolValue(dynamic value) {
+    if (value is bool) return value;
+    final raw = value?.toString().trim().toLowerCase();
+    if (raw == null || raw.isEmpty) return null;
+    if (raw == "true" || raw == "1") return true;
+    if (raw == "false" || raw == "0") return false;
+    return null;
   }
 
   static String _decodeOuterBase64Json(String content) {

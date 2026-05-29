@@ -62,19 +62,10 @@ func ParseUrl(inputURL string, defaultPort uint16) (*UrlSchema, error) {
 	}
 
 	for key, values := range parsedURL.Query() {
-		data.Params[normalizeStr(key)] = strings.Join(values, ",")
+		data.Params[strings.ReplaceAll(strings.ToLower(key), "_", "")] = strings.Join(values, ",")
 	}
 
 	return data, nil
-}
-
-func normalizeStr(ss string) string {
-	s := strings.ToLower(strings.TrimSpace(ss))
-	for _, r := range []string{"_", "-"} {
-		s = strings.ReplaceAll(s, r, " ")
-
-	}
-	return s
 }
 
 func getPassword(u *url.URL) string {

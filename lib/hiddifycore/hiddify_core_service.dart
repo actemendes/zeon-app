@@ -152,15 +152,24 @@ class HiddifyCoreService with InfraLogger {
       if (_useMockCore) {
         return right(unit);
       }
-      try {
-        final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
-        if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
-      } catch (e) {
-        await setup().run();
-        final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
-        if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
+      const maxAttempts = 3;
+      Object? lastError;
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
+          if (response.responseCode == ResponseCode.OK) {
+            return right(unit);
+          }
+          return left("${response.responseCode} ${response.message}");
+        } catch (e, st) {
+          lastError = e;
+          loggy.warning("validate config attempt [$attempt/$maxAttempts] failed", e, st);
+          if (attempt == maxAttempts) break;
+          await setup().run();
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        }
       }
-      return right(unit);
+      return left("validate config grpc unavailable: $lastError");
     });
   }
 
@@ -222,23 +231,37 @@ class HiddifyCoreService with InfraLogger {
       // latestOptions = options;
       final payload = await _buildCoreOptionsPayload(options);
       loggy.info("core payload (safe): ${_safeCorePayload(payload)}");
-      try {
-        final res = await core.fgClient.changeHiddifySettings(
-          ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(payload)),
-        );
-        if (res.messageType != MessageType.EMPTY) return left("${res.messageType} ${res.message}");
-        await core.bgClient.changeHiddifySettings(
-          ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(payload)),
-        );
-      } on GrpcError catch (e) {
-        if (e.code == StatusCode.unavailable) {
-          loggy.debug("background core is not started yet! $e");
-        } else {
-          rethrow;
+      final request = ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(payload));
+      const maxAttempts = 3;
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          final res = await core.fgClient.changeHiddifySettings(request);
+          if (res.messageType != MessageType.EMPTY) {
+            return left("${res.messageType} ${res.message}");
+          }
+          try {
+            await core.bgClient.changeHiddifySettings(request);
+          } on GrpcError catch (e) {
+            if (e.code == StatusCode.unavailable) {
+              loggy.debug("background core is not started yet! $e");
+            } else {
+              rethrow;
+            }
+          }
+          return right(unit);
+        } on GrpcError catch (e, st) {
+          if (e.code != StatusCode.unavailable) {
+            rethrow;
+          }
+          loggy.warning("change options fg unavailable [$attempt/$maxAttempts]", e, st);
+          if (attempt == maxAttempts) {
+            return left("fg core unavailable while applying options: $e");
+          }
+          await setup().run();
+          await Future<void>.delayed(const Duration(milliseconds: 200));
         }
       }
-
-      return right(unit);
+      return left("failed to apply options");
     });
   }
 

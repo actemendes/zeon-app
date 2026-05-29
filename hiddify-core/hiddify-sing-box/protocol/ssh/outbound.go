@@ -15,7 +15,6 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/common/dialer"
-	"github.com/sagernet/sing-box/common/monitoring"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -50,7 +49,6 @@ type Outbound struct {
 	clientConn        net.Conn
 	client            *ssh.Client
 	uotClient         *uot.Client
-	connectionErr     string
 }
 
 func NewOutbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.SSHOutboundOptions) (adapter.Outbound, error) {
@@ -164,7 +162,6 @@ func (s *Outbound) connect() (*ssh.Client, error) {
 					return nil
 				}
 			}
-
 			return E.New("host key mismatch, server send ", key.Type(), " ", base64.StdEncoding.EncodeToString(serverKey))
 		},
 	}
@@ -191,14 +188,6 @@ func (s *Outbound) connect() (*ssh.Client, error) {
 	return client, nil
 }
 
-func (s *Outbound) PostStart() error {
-	s.connect()
-	if s.IsReady() {
-		monitoring.Get(s.ctx).TestNow(s.Tag())
-	}
-	return nil
-}
-
 func (s *Outbound) InterfaceUpdated() {
 	common.Close(s.clientConn)
 }
@@ -213,10 +202,8 @@ func (s *Outbound) DialContext(ctx context.Context, network string, destination 
 	metadata.Destination = destination
 	client, err := s.connect()
 	if err != nil {
-		s.connectionErr = err.Error()
 		return nil, err
 	}
-	s.connectionErr = ""
 
 	switch N.NetworkName(network) {
 
@@ -265,20 +252,4 @@ func (c *chanConnWrapper) SetReadDeadline(t time.Time) error {
 
 func (c *chanConnWrapper) SetWriteDeadline(t time.Time) error {
 	return os.ErrInvalid
-}
-
-func (s *Outbound) IsReady() bool {
-	return s.client != nil
-}
-func (s *Outbound) ProxyDisplayName() string {
-	str := C.ProxyDisplayName(s.Type())
-	if !s.IsReady() {
-		if s.connectionErr != "" {
-			str += " ❌ "
-			str += s.connectionErr
-		} else {
-			str += " ⚠️ Connecting..."
-		}
-	}
-	return s.connectionErr
 }

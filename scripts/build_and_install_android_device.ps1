@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet("release", "debug", "profile")]
-    [string]$BuildMode = "release",
+    [string]$BuildMode = "debug",
 
     [string]$BuildTarget = "lib/main_prod.dart",
 

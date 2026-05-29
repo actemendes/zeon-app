@@ -162,88 +162,8 @@ class PreferencesVersion3Migration extends PreferencesMigrationStep with InfraLo
 class PreferencesVersion4Migration extends PreferencesMigrationStep with InfraLogger {
   PreferencesVersion4Migration(super.sharedPreferences);
 
-  static const _siteRoutingExcludeKey = "site_routing_exclude_list";
-  static const _siteRoutingModeKey = "site_routing_mode";
-  static const _defaultExcludedSites = <String>[
-    "gosuslugi.ru",
-    "vk.com",
-    "mail.ru",
-    "max.ru",
-    "vkvideo.ru",
-    "rustore.ru",
-    "rutube.ru",
-    "ok.ru",
-    "sber.ru",
-    "tbank.ru",
-    "alfabank.ru",
-    "vtb.ru",
-    "wildberries.ru",
-    "wb.ru",
-    "rwb.ru",
-    "wb-basket.ru",
-    "wbbasket.ru",
-    "wbcontent.net",
-    "wbstatic.net",
-    "wibes.ru",
-    "global.wildberries.ru",
-    "seller.wildberries.ru",
-    "digital.wildberries.ru",
-    "dev.wildberries.ru",
-    "pro.wildberries.ru",
-    "public-feedbacks.wildberries.ru",
-    "a.wb.ru",
-    "service.wb.ru",
-    "splitter.wb.ru",
-    "marketplace-sentry.wb.ru",
-    "user-storage-01.wb.ru",
-    "nel.wb.ru",
-    "xc.wb.ru",
-    "mediabasket-static-02e.xc.wb.ru",
-    "static-basket-01.wbbasket.ru",
-    "static-basket-02.wbbasket.ru",
-    "static-basket-03.wbbasket.ru",
-    "static-basket-07.wbbasket.ru",
-    "wibes-06.wbbasket.ru",
-    "static-basket-01.wb.ru",
-    "static-basket-02.wb.ru",
-    "ozon.ru",
-    "lamoda.ru",
-    "megamarket.ru",
-    "avito.ru",
-    "samokat.ru",
-    "vkusvill.ru",
-    "lenta.com",
-    "magnit.com",
-    "kinopoisk.ru",
-    "ivi.ru",
-    "start.ru",
-    "kion.ru",
-    "wink.ru",
-    "2gis.ru",
-    "hh.ru",
-    "browser.yandex.ru",
-    "yandex.ru",
-    "pay.yandex.ru",
-    "litres.ru",
-    "rzd.ru",
-    "cian.ru",
-  ];
-
   @override
-  Future<void> migrate() async {
-    final excludeSites = sharedPreferences.getStringList(_siteRoutingExcludeKey);
-    final shouldSeedExcludeSites = excludeSites == null || excludeSites.isEmpty;
-    if (shouldSeedExcludeSites) {
-      loggy.debug("site routing migration: seeding default excluded sites");
-      await sharedPreferences.setStringList(_siteRoutingExcludeKey, _defaultExcludedSites);
-    }
-
-    final mode = sharedPreferences.getString(_siteRoutingModeKey);
-    if (shouldSeedExcludeSites && (mode == null || mode.isEmpty || mode == "off")) {
-      loggy.debug("site routing migration: changing mode from [$mode] to [exclude]");
-      await sharedPreferences.setString(_siteRoutingModeKey, "exclude");
-    }
-  }
+  Future<void> migrate() async {}
 }
 
 class PreferencesVersion5Migration extends PreferencesMigrationStep with InfraLogger {
@@ -381,48 +301,6 @@ class PreferencesVersion8Migration extends PreferencesMigrationStep with InfraLo
 class PreferencesVersion9Migration extends PreferencesMigrationStep with InfraLogger {
   PreferencesVersion9Migration(super.sharedPreferences);
 
-  static const _siteRoutingExcludeKey = "site_routing_exclude_list";
-  static const _wildberriesDomains = <String>[
-    "wildberries.ru",
-    "wb.ru",
-    "rwb.ru",
-    "wb-basket.ru",
-    "wbbasket.ru",
-    "wbcontent.net",
-    "wbstatic.net",
-    "wibes.ru",
-    "global.wildberries.ru",
-    "seller.wildberries.ru",
-    "digital.wildberries.ru",
-    "dev.wildberries.ru",
-    "pro.wildberries.ru",
-    "public-feedbacks.wildberries.ru",
-    "a.wb.ru",
-    "service.wb.ru",
-    "splitter.wb.ru",
-    "marketplace-sentry.wb.ru",
-    "user-storage-01.wb.ru",
-    "nel.wb.ru",
-    "xc.wb.ru",
-    "mediabasket-static-02e.xc.wb.ru",
-    "static-basket-01.wbbasket.ru",
-    "static-basket-02.wbbasket.ru",
-    "static-basket-03.wbbasket.ru",
-    "static-basket-07.wbbasket.ru",
-    "wibes-06.wbbasket.ru",
-    "static-basket-01.wb.ru",
-    "static-basket-02.wb.ru",
-  ];
-
   @override
-  Future<void> migrate() async {
-    final excludeSites = sharedPreferences.getStringList(_siteRoutingExcludeKey);
-    if (excludeSites == null || excludeSites.isEmpty) return;
-
-    final merged = <String>[...excludeSites, ..._wildberriesDomains.where((domain) => !excludeSites.contains(domain))];
-    if (merged.length == excludeSites.length) return;
-
-    loggy.debug("site routing v9: appending wildberries ecosystem domains to exclude list");
-    await sharedPreferences.setStringList(_siteRoutingExcludeKey, merged);
-  }
+  Future<void> migrate() async {}
 }

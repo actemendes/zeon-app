@@ -440,7 +440,6 @@
 | tag_display | [string](#string) |  |  |
 | upload | [int64](#int64) |  |  |
 | download | [int64](#int64) |  |  |
-| detour | [string](#string) |  |  |
 
 
 

@@ -28,7 +28,6 @@ import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:hiddify/features/profile/data/debug_profile_bootstrap_service.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
 import 'package:hiddify/features/window/notifier/window_notifier.dart';
 import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
@@ -183,7 +182,6 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
 
   final debug = container.read(debugModeNotifierProvider) || kDebugMode;
   await _safeInit("per-app proxy defaults", () => _seedPerAppProxyDefaults(container), timeout: 5000);
-  await _safeInit("site routing defaults", () => _seedSiteRoutingDefaults(container), timeout: 5000);
 
   if (PlatformUtils.isDesktop) {
     await _init("window controller", () => container.read(windowNotifierProvider.future));
@@ -375,50 +373,6 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
           );
     }
   }
-  await prefs.setBool(seedKey, true);
-}
-
-Future<void> _seedSiteRoutingDefaults(ProviderContainer container) async {
-  final prefs = container.read(sharedPreferencesProvider).requireValue;
-  const seedKey = "site_routing_seed_v1_done";
-  if (prefs.getBool(seedKey) ?? false) return;
-
-  const excludeSites = <String>[
-    "yandex.ru",
-    "ya.ru",
-    "vk.com",
-    "mail.ru",
-    "ok.ru",
-    "gosuslugi.ru",
-    "sberbank.ru",
-    "alfabank.ru",
-    "tbank.ru",
-    "vtb.ru",
-    "kinopoisk.ru",
-    "rutube.ru",
-  ];
-
-  final currentMode = container.read(Preferences.siteRoutingMode);
-  final currentInclude = container.read(Preferences.includeSites);
-  final currentExclude = container.read(Preferences.excludeSites);
-  final shouldApplyDefaults = currentMode == SiteRoutingMode.off && currentInclude.isEmpty && currentExclude.isEmpty;
-  if (shouldApplyDefaults) {
-    await container.read(Preferences.siteRoutingMode.notifier).update(SiteRoutingMode.exclude);
-    await container.read(Preferences.includeSites.notifier).update(const []);
-    await container.read(Preferences.excludeSites.notifier).update(excludeSites);
-    await container.read(Preferences.seededExcludeSites.notifier).update(excludeSites);
-    await prefs.setBool(seedKey, true);
-    return;
-  }
-
-  if (currentMode == SiteRoutingMode.exclude) {
-    final merged = <String>[...currentExclude, ...excludeSites.where((site) => !currentExclude.contains(site))];
-    if (merged.length != currentExclude.length) {
-      await container.read(Preferences.excludeSites.notifier).update(merged);
-      await container.read(Preferences.seededExcludeSites.notifier).update(excludeSites);
-    }
-  }
-
   await prefs.setBool(seedKey, true);
 }
 
