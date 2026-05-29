@@ -566,6 +566,19 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	dnsRules := []option.DefaultDNSRule{}
 	routeRules := []option.Rule{}
 	rulesets := []option.RuleSet{}
+	ruProxyOverrideDomainSuffixes := []string{
+		"ya.ru",
+		"yandex.ru",
+		"yandex.net",
+		"yastatic.net",
+		"wildberries.ru",
+		"wb.ru",
+		"wbbasket.ru",
+		"wbstatic.net",
+		"wbcontent.net",
+		"rwb.ru",
+		"wibes.ru",
+	}
 
 	// if opt.EnableTun && runtime.GOOS == "android" {
 	// 	// routeRules = append(
@@ -752,7 +765,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 					Strategy:       hopt.DirectDnsDomainStrategy,
 					RewriteTTL:     &DEFAULT_DNS_TTL,
 					DisableCache:   false,
-					BypassIfFailed: false,
+					BypassIfFailed: true,
 				},
 			},
 		})
@@ -874,6 +887,38 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			DNSRuleAction: rejectDnsAction,
 		})
 	}
+	if hopt.Region == "ru" {
+		// Some RU services work more reliably via proxy path from certain networks.
+		// Place this before generic RU direct rules.
+		dnsRules = append(dnsRules, option.DefaultDNSRule{
+			RawDefaultDNSRule: option.RawDefaultDNSRule{
+				DomainSuffix: ruProxyOverrideDomainSuffixes,
+			},
+			DNSRuleAction: option.DNSRuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.DNSRouteActionOptions{
+					Server:         DNSMultiRemoteTag,
+					Strategy:       hopt.RemoteDnsDomainStrategy,
+					RewriteTTL:     &DEFAULT_DNS_TTL,
+					BypassIfFailed: true,
+				},
+			},
+		})
+		routeRules = append(routeRules, option.Rule{
+			Type: C.RuleTypeDefault,
+			DefaultOptions: option.DefaultRule{
+				RawDefaultRule: option.RawDefaultRule{
+					DomainSuffix: ruProxyOverrideDomainSuffixes,
+				},
+				RuleAction: option.RuleAction{
+					Action: C.RuleActionTypeRoute,
+					RouteOptions: option.RouteActionOptions{
+						Outbound: OutboundMainDetour,
+					},
+				},
+			},
+		})
+	}
 	if hopt.Region != "other" {
 		dnsRules = append(dnsRules, option.DefaultDNSRule{
 			RawDefaultDNSRule: option.RawDefaultDNSRule{
@@ -885,7 +930,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 					Server:         DNSMultiDirectTag,
 					Strategy:       hopt.DirectDnsDomainStrategy,
 					RewriteTTL:     &DEFAULT_DNS_TTL,
-					BypassIfFailed: false,
+					BypassIfFailed: true,
 				},
 			},
 		})
@@ -917,7 +962,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 					Server:         DNSMultiDirectTag,
 					Strategy:       hopt.DirectDnsDomainStrategy,
 					RewriteTTL:     &DEFAULT_DNS_TTL,
-					BypassIfFailed: false,
+					BypassIfFailed: true,
 				},
 			},
 		})

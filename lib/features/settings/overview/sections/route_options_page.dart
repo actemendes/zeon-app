@@ -3,9 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
+import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/core/widget/tip_card.dart';
-import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:hiddify/features/per_app_proxy/overview/per_app_proxy_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -16,10 +16,18 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class RouteOptionsPage extends HookConsumerWidget {
   const RouteOptionsPage({super.key});
+
+  String _defaultDirectDnsForRegion(Region region) => switch (region) {
+    Region.cn => "223.5.5.5",
+    Region.ru => "77.88.8.8",
+    _ => "1.1.1.1",
+  };
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final perAppProxy = ref.watch(Preferences.perAppProxyMode).enabled;
+    final currentRegion = ref.watch(ConfigOptions.region);
     return Scaffold(
       key: const ValueKey(UiNames.screenRouteOptions),
       appBar: AppBar(title: Text(t.pages.settings.routing.title.toUpperCase())),
@@ -46,7 +54,7 @@ class RouteOptionsPage extends HookConsumerWidget {
               },
             ),
           ChoicePreferenceWidget(
-            selected: ref.watch(ConfigOptions.region),
+            selected: currentRegion,
             preferences: ref.watch(ConfigOptions.region.notifier),
             choices: Region.values,
             title: t.pages.settings.routing.region,
@@ -54,7 +62,17 @@ class RouteOptionsPage extends HookConsumerWidget {
             icon: Icons.place_rounded,
             presentChoice: (value) => value.present(t),
             onChanged: (val) async {
-              await ref.read(ConfigOptions.directDnsAddress.notifier).reset();
+              final currentDirectDns = ref.read(ConfigOptions.directDnsAddress).trim().toLowerCase();
+              final previousRegionDefault = _defaultDirectDnsForRegion(currentRegion);
+              final nextRegionDefault = _defaultDirectDnsForRegion(val);
+              final normalizedPreviousDefaults = {previousRegionDefault, 'udp://$previousRegionDefault'};
+              final normalizedNextDefaults = {nextRegionDefault, 'udp://$nextRegionDefault'};
+              final usingRegionDefault =
+                  normalizedPreviousDefaults.contains(currentDirectDns) ||
+                  normalizedNextDefaults.contains(currentDirectDns);
+              if (usingRegionDefault) {
+                await ref.read(ConfigOptions.directDnsAddress.notifier).reset();
+              }
               final autoRegion = ref.read(Preferences.autoAppsSelectionRegion);
               final mode = ref.read(Preferences.perAppProxyMode).toAppProxy();
               if (autoRegion != val &&

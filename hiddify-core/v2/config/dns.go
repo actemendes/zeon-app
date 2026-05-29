@@ -237,7 +237,7 @@ func addForceDirect(options *option.Options, hopt *HiddifyOptions) ([]option.Def
 				RouteOptions: option.DNSRouteActionOptions{
 					Server:         DNSRemoteNoWarpTag,
 					Strategy:       hopt.DirectDnsDomainStrategy,
-					BypassIfFailed: false,
+					BypassIfFailed: true,
 					RewriteTTL:     &DEFAULT_DNS_TTL,
 				},
 			},
@@ -269,7 +269,7 @@ func addForceDirect(options *option.Options, hopt *HiddifyOptions) ([]option.Def
 						Server:         DNSMultiDirectTag,
 						Strategy:       hopt.DirectDnsDomainStrategy,
 						RewriteTTL:     &DEFAULT_DNS_TTL,
-						BypassIfFailed: false,
+						BypassIfFailed: true,
 					},
 				},
 			},
