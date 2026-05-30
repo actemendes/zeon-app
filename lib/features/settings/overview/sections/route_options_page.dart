@@ -17,6 +17,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 class RouteOptionsPage extends HookConsumerWidget {
   const RouteOptionsPage({super.key});
 
+  static const _regionChoices = [Region.ru, Region.other];
+
   String _defaultDirectDnsForRegion(Region region) => switch (region) {
     Region.cn => "223.5.5.5",
     Region.ru => "77.88.8.8",
@@ -56,7 +58,7 @@ class RouteOptionsPage extends HookConsumerWidget {
           ChoicePreferenceWidget(
             selected: currentRegion,
             preferences: ref.watch(ConfigOptions.region.notifier),
-            choices: Region.values,
+            choices: _regionChoices,
             title: t.pages.settings.routing.region,
             showFlag: true,
             icon: Icons.place_rounded,

@@ -113,11 +113,7 @@ func StartService(ctx context.Context, in *StartRequest) (coreResponse *CoreInfo
 
 	config.SaveCurrentConfig(ctx, currentBuildConfigPath, *options)
 	if static.debug {
-		pout, err := options.MarshalJSONContext(ctx)
-		if err != nil {
-			return errorWrapper(MessageType_ERROR_BUILDING_CONFIG, err)
-		}
-		Log(LogLevel_INFO, LogType_CORE, "Current Config is:\n", string(pout))
+		Log(LogLevel_INFO, LogType_CORE, "Current config saved to ", currentBuildConfigPath)
 	}
 	ctx = libbox.FromContext(ctx, static.globalPlatformInterface)
 	if static.globalPlatformInterface != nil {

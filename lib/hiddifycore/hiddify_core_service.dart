@@ -202,18 +202,21 @@ class HiddifyCoreService with InfraLogger {
 
         await startListeningLogs("fg", core.fgClient);
         // await startListeningStatus("fg", core.fgClient);
-        if (!core.isSingleChannel()) {
+        final bgActive = core.isSingleChannel() || await core.isActiveBg();
+        if (bgActive && !core.isSingleChannel()) {
           await startListeningLogs("bg", core.bgClient);
         }
         if (!core.isSingleChannel()) {
           try {
-            currentState = await core.isActiveBg() ? const CoreStatus.started() : const CoreStatus.stopped();
+            currentState = bgActive ? const CoreStatus.started() : const CoreStatus.stopped();
           } catch (e) {
             loggy.warning("failed to detect background core state: $e");
           }
         }
         statusController.add(currentState);
-        await startListeningStatus("bg", core.bgClient);
+        if (bgActive) {
+          await startListeningStatus("bg", core.bgClient);
+        }
         // ref.read(coreRestartSignalProvider.notifier).restart();
         return right(unit);
       } catch (e) {
@@ -723,7 +726,13 @@ class HiddifyCoreService with InfraLogger {
       yield* statusController.stream;
       return;
     }
-    await startListeningStatus("bg", core.bgClient);
+    try {
+      if (core.isSingleChannel() || await core.isActiveBg()) {
+        await startListeningStatus("bg", core.bgClient);
+      }
+    } catch (e) {
+      loggy.debug("background core is not ready for status listener: $e");
+    }
     yield* statusController.stream;
     // .endWith(const CoreStatus.stopped());
   }

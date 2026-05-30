@@ -32,7 +32,7 @@ abstract class ConfigOptions {
 
   static final region = PreferencesNotifier.create<Region, String>(
     "region",
-    Region.other,
+    Region.ru,
     mapFrom: Region.values.byName,
     mapTo: (value) => value.name,
   );

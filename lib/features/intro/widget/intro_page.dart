@@ -149,7 +149,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
 
   Future<void> autoSelectRegion(WidgetRef ref) async {
     try {
-      await ref.read(ConfigOptions.region.notifier).update(Region.other);
+      await ref.read(ConfigOptions.region.notifier).update(Region.ru);
       await ref.read(ConfigOptions.directDnsAddress.notifier).reset();
     } catch (e) {
       loggy.warning('Could not set default region', e);
