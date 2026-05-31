@@ -21,6 +21,7 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion7Migration(sharedPreferences),
       PreferencesVersion8Migration(sharedPreferences),
       PreferencesVersion9Migration(sharedPreferences),
+      PreferencesVersion10Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -91,7 +92,13 @@ class PreferencesVersion1Migration extends PreferencesMigrationStep with InfraLo
       await sharedPreferences.setInt("direct-port", directPort);
     }
 
-    await sharedPreferences.remove("execute-config-as-is");
+    final legacyExecuteConfigAsIs = sharedPreferences.getBool("execute-config-as-is");
+    if (legacyExecuteConfigAsIs != null && !sharedPreferences.containsKey("enable-full-config")) {
+      loggy.debug("migrating [execute-config-as-is] = [$legacyExecuteConfigAsIs] to [enable-full-config]");
+      await sharedPreferences.setBool("enable-full-config", legacyExecuteConfigAsIs);
+    }
+
+    // Keep legacy key for backward compatibility with older app/core versions.
     await sharedPreferences.remove("enable-tun");
     await sharedPreferences.remove("set-system-proxy");
 
@@ -207,9 +214,9 @@ class PreferencesVersion6Migration extends PreferencesMigrationStep with InfraLo
     }
 
     final mtu = sharedPreferences.getInt("mtu");
-    if (mtu == null || mtu != 9000) {
-      loggy.debug("hiddify baseline migration: changing mtu from [$mtu] to [9000]");
-      await sharedPreferences.setInt("mtu", 9000);
+    if (mtu == null || mtu != 1500) {
+      loggy.debug("hiddify baseline migration: changing mtu from [$mtu] to [1500]");
+      await sharedPreferences.setInt("mtu", 1500);
     }
 
     final strictRoute = sharedPreferences.getBool("strict-route");
@@ -303,4 +310,22 @@ class PreferencesVersion9Migration extends PreferencesMigrationStep with InfraLo
 
   @override
   Future<void> migrate() async {}
+}
+
+class PreferencesVersion10Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion10Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    final canonical = sharedPreferences.getBool("enable-full-config");
+    final legacy = sharedPreferences.getBool("execute-config-as-is");
+
+    if (canonical == null && legacy != null) {
+      loggy.debug("v10: copying [execute-config-as-is]=$legacy to [enable-full-config]");
+      await sharedPreferences.setBool("enable-full-config", legacy);
+    } else if (canonical != null && legacy == null) {
+      loggy.debug("v10: copying [enable-full-config]=$canonical to [execute-config-as-is]");
+      await sharedPreferences.setBool("execute-config-as-is", canonical);
+    }
+  }
 }

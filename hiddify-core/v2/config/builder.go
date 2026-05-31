@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"sort"
 	"strings"
 	sync "sync"
 	"time"
@@ -430,6 +431,181 @@ func isIPv6Supported() bool {
 	_, err := net.ResolveIPAddr("ip6", "::1")
 	return err == nil
 }
+
+func dynamicMTUForTransport(transport string) uint32 {
+	switch strings.ToLower(strings.TrimSpace(transport)) {
+	case "cellular":
+		return 1380
+	case "wifi", "ethernet":
+		return 1460
+	default:
+		return 1400
+	}
+}
+
+func clampMTU(mtu uint32) uint32 {
+	if mtu < 576 {
+		return 576
+	}
+	if mtu > 9000 {
+		return 9000
+	}
+	return mtu
+}
+
+func resolveEffectiveTunMTU(hopt *HiddifyOptions) uint32 {
+	mode := strings.ToLower(strings.TrimSpace(hopt.NetworkMtuMode))
+	if mode == "" {
+		mode = "dynamic"
+	}
+
+	effective := hopt.MTU
+	switch mode {
+	case "dynamic":
+		effective = dynamicMTUForTransport(hopt.NetworkTransportType)
+		if hopt.NetworkInterfaceMTU > 0 {
+			effective = uint32(hopt.NetworkInterfaceMTU)
+		}
+	case "fixed", "manual", "static":
+		if effective == 0 {
+			effective = 1500
+		}
+	default:
+		if effective == 0 {
+			effective = dynamicMTUForTransport(hopt.NetworkTransportType)
+		}
+	}
+
+	effective = clampMTU(effective)
+	fmt.Printf(
+		"Effective MTU selected: mode=%s transport=%s iface_mtu=%d configured=%d effective=%d\n",
+		mode,
+		hopt.NetworkTransportType,
+		hopt.NetworkInterfaceMTU,
+		hopt.MTU,
+		effective,
+	)
+	return effective
+}
+
+func toRouteActionForUserRule(outbound Outbound) option.RuleAction {
+	switch outbound {
+	case Outbound_direct:
+		return option.RuleAction{
+			Action: C.RuleActionTypeRoute,
+			RouteOptions: option.RouteActionOptions{
+				Outbound: OutboundDirectTag,
+			},
+		}
+	case Outbound_direct_with_fragment:
+		return option.RuleAction{
+			Action: C.RuleActionTypeRoute,
+			RouteOptions: option.RouteActionOptions{
+				Outbound: OutboundDirectFragmentTag,
+			},
+		}
+	case Outbound_block:
+		return option.RuleAction{
+			Action: C.RuleActionTypeReject,
+			RejectOptions: option.RejectActionOptions{
+				Method: C.RuleActionRejectMethodDefault,
+			},
+		}
+	default:
+		return option.RuleAction{
+			Action: C.RuleActionTypeRoute,
+			RouteOptions: option.RouteActionOptions{
+				Outbound: OutboundMainDetour,
+			},
+		}
+	}
+}
+
+func toProtocolString(p Protocol) string {
+	switch p {
+	case Protocol_tls:
+		return "tls"
+	case Protocol_http:
+		return "http"
+	case Protocol_quic:
+		return C.ProtocolQUIC
+	case Protocol_stun:
+		return "stun"
+	case Protocol_dns:
+		return C.ProtocolDNS
+	case Protocol_bittorrent:
+		return "bittorrent"
+	default:
+		return ""
+	}
+}
+
+func toNetworkString(n Network) string {
+	switch n {
+	case Network_tcp:
+		return "tcp"
+	case Network_udp:
+		return "udp"
+	default:
+		return ""
+	}
+}
+
+func buildUserRouteRules(rules []Rule) []option.Rule {
+	if len(rules) == 0 {
+		return nil
+	}
+	ordered := make([]Rule, 0, len(rules))
+	for _, r := range rules {
+		if !r.Enabled {
+			continue
+		}
+		ordered = append(ordered, r)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		return ordered[i].ListOrder < ordered[j].ListOrder
+	})
+
+	routeRules := make([]option.Rule, 0, len(ordered))
+	for _, r := range ordered {
+		raw := option.RawDefaultRule{
+			RuleSet:         r.RuleSets,
+			PackageName:     r.PackageNames,
+			ProcessName:     r.ProcessNames,
+			ProcessPath:     r.ProcessPaths,
+			PortRange:       r.PortRanges,
+			SourcePortRange: r.SourcePortRanges,
+			IPCIDR:          r.IpCidrs,
+			SourceIPCIDR:    r.SourceIpCidrs,
+			Domain:          r.Domains,
+			DomainSuffix:    r.DomainSuffixes,
+			DomainKeyword:   r.DomainKeywords,
+			DomainRegex:     r.DomainRegexes,
+		}
+		if network := toNetworkString(r.Network); network != "" {
+			raw.Network = []string{network}
+		}
+		for _, protocol := range r.Protocols {
+			if p := toProtocolString(protocol); p != "" {
+				raw.Protocol = append(raw.Protocol, p)
+			}
+		}
+
+		def := option.DefaultRule{
+			RawDefaultRule: raw,
+			RuleAction:     toRouteActionForUserRule(r.Outbound),
+		}
+		if !def.IsValid() {
+			continue
+		}
+		routeRules = append(routeRules, option.Rule{
+			Type:           C.RuleTypeDefault,
+			DefaultOptions: def,
+		})
+	}
+	return routeRules
+}
+
 func setInbound(options *option.Options, hopt *HiddifyOptions) {
 	// var inboundDomainStrategy option.DomainStrategy
 	// if !opt.ResolveDestination {
@@ -439,10 +615,11 @@ func setInbound(options *option.Options, hopt *HiddifyOptions) {
 	// }
 	ipv6Enable := isIPv6Supported()
 	if hopt.EnableTun {
+		effectiveMTU := resolveEffectiveTunMTU(hopt)
 
 		opts := option.TunInboundOptions{
 			Stack:       hopt.TUNStack,
-			MTU:         hopt.MTU,
+			MTU:         effectiveMTU,
 			AutoRoute:   true,
 			StrictRoute: hopt.StrictRoute,
 
@@ -663,6 +840,11 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			},
 		},
 	})
+	userRouteRules := buildUserRouteRules(hopt.Rules)
+	if len(userRouteRules) > 0 {
+		fmt.Printf("Applying user route rules: configured=%d active=%d\n", len(hopt.Rules), len(userRouteRules))
+		routeRules = append(routeRules, userRouteRules...)
+	}
 	// {
 	// 	Type: C.RuleTypeDefault,
 	// 	DefaultOptions: option.DefaultRule{

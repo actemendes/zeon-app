@@ -71,6 +71,9 @@ class SingboxConfigOption with _$SingboxConfigOption {
     map.remove("site-routing-mode");
     map.remove("site-routing-include");
     map.remove("site-routing-exclude");
+    // Canonical key is enable-full-config; keep execute-config-as-is as a legacy alias.
+    map["enable-full-config"] = executeConfigAsIs;
+    map["execute-config-as-is"] = executeConfigAsIs;
     map["rules"] = rules.map((rule) => rule.toCoreJson()).toList();
     return map;
   }

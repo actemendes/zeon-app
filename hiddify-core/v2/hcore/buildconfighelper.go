@@ -110,18 +110,60 @@ func ChangeHiddifySettings(in *ChangeHiddifySettingsRequest, insert bool) (*Core
 	if in.HiddifySettingsJson == "" {
 		return &CoreInfoResponse{}, nil
 	}
+	normalizedJSON := in.HiddifySettingsJson
+	ruleCountFromInput := 0
+	// Keep backward compatibility with legacy execute-config-as-is key.
+	var settingsMap map[string]any
+	if err := json.Unmarshal([]byte(in.HiddifySettingsJson), &settingsMap); err == nil {
+		if _, hasCanonical := settingsMap["enable-full-config"]; !hasCanonical {
+			if legacy, hasLegacy := settingsMap["execute-config-as-is"]; hasLegacy {
+				settingsMap["enable-full-config"] = legacy
+			}
+		}
+		if _, hasLegacy := settingsMap["execute-config-as-is"]; !hasLegacy {
+			if canonical, hasCanonical := settingsMap["enable-full-config"]; hasCanonical {
+				settingsMap["execute-config-as-is"] = canonical
+			}
+		}
+		if rawRules, ok := settingsMap["rules"].([]any); ok {
+			ruleCountFromInput = len(rawRules)
+		}
+		if marshaled, err := json.Marshal(settingsMap); err == nil {
+			normalizedJSON = string(marshaled)
+		}
+	}
+
 	if insert {
 		settings := db.GetTable[hcommon.AppSettings]()
 		settings.UpdateInsert(&hcommon.AppSettings{
 			Id:    "HiddifySettingsJson",
-			Value: in.HiddifySettingsJson,
+			Value: normalizedJSON,
 		})
 	}
 
-	err := json.Unmarshal([]byte(in.HiddifySettingsJson), static.HiddifyOptions)
+	err := json.Unmarshal([]byte(normalizedJSON), static.HiddifyOptions)
 	if err != nil {
 		return nil, err
 	}
+	if static.HiddifyOptions.ExecuteConfigAsIs {
+		static.HiddifyOptions.EnableFullConfig = true
+	}
+	Log(
+		LogLevel_DEBUG,
+		LogType_CORE,
+		"HiddifyOptions applied: ",
+		"full-config=", static.HiddifyOptions.EnableFullConfig,
+		", execute-config-as-is=", static.HiddifyOptions.ExecuteConfigAsIs,
+		", mtu=", static.HiddifyOptions.MTU,
+		", network-profile=", static.HiddifyOptions.NetworkProfile,
+		", network-mtu-mode=", static.HiddifyOptions.NetworkMtuMode,
+		", network-transport-type=", static.HiddifyOptions.NetworkTransportType,
+		", network-interface-mtu=", static.HiddifyOptions.NetworkInterfaceMTU,
+		", fragment-mode=", static.HiddifyOptions.FragmentMode,
+		", profile-dns-strategy=", static.HiddifyOptions.ProfileDnsStrategy,
+		", user-rules=", len(static.HiddifyOptions.Rules),
+		", input-user-rules=", ruleCountFromInput,
+	)
 
 	if static.HiddifyOptions.Warp.WireguardConfigStr != "" {
 		err := json.Unmarshal([]byte(static.HiddifyOptions.Warp.WireguardConfigStr), &static.HiddifyOptions.Warp.WireguardConfig)

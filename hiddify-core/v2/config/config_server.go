@@ -25,7 +25,7 @@ func (s *server) ParseConfig(ctx context.Context, in *ParseConfigRequest) (resp 
 		err = nil
 	})
 	ctx = libbox.BaseContext(nil)
-	config, err := ParseConfig(ctx, &ReadOptions{Path: in.Path}, in.Debug, nil, false)
+	config, err := ParseConfig(ctx, &ReadOptions{Path: in.Path}, in.Debug, DefaultHiddifyOptions(), false)
 	if err != nil {
 		return &ParseConfigResponse{Error: String(err.Error())}, nil
 	}

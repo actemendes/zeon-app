@@ -39,10 +39,10 @@ import com.hiddify.core.libbox.SystemProxyStatus
 import com.hiddify.hiddify.BuildConfig
 import com.hiddify.hiddify.MainActivity
 import com.hiddify.hiddify.constant.Bugs
-import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -116,6 +116,8 @@ class BoxService(
     private val notification = ServiceNotification(status, service)
 //    private var boxService: BoxService? = null
     private var commandServer: CommandServer? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var receiverRegistered = false
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -268,7 +270,7 @@ class BoxService(
             receiverRegistered = false
         }
         notification.close()
-        GlobalScope.launch(Dispatchers.IO) {
+        serviceScope.launch {
             val pfd = fileDescriptor
             if (pfd != null) {
                 pfd.close()
@@ -318,7 +320,6 @@ class BoxService(
         }
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
     @Suppress("SameReturnValue")
     internal fun onStartCommand(): Int {
         if (status.value != Status.Stopped) return Service.START_NOT_STICKY
@@ -334,7 +335,7 @@ class BoxService(
             receiverRegistered = true
         }
 
-        GlobalScope.launch(Dispatchers.IO) {
+        serviceScope.launch {
             Settings.startedByUser = true
             initialize()
 //            try {
@@ -354,6 +355,8 @@ class BoxService(
 
     fun onDestroy() {
         binder.close()
+        serviceScope.cancel()
+        mainScope.cancel()
     }
 
     fun onRevoke() {
@@ -387,7 +390,7 @@ class BoxService(
                 ),
             )
         }
-        GlobalScope.launch(Dispatchers.Main) {
+        mainScope.launch {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 Application.notification.createNotificationChannel(
                     NotificationChannel(

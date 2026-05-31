@@ -12,6 +12,7 @@ import (
 
 type HiddifyOptions struct {
 	EnableFullConfig        bool   `json:"enable-full-config,omitempty" overridable:"true"`
+	ExecuteConfigAsIs       bool   `json:"execute-config-as-is,omitempty"`
 	LogLevel                string `json:"log-level,omitempty"`
 	LogFile                 string `json:"log-file,omitempty"`
 	EnableClashApi          bool   `json:"enable-clash-api,omitempty"`
@@ -29,6 +30,13 @@ type HiddifyOptions struct {
 	Mux       MuxOptions  `json:"mux,omitempty" overridable:"true"`
 	TLSTricks TLSTricks   `json:"tls-tricks,omitempty"`
 	EnableNTP bool        `json:"enable-ntp,omitempty"`
+
+	NetworkProfile       string `json:"network-profile,omitempty"`
+	NetworkMtuMode       string `json:"network-mtu-mode,omitempty"`
+	FragmentMode         string `json:"fragment-mode,omitempty"`
+	ProfileDnsStrategy   string `json:"profile-dns-strategy,omitempty"`
+	NetworkTransportType string `json:"network-transport-type,omitempty"`
+	NetworkInterfaceMTU  int    `json:"network-interface-mtu,omitempty"`
 
 	DNSOptions
 	InboundOptions
@@ -124,7 +132,7 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 			TProxyPort:     12335,
 			RedirectPort:   12336,
 			DirectPort:     12337,
-			MTU:            9000,
+			MTU:            1500,
 			StrictRoute:    true,
 			TUNStack:       "mixed",
 		},
@@ -144,6 +152,13 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 		LogFile:        "data/box.log",
 		Region:         "other",
 		EnableClashApi: true,
+		NetworkProfile: "stable_mobile",
+		NetworkMtuMode: "dynamic",
+		FragmentMode:   "default",
+		// Keep this for diagnostics/UI profiling only.
+		ProfileDnsStrategy:   "default",
+		NetworkTransportType: "unknown",
+		NetworkInterfaceMTU:  0,
 
 		ClashApiPort:   16756,
 		ClashApiSecret: "",

@@ -142,6 +142,8 @@ abstract class ConfigOptions {
   static final networkMtuMode = PreferencesNotifier.create<String, String>("network-mtu-mode", "dynamic");
   static final fragmentMode = PreferencesNotifier.create<String, String>("fragment-mode", "default");
   static final profileDnsStrategy = PreferencesNotifier.create<String, String>("profile-dns-strategy", "default");
+  static final executeConfigAsIs = PreferencesNotifier.create<bool, bool>("execute-config-as-is", false);
+  static final enableFullConfig = PreferencesNotifier.create<bool, bool>("enable-full-config", false);
 
   static final connectionTestUrl = PreferencesNotifier.create<String, String>(
     "connection-test-url",
@@ -334,6 +336,8 @@ abstract class ConfigOptions {
     "network-mtu-mode": networkMtuMode,
     "fragment-mode": fragmentMode,
     "profile-dns-strategy": profileDnsStrategy,
+    "execute-config-as-is": executeConfigAsIs,
+    "enable-full-config": enableFullConfig,
     "connection-test-url": connectionTestUrl,
     "url-test-interval": urlTestInterval,
     "clash-api-port": clashApiPort,
@@ -385,7 +389,7 @@ abstract class ConfigOptions {
       balancerStrategy: ref.watch(balancerStrategy),
       blockAds: ref.watch(blockAds),
       useXrayCoreWhenPossible: ref.watch(useXrayCoreWhenPossible),
-      executeConfigAsIs: false,
+      executeConfigAsIs: ref.watch(enableFullConfig) || ref.watch(executeConfigAsIs),
       logLevel: ref.watch(logLevel),
       resolveDestination: ref.watch(resolveDestination),
       ipv6Mode: ref.watch(ipv6Mode),
@@ -401,7 +405,7 @@ abstract class ConfigOptions {
       mtu: ref.watch(mtu),
       strictRoute: ref.watch(strictRoute),
       networkProfile: ref.watch(networkProfile),
-      networkMtuMode: "dynamic",
+      networkMtuMode: ref.watch(networkMtuMode),
       fragmentMode: ref.watch(fragmentMode),
       profileDnsStrategy: ref.watch(profileDnsStrategy),
       connectionTestUrl: ref.watch(connectionTestUrl),

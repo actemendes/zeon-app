@@ -87,5 +87,11 @@ void main() {
     expect(json["network-mtu-mode"], "adaptive");
     expect(json["fragment-mode"], "off");
     expect(json["profile-dns-strategy"], "prefer_ipv4");
+    expect(json["enable-full-config"], false);
+    expect(json["execute-config-as-is"], false);
+
+    final fullConfigJson = option.copyWith(executeConfigAsIs: true).toCoreJson();
+    expect(fullConfigJson["enable-full-config"], true);
+    expect(fullConfigJson["execute-config-as-is"], true);
   });
 }
