@@ -69,6 +69,7 @@ class ProfileParser {
             cancelToken: CancelToken(),
             ref: _ref,
           );
+          _prepareTempFileForCoreImport(tempFilePath);
         }, (error, stackTrace) => const ProfileFailure.unexpected())
         .flatMap((_) => TaskEither.fromEither(populateHeaders(content: content)))
         .flatMap(
@@ -141,12 +142,15 @@ class ProfileParser {
   Either<ProfileFailure, ProfileEntriesCompanion> offlineUpdate({
     required ProfileEntity profile,
     required String tempFilePath,
-  }) => profile
-      .map(
-        remote: (rp) => parse(profile: rp, tempFilePath: tempFilePath),
-        local: (lp) => parse(tempFilePath: tempFilePath, profile: lp),
-      )
-      .flatMap((profEntity) => Either.tryCatch(() => profEntity.toUpdateEntry(), ProfileFailure.unexpected));
+  }) {
+    _prepareTempFileForCoreImport(tempFilePath);
+    return profile
+        .map(
+          remote: (rp) => parse(profile: rp, tempFilePath: tempFilePath),
+          local: (lp) => parse(tempFilePath: tempFilePath, profile: lp),
+        )
+        .flatMap((profEntity) => Either.tryCatch(() => profEntity.toUpdateEntry(), ProfileFailure.unexpected));
+  }
 
   TaskEither<ProfileFailure, Map<String, dynamic>> _downloadProfile(
     String url,
@@ -185,11 +189,7 @@ class ProfileParser {
     );
     final rawContent = File(tempFilePath).readAsStringSync();
     final ok24MetaHeaders = _extractOk24MetaHeaders(rawContent);
-    final normalizedForCore = _normalizeContentForCoreImport(rawContent);
-    if (normalizedForCore != rawContent) {
-      File(tempFilePath).writeAsStringSync(normalizedForCore);
-    }
-    _sanitizeUnsupportedConfigFields(tempFilePath);
+    _prepareTempFileForCoreImport(tempFilePath);
     // fixing headers before return
     final responseHeaders = rs.headers.map.map((key, value) {
       if (value.length == 1) return MapEntry(key, value.first);
@@ -303,7 +303,85 @@ class ProfileParser {
     final normalized = _decodeOuterBase64Json(content).trim();
     if (normalized.isEmpty) return content;
     final converted = _convertXrayJsonLinesToUriList(normalized);
-    return converted ?? normalized;
+    return sanitizeImportedServerConfigs(converted ?? normalized);
+  }
+
+  @visibleForTesting
+  static String sanitizeImportedServerConfigs(String content) {
+    final filteredLines = content.split('\n').where((line) => !_isAutoServerConfigLine(line.trim())).join('\n').trim();
+    if (filteredLines.isEmpty) return filteredLines;
+
+    try {
+      final decoded = jsonDecode(filteredLines);
+      if (_isAutoServerConfigMap(_asMap(decoded))) {
+        return '';
+      }
+      return jsonEncode(_removeAutoServerConfigsFromJson(decoded));
+    } catch (_) {
+      return filteredLines;
+    }
+  }
+
+  static bool _isAutoServerConfigLine(String line) {
+    if (line.isEmpty) return false;
+    if (_isUriLine(line)) {
+      final uri = Uri.tryParse(line);
+      if (uri != null && uri.hasFragment) {
+        return _isAutoServerConfigName(Uri.decodeComponent(uri.fragment));
+      }
+    }
+    if (!line.startsWith('{')) return false;
+    try {
+      return _isAutoServerConfigMap(_asMap(jsonDecode(line)));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static bool _isAutoServerConfigMap(Map<String, dynamic>? value) {
+    if (value == null) return false;
+    return _isAutoServerConfigName(_stringValue(value["remarks"])) ||
+        _isAutoServerConfigName(_stringValue(value["tag"]));
+  }
+
+  static bool _isAutoServerConfigName(String? value) {
+    if (value == null) return false;
+    return RegExp(r"\u0430\u0432\u0442\u043e\s*\|", caseSensitive: false).hasMatch(value);
+  }
+
+  static dynamic _removeAutoServerConfigsFromJson(dynamic value) {
+    if (value is List) {
+      return value
+          .where((item) {
+            if (item is String) return !_isAutoServerConfigName(item);
+            return !_isAutoServerConfigMap(_asMap(item));
+          })
+          .map(_removeAutoServerConfigsFromJson)
+          .toList();
+    }
+    if (value is Map) {
+      final out = <String, dynamic>{};
+      for (final entry in value.entries) {
+        final key = entry.key.toString();
+        final sanitized = _removeAutoServerConfigsFromJson(entry.value);
+        if (key == "default" && sanitized is String && _isAutoServerConfigName(sanitized)) {
+          continue;
+        }
+        out[key] = sanitized;
+      }
+      return out;
+    }
+    return value;
+  }
+
+  static void _prepareTempFileForCoreImport(String tempFilePath) {
+    final file = File(tempFilePath);
+    final rawContent = file.readAsStringSync();
+    final normalizedForCore = _normalizeContentForCoreImport(rawContent);
+    if (normalizedForCore != rawContent) {
+      file.writeAsStringSync(normalizedForCore);
+    }
+    _sanitizeUnsupportedConfigFields(tempFilePath);
   }
 
   static String? _convertXrayJsonLinesToUriList(String content) {
