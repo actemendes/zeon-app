@@ -363,7 +363,7 @@ class _IntroSecondaryButton extends StatelessWidget {
 class _BindAccountCodeDialog extends HookConsumerWidget {
   const _BindAccountCodeDialog();
 
-  static const _sampleBindLink = 'https://zeon-vps.link/open/649669380';
+  static const _sampleBindLink = 'https://zeon-vps.link/open/ХХХХХХ';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

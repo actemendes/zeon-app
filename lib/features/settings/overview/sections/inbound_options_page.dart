@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/ui/ui_names.dart';
-import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
-import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
@@ -11,17 +9,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class InboundOptionsPage extends HookConsumerWidget {
   const InboundOptionsPage({super.key});
-
-  Future<void> _reconnectIfConnected(WidgetRef ref) async {
-    final connection = ref.read(connectionNotifierProvider);
-    final isConnectedNow = switch (connection) {
-      AsyncData(value: final value) => value.isConnected || value.isSwitching,
-      _ => false,
-    };
-    if (!isConnectedNow) return;
-    final profile = await ref.read(activeProfileProvider.future);
-    await ref.read(connectionNotifierProvider.notifier).reconnect(profile);
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,7 +28,6 @@ class InboundOptionsPage extends HookConsumerWidget {
             title: t.pages.settings.inbound.serviceMode,
             icon: Icons.tune_rounded,
             presentChoice: (value) => value.present(t),
-            onChanged: (_) => _reconnectIfConnected(ref),
           ),
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.inbound.strictRoute),
@@ -50,7 +36,6 @@ class InboundOptionsPage extends HookConsumerWidget {
             onChanged: isTunMode
                 ? (value) async {
                     await ref.read(ConfigOptions.strictRoute.notifier).update(value);
-                    await _reconnectIfConnected(ref);
                   }
                 : null,
           ),
@@ -62,7 +47,6 @@ class InboundOptionsPage extends HookConsumerWidget {
             icon: Icons.trip_origin_rounded,
             presentChoice: (value) => value.present(t),
             enabled: isTunMode,
-            onChanged: (_) => _reconnectIfConnected(ref),
           ),
           if (PlatformUtils.isLinux)
             ValuePreferenceWidget(

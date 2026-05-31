@@ -126,6 +126,23 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }
   }
 
+  Future<void> restartForConfigChange(ProfileEntity? profile) async {
+    if (state case AsyncData(:final value) when value == const Connected()) {
+      if (profile == null) {
+        loggy.info("no active profile, disconnecting");
+        return _disconnect();
+      }
+      if (_useMockConnectionFlow) {
+        loggy.info("mock config change restart");
+        return _mockReconnectFlow();
+      }
+      loggy.info("config options changed, restarting connection");
+      await ref.read(Preferences.startedByUser.notifier).update(true);
+      await _disconnect();
+      await _connect();
+    }
+  }
+
   Future<void> abortConnection() async {
     if (state case AsyncData(:final value)) {
       switch (value) {
@@ -140,7 +157,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   final _singleStart = SingleCall();
 
   Future<void> _connect() async {
-    _singleStart.run(
+    await _singleStart.run(
       () async {
         await _connectThrottled();
       },
