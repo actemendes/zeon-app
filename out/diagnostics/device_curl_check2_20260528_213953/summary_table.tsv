@@ -1,0 +1,5 @@
+file	metrics(http dns connect tls ttfb total size)	error
+01_open_headless_time.txt		
+02_open_follow_time.txt		
+03_lookup_time.txt		
+04_fallback_follow_max25_time.txt	200 0.277034 0.492950 0.728602 2.668278 25.554666 20474	curl: (28) Operation timed out after 25555 milliseconds with 20474 bytes received

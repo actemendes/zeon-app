@@ -223,13 +223,17 @@ function Build-ExeInstaller {
     $displayName = Get-YamlScalar -Path $configPath -Key "display_name"
     $installDirName = Get-YamlScalar -Path $configPath -Key "install_dir_name"
     $setupIconFile = Get-YamlScalar -Path $configPath -Key "setup_icon_file"
+    $createDesktopIconRaw = Get-YamlScalar -Path $configPath -Key "create_desktop_icon"
+    $launchAtStartupRaw = Get-YamlScalar -Path $configPath -Key "launch_at_startup"
 
     if (-not $appId) { $appId = [guid]::NewGuid().ToString() }
     if (-not $publisher) { $publisher = "ZEON" }
     if (-not $publisherUrl) { $publisherUrl = "https://github.com/actemendes/zeon-app" }
     if (-not $displayName) { $displayName = "ZEON" }
-    if (-not $installDirName) { $installDirName = "{autopf64}\ZEON" }
+    if (-not $installDirName) { $installDirName = "{localappdata}\Programs\ZEON" }
     if (-not $setupIconFile) { $setupIconFile = "windows\runner\resources\app_icon.ico" }
+    $createDesktopIcon = $createDesktopIconRaw -notmatch '^(?i:false|0|no)$'
+    $launchAtStartup = $launchAtStartupRaw -notmatch '^(?i:false|0|no)$'
 
     $releaseDir = Join-Path $WorkingRoot "build\windows\x64\runner\Release"
     if (-not (Test-Path -LiteralPath $releaseDir)) {
@@ -250,6 +254,7 @@ function Build-ExeInstaller {
     if ($version.Contains("+")) {
         $version = $version.Split("+")[0]
     }
+    Write-Host "EXE installer version from pubspec.yaml: $versionRaw -> $version"
 
     $distDir = Join-Path $WorkingRoot "dist\zeon"
     New-Item -ItemType Directory -Force -Path $distDir | Out-Null
@@ -258,17 +263,21 @@ function Build-ExeInstaller {
     $releaseDirForIss = $releaseDir -replace '/', '\'
     $iconForIss = (Join-Path $WorkingRoot $setupIconFile) -replace '/', '\'
     $distDirForIss = $distDir -replace '/', '\'
+    $desktopIconFlags = if ($createDesktopIcon) { "checkedonce" } else { "unchecked" }
+    $startupFlags = if ($launchAtStartup) { "checkedonce" } else { "unchecked" }
 
     $iss = @"
 [Setup]
 AppId=${appId}
 AppName=${displayName}
 AppVersion=${version}
+AppVerName=${displayName} ${version}
 AppPublisher=${publisher}
 AppPublisherURL=${publisherUrl}
 AppSupportURL=${publisherUrl}
 AppUpdatesURL=${publisherUrl}
 DefaultDirName=${installDirName}
+DefaultGroupName=${displayName}
 DisableProgramGroupPage=yes
 OutputDir=${distDirForIss}
 OutputBaseFilename=ZEON-Windows-Setup-x64
@@ -280,13 +289,18 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 CloseApplications=force
+CloseApplicationsFilter=${exeName},Hiddify.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: ${desktopIconFlags}
+Name: "launchAtStartup"; Description: "Start ${displayName} when Windows starts"; GroupDescription: "{cm:AdditionalIcons}"; Flags: ${startupFlags}
+
+[InstallDelete]
+Type: files; Name: "{userstartup}\Hiddify.lnk"
 
 [Files]
 Source: "${releaseDirForIss}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -294,6 +308,7 @@ Source: "${releaseDirForIss}\*"; DestDir: "{app}"; Flags: ignoreversion recurses
 [Icons]
 Name: "{autoprograms}\${displayName}"; Filename: "{app}\${exeName}"
 Name: "{autodesktop}\${displayName}"; Filename: "{app}\${exeName}"; Tasks: desktopicon
+Name: "{userstartup}\${displayName}"; Filename: "{app}\${exeName}"; WorkingDir: "{app}"; Tasks: launchAtStartup
 
 [Run]
 Filename: "{app}\${exeName}"; Description: "{cm:LaunchProgram,${displayName}}"; Flags: nowait postinstall skipifsilent
@@ -324,6 +339,8 @@ function New-IsolatedWorkspace {
         "out",
         ".idea",
         ".vscode",
+        "linux\flutter\ephemeral",
+        "macos\Flutter\ephemeral",
         "windows\flutter\ephemeral"
     )
 
@@ -442,18 +459,37 @@ function Patch-FlutterSecureStorageWindowsPlugin {
     param([Parameter(Mandatory = $true)][string]$WorkingRoot)
 
     $pluginLink = Join-Path $WorkingRoot "windows\flutter\ephemeral\.plugin_symlinks\flutter_secure_storage_windows"
-    if (-not (Test-Path -LiteralPath $pluginLink)) {
-        throw "Plugin symlink not found: $pluginLink. Run 'flutter pub get' first."
-    }
+    $pluginTarget = $null
+    if (Test-Path -LiteralPath $pluginLink) {
+        $pluginItem = Get-Item -LiteralPath $pluginLink
+        if (-not $pluginItem.Target) {
+            throw "Plugin symlink target is empty: $pluginLink"
+        }
 
-    $pluginItem = Get-Item -LiteralPath $pluginLink
-    if (-not $pluginItem.Target) {
-        throw "Plugin symlink target is empty: $pluginLink"
+        $pluginTarget = $pluginItem.Target
+        if ($pluginTarget -is [Array]) {
+            $pluginTarget = $pluginTarget[0]
+        }
     }
+    else {
+        $packageConfigPath = Join-Path $WorkingRoot ".dart_tool\package_config.json"
+        if (-not (Test-Path -LiteralPath $packageConfigPath)) {
+            throw "Package config not found: $packageConfigPath. Run 'flutter pub get' first."
+        }
 
-    $pluginTarget = $pluginItem.Target
-    if ($pluginTarget -is [Array]) {
-        $pluginTarget = $pluginTarget[0]
+        $packageConfig = Get-Content -LiteralPath $packageConfigPath -Raw | ConvertFrom-Json
+        $package = $packageConfig.packages | Where-Object { $_.name -eq "flutter_secure_storage_windows" } | Select-Object -First 1
+        if (-not $package) {
+            throw "Package flutter_secure_storage_windows was not found in $packageConfigPath."
+        }
+
+        $rootUri = [string]$package.rootUri
+        if ($rootUri.StartsWith("file:")) {
+            $pluginTarget = ([Uri]$rootUri).LocalPath
+        }
+        else {
+            $pluginTarget = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $packageConfigPath) $rootUri))
+        }
     }
 
     $cppPath = Join-Path $pluginTarget "windows\flutter_secure_storage_windows_plugin.cpp"

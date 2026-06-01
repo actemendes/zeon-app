@@ -12,7 +12,10 @@
 - Managed-профиль: профиль, который приложение получило через мобильную цепочку `bootstrap`, ручной импорт `conn_link` или bind confirm и дальше считает управляемым. Приложение может заменить этот профиль новым импортом, удалить старый managed-профиль, удалить лишние профили и сохранить id текущего managed-профиля в `mobile_managed_profile_id`.
 - `api_link`: базовый адрес мобильного API из `mobile_api_base_url`. Используется и для backend API (`/api/v1/...`, `/bind/...`), и как host основного импортируемого `conn_link`.
 - `conn_link`: основной импортируемый URL профиля в формате `api_link/open/$openId`. Пример: `https://130.49.151.173/open/649669380`. В API рядом могут встречаться поля `connection_link`, `raw_url`, `conn_link` или технический `subscriptionUrl`; входные `/open/$openId` и публичные ссылки нормализуются к основному `conn_link`.
-- Публичная open-ссылка: `https://zeon-vps.link/open/$openId`. Это fallback, если основной `api_link/open/$openId` недоступен, возвращает 404 или импорт по нему не проходит.
+- Публичная open-ссылка: `https://zeon-vps.link/open/$openId`. Это публичный alias для ввода; в open-сценарии сервис канонизирует его в primary `https://130.49.151.173/open/$openId` до сетевого импорта.
+- Режимы импорта `conn_link`:
+  - `fast`: короткий путь без long-tail ретраев/резолвов; используется на старте и в Intro.
+  - `standard`: расширенный путь с resolve/no-validate fallback; используется в фоновых повторах и при явном вызове.
 - `subscriptionUrl`: технический URL из `<script id="zeon-data">`, который может указывать на фактическую подписку. Это не бизнес-термин и не заменяет `conn_link`.
 - `user_id`: id пользователя в мобильном API. Хранится в `mobile_auto_import_user_id`, если был получен через авто-импорт или bind confirm.
 - Каноническое правило (обновлено 11 мая 2026): при импорте `open/<id>` `MobileConnLinkImportService` извлекает numeric `openId` и сохраняет его в `mobile_auto_import_user_id`; далее этот же ключ должен использоваться в оплате.
@@ -38,7 +41,7 @@ flowchart TD
     L --> M[MobileConnLinkImportService импортирует conn_link]
     J --> N[Managed cleanup, single profile, prefs, metadata]
     M --> N
-    H --> O[Ждать активный профиль до 5 сек]
+    H --> O[Ждать активный профиль до 3 сек]
     N --> O
     O --> P[Построить App]
     P --> Q{introCompleted?}
@@ -69,11 +72,12 @@ flowchart TD
 1. Инициализируются директории, логгер, SharedPreferences, миграции prefs.
 2. Инициализируются defaults, профильный репозиторий, переводы, hiddify-core.
 3. На mobile вызывается `MobileBootstrapImportService.enforceSingleProfile()`.
-4. Вызывается `MobileBootstrapImportService.run()` с timeout 90 секунд на чистом старте без профиля.
-5. После этого bootstrap ждёт активный профиль до 5 секунд.
+4. Вызывается `MobileBootstrapImportService.run(mode: MobileConnLinkImportMode.fast)` с timeout 18 секунд на чистом старте без профиля.
+5. После этого bootstrap ждёт активный профиль до 3 секунд.
 6. Запускаются фоновые повторы авто-импорта через 5, 10, 20 и 40 секунд.
 
-Жесткая верхняя граница ожидания mobile auto import в прелоадере: 90 секунд, чтобы чистый пользователь успел пройти API create/reuse, импорт и metadata sync. Ручной импорт в Intro также ограничен 90 секундами. HTTP-клиент использует timeout 15 секунд и retry interceptor.
+Жесткая верхняя граница ожидания mobile auto import в прелоадере: 18 секунд. Ручной импорт в Intro ограничен 25 секундами. HTTP-клиент использует timeout 15 секунд и retry interceptor, но в `fast`-режиме ключевые запросы запускаются с `disableRetry=true` для срезания длинных хвостов ожидания.
+Фоновые повторы после прелоадера выполняются `service.run()` с параметрами по умолчанию, то есть в `standard`-режиме и уже без блокировки старта UI.
 
 Если `mobile_auto_import_done = true` и активный профиль есть, `MobileBootstrapImportService` быстро выходит без blocking API/import. Metadata refresh по сохраненному `conn_link` запускается best-effort в фоне с коротким timeout и не держит старт приложения.
 
@@ -83,26 +87,31 @@ flowchart TD
 
 Файл: `lib/features/mobile/data/mobile_conn_link_import_service.dart`.
 
-Это единый владелец импорта `conn_link`. `MobileBootstrapImportService`, `IntroPage` и bind confirm не должны дублировать `_importFromConnLink`, `_resolveImportUrl`, cleanup managed-профиля или metadata sync.
+Это единый владелец импорта `conn_link`. `MobileBootstrapImportService`, `IntroPage` и bind confirm не должны дублировать `_importFromConnLink`, `resolveImportUrl`, cleanup managed-профиля или metadata sync.
 
 Ответственность сервиса:
 
 1. Нормализовать raw input, open id или URL.
 2. Для `/open/$openId` строить primary `conn_link = api_link/open/$openId`.
-3. Для того же `$openId` строить fallback `https://zeon-vps.link/open/$openId`.
-4. Импортировать через `ProfileRepository.upsertRemote(...)`.
-5. Для каждого candidate (`primary`, затем `fallback`) делать validate-проход:
-   - `upsertRemote(default)`;
-   - `upsertRemote(resolved/default)` по `subscriptionUrl` из `zeon-data`, если он есть;
-   - `upsertRemote(directOnly)`;
-   - `upsertRemote(resolved/directOnly)`;
-   - те же шаги для `platform=hiddify`.
-6. Только если validate-проход не дал результата ни для одного candidate, запускать no-validate-проход (`validateConfigOnImport: false`) с тем же порядком (`default -> resolved/default -> directOnly -> resolved/directOnly`) и также с вариантом `platform=hiddify`.
-7. При провале primary и наличии fallback логировать предупреждение и переходить к `https://zeon-vps.link/open/$openId`.
-8. Заменять предыдущий managed-профиль на активный импортированный профиль.
-9. Удалять лишние профили, оставляя один активный.
-10. Синхронизировать metadata: name/login, status, expires_at, webPageUrl, supportUrl.
-11. Сохранять prefs:
+3. Для того же `$openId` добавлять fallback `https://zeon-vps.link/open/$openId` только при `mobile_enable_public_open_fallback=true`.
+4. Переписывать входные публичные/blocked host на primary:
+   - `zeon-vps.link/*` -> `130.49.151.173/*`
+   - `ok24-server.com/*`, `www.ok24-server.com/*` -> `130.49.151.173/*`
+5. Импортировать через `ProfileRepository.upsertRemote(...)`.
+6. В `fast`-режиме:
+   - candidates: только primary;
+   - попытки: `default -> directOnly -> no-validate -> directOnly/no-validate`;
+   - все попытки идут с `disableRetry=true`.
+7. В `standard`-режиме:
+   - candidates: `primary`, затем `fallback` (если включен);
+   - validate-проход: `default -> resolved/default -> directOnly -> resolved/directOnly`;
+   - для каждого candidate также вариант с `platform=hiddify`.
+8. Только в `standard`-режиме, если validate-проход неуспешен, запускается второй no-validate-проход (`validateConfigOnImport: false`) в том же порядке.
+9. При провале primary и наличии fallback логируется предупреждение о переключении на fallback (на практике open-host fallback также канонизируется в primary).
+10. Заменять предыдущий managed-профиль на активный импортированный профиль.
+11. Удалять лишние профили, оставляя один активный.
+12. Синхронизировать metadata: name/login, status, expires_at, webPageUrl, supportUrl.
+13. Сохранять prefs:
     - `mobile_auto_import_done`
     - `mobile_auto_import_conn_link`
     - `mobile_managed_profile_id`
@@ -110,18 +119,17 @@ flowchart TD
 
 Порядок для open-ссылки:
 
-1. Построить candidates: `primary = api_link/open/$openId`, `fallback = https://zeon-vps.link/open/$openId`.
-2. Прогнать validate-проход по `primary` и затем по `fallback`:
-   - `default -> resolved/default -> directOnly -> resolved/directOnly`;
-   - для каждого шага также вариант `platform=hiddify`.
-3. Если validate-проход неуспешен на всех candidates, прогнать второй no-validate-проход (`validateConfigOnImport: false`) в том же порядке.
-4. Если primary не импортировался и есть fallback, фиксировать warning про переключение на fallback.
+1. Нормализовать open-ввод в `primary = api_link/open/$openId`; fallback добавить только при `mobile_enable_public_open_fallback=true`.
+2. Если вызов идет в `fast`-режиме, использовать только `primary` и короткий набор попыток (`default -> directOnly -> no-validate -> directOnly/no-validate`) без network retry.
+3. Если вызов идет в `standard`-режиме, пройти `primary` (и fallback при наличии) по validate-пайплайну (`default -> resolved/default -> directOnly -> resolved/directOnly`), включая вариант `platform=hiddify`; для open-host fallback-кандидат перед сетевым вызовом также переписывается в primary.
+4. Если `standard` validate-пайплайн неуспешен, запустить no-validate-проход в том же порядке.
 5. При сохранении `mobile_auto_import_user_id` приоритет источников такой:
    - сначала явный `userId` из аргумента `importConnectionLink(...)`;
    - если его нет, используется numeric `openId` из `/open/<id>`;
    - если оба отсутствуют и `clearUserIdWhenMissing=true`, ключ `mobile_auto_import_user_id` удаляется.
 
 В `mobile_auto_import_conn_link` сохраняется основной `conn_link` (`api_link/open/$openId`), даже если конкретный импорт прошел через public fallback.
+Важно: текущие пользовательские потоки (`bootstrap` и ручной импорт в Intro) вызывают сервис в `fast`-режиме, поэтому fallback-кандидат обычно не используется.
 
 ## 3.1 MobileDeviceRebindService
 
@@ -225,7 +233,7 @@ Intro открывается, когда `Preferences.introCompleted == false`.
 1. Открывается `_BindAccountCodeDialog`.
 2. Пользователь вводит `conn_link`, public open-ссылку или open id.
 3. Dialog валидирует ввод как ссылку/код.
-4. Вызывает `MobileConnLinkImportService.importConnectionLink(rawInput).timeout(90 секунд)`. Для ввода вида `/open/<id>` этот шаг дополнительно записывает канонический `mobile_auto_import_user_id` из numeric `openId`.
+4. Вызывает `MobileConnLinkImportService.importConnectionLink(rawInput, mode: MobileConnLinkImportMode.fast).timeout(25 секунд)`. Для ввода вида `/open/<id>` этот шаг дополнительно записывает канонический `mobile_auto_import_user_id` из numeric `openId`.
 5. При успехе:
    - делает best-effort `MobileDeviceRebindService.syncManualImportRebind(...).timeout(15 секунд)`; ошибка rebind не ломает импорт;
    - показывает success toast;
@@ -238,9 +246,9 @@ Intro открывается, когда `Preferences.introCompleted == false`.
 
 1. Dialog распознает `/open/649669380`.
 2. `MobileConnLinkImportService` строит primary `https://130.49.151.173/open/649669380`.
-3. Пытается импортировать primary как remote profile.
-4. Если primary недоступен/404/не импортируется, пробует `https://zeon-vps.link/open/649669380`.
-5. Если импорт успешен, профиль становится активным и сохраняется как managed-профиль.
+3. В `fast`-режиме пытается импортировать только primary (короткий набор попыток).
+4. Если импорт успешен, профиль становится активным и сохраняется как managed-профиль.
+5. Для open-ссылок прямой сетевой вызов `zeon-vps.link` в текущей реализации обычно не происходит: URL канонизируется в primary до импорта.
 
 ### 6.3 Итоговая цепочка восстановления после переустановки
 
@@ -256,7 +264,8 @@ Intro открывается, когда `Preferences.introCompleted == false`.
 - Нужно решить, должен ли Home блокироваться, если после bootstrap нет активного профиля. Сейчас блокировки нет.
 - `getByUrl` ищет через `LIKE '%url%'`, поэтому совпадения URL могут быть нестрогими.
 - `_safeInit(... timeout ...)` не отменяет исходный Future. При timeout bootstrap продолжит, а исходный импорт может завершиться позже.
-- Если primary `api_link/open/$openId` стабильно недоступен, импорт пройдет через public fallback, но сохраненный `conn_link` останется primary. Это сделано намеренно по бизнес-терминологии.
+- Если `fast`-режим системно не проходит на плохой сети, пользователь увидит ошибку быстрее (что ожидаемо), но без долгого зависания; fallback к public open в этом режиме не выполняется.
+- Даже если включен `mobile_enable_public_open_fallback`, для open-хостов импортный URL канонизируется в primary; сохраненный `conn_link` в любом случае остается primary.
 - Если backend еще не реализовал `/api/v1/devices/rebind`, переустановка может вернуть старую server-side привязку `device_id -> user`, даже при успешном локальном ручном импорте.
 
 ## Ключевые файлы

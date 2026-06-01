@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet("release", "debug", "profile")]
-    [string]$BuildMode = "release",
+    [string]$BuildMode = "debug",
 
     [string]$BuildTarget = "lib/main_prod.dart",
 
@@ -38,6 +38,28 @@ function Get-CoreVersion {
     return ($line -split '=')[1].Trim()
 }
 
+function Get-PubspecVersion {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $pubspecPath = Join-Path $RepoRoot "pubspec.yaml"
+    if (-not (Test-Path -LiteralPath $pubspecPath)) {
+        throw "pubspec.yaml not found: $pubspecPath"
+    }
+
+    $line = Select-String -Path $pubspecPath -Pattern "^\s*version:\s*(.+)$" | Select-Object -First 1
+    if (-not $line) {
+        throw "Could not find 'version' in $pubspecPath"
+    }
+
+    return $line.Matches[0].Groups[1].Value.Trim()
+}
+
+function ConvertTo-ArtifactVersion {
+    param([Parameter(Mandatory = $true)][string]$Version)
+
+    return ($Version -replace '[<>:"/\\|?*]', '-')
+}
+
 function Ensure-AndroidCoreAar {
     param([Parameter(Mandatory = $true)][string]$RepoRoot)
 
@@ -69,7 +91,8 @@ function Copy-AndroidInstallersToOut {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
         [Parameter(Mandatory = $true)][string]$Artifacts,
-        [Parameter(Mandatory = $true)][string]$BuildMode
+        [Parameter(Mandatory = $true)][string]$BuildMode,
+        [Parameter(Mandatory = $true)][string]$AppVersion
     )
 
     $apkDir = Join-Path $RepoRoot "build\app\outputs\flutter-apk"
@@ -80,24 +103,31 @@ function Copy-AndroidInstallersToOut {
     $outDir = Join-Path $RepoRoot "out\installers\android"
     New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
-    $patterns = @()
+    $modeSuffix = if ($BuildMode -eq "release") { "" } else { "-$BuildMode" }
+    $copies = @()
     if ($Artifacts -in @("split", "both")) {
-        $patterns += @(
-            "app-armeabi-v7a-$BuildMode.apk",
-            "app-arm64-v8a-$BuildMode.apk",
-            "app-x86_64-$BuildMode.apk"
+        $copies += @(
+            [pscustomobject]@{ Source = "app-armeabi-v7a-$BuildMode.apk"; Destination = "ZEON-$AppVersion-armeabi-v7a$modeSuffix.apk" },
+            [pscustomobject]@{ Source = "app-arm64-v8a-$BuildMode.apk"; Destination = "ZEON-$AppVersion-arm64-v8a$modeSuffix.apk" },
+            [pscustomobject]@{ Source = "app-x86_64-$BuildMode.apk"; Destination = "ZEON-$AppVersion-x86_64$modeSuffix.apk" }
         )
     }
     if ($Artifacts -in @("universal", "both")) {
-        $patterns += "app-$BuildMode.apk"
+        $copies += [pscustomobject]@{ Source = "app-$BuildMode.apk"; Destination = "ZEON-$AppVersion$modeSuffix.apk" }
     }
 
-    foreach ($pattern in $patterns) {
-        $sourcePath = Join-Path $apkDir $pattern
+    foreach ($copy in $copies) {
+        $sourcePath = Join-Path $apkDir $copy.Source
         if (-not (Test-Path -LiteralPath $sourcePath)) {
             throw "Expected APK was not found: $sourcePath"
         }
-        Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $outDir $pattern) -Force
+
+        $legacyPath = Join-Path $outDir $copy.Source
+        if (Test-Path -LiteralPath $legacyPath) {
+            Remove-Item -LiteralPath $legacyPath -Force
+        }
+
+        Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $outDir $copy.Destination) -Force
     }
 
     Write-Host ""
@@ -114,11 +144,13 @@ $repoRoot = Split-Path -Parent $scriptDir
 Push-Location $repoRoot
 try {
     Assert-Command "flutter"
+    Assert-Command "dart"
     if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $BuildTarget))) {
         throw "Build target not found: $BuildTarget"
     }
 
     Ensure-AndroidCoreAar -RepoRoot $repoRoot
+    $appVersion = ConvertTo-ArtifactVersion -Version (Get-PubspecVersion -RepoRoot $repoRoot)
 
     if (-not $SkipPubGet) {
         Write-Host "Running: flutter pub get"
@@ -126,6 +158,12 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "flutter pub get failed."
         }
+    }
+
+    Write-Host "Running: dart run slang"
+    & dart run slang
+    if ($LASTEXITCODE -ne 0) {
+        throw "Translation generation failed."
     }
 
     if ($Artifacts -in @("split", "both")) {
@@ -156,7 +194,7 @@ try {
             Format-Table -AutoSize
     }
 
-    Copy-AndroidInstallersToOut -RepoRoot $repoRoot -Artifacts $Artifacts -BuildMode $BuildMode
+    Copy-AndroidInstallersToOut -RepoRoot $repoRoot -Artifacts $Artifacts -BuildMode $BuildMode -AppVersion $appVersion
 }
 finally {
     Pop-Location

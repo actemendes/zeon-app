@@ -187,4 +187,38 @@ void main() {
       });
     });
   });
+
+  group("sanitizeImportedServerConfigs", () {
+    test("removes auto server URI entries", () {
+      final content = [
+        "vless://id@example.com:443#%F0%9F%94%84%20%D0%90%D0%92%D0%A2%D0%9E%20%7C%20WI-FI",
+        "vless://id@example.com:443#Germany",
+      ].join("\n");
+
+      expect(ProfileParser.sanitizeImportedServerConfigs(content), "vless://id@example.com:443#Germany");
+    });
+
+    test("removes auto outbounds and selector references from JSON", () {
+      const content = '''
+{
+  "outbounds": [
+    {
+      "type": "selector",
+      "tag": "select",
+      "outbounds": ["\u0410\u0412\u0422\u041e | WI-FI", "Germany"],
+      "default": "\u0410\u0412\u0422\u041e | WI-FI"
+    },
+    {"type": "vless", "tag": "\u0410\u0412\u0422\u041e | WI-FI"},
+    {"type": "vless", "tag": "Germany"}
+  ]
+}
+''';
+
+      final sanitized = ProfileParser.sanitizeImportedServerConfigs(content);
+
+      expect(sanitized, isNot(contains("\u0410\u0412\u0422\u041e |")));
+      expect(sanitized, contains("Germany"));
+      expect(sanitized, isNot(contains('"default"')));
+    });
+  });
 }

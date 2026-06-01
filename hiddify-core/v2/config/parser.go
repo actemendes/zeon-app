@@ -37,7 +37,7 @@ func ParseConfig(ctx context.Context, opt *ReadOptions, debug bool, configOpt *H
 	if err != nil {
 		return nil, err
 	}
-	return parseConfigContent(ctx, content, debug, nil, false)
+	return parseConfigContent(ctx, content, debug, configOpt, fullConfig)
 }
 
 func ParseConfigBytes(ctx context.Context, opt *ReadOptions, debug bool, configOpt *HiddifyOptions, fullConfig bool) ([]byte, error) {
@@ -54,6 +54,7 @@ func parseConfigContent(ctx context.Context, content []byte, debug bool, configO
 	if configOpt == nil {
 		configOpt = DefaultHiddifyOptions()
 	}
+	fmt.Printf("Parser mode fullConfig=%v (arg=%v option=%v)\n", fullConfig || configOpt.EnableFullConfig, fullConfig, configOpt.EnableFullConfig)
 
 	var jsonObj map[string]interface{} = make(map[string]interface{})
 
@@ -63,7 +64,7 @@ func parseConfigContent(ctx context.Context, content []byte, debug bool, configO
 		fmt.Printf("Convert using json\n")
 		if tmpJsonObj, ok := tmpJsonResult.(map[string]interface{}); ok {
 			if tmpJsonObj["outbounds"] == nil && tmpJsonObj["endpoints"] == nil {
-				jsonObj["outbounds"] = []interface{}{jsonObj}
+				jsonObj["outbounds"] = []interface{}{tmpJsonObj}
 			} else {
 				if fullConfig || (configOpt != nil && configOpt.EnableFullConfig) {
 					jsonObj = tmpJsonObj

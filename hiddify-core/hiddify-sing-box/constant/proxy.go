@@ -121,8 +121,6 @@ func ProxyDisplayName(proxyType string) string {
 		return "Awg"
 	case TypeBalancer:
 		return "Balancer"
-	case TypeDNSTT:
-		return "DNSTT"
 	default:
 		return "Unknown"
 	}

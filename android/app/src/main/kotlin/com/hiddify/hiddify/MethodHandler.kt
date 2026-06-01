@@ -13,9 +13,6 @@ import com.hiddify.core.mobile.Mobile
 import com.hiddify.core.mobile.SetupOptions
 import com.hiddify.hiddify.bg.Bugs
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -53,7 +50,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             Trigger.AddGrpcClientPublicKey.method -> {
-                GlobalScope.launch {
+                scope.launch {
                     result.runCatching {
                         val args = call.arguments as Map<*, *>
                         val clientPub = args["clientPublicKey"] as ByteArray
@@ -66,7 +63,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             }
 
             Trigger.GetGrpcServerPublicKey.method -> {
-                GlobalScope.launch {
+                scope.launch {
                     result.runCatching {
                         result.success(Mobile.getServerPublicKey())
                     }
@@ -74,7 +71,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             }
 
             Trigger.Setup.method -> {
-                GlobalScope.launch {
+                scope.launch {
                     result.runCatching {
                         val args = call.arguments as Map<*, *>
                         Settings.baseDir = args["baseDir"] as String

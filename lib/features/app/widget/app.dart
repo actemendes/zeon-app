@@ -35,7 +35,10 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   const App({super.key});
 
   void onInactive(WidgetRef ref) {
-    onPause(ref);
+    if (PlatformUtils.isDesktop) return;
+    // Android enters inactive during transient system UI (e.g. VPN permission dialog).
+    // Closing front core here causes unnecessary start/stop flapping.
+    loggy.info("skip closeFront on inactive");
   }
 
   void onPause(WidgetRef ref) {

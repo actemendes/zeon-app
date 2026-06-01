@@ -112,7 +112,7 @@ func Setup(params *SetupRequest, platformInterface libbox.PlatformInterface) err
 	}
 	settings := db.GetTable[hcommon.AppSettings]()
 	val, err := settings.Get("HiddifySettingsJson")
-	Log(LogLevel_DEBUG, LogType_CORE, "HiddifySettingsJson", val, err)
+	Log(LogLevel_DEBUG, LogType_CORE, "HiddifySettingsJson loaded", val != nil, err)
 	if val == nil || err != nil {
 		// if params.Mode == SetupMode_GRPC_BACKGROUND_INSECURE {
 		_, err := ChangeHiddifySettings(&ChangeHiddifySettingsRequest{HiddifySettingsJson: ""}, false)

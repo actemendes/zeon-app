@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:basic_utils/basic_utils.dart';
 import 'package:flutter/services.dart';
@@ -14,10 +15,7 @@ import 'package:hiddify/hiddifycore/generated/v2/hello/hello_service.pbgrpc.dart
 import 'package:hiddify/singbox/model/core_status.dart';
 
 import 'package:hiddify/utils/utils.dart';
-import 'package:loggy/loggy.dart';
 import 'package:rxdart/rxdart.dart';
-
-final _logger = Loggy('FFIHiddifyCoreService');
 
 class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   static const channelPrefix = "com.hiddify.app";
@@ -139,7 +137,14 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     }
     loggy.info("Waiting for starting core finished");
 
-    if (!await waitUntilPort(portBack, true, null, maxTry: 10)) {
+    if (!await waitUntilPort(
+      portBack,
+      true,
+      null,
+      maxTry: 18,
+      baseDelay: const Duration(milliseconds: 180),
+      maxDelay: const Duration(milliseconds: 1600),
+    )) {
       await stopMethodChannel();
       return const CoreStatus.stopped(alert: CoreAlert.startService, message: "starting background core...");
     }
@@ -149,7 +154,14 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   @override
   Future<bool> stop() async {
     await stopMethodChannel();
-    if (!await waitUntilPort(portBack, false, null, maxTry: 10)) {
+    if (!await waitUntilPort(
+      portBack,
+      false,
+      null,
+      maxTry: 16,
+      baseDelay: const Duration(milliseconds: 160),
+      maxDelay: const Duration(milliseconds: 1200),
+    )) {
       return false;
     }
 
@@ -187,8 +199,13 @@ Future<bool> waitUntilPort(
   int portNumber,
   bool isOpen,
   Future Function()? callFunctionAfterEachFail, {
-  int maxTry = 10,
+  int maxTry = 14,
+  Duration baseDelay = const Duration(milliseconds: 200),
+  Duration maxDelay = const Duration(milliseconds: 1500),
+  double factor = 1.8,
 }) async {
+  var delay = baseDelay;
+  final random = Random();
   for (var i = 0; i < maxTry; i++) {
     if (await isPortOpen("127.0.0.1", portNumber) == isOpen) {
       return true;
@@ -196,8 +213,13 @@ Future<bool> waitUntilPort(
     if (callFunctionAfterEachFail != null) {
       await callFunctionAfterEachFail();
     }
-
-    await Future.delayed(const Duration(milliseconds: 200));
+    final jitterMs = random.nextInt(max(1, delay.inMilliseconds ~/ 4));
+    await Future.delayed(Duration(milliseconds: delay.inMilliseconds + jitterMs));
+    final nextDelayMs = min(
+      maxDelay.inMilliseconds,
+      max(delay.inMilliseconds + 1, (delay.inMilliseconds * factor).round()),
+    );
+    delay = Duration(milliseconds: nextDelayMs);
   }
   return false;
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -7,12 +8,10 @@ import 'package:flutter/services.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:grpc/grpc.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
-import 'package:hiddify/core/model/directories.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/features/connection/model/connection_failure.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/hiddifycore/core_interface/core_interface.dart';
+import 'package:hiddify/hiddifycore/generated/v2/config/route_rule.pb.dart' as route_rule;
 import 'package:hiddify/hiddifycore/generated/v2/hcommon/common.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore_service.pbgrpc.dart';
@@ -28,8 +27,9 @@ import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:loggy/loggy.dart' as loggyl;
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:rxdart/rxdart.dart';
+
+enum _CoreLifecycleState { stopped, starting, started, stopping }
 
 class HiddifyCoreService with InfraLogger {
   HiddifyCoreService(this.ref);
@@ -40,6 +40,8 @@ class HiddifyCoreService with InfraLogger {
   static const _debugFragmentMode = String.fromEnvironment("debug_fragment_mode");
   static const _debugProfileDnsStrategy = String.fromEnvironment("debug_profile_dns_strategy");
   static const _debugTunImplementation = String.fromEnvironment("debug_tun_implementation");
+  static const _listenerBackoffBaseMs = 300;
+  static const _listenerBackoffMaxMs = 6000;
 
   bool get _useMockCore => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
 
@@ -51,6 +53,9 @@ class HiddifyCoreService with InfraLogger {
   final logController = BehaviorSubject<List<LogMessage>>();
   final CallOptions? grpcOptions = null; //CallOptions(timeout: const Duration(milliseconds: 10000));
   final Map<String, StreamSubscription?> subscriptions = {};
+  final Map<String, int> _listenerReconnectAttempt = {};
+  Future<void> _lifecycleQueueTail = Future<void>.value();
+  _CoreLifecycleState _lifecycleState = _CoreLifecycleState.stopped;
   static const _platformChannel = MethodChannel("com.hiddify.app/platform");
   List<OutboundGroup> latest = [];
   final BehaviorSubject<List<OutboundGroup>> _mockGroupsController = BehaviorSubject<List<OutboundGroup>>();
@@ -124,6 +129,86 @@ class HiddifyCoreService with InfraLogger {
     _mockGroupsController.add(payload);
   }
 
+  void _transitionLifecycle(_CoreLifecycleState next, {String reason = ""}) {
+    final prev = _lifecycleState;
+    if (prev == next) return;
+    _lifecycleState = next;
+    loggy.info("lifecycle: ${prev.name} -> ${next.name}${reason.isEmpty ? "" : " ($reason)"}");
+  }
+
+  void _syncLifecycleFromCoreStatus(CoreStatus status, {String reason = "status event"}) {
+    switch (status) {
+      case CoreStarting():
+        _transitionLifecycle(_CoreLifecycleState.starting, reason: reason);
+      case CoreStarted():
+        _transitionLifecycle(_CoreLifecycleState.started, reason: reason);
+      case CoreStopping():
+        _transitionLifecycle(_CoreLifecycleState.stopping, reason: reason);
+      case CoreStopped():
+        _transitionLifecycle(_CoreLifecycleState.stopped, reason: reason);
+    }
+  }
+
+  Future<CoreStatus> _applyCoreStatusFromListener(String key, CoreStatus next) async {
+    // Guard against transient/stale "stopped" events while background core is still alive.
+    if (next is CoreStopped && _lifecycleState == _CoreLifecycleState.started) {
+      try {
+        if (await core.isActiveBg()) {
+          loggy.warning("ignore stale stopped from coreInfoListener[$key]: bg port still active");
+          return currentState;
+        }
+      } catch (_) {}
+    }
+    currentState = next;
+    _syncLifecycleFromCoreStatus(currentState, reason: "coreInfoListener[$key]");
+    statusController.add(currentState);
+    return currentState;
+  }
+
+  Future<T> _enqueueLifecycle<T>(String opName, Future<T> Function() action) {
+    final completer = Completer<T>();
+    loggy.debug("lifecycle queue: enqueue $opName (state=${_lifecycleState.name})");
+    _lifecycleQueueTail = _lifecycleQueueTail.catchError((_) {}).then((_) async {
+      loggy.debug("lifecycle queue: begin $opName (state=${_lifecycleState.name})");
+      try {
+        final res = await action();
+        if (!completer.isCompleted) completer.complete(res);
+      } catch (e, st) {
+        if (!completer.isCompleted) completer.completeError(e, st);
+      } finally {
+        loggy.debug("lifecycle queue: end $opName (state=${_lifecycleState.name})");
+      }
+    });
+    return completer.future;
+  }
+
+  Duration _listenerReconnectDelay(String key) {
+    final attempt = (_listenerReconnectAttempt[key] ?? 0) + 1;
+    _listenerReconnectAttempt[key] = attempt;
+    final exp = min(_listenerBackoffMaxMs, _listenerBackoffBaseMs * (1 << min(attempt - 1, 4)));
+    final jitter = Random().nextInt(max(1, exp ~/ 4));
+    return Duration(milliseconds: exp + jitter);
+  }
+
+  void _scheduleListenerReconnect(String key, Future<void> Function() starter) {
+    if (_lifecycleState == _CoreLifecycleState.stopping || _lifecycleState == _CoreLifecycleState.stopped) {
+      loggy.debug("listener reconnect skipped [$key]: lifecycle=${_lifecycleState.name}");
+      return;
+    }
+    final delay = _listenerReconnectDelay(key);
+    loggy.debug("listener reconnect scheduled [$key] in ${delay.inMilliseconds}ms");
+    Future<void>.delayed(delay, () async {
+      if (!core.isInitialized()) return;
+      if (_lifecycleState == _CoreLifecycleState.stopping || _lifecycleState == _CoreLifecycleState.stopped) return;
+      if (subscriptions.containsKey(key)) return;
+      try {
+        await starter();
+      } catch (e, st) {
+        loggy.warning("listener reconnect failed [$key]", e, st);
+      }
+    });
+  }
+
   Future<void> init() async {
     await setup()
         .mapLeft((e) {
@@ -152,15 +237,24 @@ class HiddifyCoreService with InfraLogger {
       if (_useMockCore) {
         return right(unit);
       }
-      try {
-        final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
-        if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
-      } catch (e) {
-        await setup().run();
-        final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
-        if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
+      const maxAttempts = 3;
+      Object? lastError;
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
+          if (response.responseCode == ResponseCode.OK) {
+            return right(unit);
+          }
+          return left("${response.responseCode} ${response.message}");
+        } catch (e, st) {
+          lastError = e;
+          loggy.warning("validate config attempt [$attempt/$maxAttempts] failed", e, st);
+          if (attempt == maxAttempts) break;
+          await setup().run();
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        }
       }
-      return right(unit);
+      return left("validate config grpc unavailable: $lastError");
     });
   }
 
@@ -179,6 +273,7 @@ class HiddifyCoreService with InfraLogger {
     return TaskEither(() async {
       if (_useMockCore) {
         currentState = const CoreStatus.stopped();
+        _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock setup");
         statusController.add(currentState);
         return right(unit);
       }
@@ -193,18 +288,25 @@ class HiddifyCoreService with InfraLogger {
 
         await startListeningLogs("fg", core.fgClient);
         // await startListeningStatus("fg", core.fgClient);
-        if (!core.isSingleChannel()) {
+        final bgActive = core.isSingleChannel() || await core.isActiveBg();
+        if (bgActive && !core.isSingleChannel()) {
           await startListeningLogs("bg", core.bgClient);
         }
         if (!core.isSingleChannel()) {
           try {
-            currentState = await core.isActiveBg() ? const CoreStatus.started() : const CoreStatus.stopped();
+            currentState = bgActive ? const CoreStatus.started() : const CoreStatus.stopped();
+            _transitionLifecycle(
+              bgActive ? _CoreLifecycleState.started : _CoreLifecycleState.stopped,
+              reason: "setup background probe",
+            );
           } catch (e) {
             loggy.warning("failed to detect background core state: $e");
           }
         }
         statusController.add(currentState);
-        await startListeningStatus("bg", core.bgClient);
+        if (bgActive) {
+          await startListeningStatus("bg", core.bgClient);
+        }
         // ref.read(coreRestartSignalProvider.notifier).restart();
         return right(unit);
       } catch (e) {
@@ -222,28 +324,49 @@ class HiddifyCoreService with InfraLogger {
       // latestOptions = options;
       final payload = await _buildCoreOptionsPayload(options);
       loggy.info("core payload (safe): ${_safeCorePayload(payload)}");
-      try {
-        final res = await core.fgClient.changeHiddifySettings(
-          ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(payload)),
-        );
-        if (res.messageType != MessageType.EMPTY) return left("${res.messageType} ${res.message}");
-        await core.bgClient.changeHiddifySettings(
-          ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(payload)),
-        );
-      } on GrpcError catch (e) {
-        if (e.code == StatusCode.unavailable) {
-          loggy.debug("background core is not started yet! $e");
-        } else {
-          rethrow;
+      final request = ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(payload));
+      const maxAttempts = 3;
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          final res = await core.fgClient.changeHiddifySettings(request);
+          if (res.messageType != MessageType.EMPTY) {
+            return left("${res.messageType} ${res.message}");
+          }
+          try {
+            await core.bgClient.changeHiddifySettings(request);
+          } on GrpcError catch (e) {
+            if (e.code == StatusCode.unavailable) {
+              loggy.debug("background core is not started yet! $e");
+            } else {
+              rethrow;
+            }
+          }
+          return right(unit);
+        } on GrpcError catch (e, st) {
+          if (e.code != StatusCode.unavailable) {
+            rethrow;
+          }
+          loggy.warning("change options fg unavailable [$attempt/$maxAttempts]", e, st);
+          if (attempt == maxAttempts) {
+            return left("fg core unavailable while applying options: $e");
+          }
+          await setup().run();
+          await Future<void>.delayed(const Duration(milliseconds: 200));
         }
       }
-
-      return right(unit);
+      return left("failed to apply options");
     });
   }
 
   Future<Map<String, dynamic>> _buildCoreOptionsPayload(SingboxConfigOption options) async {
     final map = Map<String, dynamic>.from(options.toCoreJson());
+    final fullConfig = switch (map["enable-full-config"] ?? map["execute-config-as-is"] ?? false) {
+      final bool v => v,
+      _ => false,
+    };
+    map["enable-full-config"] = fullConfig;
+    map["execute-config-as-is"] = fullConfig;
+
     if (_debugNetworkProfile.isNotEmpty) {
       map["network-profile"] = _debugNetworkProfile;
     }
@@ -262,6 +385,15 @@ class HiddifyCoreService with InfraLogger {
     final runtime = await _readRuntimeNetworkInfo();
     map["network-transport-type"] = runtime.$1;
     map["network-interface-mtu"] = runtime.$2;
+
+    final userRules = await _loadUserRouteRulesFromProto();
+    if (userRules.isNotEmpty) {
+      map["rules"] = userRules;
+    }
+
+    loggy.info(
+      "core options prepared: full-config=$fullConfig transport=${runtime.$1} iface-mtu=${runtime.$2} user-rules=${(map["rules"] as List?)?.length ?? 0}",
+    );
     return map;
   }
 
@@ -271,6 +403,8 @@ class HiddifyCoreService with InfraLogger {
       "network-mtu-mode": payload["network-mtu-mode"],
       "network-transport-type": payload["network-transport-type"],
       "network-interface-mtu": payload["network-interface-mtu"],
+      "enable-full-config": payload["enable-full-config"],
+      "execute-config-as-is": payload["execute-config-as-is"],
       "fragment-mode": payload["fragment-mode"],
       "profile-dns-strategy": payload["profile-dns-strategy"],
       "selector-interrupt-exist-connections": payload["selector-interrupt-exist-connections"],
@@ -280,8 +414,50 @@ class HiddifyCoreService with InfraLogger {
       "mtu": payload["mtu"],
       "tun-implementation": payload["tun-implementation"],
       "strict-route": payload["strict-route"],
+      "rules-count": (payload["rules"] as List?)?.length ?? 0,
     };
     return safe;
+  }
+
+  Future<List<Map<String, dynamic>>> _loadUserRouteRulesFromProto() async {
+    try {
+      final directories = ref.read(appDirectoriesProvider).requireValue;
+      final file = File('${directories.baseDir.path}/route_rule.proto');
+      if (!await file.exists()) return const [];
+      final bytes = await file.readAsBytes();
+      final rr = route_rule.RouteRule.fromBuffer(bytes);
+      if (rr.rules.isEmpty) return const [];
+
+      final sorted = rr.rules.toList()..sort((a, b) => a.listOrder.compareTo(b.listOrder));
+      return sorted.map(_routeRuleToCoreJson).toList();
+    } catch (e, st) {
+      loggy.warning("failed reading route_rule.proto; keep existing options.rules", e, st);
+      return const [];
+    }
+  }
+
+  Map<String, dynamic> _routeRuleToCoreJson(route_rule.Rule rule) {
+    final map = <String, dynamic>{
+      "list_order": rule.listOrder,
+      "enabled": rule.enabled,
+      "name": rule.name,
+      "outbound": rule.outbound.value,
+    };
+    if (rule.ruleSets.isNotEmpty) map["rule_sets"] = rule.ruleSets;
+    if (rule.packageNames.isNotEmpty) map["package_names"] = rule.packageNames;
+    if (rule.processNames.isNotEmpty) map["process_names"] = rule.processNames;
+    if (rule.processPaths.isNotEmpty) map["process_paths"] = rule.processPaths;
+    if (rule.network.value != route_rule.Network.all.value) map["network"] = rule.network.value;
+    if (rule.portRanges.isNotEmpty) map["port_ranges"] = rule.portRanges;
+    if (rule.sourcePortRanges.isNotEmpty) map["source_port_ranges"] = rule.sourcePortRanges;
+    if (rule.protocols.isNotEmpty) map["protocols"] = rule.protocols.map((e) => e.value).toList();
+    if (rule.ipCidrs.isNotEmpty) map["ip_cidrs"] = rule.ipCidrs;
+    if (rule.sourceIpCidrs.isNotEmpty) map["source_ip_cidrs"] = rule.sourceIpCidrs;
+    if (rule.domains.isNotEmpty) map["domains"] = rule.domains;
+    if (rule.domainSuffixes.isNotEmpty) map["domain_suffixes"] = rule.domainSuffixes;
+    if (rule.domainKeywords.isNotEmpty) map["domain_keywords"] = rule.domainKeywords;
+    if (rule.domainRegexes.isNotEmpty) map["domain_regexes"] = rule.domainRegexes;
+    return map;
   }
 
   Future<(String, int)> _readRuntimeNetworkInfo() async {
@@ -309,137 +485,162 @@ class HiddifyCoreService with InfraLogger {
   }
 
   TaskEither<ConnectionFailure, Unit> start(String path, String name, bool disableMemoryLimit) {
-    return TaskEither(() async {
-      if (_useMockCore) {
+    return TaskEither(
+      () => _enqueueLifecycle("start", () async {
+        if (_useMockCore) {
+          _transitionLifecycle(_CoreLifecycleState.starting, reason: "mock start");
+          statusController.add(currentState = const CoreStatus.starting());
+          await Future<void>.delayed(const Duration(milliseconds: 180));
+          _transitionLifecycle(_CoreLifecycleState.started, reason: "mock start complete");
+          statusController.add(currentState = const CoreStatus.started());
+          return right(unit);
+        }
+
+        if (_lifecycleState == _CoreLifecycleState.started && currentState == const CoreStatus.started()) {
+          loggy.debug("start ignored: already started");
+          return right(unit);
+        }
+
+        _transitionLifecycle(_CoreLifecycleState.starting, reason: "start requested");
         statusController.add(currentState = const CoreStatus.starting());
-        await Future<void>.delayed(const Duration(milliseconds: 180));
+        loggy.debug("starting");
+
+        final background = await core.setupBackground(path, name);
+        if (background != const CoreStatus.started()) {
+          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "background setup failed");
+          statusController.add(currentState = const CoreStatus.stopped());
+          return left(background.getCoreAlert() ?? const ConnectionFailure.unexpected("failed to start core"));
+        }
+
+        if (!core.isSingleChannel()) {
+          await startListeningLogs("bg", core.bgClient);
+          await startListeningStatus("bg", core.bgClient);
+        }
+
+        try {
+          final res = await core.bgClient.start(
+            StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
+          );
+          ref.read(coreRestartSignalProvider.notifier).restart();
+          if (res.messageType != MessageType.ALREADY_STARTED && res.messageType != MessageType.EMPTY) {
+            final alert = res.message.contains("denied") ? CoreAlert.requestVPNPermission : CoreAlert.startFailed;
+            currentState = CoreStatus.stopped(
+              alert: alert,
+              message: "failed to start core ${res.messageType} ${res.message}",
+            );
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "start rejected by core");
+            statusController.add(currentState);
+            return left(
+              currentState.getCoreAlert() ??
+                  ConnectionFailure.unexpected("failed to start core ${res.messageType} ${res.message}"),
+            );
+          }
+        } on GrpcError catch (e) {
+          loggy.error("failed to start bg core: $e");
+          ref.read(coreRestartSignalProvider.notifier).restart();
+          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc error on start");
+          if (e.code == StatusCode.unavailable) {
+            return left(const ConnectionFailure.unexpected("background core is not started yet!"));
+          }
+          return left(const ConnectionFailure.unexpected("failed to start background core"));
+        }
+
+        _transitionLifecycle(_CoreLifecycleState.started, reason: "start complete");
         statusController.add(currentState = const CoreStatus.started());
         return right(unit);
-      }
-      statusController.add(currentState = const CoreStatus.starting());
-      loggy.debug("starting");
-      final background = await core.setupBackground(path, name);
-      if (background != const CoreStatus.started()) {
-        statusController.add(currentState = const CoreStatus.stopped());
-        return left(background.getCoreAlert() ?? const ConnectionFailure.unexpected("failed to start core"));
-      }
-      if (!core.isSingleChannel()) {
-        await startListeningLogs("bg", core.bgClient);
-        await startListeningStatus("bg", core.bgClient);
-      }
-      // if (latestOptions != null) {
-      //   await core.bgClient.changeHiddifySettings(
-      //     ChangeHiddifySettingsRequest(
-      //       hiddifySettingsJson: jsonEncode(latestOptions!.toJson()),
-      //     ),
-      //   );
-      // }
-      // final content = await File(path).readAsString();
-      // loggy.debug("starting with content: $content");
-      try {
-        final res = await core.bgClient.start(
-          StartRequest(
-            configPath: path,
-            configName: name,
-            // configContent: content,
-            disableMemoryLimit: disableMemoryLimit,
-          ),
-        );
-        ref.read(coreRestartSignalProvider.notifier).restart();
-        if (res.messageType != MessageType.ALREADY_STARTED && res.messageType != MessageType.EMPTY) {
-          final alert = res.message.contains("denied") ? CoreAlert.requestVPNPermission : CoreAlert.startFailed;
-          currentState = CoreStatus.stopped(
-            alert: alert,
-            message: "failed to start core ${res.messageType} ${res.message}",
-          );
-
-          statusController.add(currentState);
-
-          return left(
-            currentState.getCoreAlert() ??
-                ConnectionFailure.unexpected("failed to start core ${res.messageType} ${res.message}"),
-          );
-        }
-      } on GrpcError catch (e) {
-        loggy.error("failed to start bg core: $e");
-        ref.read(coreRestartSignalProvider.notifier).restart();
-        if (e.code == StatusCode.unavailable) {
-          return left(const ConnectionFailure.unexpected("background core is not started yet!"));
-        }
-        // throw InvalidConfig(e.message);
-        // throw DioException.connectionError(requestOptions: RequestOptions(), reason: e.codeName, error: e);
-
-        // throw DioException(requestOptions: RequestOptions(), error: e);
-        return left(const ConnectionFailure.unexpected("failed to start background core"));
-      }
-
-      // if (res.messageType != MessageType.EMPTY) return left(res);
-
-      return right(unit);
-    });
+      }),
+    );
   }
 
   TaskEither<String, Unit> stop() {
-    return TaskEither(() async {
-      if (_useMockCore) {
-        statusController.add(currentState = const CoreStatus.stopping());
-        await Future<void>.delayed(const Duration(milliseconds: 120));
-        statusController.add(currentState = const CoreStatus.stopped());
-        return right(unit);
-      }
-      loggy.debug("stopping");
-      var errMsg = "";
-      try {
-        final res = await core.bgClient.stop(Empty());
-      } on GrpcError catch (e) {
-        if (e.code == StatusCode.unknown && !(e.message?.contains("HTTP/2") ?? false)) {
-          errMsg = e.message ?? "failed to stop core: $e";
+    return TaskEither(
+      () => _enqueueLifecycle("stop", () async {
+        if (_useMockCore) {
+          _transitionLifecycle(_CoreLifecycleState.stopping, reason: "mock stop");
+          statusController.add(currentState = const CoreStatus.stopping());
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock stop complete");
+          statusController.add(currentState = const CoreStatus.stopped());
+          return right(unit);
+        }
 
+        if (_lifecycleState == _CoreLifecycleState.stopped && currentState == const CoreStatus.stopped()) {
+          loggy.debug("stop ignored: already stopped");
+          return right(unit);
+        }
+
+        _transitionLifecycle(_CoreLifecycleState.stopping, reason: "stop requested");
+        statusController.add(currentState = const CoreStatus.stopping());
+        loggy.debug("stopping");
+
+        var errMsg = "";
+        try {
+          await core.bgClient.stop(Empty());
+        } on GrpcError catch (e) {
+          if (e.code == StatusCode.unknown && !(e.message?.contains("HTTP/2") ?? false)) {
+            errMsg = e.message ?? "failed to stop core: $e";
+            loggy.error("failed to stop bg core: $e");
+          }
+        } catch (e) {
           loggy.error("failed to stop bg core: $e");
         }
-      } catch (e) {
-        loggy.error("failed to stop bg core: $e");
-        // left("failed to stop core: $e");
-      }
-      if (!await core.stop()) {}
-      statusController.add(currentState = const CoreStatus.stopped());
-      if (errMsg.isNotEmpty) return left(errMsg);
-      return right(unit);
-    });
+        await core.stop();
+
+        _transitionLifecycle(_CoreLifecycleState.stopped, reason: "stop complete");
+        statusController.add(currentState = const CoreStatus.stopped());
+        if (errMsg.isNotEmpty) return left(errMsg);
+        return right(unit);
+      }),
+    );
   }
 
   TaskEither<String, Unit> restart(String path, String name, bool disableMemoryLimit) {
-    return TaskEither(() async {
-      if (_useMockCore) {
+    if (_lifecycleState == _CoreLifecycleState.starting || _lifecycleState == _CoreLifecycleState.stopping) {
+      loggy.info("restart requested during ${_lifecycleState.name}; queued");
+    }
+    return TaskEither(
+      () => _enqueueLifecycle("restart", () async {
+        if (_useMockCore) {
+          _transitionLifecycle(_CoreLifecycleState.stopping, reason: "mock restart");
+          statusController.add(currentState = const CoreStatus.stopping());
+          await Future<void>.delayed(const Duration(milliseconds: 80));
+          _transitionLifecycle(_CoreLifecycleState.starting, reason: "mock restart");
+          statusController.add(currentState = const CoreStatus.starting());
+          await Future<void>.delayed(const Duration(milliseconds: 140));
+          _transitionLifecycle(_CoreLifecycleState.started, reason: "mock restart complete");
+          statusController.add(currentState = const CoreStatus.started());
+          return right(unit);
+        }
+
+        loggy.debug("restarting");
+        _transitionLifecycle(_CoreLifecycleState.stopping, reason: "restart requested");
+        statusController.add(currentState = const CoreStatus.stopping());
+
+        try {
+          final res = await core.bgClient.restart(
+            StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit, delayStart: true),
+          );
+          if (res.messageType != MessageType.EMPTY) {
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart failed");
+            statusController.add(currentState = const CoreStatus.stopped());
+            return left("${res.messageType} ${res.message}");
+          }
+        } on GrpcError catch (e) {
+          loggy.error("failed to restart bg core: $e");
+          if (e.code == StatusCode.unknown && !(e.message?.contains("HTTP/2 error") ?? false)) {
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc restart failure");
+            statusController.add(currentState = const CoreStatus.stopped());
+            return left("${e.message}");
+          }
+        }
+
+        _transitionLifecycle(_CoreLifecycleState.starting, reason: "restart in progress");
         statusController.add(currentState = const CoreStatus.starting());
-        await Future<void>.delayed(const Duration(milliseconds: 140));
+        _transitionLifecycle(_CoreLifecycleState.started, reason: "restart complete");
         statusController.add(currentState = const CoreStatus.started());
         return right(unit);
-      }
-      loggy.debug("restarting");
-      // if (!await core.restart(path, name)) {
-      try {
-        final res = await core.bgClient.restart(
-          StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit, delayStart: true),
-        );
-        if (res.messageType != MessageType.EMPTY) return left("${res.messageType} ${res.message}");
-      } on GrpcError catch (e) {
-        loggy.error("failed to restart bg core: $e");
-        if (e.code == StatusCode.unknown && !(e.message?.contains("HTTP/2 error") ?? false)) {
-          return left("${e.message}");
-        }
-      }
-
-      return right(unit);
-      // await stop().run();
-      // return await start(path, name, disableMemoryLimit).run();
-      // }
-      // if (!core.isSingleChannel()) {
-      //   await startListeningStatus("bg", core.bgClient);
-      //   await startListeningLogs("bg", core.bgClient);
-      // }
-      // return right(unit);
-    });
+      }),
+    );
   }
 
   TaskEither<String, Unit> resetTunnel() {
@@ -700,14 +901,21 @@ class HiddifyCoreService with InfraLogger {
       yield* statusController.stream;
       return;
     }
-    await startListeningStatus("bg", core.bgClient);
+    try {
+      if (core.isSingleChannel() || await core.isActiveBg()) {
+        await startListeningStatus("bg", core.bgClient);
+      }
+    } catch (e) {
+      loggy.debug("background core is not ready for status listener: $e");
+    }
     yield* statusController.stream;
     // .endWith(const CoreStatus.stopped());
   }
 
   Future<void> startListeningStatus(String key, CoreClient cc) async {
+    final listenKey = "${key}StatusListener";
     await listenSingle<CoreStatus>(
-      "${key}StatusListener",
+      listenKey,
       () => cc
           .coreInfoListener(Empty(), options: grpcOptions)
           .doOnCancel(() {
@@ -719,19 +927,14 @@ class HiddifyCoreService with InfraLogger {
           .doOnDone(() {
             loggy.debug("status listener done [$key]");
           })
-          .map((event) {
-            currentState = CoreStatus.fromCoreInfo(event);
-            statusController.add(currentState);
-            return currentState;
-          }),
-      // .endWith(const CoreStatus.stopped())
+          .asyncMap((event) => _applyCoreStatusFromListener(key, CoreStatus.fromCoreInfo(event))),
+      onDone: () {
+        loggy.warning("status listener closed [$key], scheduling reconnect");
+        _scheduleListenerReconnect(listenKey, () => startListeningStatus(key, cc));
+      },
       onError: (error) {
-        loggy.error("Stream error in ${key}StatusListener: $error");
-
-        // currentState = const CoreStatus.stopped();
-        // statusController.add(currentState);
-
-        // startListeningStatus(key, cc);
+        loggy.error("Stream error in $listenKey: $error");
+        _scheduleListenerReconnect(listenKey, () => startListeningStatus(key, cc));
       },
     );
   }
@@ -739,22 +942,32 @@ class HiddifyCoreService with InfraLogger {
   Future<void> startListeningLogs(String key, CoreClient cc) async {
     final coreLogLevel = getCoreLogLevel(config_log_level.LogLevel.warn);
     final listenKey = "${key}LogListener";
-    // await stopListenSingle(listenKey);
-    await listenSingle<LogMessage>(listenKey, () {
-      return cc.logListener(LogRequest(level: coreLogLevel), options: grpcOptions).map((event) {
-        // Handle incoming event
-        logBuffer.add(event);
-        if (logBuffer.length > 300) {
-          logBuffer.removeAt(0);
-        }
-        logController.add(logBuffer);
-        // loggy.log(getLogLevel(event.level), event.message);
-        event.message.split('\n').forEach((line) {
-          loggy.log(getLogLevel(event.level), line);
+    await listenSingle<LogMessage>(
+      listenKey,
+      () {
+        return cc.logListener(LogRequest(level: coreLogLevel), options: grpcOptions).map((event) {
+          // Handle incoming event
+          logBuffer.add(event);
+          if (logBuffer.length > 300) {
+            logBuffer.removeAt(0);
+          }
+          logController.add(logBuffer);
+          // loggy.log(getLogLevel(event.level), event.message);
+          event.message.split('\n').forEach((line) {
+            loggy.log(getLogLevel(event.level), line);
+          });
+          return event;
         });
-        return event;
-      });
-    });
+      },
+      onDone: () {
+        loggy.warning("log listener closed [$key], scheduling reconnect");
+        _scheduleListenerReconnect(listenKey, () => startListeningLogs(key, cc));
+      },
+      onError: (error) {
+        loggy.error("Stream error in $listenKey: $error");
+        _scheduleListenerReconnect(listenKey, () => startListeningLogs(key, cc));
+      },
+    );
   }
 
   Future<void> stopListenSingle(String key) async {
@@ -770,6 +983,7 @@ class HiddifyCoreService with InfraLogger {
       await sub?.cancel(); // cancel the subscription
 
       subscriptions.remove(k);
+      _listenerReconnectAttempt.remove(k);
     }
   }
 
@@ -777,22 +991,31 @@ class HiddifyCoreService with InfraLogger {
     String key,
     Stream<T> Function() stream, {
     Function(dynamic error)? onError,
+    VoidCallback? onDone,
   }) async {
     if (subscriptions.containsKey(key)) {
       // return subscriptions[key] as StreamSubscription<T>?;
       await stopListenSingle(key);
     }
     subscriptions[key] = null;
+    var streamFailed = false;
     subscriptions[key] = stream().listen(
-      (event) {
-        // loggy.debug(event);
+      (_) {
+        _listenerReconnectAttempt[key] = 0;
       },
       cancelOnError: true,
       onError: (error) {
+        streamFailed = true;
         loggy.log(loggyl.LogLevel.error, 'Stream error: $error');
         onError?.call(error);
         subscriptions[key]?.cancel();
         subscriptions.remove(key);
+      },
+      onDone: () {
+        subscriptions.remove(key);
+        if (!streamFailed) {
+          onDone?.call();
+        }
       },
     );
     return subscriptions[key] as StreamSubscription<T>?;
@@ -818,13 +1041,18 @@ class HiddifyCoreService with InfraLogger {
       config_log_level.LogLevel.error => LogLevel.ERROR,
       config_log_level.LogLevel.fatal => LogLevel.FATAL,
       config_log_level.LogLevel.panic => LogLevel.FATAL,
-      _ => LogLevel.INFO, // Default case
     };
   }
 
   Future<void> closeFront() async {
     if (!core.isInitialized()) {
       return;
+    }
+    var bgStillActive = false;
+    if (!core.isSingleChannel()) {
+      try {
+        bgStillActive = await core.isActiveBg();
+      } catch (_) {}
     }
     if (!core.isSingleChannel()) {
       await stopListenSingle("fg");
@@ -835,6 +1063,19 @@ class HiddifyCoreService with InfraLogger {
       try {
         await core.fgClient.close(CloseRequest(mode: SetupMode.GRPC_NORMAL));
       } catch (e) {}
+    }
+    if (bgStillActive) {
+      _transitionLifecycle(_CoreLifecycleState.started, reason: "close front while bg active");
+      if (currentState != const CoreStatus.started()) {
+        currentState = const CoreStatus.started();
+        statusController.add(currentState);
+      }
+    } else {
+      _transitionLifecycle(_CoreLifecycleState.stopped, reason: "close front");
+      if (currentState != const CoreStatus.stopped()) {
+        currentState = const CoreStatus.stopped();
+        statusController.add(currentState);
+      }
     }
   }
 }

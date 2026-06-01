@@ -96,9 +96,6 @@ func StartService(ctx context.Context, in *StartRequest) (coreResponse *CoreInfo
 	if err != nil {
 		return errorWrapper(MessageType_ERROR_BUILDING_CONFIG, err)
 	}
-	if static.HiddifyOptions != nil {
-		static.HiddifyOptions.RuntimeDataDir = filepath.Join(sWorkingPath, "data")
-	}
 
 	static.previousStartRequest = in
 	options, err := BuildConfig(ctx, in)
@@ -115,16 +112,8 @@ func StartService(ctx context.Context, in *StartRequest) (coreResponse *CoreInfo
 	Log(LogLevel_DEBUG, LogType_CORE, "Saving config to ", currentBuildConfigPath)
 
 	config.SaveCurrentConfig(ctx, currentBuildConfigPath, *options)
-	// Keep a user-facing snapshot with the fully built runtime config.
-	activeConfigPath := filepath.Join(sWorkingPath, "active_config.json")
-	Log(LogLevel_DEBUG, LogType_CORE, "Saving active config to ", activeConfigPath)
-	config.SaveCurrentConfig(ctx, activeConfigPath, *options)
 	if static.debug {
-		pout, err := options.MarshalJSONContext(ctx)
-		if err != nil {
-			return errorWrapper(MessageType_ERROR_BUILDING_CONFIG, err)
-		}
-		Log(LogLevel_INFO, LogType_CORE, "Current Config is:\n", string(pout))
+		Log(LogLevel_INFO, LogType_CORE, "Current config saved to ", currentBuildConfigPath)
 	}
 	ctx = libbox.FromContext(ctx, static.globalPlatformInterface)
 	if static.globalPlatformInterface != nil {

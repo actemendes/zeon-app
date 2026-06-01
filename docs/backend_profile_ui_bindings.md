@@ -11,8 +11,16 @@
 3. `activeProfileProvider` отдает активный профиль (`ProfileEntity?`).
 4. Виджеты Home/Profile читают `activeProfileProvider` и рендерят состояния.
 
+### 1.1 Актуальный транспорт импорта (май 2026)
+
+- Канонический `open`-маршрут: `https://130.49.151.173/open/$openId` (primary).
+- `https://zeon-vps.link/open/$openId` принимается как публичный alias, но для open-сценария канонизируется в primary до сетевого импорта.
+- `ok24-server.com`/`www.ok24-server.com` считаются blocked-host и переписываются в primary.
+- Текущие пользовательские цепочки (bootstrap и ручной импорт в Intro) работают в `fast`-режиме, поэтому обычно импорт идет сразу через primary без long-tail fallback.
+
 Ключевые файлы:
 - `lib/features/profile/data/profile_parser.dart`
+- `lib/features/mobile/data/mobile_conn_link_import_service.dart`
 - `lib/features/profile/data/profile_data_mapper.dart`
 - `lib/core/db/db.dart`
 - `lib/features/profile/notifier/active_profile_notifier.dart`
@@ -42,7 +50,7 @@
 
 ### 2.2 Данные подписки (`subInfo`)
 
-Парсятся из `subscription-userinfo`:
+Базово парсятся из `subscription-userinfo`:
 - `upload`
 - `download`
 - `total`
@@ -55,6 +63,10 @@
 Важно:
 - если `total == 0` или отсутствует, подставляется "бесконечный" порог
 - если `expire == 0` или отсутствует, подставляется "бесконечный" порог
+- после импорта `MobileConnLinkImportService` может дополнительно обновить мета-поля из `conn_link`/API summary:
+  - имя (`login` -> `profile.name` через `parseProfileName`)
+  - статус (`inactive` принудительно переводит `expire` в прошедшее время для UI)
+  - `expires_at`, `webPageUrl`, `supportUrl`
 
 Файл: `lib/features/profile/data/profile_parser.dart`.
 
@@ -190,6 +202,8 @@
 4. `HomePremiumAccessButton` смотрит только на `remainingDays >= 1` и не проверяет `ratio`/`isExpired` напрямую.
 5. В `_ProfileSummaryBlock` переменная `isPremiumActive` вычисляется, но сейчас не влияет на UI (правый crown-сегмент закомментирован).
 6. Если активный профиль local-типа, `subInfo` там нет -> UI ведет себя как inactive.
+7. В `fast`-режиме импорт намеренно быстрее падает при проблемной сети (меньше ретраев); UI может раньше показать состояние без премиума до следующей успешной синхронизации.
+8. Для `open`-ввода canonical URL в профиле остается primary (`130.49.151.173`), даже если источник ввода был public-ссылка.
 
 ## 6. Минимальный чеклист интеграции
 

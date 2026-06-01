@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet("release", "debug", "profile")]
-    [string]$BuildMode = "release",
+    [string]$BuildMode = "debug",
 
     [string]$BuildTarget = "lib/main_prod.dart",
 
@@ -193,6 +193,7 @@ $repoRoot = Split-Path -Parent $scriptDir
 Push-Location $repoRoot
 try {
     Assert-Command "flutter"
+    Assert-Command "dart"
     Assert-Command "adb"
     if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $BuildTarget))) {
         throw "Build target not found: $BuildTarget"
@@ -217,6 +218,12 @@ try {
     Write-Host "Build mode: $BuildMode"
     Write-Host "Build target: $BuildTarget"
     Write-Host ""
+
+    Write-Host "Running: dart run slang"
+    & dart run slang
+    if ($LASTEXITCODE -ne 0) {
+        throw "Translation generation failed."
+    }
 
     $buildArgs = @("build", "apk", "--$BuildMode", "--target", $BuildTarget, "--target-platform", $targetPlatform)
     Write-Host ("Running: flutter " + ($buildArgs -join " "))

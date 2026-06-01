@@ -25,6 +25,8 @@ final mobileConnLinkImportServiceProvider = Provider<MobileConnLinkImportService
   );
 });
 
+enum MobileConnLinkImportMode { standard, fast }
+
 class MobileConnLinkImportService with InfraLogger {
   MobileConnLinkImportService({
     required DioHttpClient httpClient,
@@ -38,6 +40,10 @@ class MobileConnLinkImportService with InfraLogger {
 
   static const apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://130.49.151.173");
   static const publicOpenBaseUrl = "https://zeon-vps.link";
+  static const enablePublicOpenFallback = bool.fromEnvironment("mobile_enable_public_open_fallback");
+  static const _blockedRedirectHosts = <String>{"ok24-server.com", "www.ok24-server.com"};
+  static final Uri _apiBaseUri = Uri.parse(apiBaseUrl);
+  static final Uri _publicOpenBaseUri = Uri.parse(publicOpenBaseUrl);
 
   static const prefDone = "mobile_auto_import_done";
   static const prefUserId = "mobile_auto_import_user_id";
@@ -58,14 +64,35 @@ class MobileConnLinkImportService with InfraLogger {
     final openId = _extractOpenId(input);
     if (openId != null && openId.isNotEmpty) {
       return MobileConnLinkInput(
-        primaryConnLink: Uri.parse(apiBaseUrl).resolve("/open/$openId").toString(),
-        fallbackConnLink: Uri.parse(publicOpenBaseUrl).resolve("/open/$openId").toString(),
+        primaryConnLink: _apiBaseUri.resolve("/open/$openId").toString(),
+        fallbackConnLink: enablePublicOpenFallback ? _publicOpenBaseUri.resolve("/open/$openId").toString() : null,
         openId: openId,
       );
     }
 
     final parsed = Uri.tryParse(input);
     if (parsed != null && parsed.hasScheme && (parsed.scheme == "http" || parsed.scheme == "https")) {
+      if (_isBlockedHost(parsed.host)) {
+        final rewritten = _rewriteKnownOpenToPrimary(input);
+        if (rewritten == null) {
+          return const MobileConnLinkInput(primaryConnLink: "", fallbackConnLink: null, openId: null);
+        }
+        return MobileConnLinkInput(
+          primaryConnLink: rewritten,
+          fallbackConnLink: null,
+          openId: _extractOpenId(rewritten),
+        );
+      }
+      if (_isPublicOpenHost(parsed.host)) {
+        final rewritten = _rewriteKnownOpenToPrimary(input);
+        if (rewritten != null) {
+          return MobileConnLinkInput(
+            primaryConnLink: rewritten,
+            fallbackConnLink: null,
+            openId: _extractOpenId(rewritten),
+          );
+        }
+      }
       return MobileConnLinkInput(primaryConnLink: parsed.toString(), fallbackConnLink: null, openId: null);
     }
 
@@ -77,7 +104,7 @@ class MobileConnLinkImportService with InfraLogger {
       return const MobileConnLinkInput(primaryConnLink: "", fallbackConnLink: null, openId: null);
     }
     return MobileConnLinkInput(
-      primaryConnLink: Uri.parse(apiBaseUrl).resolve("/$candidate").toString(),
+      primaryConnLink: _apiBaseUri.resolve("/$candidate").toString(),
       fallbackConnLink: null,
       openId: null,
     );
@@ -90,15 +117,20 @@ class MobileConnLinkImportService with InfraLogger {
     DateTime? apiExpiresAt,
     String? apiLogin,
     bool clearUserIdWhenMissing = true,
+    MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard,
   }) async {
     final normalized = normalizeConnectionLink(rawInput);
     if (normalized.primaryConnLink.isEmpty || Uri.tryParse(normalized.primaryConnLink) == null) {
       throw const MobileConnLinkImportException("validation_error");
     }
 
+    final importCandidates = mode == MobileConnLinkImportMode.fast
+        ? <String>[normalized.primaryConnLink]
+        : normalized.importCandidates;
+
     String? importedUrl;
-    for (final connLink in normalized.importCandidates) {
-      final imported = await _importFromConnLink(connLink, allowNoValidateFallback: false);
+    for (final connLink in importCandidates) {
+      final imported = await _importFromConnLink(connLink, allowNoValidateFallback: false, mode: mode);
       if (imported) {
         importedUrl = connLink;
         break;
@@ -111,9 +143,9 @@ class MobileConnLinkImportService with InfraLogger {
       }
     }
 
-    if (importedUrl == null) {
-      for (final connLink in normalized.importCandidates) {
-        final imported = await _importFromConnLink(connLink, allowNoValidateFallback: true);
+    if (importedUrl == null && mode == MobileConnLinkImportMode.standard) {
+      for (final connLink in importCandidates) {
+        final imported = await _importFromConnLink(connLink, allowNoValidateFallback: true, mode: mode);
         if (imported) {
           importedUrl = connLink;
           break;
@@ -195,8 +227,30 @@ class MobileConnLinkImportService with InfraLogger {
   }
 
   Future<String> resolveImportUrl(String connLink) async {
+    final sourceUri = Uri.tryParse(connLink);
+    if (sourceUri != null && (_isPublicOpenHost(sourceUri.host) || _isBlockedHost(sourceUri.host))) {
+      final rewritten = _rewriteKnownOpenToPrimary(connLink);
+      if (rewritten != null && rewritten.isNotEmpty) {
+        if (rewritten != connLink) {
+          loggy.info(
+            "mobile conn_link import: rewrite source to primary "
+            "[from=${_maskLink(connLink)} to=${_maskLink(rewritten)}]",
+          );
+        }
+        return rewritten;
+      }
+    }
     try {
       final response = await _httpClient.get<String>(connLink, headers: {"Accept": "text/html"});
+      final finalHost = response.realUri.host;
+      if (finalHost.isNotEmpty && _isBlockedHost(finalHost)) {
+        loggy.warning(
+          "mobile conn_link import: blocked redirect host in resolveImportUrl "
+          "[host=$finalHost, source=${_maskLink(connLink)}]",
+        );
+        final rewritten = _rewriteKnownOpenToPrimary(connLink);
+        return rewritten ?? connLink;
+      }
       final content = response.data;
       if (content == null || content.isEmpty) {
         return connLink;
@@ -211,19 +265,70 @@ class MobileConnLinkImportService with InfraLogger {
       if (subscriptionUrl.isEmpty || Uri.tryParse(subscriptionUrl) == null) {
         return connLink;
       }
-
+      final candidateUri = Uri.tryParse(subscriptionUrl);
+      if (candidateUri == null) return connLink;
+      if (_isBlockedHost(candidateUri.host)) {
+        loggy.warning(
+          "mobile conn_link import: blocked subscriptionUrl host "
+          "[host=${candidateUri.host}, source=${_maskLink(connLink)}]",
+        );
+        final rewritten = _rewriteKnownOpenToPrimary(connLink);
+        return rewritten ?? connLink;
+      }
       return subscriptionUrl;
     } catch (_) {
       return connLink;
     }
   }
 
-  Future<bool> _importFromConnLink(String connLink, {required bool allowNoValidateFallback}) async {
-    final attempts = <String>[connLink, _appendPlatformHint(connLink)].where((e) => e.isNotEmpty).toSet().toList();
+  Future<bool> _importFromConnLink(
+    String connLink, {
+    required bool allowNoValidateFallback,
+    required MobileConnLinkImportMode mode,
+  }) async {
+    var effectiveConnLink = connLink;
+    final sourceUri = Uri.tryParse(connLink);
+    if (sourceUri != null && (_isPublicOpenHost(sourceUri.host) || _isBlockedHost(sourceUri.host))) {
+      final rewritten = _rewriteKnownOpenToPrimary(connLink);
+      if (rewritten != null && rewritten.isNotEmpty) {
+        if (rewritten != connLink) {
+          loggy.info(
+            "mobile conn_link import: candidate rewritten to primary "
+            "[from=${_maskLink(connLink)} to=${_maskLink(rewritten)}]",
+          );
+        }
+        effectiveConnLink = rewritten;
+      }
+    }
+    final attempts = mode == MobileConnLinkImportMode.fast
+        ? <String>[effectiveConnLink]
+        : <String>[
+            effectiveConnLink,
+            _appendPlatformHint(effectiveConnLink),
+          ].where((e) => e.isNotEmpty).toSet().toList();
 
     for (final attemptLink in attempts) {
-      if (await _tryUpsert(attemptLink, "default")) {
+      if (await _tryUpsert(attemptLink, "default", disableRetry: mode == MobileConnLinkImportMode.fast)) {
         return true;
+      }
+
+      if (mode == MobileConnLinkImportMode.fast) {
+        if (await _tryUpsert(attemptLink, "directOnly", directOnly: true, disableRetry: true)) {
+          return true;
+        }
+        if (await _tryUpsert(attemptLink, "no-validate", validateConfigOnImport: false, disableRetry: true)) {
+          return true;
+        }
+        if (await _tryUpsert(
+          attemptLink,
+          "directOnly/no-validate",
+          directOnly: true,
+          validateConfigOnImport: false,
+          disableRetry: true,
+        )) {
+          return true;
+        }
+        continue;
       }
 
       final importUrl = await resolveImportUrl(attemptLink);
@@ -245,7 +350,7 @@ class MobileConnLinkImportService with InfraLogger {
       }
     }
 
-    if (!allowNoValidateFallback) {
+    if (mode == MobileConnLinkImportMode.fast || !allowNoValidateFallback) {
       return false;
     }
 
@@ -287,11 +392,17 @@ class MobileConnLinkImportService with InfraLogger {
     String label, {
     bool directOnly = false,
     bool validateConfigOnImport = true,
+    bool disableRetry = false,
   }) async {
     try {
       loggy.info("mobile conn_link import attempt [$label, link=${_maskLink(link)}]");
       final result = await _profileRepository
-          .upsertRemote(link, directOnly: directOnly, validateConfigOnImport: validateConfigOnImport)
+          .upsertRemote(
+            link,
+            directOnly: directOnly,
+            disableRetry: disableRetry,
+            validateConfigOnImport: validateConfigOnImport,
+          )
           .run();
       if (result.isRight()) {
         loggy.info("mobile conn_link import success: upsertRemote($label)");
@@ -557,6 +668,16 @@ class MobileConnLinkImportService with InfraLogger {
     }
     final match = RegExp('/open/([A-Za-z0-9_-]{4,})').firstMatch(normalized);
     return match?.group(1);
+  }
+
+  static bool _isBlockedHost(String host) => _blockedRedirectHosts.contains(host.trim().toLowerCase());
+
+  static bool _isPublicOpenHost(String host) => host.trim().toLowerCase() == _publicOpenBaseUri.host.toLowerCase();
+
+  static String? _rewriteKnownOpenToPrimary(String raw) {
+    final openId = _extractOpenId(raw);
+    if (openId == null || openId.isEmpty) return null;
+    return _apiBaseUri.resolve("/open/$openId").toString();
   }
 
   static String? _firstNonEmpty(List<String?> values) {

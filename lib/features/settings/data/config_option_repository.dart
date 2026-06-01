@@ -1,17 +1,13 @@
-import 'dart:convert';
-
 import 'package:dartx/dartx.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/model/optional_range.dart';
 import 'package:hiddify/core/model/region.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/utils/exception_handler.dart';
 import 'package:hiddify/core/utils/json_converters.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/log/model/log_level.dart';
 import 'package:hiddify/features/profile/data/profile_parser.dart';
 import 'package:hiddify/features/settings/model/config_option_failure.dart';
-import 'package:hiddify/features/site_routing/model/site_routing_mode.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hiddify/singbox/model/singbox_config_option.dart';
 import 'package:hiddify/singbox/model/singbox_rule.dart';
@@ -36,7 +32,7 @@ abstract class ConfigOptions {
 
   static final region = PreferencesNotifier.create<Region, String>(
     "region",
-    Region.other,
+    Region.ru,
     mapFrom: Region.values.byName,
     mapTo: (value) => value.name,
   );
@@ -84,17 +80,20 @@ abstract class ConfigOptions {
     "udp://1.1.1.1",
     possibleValues: List.of([
       "local",
+      "udp://77.88.8.8",
       "udp://223.5.5.5",
       "udp://1.1.1.1",
       "udp://1.1.1.2",
       "tcp://1.1.1.1",
       "https://1.1.1.1/dns-query",
       "https://dns.cloudflare.com/dns-query",
+      "77.88.8.8",
       "4.4.2.2",
       "8.8.8.8",
     ]),
     defaultValueFunction: (ref) => switch (ref.read(region)) {
       Region.cn => "223.5.5.5",
+      Region.ru => "77.88.8.8",
       _ => "1.1.1.1",
     },
     validator: (value) => value.isNotBlank,
@@ -140,14 +139,18 @@ abstract class ConfigOptions {
 
   static final strictRoute = PreferencesNotifier.create<bool, bool>("strict-route", true);
   static final networkProfile = PreferencesNotifier.create<String, String>("network-profile", "stable_mobile");
-  static final networkMtuMode = PreferencesNotifier.create<String, String>("network-mtu-mode", "fixed");
+  static final networkMtuMode = PreferencesNotifier.create<String, String>("network-mtu-mode", "dynamic");
   static final fragmentMode = PreferencesNotifier.create<String, String>("fragment-mode", "default");
   static final profileDnsStrategy = PreferencesNotifier.create<String, String>("profile-dns-strategy", "default");
+  static final executeConfigAsIs = PreferencesNotifier.create<bool, bool>("execute-config-as-is", false);
+  static final enableFullConfig = PreferencesNotifier.create<bool, bool>("enable-full-config", false);
 
   static final connectionTestUrl = PreferencesNotifier.create<String, String>(
     "connection-test-url",
-    "http://captive.apple.com/hotspot-detect.html",
+    "https://1.1.1.1",
     possibleValues: List.of([
+      "https://1.1.1.1",
+      "https://zeon-vps.link/generate_204",
       "http://connectivitycheck.gstatic.com/generate_204",
       "http://www.gstatic.com/generate_204",
       "https://www.gstatic.com/generate_204",
@@ -156,7 +159,6 @@ abstract class ConfigOptions {
       "http://kernel.org",
       "http://detectportal.firefox.com",
       "http://captive.apple.com/hotspot-detect.html",
-      "https://1.1.1.1",
       "http://1.1.1.1",
     ]),
     validator: (value) => value.isNotBlank && isUrl(value),
@@ -164,7 +166,7 @@ abstract class ConfigOptions {
 
   static final urlTestInterval = PreferencesNotifier.create<Duration, int>(
     "url-test-interval",
-    const Duration(minutes: 10),
+    const Duration(minutes: 3),
     mapFrom: const IntervalInSecondsConverter().fromJson,
     mapTo: const IntervalInSecondsConverter().toJson,
   );
@@ -335,6 +337,8 @@ abstract class ConfigOptions {
     "network-mtu-mode": networkMtuMode,
     "fragment-mode": fragmentMode,
     "profile-dns-strategy": profileDnsStrategy,
+    "execute-config-as-is": executeConfigAsIs,
+    "enable-full-config": enableFullConfig,
     "connection-test-url": connectionTestUrl,
     "url-test-interval": urlTestInterval,
     "clash-api-port": clashApiPort,
@@ -378,23 +382,15 @@ abstract class ConfigOptions {
 
   static final singboxConfigOptions = Provider<SingboxConfigOption>((ref) {
     final mode = ref.watch(serviceMode);
-    final selectedRegion = ref.watch(region);
-    final siteRoutingMode = ref.watch(Preferences.siteRoutingMode);
-    final siteRoutingInclude = _normalizeWebsites(ref.watch(Preferences.includeSites));
-    final siteRoutingExclude = _normalizeWebsites(ref.watch(Preferences.excludeSites));
-    final rules = _buildSiteRoutingRules(
-      mode: siteRoutingMode,
-      include: siteRoutingInclude,
-      exclude: siteRoutingExclude,
-    );
+    final rules = <SingboxRule>[];
     // final reg = ref.watch(Preferences.region.notifier).raw();
 
     return SingboxConfigOption(
-      region: selectedRegion.name,
+      region: ref.watch(region).name,
       balancerStrategy: ref.watch(balancerStrategy),
       blockAds: ref.watch(blockAds),
       useXrayCoreWhenPossible: ref.watch(useXrayCoreWhenPossible),
-      executeConfigAsIs: false,
+      executeConfigAsIs: ref.watch(enableFullConfig) || ref.watch(executeConfigAsIs),
       logLevel: ref.watch(logLevel),
       resolveDestination: ref.watch(resolveDestination),
       ipv6Mode: ref.watch(ipv6Mode),
@@ -425,9 +421,9 @@ abstract class ConfigOptions {
       enableFakeDns: ref.watch(enableFakeDns),
       // enableDnsRouting: ref.watch(enableDnsRouting),
       independentDnsCache: ref.watch(independentDnsCache),
-      siteRoutingMode: siteRoutingMode.name,
-      siteRoutingInclude: siteRoutingInclude,
-      siteRoutingExclude: siteRoutingExclude,
+      siteRoutingMode: "off",
+      siteRoutingInclude: const [],
+      siteRoutingExclude: const [],
       // mux: SingboxMuxOption(
       //   enable: ref.watch(enableMux),
       //   padding: ref.watch(muxPadding),
@@ -473,45 +469,6 @@ abstract class ConfigOptions {
       rules: rules,
     );
   });
-
-  static List<String> _normalizeWebsites(List<String> rawValues) {
-    final normalized = <String>[];
-    for (final value in rawValues) {
-      var candidate = value.trim().toLowerCase();
-      if (candidate.isEmpty || normalized.contains(candidate)) continue;
-      candidate = candidate
-          .replaceAll(RegExp(r'\s+'), '')
-          .replaceFirst(RegExp('^[a-z][a-z0-9+.-]*://'), '')
-          .replaceFirst(RegExp('^/+'), '')
-          .split('/')[0]
-          .split('?')[0]
-          .split('#')[0]
-          .replaceFirst(RegExp(r'^\*\.'), '')
-          .replaceFirst(RegExp(r'^www\.'), '')
-          .replaceFirst(RegExp(r'^\.'), '')
-          .replaceFirst(RegExp(r'\.$'), '');
-      if (candidate.isEmpty || !isDomain(candidate) || normalized.contains(candidate)) continue;
-      normalized.add(candidate);
-    }
-    return normalized;
-  }
-
-  static List<SingboxRule> _buildSiteRoutingRules({
-    required SiteRoutingMode mode,
-    required List<String> include,
-    required List<String> exclude,
-  }) {
-    final compactInclude = include;
-    final compactExclude = exclude;
-    return switch (mode) {
-      SiteRoutingMode.off => const <SingboxRule>[],
-      SiteRoutingMode.include when compactInclude.isNotEmpty => <SingboxRule>[SingboxRule(domains: compactInclude)],
-      SiteRoutingMode.exclude when compactExclude.isNotEmpty => <SingboxRule>[
-        SingboxRule(domains: compactExclude, outbound: RuleOutbound.bypass),
-      ],
-      _ => const <SingboxRule>[],
-    };
-  }
 }
 
 class ConfigOptionRepository with ExceptionHandler, InfraLogger {
@@ -528,56 +485,7 @@ class ConfigOptionRepository with ExceptionHandler, InfraLogger {
       Either.tryCatch(() => _getConfigOptions(), ConfigOptionFailure.unexpected).flatMap(
         (options) => Either.tryCatch(() {
           final json = ProfileParser.applyProfileOverride(options.toJson(), profileOverride);
-          return SingboxConfigOption.fromJson(_normalizeConfigJsonForFromJson(json));
+          return SingboxConfigOption.fromJson(json);
         }, ConfigOptionFailure.unexpected),
       );
-
-  static Map<String, dynamic> _normalizeConfigJsonForFromJson(Map<String, dynamic> json) {
-    final normalized = Map<String, dynamic>.from(json);
-    normalized['site-routing-include'] = _normalizeStringList(normalized['site-routing-include']);
-    normalized['site-routing-exclude'] = _normalizeStringList(normalized['site-routing-exclude']);
-    normalized['rules'] = _normalizeRuleList(normalized['rules']);
-    return normalized;
-  }
-
-  static List<String> _normalizeStringList(dynamic raw) {
-    if (raw is List) {
-      return raw.map((e) => e.toString()).where((e) => e.isNotBlank).toList();
-    }
-    if (raw is String) {
-      final trimmed = raw.trim();
-      if (trimmed.isEmpty) return const <String>[];
-      if (trimmed.startsWith('[')) {
-        try {
-          final decoded = jsonDecode(trimmed);
-          if (decoded is List) {
-            return decoded.map((e) => e.toString()).where((e) => e.isNotBlank).toList();
-          }
-        } catch (_) {
-          // Fallback to token split below.
-        }
-      }
-      return trimmed.split(RegExp(r'[;,\n]+')).map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-    }
-    return const <String>[];
-  }
-
-  static List<Map<String, dynamic>> _normalizeRuleList(dynamic raw) {
-    if (raw is List) {
-      return raw.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList();
-    }
-    if (raw is String) {
-      final trimmed = raw.trim();
-      if (trimmed.isEmpty) return const <Map<String, dynamic>>[];
-      try {
-        final decoded = jsonDecode(trimmed);
-        if (decoded is List) {
-          return decoded.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList();
-        }
-      } catch (_) {
-        // Ignore invalid JSON and fall back to empty rule list.
-      }
-    }
-    return const <Map<String, dynamic>>[];
-  }
 }

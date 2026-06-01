@@ -33,6 +33,7 @@ abstract interface class ProfileRepository {
     UserOverride? userOverride,
     CancelToken? cancelToken,
     bool directOnly = false,
+    bool disableRetry = false,
     bool validateConfigOnImport = true,
   });
   TaskEither<ProfileFailure, Unit> addLocal(String content, {UserOverride? userOverride});
@@ -135,47 +136,51 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
     UserOverride? userOverride,
     CancelToken? cancelToken,
     bool directOnly = false,
+    bool disableRetry = false,
     bool validateConfigOnImport = true,
   }) =>
       TaskEither.tryCatch(
         () async => await _profileDataSource.getByUrl(url).then((profEntry) => profEntry?.toEntity()),
         ProfileFailure.unexpected,
       ).flatMap((profEntity) {
+        final existingProfile = profEntity;
         // if profile is null, generate id
-        final id = profEntity?.id ?? const Uuid().v4();
+        final id = existingProfile?.id ?? const Uuid().v4();
         final file = _profilePathResolver.file(id);
         final tempFile = _profilePathResolver.tempFile(id);
         try {
-          if (profEntity != null && profEntity is RemoteProfileEntity) {
+          if (existingProfile != null && existingProfile is RemoteProfileEntity) {
+            final updatedRemote = userOverride == null
+                ? existingProfile
+                : existingProfile.copyWith(userOverride: userOverride);
             // Update
-            if (userOverride != null) {
-              profEntity = profEntity.copyWith(userOverride: userOverride);
-            }
             return _profileParser
                 .updateRemote(
-                  rp: profEntity,
+                  rp: updatedRemote,
                   tempFilePath: tempFile.path,
                   cancelToken: cancelToken,
                   directOnly: directOnly,
+                  disableRetry: disableRetry,
                 )
                 .flatMap(
-                  (profEntity) => (validateConfigOnImport
-                          ? validateConfig(file.path, tempFile.path, profEntity.profileOverride.value, false)
-                          : TaskEither<ProfileFailure, Unit>.right(unit).flatMap(
-                              (_) => TaskEither.tryCatch(() async {
-                                if (await file.exists()) {
-                                  await file.delete();
-                                }
-                                await tempFile.copy(file.path);
-                                return unit;
-                              }, ProfileFailure.unexpected),
-                            ))
-                      .flatMap(
-                        (unit) => TaskEither.tryCatch(() async {
-                          await _profileDataSource.edit(id, profEntity);
-                          return unit;
-                        }, ProfileFailure.unexpected),
-                      ),
+                  (profEntity) =>
+                      (validateConfigOnImport
+                              ? validateConfig(file.path, tempFile.path, profEntity.profileOverride.value, false)
+                              : TaskEither<ProfileFailure, Unit>.right(unit).flatMap(
+                                  (_) => TaskEither.tryCatch(() async {
+                                    if (await file.exists()) {
+                                      await file.delete();
+                                    }
+                                    await tempFile.copy(file.path);
+                                    return unit;
+                                  }, ProfileFailure.unexpected),
+                                ))
+                          .flatMap(
+                            (unit) => TaskEither.tryCatch(() async {
+                              await _profileDataSource.edit(id, profEntity);
+                              return unit;
+                            }, ProfileFailure.unexpected),
+                          ),
                 );
           } else {
             // Add
@@ -187,25 +192,27 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                   userOverride: userOverride,
                   cancelToken: cancelToken,
                   directOnly: directOnly,
+                  disableRetry: disableRetry,
                 )
                 .flatMap(
-                  (profEntity) => (validateConfigOnImport
-                          ? validateConfig(file.path, tempFile.path, profEntity.profileOverride.value, false)
-                          : TaskEither<ProfileFailure, Unit>.right(unit).flatMap(
-                              (_) => TaskEither.tryCatch(() async {
-                                if (await file.exists()) {
-                                  await file.delete();
-                                }
-                                await tempFile.copy(file.path);
-                                return unit;
-                              }, ProfileFailure.unexpected),
-                            ))
-                      .flatMap(
-                        (unit) => TaskEither.tryCatch(() async {
-                          await _profileDataSource.insert(profEntity);
-                          return unit;
-                        }, ProfileFailure.unexpected),
-                      ),
+                  (profEntity) =>
+                      (validateConfigOnImport
+                              ? validateConfig(file.path, tempFile.path, profEntity.profileOverride.value, false)
+                              : TaskEither<ProfileFailure, Unit>.right(unit).flatMap(
+                                  (_) => TaskEither.tryCatch(() async {
+                                    if (await file.exists()) {
+                                      await file.delete();
+                                    }
+                                    await tempFile.copy(file.path);
+                                    return unit;
+                                  }, ProfileFailure.unexpected),
+                                ))
+                          .flatMap(
+                            (unit) => TaskEither.tryCatch(() async {
+                              await _profileDataSource.insert(profEntity);
+                              return unit;
+                            }, ProfileFailure.unexpected),
+                          ),
                 );
           }
         } finally {

@@ -3,7 +3,6 @@ package hcore
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 
 	"github.com/hiddify/hiddify-core/v2/config"
@@ -31,9 +30,6 @@ func BuildConfig(ctx context.Context, in *StartRequest) (*option.Options, error)
 
 	readOpt := &config.ReadOptions{Content: in.ConfigContent, Path: in.ConfigPath}
 	if !in.EnableRawConfig {
-		if static.HiddifyOptions != nil {
-			Log(LogLevel_INFO, LogType_CORE, safeOptionsSummary("buildconfig input", static.HiddifyOptions))
-		}
 		// hcontent, err := json.MarshalIndent(static.HiddifyOptions, "", " ")
 		// if err != nil {
 		// 	return nil, err
@@ -114,19 +110,60 @@ func ChangeHiddifySettings(in *ChangeHiddifySettingsRequest, insert bool) (*Core
 	if in.HiddifySettingsJson == "" {
 		return &CoreInfoResponse{}, nil
 	}
+	normalizedJSON := in.HiddifySettingsJson
+	ruleCountFromInput := 0
+	// Keep backward compatibility with legacy execute-config-as-is key.
+	var settingsMap map[string]any
+	if err := json.Unmarshal([]byte(in.HiddifySettingsJson), &settingsMap); err == nil {
+		if _, hasCanonical := settingsMap["enable-full-config"]; !hasCanonical {
+			if legacy, hasLegacy := settingsMap["execute-config-as-is"]; hasLegacy {
+				settingsMap["enable-full-config"] = legacy
+			}
+		}
+		if _, hasLegacy := settingsMap["execute-config-as-is"]; !hasLegacy {
+			if canonical, hasCanonical := settingsMap["enable-full-config"]; hasCanonical {
+				settingsMap["execute-config-as-is"] = canonical
+			}
+		}
+		if rawRules, ok := settingsMap["rules"].([]any); ok {
+			ruleCountFromInput = len(rawRules)
+		}
+		if marshaled, err := json.Marshal(settingsMap); err == nil {
+			normalizedJSON = string(marshaled)
+		}
+	}
+
 	if insert {
 		settings := db.GetTable[hcommon.AppSettings]()
 		settings.UpdateInsert(&hcommon.AppSettings{
 			Id:    "HiddifySettingsJson",
-			Value: in.HiddifySettingsJson,
+			Value: normalizedJSON,
 		})
 	}
 
-	err := json.Unmarshal([]byte(in.HiddifySettingsJson), static.HiddifyOptions)
+	err := json.Unmarshal([]byte(normalizedJSON), static.HiddifyOptions)
 	if err != nil {
 		return nil, err
 	}
-	Log(LogLevel_INFO, LogType_CORE, safeOptionsSummary("change settings parsed", static.HiddifyOptions))
+	if static.HiddifyOptions.ExecuteConfigAsIs {
+		static.HiddifyOptions.EnableFullConfig = true
+	}
+	Log(
+		LogLevel_DEBUG,
+		LogType_CORE,
+		"HiddifyOptions applied: ",
+		"full-config=", static.HiddifyOptions.EnableFullConfig,
+		", execute-config-as-is=", static.HiddifyOptions.ExecuteConfigAsIs,
+		", mtu=", static.HiddifyOptions.MTU,
+		", network-profile=", static.HiddifyOptions.NetworkProfile,
+		", network-mtu-mode=", static.HiddifyOptions.NetworkMtuMode,
+		", network-transport-type=", static.HiddifyOptions.NetworkTransportType,
+		", network-interface-mtu=", static.HiddifyOptions.NetworkInterfaceMTU,
+		", fragment-mode=", static.HiddifyOptions.FragmentMode,
+		", profile-dns-strategy=", static.HiddifyOptions.ProfileDnsStrategy,
+		", user-rules=", len(static.HiddifyOptions.Rules),
+		", input-user-rules=", ruleCountFromInput,
+	)
 
 	if static.HiddifyOptions.Warp.WireguardConfigStr != "" {
 		err := json.Unmarshal([]byte(static.HiddifyOptions.Warp.WireguardConfigStr), &static.HiddifyOptions.Warp.WireguardConfig)
@@ -141,34 +178,6 @@ func ChangeHiddifySettings(in *ChangeHiddifySettingsRequest, insert bool) (*Core
 		}
 	}
 	return &CoreInfoResponse{}, nil
-}
-
-func safeOptionsSummary(prefix string, h *config.HiddifyOptions) string {
-	if h == nil {
-		return prefix + ": <nil>"
-	}
-	selectorInterrupt := "nil"
-	if h.RouteOptions.SelectorInterrupt != nil {
-		selectorInterrupt = fmt.Sprintf("%v", *h.RouteOptions.SelectorInterrupt)
-	}
-	return fmt.Sprintf(
-		"%s: profile=%s mtu_mode=%s transport=%s iface_mtu=%d fragment_mode=%s profile_dns=%s selector_interrupt=%s selector_tolerance=%d selector_sticky=%v mtu=%d tun_stack=%s strict_route=%v critical_fallback=%v runtime_data_dir=%s",
-		prefix,
-		h.RouteOptions.NetworkProfile,
-		h.RouteOptions.NetworkMTUMode,
-		h.RouteOptions.NetworkTransportType,
-		h.RouteOptions.NetworkInterfaceMTU,
-		h.RouteOptions.FragmentMode,
-		h.RouteOptions.ProfileDNSStrategy,
-		selectorInterrupt,
-		h.RouteOptions.SelectorTolerance,
-		h.RouteOptions.SelectorUseSticky,
-		h.MTU,
-		h.TUNStack,
-		h.StrictRoute,
-		h.RouteOptions.CriticalDomainsFallbackEnabled,
-		h.RuntimeDataDir,
-	)
 }
 
 func (s *CoreService) GenerateConfig(ctx context.Context, in *GenerateConfigRequest) (*GenerateConfigResponse, error) {

@@ -1,0 +1,7 @@
+﻿{"ok":true,"data":{"subscription_id":"8489007b-8479-4f80-a463-2769e2656549","vpn_uuid":"93c53af4-5f29-43c9-b9e0-7401039e59ab","status":"active","expires_at":"2026-06-26T07:40:00+00:00","expired":null,"connection_link":"https://zeon-vps.link/open/649669380?platform=st"}}
+HTTP 200
+DNS 0.000044s
+CONNECT 0.042299s
+TLS 0.083234s
+TTFB 0.128471s
+TOTAL 0.128538s

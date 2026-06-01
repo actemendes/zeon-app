@@ -3,7 +3,8 @@ publisher: ZEON
 publisher_url: https://github.com/actemendes/zeon-app
 display_name: ZEON
 create_desktop_icon: true
-install_dir_name: "{autopf64}\\ZEON"
+launch_at_startup: true
+install_dir_name: "{localappdata}\\Programs\\ZEON"
 setup_icon_file: windows\runner\resources\app_icon.ico
 locales:
   - ar

@@ -258,8 +258,8 @@ class ProfilePaymentPage extends HookConsumerWidget {
     if (isProcessingPayment.value) return;
     isProcessingPayment.value = true;
     try {
-      const retryDelaysSeconds = <int>[3, 5, 10, 15, 20, 25, 30, 35, 40];
-      const maxAttempts = 10;
+      const retryDelay = Duration(seconds: 5);
+      const maxAttempts = 3;
 
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         final checkout = await paymentService.createPayment(plan: plan.code);
@@ -272,7 +272,7 @@ class ProfilePaymentPage extends HookConsumerWidget {
         }
 
         if (attempt < maxAttempts) {
-          await Future.delayed(Duration(seconds: retryDelaysSeconds[attempt - 1]));
+          await Future.delayed(retryDelay);
         }
       }
 

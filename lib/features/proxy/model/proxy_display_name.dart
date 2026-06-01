@@ -55,5 +55,8 @@ String _stripLeadingFlag(String value) {
 bool shouldHideProxyOption({required String tag, required String tagDisplay}) {
   final rawTag = tag.trim().toLowerCase();
   final rawDisplay = tagDisplay.trim().toLowerCase();
-  return rawTag == "lowest" || rawDisplay == "lowest";
+  return rawTag == "lowest" || rawDisplay == "lowest" || _isAutoServerConfig(rawTag) || _isAutoServerConfig(rawDisplay);
 }
+
+bool _isAutoServerConfig(String value) =>
+    RegExp(r"\u0430\u0432\u0442\u043e\s*\|", caseSensitive: false).hasMatch(value);

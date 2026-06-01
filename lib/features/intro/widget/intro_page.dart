@@ -149,7 +149,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
 
   Future<void> autoSelectRegion(WidgetRef ref) async {
     try {
-      await ref.read(ConfigOptions.region.notifier).update(Region.other);
+      await ref.read(ConfigOptions.region.notifier).update(Region.ru);
       await ref.read(ConfigOptions.directDnsAddress.notifier).reset();
     } catch (e) {
       loggy.warning('Could not set default region', e);
@@ -363,7 +363,7 @@ class _IntroSecondaryButton extends StatelessWidget {
 class _BindAccountCodeDialog extends HookConsumerWidget {
   const _BindAccountCodeDialog();
 
-  static const _sampleBindLink = 'https://zeon-vps.link/open/649669380';
+  static const _sampleBindLink = 'https://zeon-vps.link/open/ХХХХХХ';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -479,7 +479,9 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
         final importService = ref.read(mobileConnLinkImportServiceProvider);
         MobileConnLinkImportResult importResult;
         if (isLikelyAccountLink(rawInput) || extractBindCode(rawInput) != null) {
-          importResult = await importService.importConnectionLink(rawInput).timeout(const Duration(seconds: 90));
+          importResult = await importService
+              .importConnectionLink(rawInput, mode: MobileConnLinkImportMode.fast)
+              .timeout(const Duration(seconds: 25));
           await ref.read(mobileDeviceRebindServiceProvider).syncManualImportRebind(importResult);
         } else {
           showError(t.errors.profiles.invalidUrl);

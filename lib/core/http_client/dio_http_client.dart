@@ -10,7 +10,7 @@ import 'package:hiddify/utils/custom_loggers.dart';
 class DioHttpClient with InfraLogger {
   final Map<String, Dio> _dio = {};
   DioHttpClient({required Duration timeout, required this.userAgent, required bool debug}) {
-    for (var mode in ["proxy", "direct", "both"]) {
+    for (final mode in ["proxy", "direct", "both"]) {
       _dio[mode] = Dio(
         BaseOptions(
           connectTimeout: timeout,
@@ -91,6 +91,7 @@ class DioHttpClient with InfraLogger {
     Map<String, String>? headers,
     bool proxyOnly = false,
     bool directOnly = false,
+    bool disableRetry = false,
   }) async {
     final mode = directOnly
         ? "direct"
@@ -104,7 +105,13 @@ class DioHttpClient with InfraLogger {
     return dio.get<T>(
       url,
       cancelToken: cancelToken,
-      options: _options(url, userAgent: userAgent, credentials: credentials, headers: headers),
+      options: _options(
+        url,
+        userAgent: userAgent,
+        credentials: credentials,
+        headers: headers,
+        disableRetry: disableRetry,
+      ),
     );
   }
 
@@ -117,6 +124,7 @@ class DioHttpClient with InfraLogger {
     Map<String, String>? headers,
     bool proxyOnly = false,
     bool directOnly = false,
+    bool disableRetry = false,
   }) async {
     final mode = directOnly
         ? "direct"
@@ -131,7 +139,13 @@ class DioHttpClient with InfraLogger {
       url,
       data: data,
       cancelToken: cancelToken,
-      options: _options(url, userAgent: userAgent, credentials: credentials, headers: headers),
+      options: _options(
+        url,
+        userAgent: userAgent,
+        credentials: credentials,
+        headers: headers,
+        disableRetry: disableRetry,
+      ),
     );
   }
 
@@ -144,6 +158,7 @@ class DioHttpClient with InfraLogger {
     Map<String, String>? headers,
     bool proxyOnly = false,
     bool directOnly = false,
+    bool disableRetry = false,
   }) async {
     final mode = directOnly
         ? "direct"
@@ -157,7 +172,13 @@ class DioHttpClient with InfraLogger {
       url,
       path,
       cancelToken: cancelToken,
-      options: _options(url, userAgent: userAgent, credentials: credentials, headers: headers),
+      options: _options(
+        url,
+        userAgent: userAgent,
+        credentials: credentials,
+        headers: headers,
+        disableRetry: disableRetry,
+      ),
     );
   }
 
@@ -166,6 +187,7 @@ class DioHttpClient with InfraLogger {
     String? userAgent,
     ({String username, String password})? credentials,
     Map<String, String>? headers,
+    bool disableRetry = false,
   }) {
     final uri = Uri.parse(url);
 
@@ -181,7 +203,7 @@ class DioHttpClient with InfraLogger {
       basicAuth = "Basic ${base64.encode(utf8.encode(userInfo))}";
     }
 
-    return Options(
+    final options = Options(
       headers: {
         if (userAgent != null) "User-Agent": userAgent,
         if (basicAuth != null) "authorization": basicAuth,
@@ -190,5 +212,9 @@ class DioHttpClient with InfraLogger {
         // "Content-Type": "application/json",
       },
     );
+    if (disableRetry) {
+      options.disableRetry = true;
+    }
+    return options;
   }
 }

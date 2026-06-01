@@ -25,13 +25,13 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 			TproxyPort:     12335,
 			RedirectPort:   12336,
 			DirectPort:     12337,
-			Mtu:            9000,
+			Mtu:            1500,
 			StrictRoute:    true,
 			TunStack:       "mixed",
 		},
 		UrlTestOptions: &URLTestOptions{
-			ConnectionTestUrl: "http://cp.cloudflare.com/",
-			UrlTestInterval:   600 * 1000,
+			ConnectionTestUrl: "https://1.1.1.1",
+			UrlTestInterval:   180 * 1000,
 			// URLTestIdleTimeout: DurationInSeconds(6000),
 		},
 		RouteOptions: &RouteOptions{

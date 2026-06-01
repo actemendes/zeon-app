@@ -68,6 +68,12 @@ class SingboxConfigOption with _$SingboxConfigOption {
 
   Map<String, dynamic> toCoreJson() {
     final map = Map<String, dynamic>.from(toJson());
+    map.remove("site-routing-mode");
+    map.remove("site-routing-include");
+    map.remove("site-routing-exclude");
+    // Canonical key is enable-full-config; keep execute-config-as-is as a legacy alias.
+    map["enable-full-config"] = executeConfigAsIs;
+    map["execute-config-as-is"] = executeConfigAsIs;
     map["rules"] = rules.map((rule) => rule.toCoreJson()).toList();
     return map;
   }

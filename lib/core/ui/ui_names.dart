@@ -32,7 +32,6 @@ abstract final class UiNames {
   static const screenTlsTricks = 'screen_tls_tricks';
   static const screenWarpOptions = 'screen_warp_options';
   static const screenSettings = 'screen_settings';
-  static const screenSiteRouting = 'screen_site_routing';
 
   // Intro + bind modal
   static const imageIntroLogo = 'image_intro_logo';

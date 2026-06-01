@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
+import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/features/connection/data/connection_data_providers.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
@@ -21,34 +23,76 @@ part 'config_option_notifier.g.dart';
 class ConfigOptionNotifier extends _$ConfigOptionNotifier with AppLogger {
   @override
   Future<bool> build() async {
-    final serviceSingboxOptions = ref.read(connectionRepositoryProvider).configOptionsSnapshot;
-
-    ref.listen(ConfigOptions.singboxConfigOptions, (previous, next) async {
-      if (previous == null) return;
-      final isConnectedNow = switch (ref.read(connectionNotifierProvider)) {
-        AsyncData(value: final value) => value.isConnected || value.isSwitching,
-        _ => false,
-      };
-      if (!isConnectedNow) return;
-      if (next != previous && next != serviceSingboxOptions) {
-        if (_lastUpdate == null || DateTime.now().difference(_lastUpdate!) > const Duration(milliseconds: 100)) {
-          _lastUpdate = DateTime.now();
-          if (serviceSingboxOptions?.enableTun != next.enableTun) {
-            loggy.debug("tun option changed, reconnecting");
-            await ref.read(connectionNotifierProvider.notifier).toggleConnection();
-            await ref.read(connectionNotifierProvider.notifier).toggleConnection();
-          } else {
-            final activeProfile = await ref.read(activeProfileProvider.future);
-            return await ref.read(connectionNotifierProvider.notifier).reconnect(activeProfile);
-          }
-          state = const AsyncData(false);
-        }
-      }
+    ref.onDispose(() => _restartTimer?.cancel());
+    ref.listen(ConfigOptions.singboxConfigOptions, (previous, next) {
+      if (previous == null || next == previous) return;
+      _scheduleRestart();
     }, fireImmediately: true);
+    ref.listen(Preferences.disableMemoryLimit, (previous, next) {
+      if (previous == null || next == previous) return;
+      _scheduleRestart(force: true);
+    });
+    if (PlatformUtils.isAndroid) {
+      ref.listen(Preferences.perAppProxyMode, (previous, next) {
+        if (previous == null || next == previous) return;
+        _scheduleRestart(force: true);
+      });
+      ref.listen(Preferences.includeApps, (previous, next) {
+        if (_samePackages(previous, next)) return;
+        _scheduleRestart(force: true);
+      });
+      ref.listen(Preferences.excludeApps, (previous, next) {
+        if (_samePackages(previous, next)) return;
+        _scheduleRestart(force: true);
+      });
+    }
     return false;
   }
 
-  DateTime? _lastUpdate;
+  Timer? _restartTimer;
+  bool _forceRestart = false;
+
+  bool _samePackages(List<String>? previous, List<String> next) =>
+      previous != null && previous.length == next.length && previous.toSet().containsAll(next);
+
+  void _scheduleRestart({Duration delay = const Duration(milliseconds: 200), bool force = false}) {
+    _forceRestart |= force;
+    _restartTimer?.cancel();
+    _restartTimer = Timer(delay, _restartIfNeeded);
+  }
+
+  Future<void> _restartIfNeeded() async {
+    final connection = ref.read(connectionNotifierProvider);
+    final isSwitching = switch (connection) {
+      AsyncData(value: final value) => value.isSwitching,
+      _ => false,
+    };
+    if (isSwitching) {
+      _scheduleRestart(delay: const Duration(milliseconds: 250));
+      return;
+    }
+
+    final isConnected = switch (connection) {
+      AsyncData(value: final value) => value.isConnected,
+      _ => false,
+    };
+    if (!isConnected) {
+      _forceRestart = false;
+      return;
+    }
+
+    final repository = ref.read(connectionRepositoryProvider);
+    final nextOptions = ref.read(ConfigOptions.singboxConfigOptions);
+    if (!_forceRestart && nextOptions == repository.configOptionsSnapshot) return;
+    _forceRestart = false;
+
+    loggy.debug("config options changed, restarting connection");
+    final t = ref.read(translationsProvider).requireValue;
+    ref.read(inAppNotificationControllerProvider).showInfoToast(t.connection.reconnectMsg);
+    final activeProfile = await ref.read(activeProfileProvider.future);
+    await ref.read(connectionNotifierProvider.notifier).restartForConfigChange(activeProfile);
+    state = const AsyncData(false);
+  }
 
   Future<String?> _exportJson(bool excludePrivate) async {
     try {

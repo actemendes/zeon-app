@@ -86,18 +86,37 @@ function Patch-FlutterSecureStorageWindowsPlugin {
     param([Parameter(Mandatory = $true)][string]$WorkingRoot)
 
     $pluginLink = Join-Path $WorkingRoot "windows\flutter\ephemeral\.plugin_symlinks\flutter_secure_storage_windows"
-    if (-not (Test-Path -LiteralPath $pluginLink)) {
-        throw "Plugin symlink not found: $pluginLink. Run 'flutter pub get' first."
-    }
+    $pluginTarget = $null
+    if (Test-Path -LiteralPath $pluginLink) {
+        $pluginItem = Get-Item -LiteralPath $pluginLink
+        if (-not $pluginItem.Target) {
+            throw "Plugin symlink target is empty: $pluginLink"
+        }
 
-    $pluginItem = Get-Item -LiteralPath $pluginLink
-    if (-not $pluginItem.Target) {
-        throw "Plugin symlink target is empty: $pluginLink"
+        $pluginTarget = $pluginItem.Target
+        if ($pluginTarget -is [Array]) {
+            $pluginTarget = $pluginTarget[0]
+        }
     }
+    else {
+        $packageConfigPath = Join-Path $WorkingRoot ".dart_tool\package_config.json"
+        if (-not (Test-Path -LiteralPath $packageConfigPath)) {
+            throw "Package config not found: $packageConfigPath. Run 'flutter pub get' first."
+        }
 
-    $pluginTarget = $pluginItem.Target
-    if ($pluginTarget -is [Array]) {
-        $pluginTarget = $pluginTarget[0]
+        $packageConfig = Get-Content -LiteralPath $packageConfigPath -Raw | ConvertFrom-Json
+        $package = $packageConfig.packages | Where-Object { $_.name -eq "flutter_secure_storage_windows" } | Select-Object -First 1
+        if (-not $package) {
+            throw "Package flutter_secure_storage_windows was not found in $packageConfigPath."
+        }
+
+        $rootUri = [string]$package.rootUri
+        if ($rootUri.StartsWith("file:")) {
+            $pluginTarget = ([Uri]$rootUri).LocalPath
+        }
+        else {
+            $pluginTarget = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $packageConfigPath) $rootUri))
+        }
     }
 
     $cppPath = Join-Path $pluginTarget "windows\flutter_secure_storage_windows_plugin.cpp"
