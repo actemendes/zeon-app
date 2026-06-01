@@ -147,8 +147,10 @@ abstract class ConfigOptions {
 
   static final connectionTestUrl = PreferencesNotifier.create<String, String>(
     "connection-test-url",
-    "http://captive.apple.com/hotspot-detect.html",
+    "https://1.1.1.1",
     possibleValues: List.of([
+      "https://1.1.1.1",
+      "https://zeon-vps.link/generate_204",
       "http://connectivitycheck.gstatic.com/generate_204",
       "http://www.gstatic.com/generate_204",
       "https://www.gstatic.com/generate_204",
@@ -157,7 +159,6 @@ abstract class ConfigOptions {
       "http://kernel.org",
       "http://detectportal.firefox.com",
       "http://captive.apple.com/hotspot-detect.html",
-      "https://1.1.1.1",
       "http://1.1.1.1",
     ]),
     validator: (value) => value.isNotBlank && isUrl(value),
@@ -165,7 +166,7 @@ abstract class ConfigOptions {
 
   static final urlTestInterval = PreferencesNotifier.create<Duration, int>(
     "url-test-interval",
-    const Duration(minutes: 10),
+    const Duration(minutes: 3),
     mapFrom: const IntervalInSecondsConverter().fromJson,
     mapTo: const IntervalInSecondsConverter().toJson,
   );

@@ -30,8 +30,8 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 			TunStack:       "mixed",
 		},
 		UrlTestOptions: &URLTestOptions{
-			ConnectionTestUrl: "http://cp.cloudflare.com/",
-			UrlTestInterval:   600 * 1000,
+			ConnectionTestUrl: "https://1.1.1.1",
+			UrlTestInterval:   180 * 1000,
 			// URLTestIdleTimeout: DurationInSeconds(6000),
 		},
 		RouteOptions: &RouteOptions{

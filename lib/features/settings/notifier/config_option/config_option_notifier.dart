@@ -38,11 +38,11 @@ class ConfigOptionNotifier extends _$ConfigOptionNotifier with AppLogger {
         _scheduleRestart(force: true);
       });
       ref.listen(Preferences.includeApps, (previous, next) {
-        if (previous == null || next == previous) return;
+        if (_samePackages(previous, next)) return;
         _scheduleRestart(force: true);
       });
       ref.listen(Preferences.excludeApps, (previous, next) {
-        if (previous == null || next == previous) return;
+        if (_samePackages(previous, next)) return;
         _scheduleRestart(force: true);
       });
     }
@@ -51,6 +51,9 @@ class ConfigOptionNotifier extends _$ConfigOptionNotifier with AppLogger {
 
   Timer? _restartTimer;
   bool _forceRestart = false;
+
+  bool _samePackages(List<String>? previous, List<String> next) =>
+      previous != null && previous.length == next.length && previous.toSet().containsAll(next);
 
   void _scheduleRestart({Duration delay = const Duration(milliseconds: 200), bool force = false}) {
     _forceRestart |= force;
