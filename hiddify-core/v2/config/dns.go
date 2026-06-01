@@ -42,6 +42,8 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 	if remoteAddr == fallbackAddr {
 		fallbackAddr = "https://1.0.0.1/dns-query"
 	}
+	directPrimaryAddr := getDnsAddress(opt.DirectDnsAddress)
+	directSecondaryAddr := directDNSSecondaryAddress(directPrimaryAddr)
 
 	// if strings.HasPrefix(remoteAddr, "udp://") {
 	// 	remoteAddr = strings.Replace(remoteAddr, "udp://", "tcp://", 1)
@@ -145,6 +147,22 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 	// options.DNS.StaticIPs["ipapi.co"] = []string{"www.speedtest.net", "cloudflare.com"}
 	// options.DNS.StaticIPs["api.ip.sb"] = []string{"www.speedtest.net", "cloudflare.com"}
 	return nil
+}
+
+func directDNSSecondaryAddress(primary string) string {
+	p := strings.ToLower(strings.TrimSpace(primary))
+	if p == "" {
+		return "https://dns.cloudflare.com/dns-query"
+	}
+	// Keep secondary on a different provider/address family target.
+	switch {
+	case strings.Contains(p, "1.1.1.1"), strings.Contains(p, "dns.cloudflare.com"):
+		return "https://8.8.8.8/dns-query"
+	case strings.Contains(p, "8.8.8.8"), strings.Contains(p, "dns.google"):
+		return "https://dns.cloudflare.com/dns-query"
+	default:
+		return "https://dns.cloudflare.com/dns-query"
+	}
 }
 func getAllOutboundsOptions(options *option.Options) []any {
 	outbounds := []any{}
