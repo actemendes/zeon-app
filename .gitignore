@@ -74,3 +74,24 @@ windows/sign.pfx
 windows/sign.cer
 out/ZEON-Windows-Setup-x64.exe
 out/installers/
+
+# Local credentials and runtime profiles
+/zeon-pc
+/zeon-pc.pub
+/configs/
+/active_config.json
+/generated_stable*.json
+
+# Local diagnostics and scratch artifacts
+/out/
+/tmp*
+/screen*.png
+/window*.xml
+/w*.xml
+/fw*.xml
+/log_tmp.txt
+/logcat_bind_check.txt
+/codex_changes_bundle.zip
+/hiddify-core_backup_*/
+/hiddify-core/tmp_*
+*.bak*

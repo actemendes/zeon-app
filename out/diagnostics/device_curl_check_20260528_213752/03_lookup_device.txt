@@ -1,9 +1,0 @@
-﻿curl: (6) Could not resolve host: mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7
-curl: (6) Could not resolve host: application
-curl: (3) URL rejected: Bad hostname
-curl: (3) URL rejected: Bad hostname
-curl: (3) URL rejected: Bad hostname
-curl: (3) URL rejected: Bad hostname
-curl: (3) URL rejected: Bad hostname
-curl: (3) URL rejected: Bad hostname
-{"ok":false,"error":{"code":"UNAUTHORIZED","message":"Valid x-api-key header is required."}}nHTTPnHTTPnHTTPnHTTPnHTTPnHTTPnHTTPnHTTPnHTTP

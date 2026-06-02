@@ -1,5 +1,0 @@
-﻿CMD: curl.exe 
-
-curl: try 'curl --help' for more information
-
-EXIT_CODE=2

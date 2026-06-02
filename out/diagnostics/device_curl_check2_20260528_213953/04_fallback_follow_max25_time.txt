@@ -1,2 +1,0 @@
-﻿curl: (28) Operation timed out after 25555 milliseconds with 20474 bytes received
-200 0.277034 0.492950 0.728602 2.668278 25.554666 20474

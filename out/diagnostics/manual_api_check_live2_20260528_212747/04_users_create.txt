@@ -1,7 +1,0 @@
-﻿{"ok":true,"data":{"user":{"user_id":649669380,"login":"happy_fox_153","email":null},"subscription":{"subscription_id":"8489007b-8479-4f80-a463-2769e2656549","vpn_uuid":"93c53af4-5f29-43c9-b9e0-7401039e59ab","status":"active","expires_at":"2026-06-26T07:40:00+00:00"},"connection":{"raw_url":"https://zeon-vps.link/open/649669380?platform=st","open_url":"https://zeon-vps.link/open/649669380?platform=st","subscription_url":"https://130.49.151.173/subscription/93c53af4-5f29-43c9-b9e0-7401039e59ab"}}}
-HTTP 200
-DNS 0.000049s
-CONNECT 0.027737s
-TLS 0.066264s
-TTFB 0.110734s
-TOTAL 0.110789s

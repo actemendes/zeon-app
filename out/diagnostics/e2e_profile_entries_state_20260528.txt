@@ -1,5 +1,0 @@
-initial_after_install_restore: count=1
-  ('7591ded9-7d5e-4bc5-8844-301d692dad2c', 'happy fox 153', 1, 'https://zeon-vps.link/open/649669380', 'remote')
-after_manual_clean_fail: count=0
-after_success_rerun: count=1
-  ('91b981fa-3787-404a-9bf9-a15f6218da57', 'happy fox 153', 1, 'https://130.49.151.173/open/649669380', 'remote')
