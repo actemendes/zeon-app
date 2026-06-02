@@ -1,6 +1,5 @@
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/localization/locale_preferences.dart';
-import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/environment.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
@@ -17,22 +16,8 @@ import 'package:version/version.dart';
 part 'app_update_notifier.g.dart';
 
 @riverpod
-Upgrader upgrader(Ref ref) {
-  final updateChannel = UpdateChannel.read();
-  final appCastUrl = Constants.appCastUrl(updateChannel);
-  return Upgrader(
-    storeController: UpgraderStoreController(
-      onAndroid: () => UpgraderAppcastStore(appcastURL: appCastUrl),
-      oniOS: () => UpgraderAppStore(),
-      onLinux: () => UpgraderAppcastStore(appcastURL: appCastUrl),
-      onWindows: () => UpgraderAppcastStore(appcastURL: appCastUrl),
-      onMacOS: () => UpgraderAppcastStore(appcastURL: appCastUrl),
-      onWeb: () => UpgraderAppcastStore(appcastURL: appCastUrl),
-    ),
-    // durationUntilAlertAgain: const Duration(hours: 12),
-    messages: UpgraderMessages(code: ref.watch(localePreferencesProvider).languageCode),
-  );
-}
+Upgrader upgrader(Ref ref) =>
+    Upgrader(messages: UpgraderMessages(code: ref.watch(localePreferencesProvider).languageCode));
 
 @Riverpod(keepAlive: true)
 class AppUpdateNotifier extends _$AppUpdateNotifier with AppLogger {
@@ -44,6 +29,25 @@ class AppUpdateNotifier extends _$AppUpdateNotifier with AppLogger {
     key: 'ignored_release_version',
     defaultValue: null,
   );
+
+  PreferencesEntry<String?, dynamic> get _lastAutoNotifiedReleasePref => PreferencesEntry(
+    preferences: ref.read(sharedPreferencesProvider).requireValue,
+    key: 'last_auto_notified_release_${UpdateChannel.read().key}',
+    defaultValue: null,
+  );
+
+  Future<RemoteVersionEntity?> checkAutomatically() async {
+    final result = await check();
+    if (result case AppUpdateStateAvailable(:final versionInfo)) {
+      if (_lastAutoNotifiedReleasePref.read() == versionInfo.releaseTag) {
+        loggy.debug("release already notified automatically [${versionInfo.releaseTag}]");
+        return null;
+      }
+      await _lastAutoNotifiedReleasePref.write(versionInfo.releaseTag);
+      return versionInfo;
+    }
+    return null;
+  }
 
   Future<AppUpdateState> check() async {
     loggy.debug("checking for update");

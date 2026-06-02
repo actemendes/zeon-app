@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:hiddify/core/model/environment.dart';
 
 abstract class Constants {
   static const appName = "ZEON";
@@ -11,9 +10,6 @@ abstract class Constants {
   static const licenseUrl = openSourceLicensesUrl;
   static const githubReleasesApiUrl = "https://api.github.com/repos/actemendes/zeon-app/releases";
   static const githubLatestReleaseUrl = "https://github.com/actemendes/zeon-app/releases/latest";
-  static const appCastStableUrl = "https://raw.githubusercontent.com/actemendes/zeon-app/main/appcast-stable.xml";
-  static const appCastBetaUrl = "https://raw.githubusercontent.com/actemendes/zeon-app/main/appcast-beta.xml";
-  static String appCastUrl(UpdateChannel channel) => channel == UpdateChannel.beta ? appCastBetaUrl : appCastStableUrl;
   static const privacyPolicyUrl =
       "https://zeon-vps.net/faq/?k=HHhBa3AAQleuzYt3Tl2GYycjl8HGG_a_m0lucqCqJDg#/zeon-app-privacy";
   static const termsAndConditionsUrl =

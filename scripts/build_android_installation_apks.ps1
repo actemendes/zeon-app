@@ -142,6 +142,9 @@ $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
 
 Push-Location $repoRoot
+$previousGradleOpts = $env:GRADLE_OPTS
+$gradlePackagingOpts = "-Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false"
+$env:GRADLE_OPTS = (@($previousGradleOpts, $gradlePackagingOpts) | Where-Object { $_ }) -join " "
 try {
     Assert-Command "flutter"
     Assert-Command "dart"
@@ -197,6 +200,12 @@ try {
     Copy-AndroidInstallersToOut -RepoRoot $repoRoot -Artifacts $Artifacts -BuildMode $BuildMode -AppVersion $appVersion
 }
 finally {
+    if ($null -eq $previousGradleOpts) {
+        Remove-Item Env:\GRADLE_OPTS -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:GRADLE_OPTS = $previousGradleOpts
+    }
     Pop-Location
 }
 

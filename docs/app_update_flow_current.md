@@ -1,14 +1,22 @@
 ﻿# ZEON: текущая схема обновлений приложения
 
-Дата актуализации: 2026-05-13
+Дата актуализации: 2026-06-02
 
-## 1) Архитектура (без изменений)
+## 1) Архитектура по типу релиза
 
-Цепочка обновлений остается прежней:
+Для обычных сборок (`Release.general`) используется единый источник данных:
 
-`About -> AppUpdateNotifier -> AppUpdateRepository -> UpgradeAlert`
+`App startup -> AppUpdateNotifier -> AppUpdateRepository -> GitHub Releases`
 
-Отдельный update-сервер не используется. Источник версии и файлов обновления: GitHub Releases + GitHub Appcast.
+Ручная проверка использует тот же путь:
+
+`Settings -> AppUpdateNotifier -> AppUpdateRepository -> GitHub Releases`
+
+Для Android-сборки Google Play (`Release.googlePlay`) сохранен отдельный магазинный путь:
+
+`App startup -> UpgradeAlert -> UpgraderPlayStore -> Google Play`
+
+Отдельный update-сервер не используется.
 
 ## 2) Канал обновлений `stable` / `beta`
 
@@ -21,25 +29,53 @@
 
 Чтение канала реализовано через `UpdateChannel.read()` (`String.fromEnvironment("update_channel")`).
 
-## 3) Используемые URL
-
-- `ZEON_RELEASES_API_URL=https://api.github.com/repos/actemendes/zeon-app/releases`
-- `ZEON_LATEST_RELEASE_URL=https://github.com/actemendes/zeon-app/releases/latest`
-- `ZEON_APPCAST_STABLE_URL=https://raw.githubusercontent.com/actemendes/zeon-app/main/appcast-stable.xml`
-- `ZEON_APPCAST_BETA_URL=https://raw.githubusercontent.com/actemendes/zeon-app/main/appcast-beta.xml`
-
-## 4) Ручная проверка из About (`checkForUpdate`)
-
-`AppUpdateNotifier.check()` передает в `AppUpdateRepository.getLatestVersion()`:
+Для обычных сборок канал влияет на выбор релиза из GitHub Releases:
 
 - `stable` -> `includePreReleases=false`
 - `beta` -> `includePreReleases=true`
 
-State-machine не меняется.
+## 3) Используемые URL
 
-### Выбор ссылки `Update now` (из одного Release -> Assets)
+- `ZEON_RELEASES_API_URL=https://api.github.com/repos/actemendes/zeon-app/releases`
+- `ZEON_LATEST_RELEASE_URL=https://github.com/actemendes/zeon-app/releases/latest`
 
-При разборе GitHub Release ссылка теперь выбирается так:
+## 4) Автоматическая проверка обычной сборки
+
+После первого отображения интерфейса `App` один раз за запуск процесса вызывает
+`AppUpdateNotifier.checkAutomatically()`.
+
+Поведение:
+
+1. Выполняется невидимый запрос к GitHub Releases.
+2. Если обновления нет или запрос завершился ошибкой, пользователь не получает уведомление.
+3. Если новая версия найдена, проверяется preference:
+   - `last_auto_notified_release_stable`
+   - `last_auto_notified_release_beta`
+4. Если `releaseTag` уже сохранен, повторное уведомление не показывается.
+5. Если `releaseTag` новый, он сохраняется и пользователю показывается диалог обновления.
+
+Нажатие `Позже` не приводит к повторному показу для той же версии. При появлении
+следующего `releaseTag` пользователь получит одно новое уведомление.
+
+Возврат приложения из фона не считается новым заходом и не запускает повторную проверку.
+
+## 5) Ручная проверка из Settings
+
+Кнопка `Проверить обновления` находится на первом экране настроек перед пунктом
+`О программе`. В подзаголовке отображается текущая версия приложения.
+
+Ручная проверка:
+
+- всегда выполняет новый запрос к GitHub Releases;
+- не блокируется маркером автоматического уведомления;
+- показывает диалог обновления, если новая версия найдена;
+- показывает toast, если установлена последняя версия или запрос завершился ошибкой.
+
+В Google Play-сборке кнопка скрыта: обновления обрабатываются магазинным flow.
+
+## 6) Выбор ссылки `Обновить сейчас`
+
+При разборе одного GitHub Release ссылка выбирается из `Assets`:
 
 - Android: приоритет `*.apk`
 - Windows: приоритет `*.exe`, fallback `*.msi`, затем `*.zip`
@@ -47,43 +83,36 @@ State-machine не меняется.
 
 Если подходящий asset не найден, используется fallback на `html_url` страницы релиза.
 
-## 5) Авто-проверка (`UpgradeAlert`)
+## 7) Google Play
 
-Источник обновлений по платформе:
+`UpgradeAlert` не удален. Он создается только для `Release.googlePlay`.
 
-- Android: только `UpgraderAppcastStore` (ветка Play Store убрана)
-- iOS: `UpgraderAppStore` (fallback, iOS-канал фактически не используется)
-- Linux/Windows/macOS/Web: `UpgraderAppcastStore`
+Для Android стандартный `UpgraderStoreController` использует `UpgraderPlayStore`.
+Собственный GitHub checker для этого типа релиза отключен через
+`allowCustomUpdateChecker=false`.
 
-URL appcast выбирается по `update_channel`:
+## 8) Appcast-файлы
 
-- `stable` -> `appcast-stable.xml`
-- `beta` -> `appcast-beta.xml`
-
-## 6) Appcast файлы в корне репозитория
+Файлы остаются в корне репозитория как legacy-артефакты:
 
 - `appcast-stable.xml`
 - `appcast-beta.xml`
 
-В каждом файле оставлены записи только для:
+Текущая runtime-логика приложения их не запрашивает. Поддерживать appcast при обычном
+релизе больше не требуется.
 
-- `android`
-- `windows`
-- `macos`
+## 9) Нейминг ассетов обычного релиза
 
-iOS item отсутствует.
-
-## 7) Нейминг ассетов (ожидаемый)
-
-Сборочный и релизный процесс должен публиковать (в одном GitHub Release -> Assets):
+Сборочный и релизный процесс должен публиковать в одном GitHub Release:
 
 - `Zeon-Android-universal.apk`
 - `Zeon-Windows-Setup-x64.exe`
 - `Zeon-MacOS.dmg`
 
-Если фактические имена отличаются, парсер поддерживает поиск по regex/contains и расширениям файлов с указанными приоритетами.
+Если фактические имена отличаются, парсер поддерживает поиск по regex/contains и
+расширениям файлов с указанными приоритетами.
 
-## 8) Примеры запуска
+## 10) Примеры запуска
 
 - Stable:
   - `flutter run --dart-define=update_channel=stable`
@@ -91,9 +120,16 @@ iOS item отсутствует.
 - Beta:
   - `flutter run --dart-define=update_channel=beta`
   - `flutter build apk --dart-define=update_channel=beta`
+- Google Play:
+  - `flutter build appbundle --dart-define=release=google-play`
 
-## 9) Smoke-check после релиза
+## 11) Smoke-check после релиза
 
-1. `stable`: prerelease не предлагается в ручной проверке.
-2. `beta`: prerelease предлагается в ручной проверке.
-3. `Update now`: ведет на прямой asset (`browser_download_url`) для текущей платформы; если asset не найден, открывается страница релиза (`html_url`).
+1. `stable`: prerelease не предлагается.
+2. `beta`: prerelease предлагается.
+3. При первом запуске с новым `releaseTag` появляется один диалог обновления.
+4. При повторном запуске с тем же `releaseTag` диалог не появляется.
+5. Кнопка в Settings вручную находит тот же релиз и открывает диалог повторно.
+6. `Обновить сейчас` ведет на прямой asset текущей платформы; если asset не найден,
+   открывается страница релиза.
+7. В `google-play` сборке GitHub checker не запускается, используется Google Play.

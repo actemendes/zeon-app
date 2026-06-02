@@ -109,6 +109,12 @@ require_directory() {
 require_command go
 require_directory "$core_dir"
 
+required_go_version="$(awk '$1 == "go" { print $2; exit }' "$core_dir/go.mod")"
+if [ -n "$required_go_version" ]; then
+  export GOTOOLCHAIN="go$required_go_version"
+fi
+echo "Using Go toolchain: $(go version)"
+
 if [ "$skip_go_mod_download" != "1" ]; then
   echo "Downloading Go modules..."
   (cd "$core_dir" && go mod download)
@@ -167,7 +173,26 @@ for platform in "${platforms[@]}"; do
       require_command x86_64-w64-mingw32-gcc
 
       echo "Building Windows core DLL, Cronet DLL and CLI..."
-      make -C "$core_dir" windows-amd64
+      windows_backup_dir="$(mktemp -d)"
+      for artifact in hiddify-core.dll libcronet.dll HiddifyCli.exe; do
+        if [ -f "$core_dir/bin/$artifact" ]; then
+          cp -f "$core_dir/bin/$artifact" "$windows_backup_dir/$artifact"
+        fi
+      done
+      if ! make -C "$core_dir" windows-amd64; then
+        for artifact in hiddify-core.dll libcronet.dll HiddifyCli.exe; do
+          if [ -f "$windows_backup_dir/$artifact" ]; then
+            cp -f "$windows_backup_dir/$artifact" "$core_dir/bin/$artifact"
+          fi
+        done
+        rm -rf "$windows_backup_dir"
+        exit 1
+      fi
+      if [ ! -f "$core_dir/bin/libcronet.dll" ] && [ -f "$windows_backup_dir/libcronet.dll" ]; then
+        echo "Cronet DLL was not rebuilt; keeping the previous compatible DLL."
+        cp -f "$windows_backup_dir/libcronet.dll" "$core_dir/bin/libcronet.dll"
+      fi
+      rm -rf "$windows_backup_dir"
       ls -lh \
         "$core_dir/bin/hiddify-core.dll" \
         "$core_dir/bin/libcronet.dll" \
@@ -202,12 +227,15 @@ done
 echo
 echo "Requested hiddify-core artifacts were rebuilt successfully."
 '@
+$bashScript = $bashScript -replace "`r`n?", "`n"
+$tempBashScript = Join-Path ([System.IO.Path]::GetTempPath()) ("rebuild-hiddify-core-" + [guid]::NewGuid().ToString("N") + ".sh")
+[System.IO.File]::WriteAllText($tempBashScript, $bashScript, [System.Text.UTF8Encoding]::new($false))
+$escapedTempBashScript = $tempBashScript.Replace("\", "\\")
+$wslBashScript = Invoke-Wsl -Arguments @("wslpath", "-a", "-u", $escapedTempBashScript) -CaptureOutput
 
 $bashArguments = @(
     "bash",
-    "-lc",
-    $bashScript,
-    "rebuild-hiddify-core",
+    $wslBashScript,
     $wslRepoRoot,
     $skipGoModDownloadValue,
     $skipGomobileInitValue,
@@ -217,13 +245,18 @@ $bashArguments = @(
 Write-Host "Repository in WSL: $wslRepoRoot"
 Write-Host "Platforms: $($selectedPlatforms -join ', ')"
 
-Invoke-Wsl -Arguments @("bash", "-n", "-c", $bashScript)
+try {
+    Invoke-Wsl -Arguments @("bash", "-n", $wslBashScript)
 
-if ($DryRun) {
-    Write-Host ""
-    Write-Host "Dry run: WSL build was not started."
-    Write-Host "Command: wsl.exe bash -lc <embedded-build-script> rebuild-hiddify-core $wslRepoRoot $skipGoModDownloadValue $skipGomobileInitValue $installWebDependenciesValue $($selectedPlatforms -join ' ')"
-    exit 0
+    if ($DryRun) {
+        Write-Host ""
+        Write-Host "Dry run: WSL build was not started."
+        Write-Host "Command: wsl.exe bash <temporary-build-script> $wslRepoRoot $skipGoModDownloadValue $skipGomobileInitValue $installWebDependenciesValue $($selectedPlatforms -join ' ')"
+    }
+    else {
+        Invoke-Wsl -Arguments $bashArguments
+    }
 }
-
-Invoke-Wsl -Arguments $bashArguments
+finally {
+    Remove-Item -LiteralPath $tempBashScript -Force -ErrorAction SilentlyContinue
+}

@@ -5,12 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:hiddify/core/directories/directories_provider.dart';
+import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/localization/locale_extensions.dart';
 import 'package:hiddify/core/localization/locale_preferences.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
-import 'package:hiddify/core/notification/in_app_notification_controller.dart';
+import 'package:hiddify/core/model/environment.dart';
+import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/go_router_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/theme/app_theme.dart';
@@ -63,7 +64,8 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
     final locale = ref.watch(localePreferencesProvider);
     final themeMode = ref.watch(themePreferencesProvider);
     final theme = AppTheme(themeMode, locale.preferredFontFamily);
-    final upgrader = ref.watch(upgraderProvider);
+    final appInfo = ref.watch(appInfoProvider).requireValue;
+    final upgrader = appInfo.release == Release.googlePlay ? ref.watch(upgraderProvider) : null;
     final activeBreakpoint = Breakpoint(context).activeBreakpoint;
 
     ref.listen(foregroundProfilesUpdateNotifierProvider, (_, _) {});
@@ -77,6 +79,17 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
       });
       return null;
     }, [activeBreakpoint]);
+    useEffect(() {
+      if (appInfo.release != Release.general) return null;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final newVersion = await ref.read(appUpdateNotifierProvider.notifier).checkAutomatically();
+        if (!context.mounted || newVersion == null) return;
+        await ref
+            .read(dialogNotifierProvider.notifier)
+            .showNewVersion(currentVersion: appInfo.presentVersion, newVersion: newVersion, canIgnore: false);
+      });
+      return null;
+    }, [appInfo.release]);
     return WindowWrapper(
       ShortcutWrapper(
         ToastificationWrapper(
@@ -95,13 +108,16 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
                   title: Constants.appName,
                   builder: (context, child) {
                     final theme = Theme.of(context);
-                    child = UpgradeAlert(
-                      upgrader: upgrader,
-                      navigatorKey: router.routerDelegate.navigatorKey,
-                      child: child ?? const SizedBox(),
-                    );
+                    var appChild = child ?? const SizedBox();
+                    if (upgrader != null) {
+                      appChild = UpgradeAlert(
+                        upgrader: upgrader,
+                        navigatorKey: router.routerDelegate.navigatorKey,
+                        child: appChild,
+                      );
+                    }
                     if (kDebugMode && _debugAccessibility) {
-                      return AccessibilityTools(checkFontOverflows: true, child: child);
+                      return AccessibilityTools(checkFontOverflows: true, child: appChild);
                     }
                     final isDark = theme.brightness == Brightness.dark;
                     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -112,7 +128,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
                         systemNavigationBarColor: theme.scaffoldBackgroundColor,
                         systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
                       ),
-                      child: child,
+                      child: appChild,
                     );
                   },
                 );

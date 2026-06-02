@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/ui/ui_names.dart';
+import 'package:hiddify/features/app_update/notifier/app_update_notifier.dart';
+import 'package:hiddify/features/app_update/notifier/app_update_state.dart';
 import 'package:hiddify/features/settings/notifier/config_option/config_option_notifier.dart';
 import 'package:hiddify/features/settings/notifier/reset_tunnel/reset_tunnel_notifier.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -21,8 +25,7 @@ enum ConfigOptionSection {
 }
 
 class SettingsPage extends HookConsumerWidget {
-  SettingsPage({super.key, String? section})
-    : section = _parseSection(section);
+  SettingsPage({super.key, String? section}) : section = _parseSection(section);
 
   final ConfigOptionSection? section;
 
@@ -37,6 +40,8 @@ class SettingsPage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    final appInfo = ref.watch(appInfoProvider).requireValue;
+    final appUpdateState = ref.watch(appUpdateNotifierProvider);
     // final scrollController = useScrollController();
 
     // useMemoized(
@@ -178,6 +183,18 @@ class SettingsPage extends HookConsumerWidget {
                 },
               ),
             ),
+          if (appInfo.release.allowCustomUpdateChecker)
+            Material(
+              child: ListTile(
+                leading: const Icon(Icons.system_update_alt_rounded),
+                title: Text(t.pages.about.checkForUpdate),
+                subtitle: Text("${t.common.version} ${appInfo.presentVersion}"),
+                trailing: appUpdateState is AppUpdateStateChecking
+                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh_rounded),
+                onTap: appUpdateState is AppUpdateStateChecking ? null : () => _checkForUpdate(context, ref),
+              ),
+            ),
           if (Breakpoint(context).isMobile()) ...[
             SettingsSection(
               title: t.pages.about.title,
@@ -188,6 +205,26 @@ class SettingsPage extends HookConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+Future<void> _checkForUpdate(BuildContext context, WidgetRef ref) async {
+  final result = await ref.read(appUpdateNotifierProvider.notifier).check();
+  if (!context.mounted) return;
+
+  final t = ref.read(translationsProvider).requireValue;
+  final appInfo = ref.read(appInfoProvider).requireValue;
+  switch (result) {
+    case AppUpdateStateAvailable(:final versionInfo) || AppUpdateStateIgnored(:final versionInfo):
+      await ref
+          .read(dialogNotifierProvider.notifier)
+          .showNewVersion(currentVersion: appInfo.presentVersion, newVersion: versionInfo, canIgnore: false);
+    case AppUpdateStateError(:final error):
+      CustomToast.error(t.presentShortError(error)).show(context);
+    case AppUpdateStateNotAvailable():
+      CustomToast.success(t.pages.about.notAvailableMsg).show(context);
+    case AppUpdateStateInitial() || AppUpdateStateDisabled() || AppUpdateStateChecking():
+      return;
   }
 }
 
