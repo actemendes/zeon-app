@@ -22,6 +22,7 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion8Migration(sharedPreferences),
       PreferencesVersion9Migration(sharedPreferences),
       PreferencesVersion10Migration(sharedPreferences),
+      PreferencesVersion11Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -326,6 +327,25 @@ class PreferencesVersion10Migration extends PreferencesMigrationStep with InfraL
     } else if (canonical != null && legacy == null) {
       loggy.debug("v10: copying [enable-full-config]=$canonical to [execute-config-as-is]");
       await sharedPreferences.setBool("execute-config-as-is", canonical);
+    }
+  }
+}
+
+class PreferencesVersion11Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion11Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    final balancerStrategy = sharedPreferences.getString("balancer-strategy");
+    if (balancerStrategy == null || balancerStrategy == "sticky-sessions") {
+      loggy.debug("v11: changing balancer-strategy from [$balancerStrategy] to [round-robin]");
+      await sharedPreferences.setString("balancer-strategy", "round-robin");
+    }
+
+    final bypassLan = sharedPreferences.getBool("bypass-lan");
+    if (bypassLan == null || bypassLan == false) {
+      loggy.debug("v11: changing bypass-lan from [$bypassLan] to [true]");
+      await sharedPreferences.setBool("bypass-lan", true);
     }
   }
 }
