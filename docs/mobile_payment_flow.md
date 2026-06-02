@@ -1,6 +1,6 @@
 ﻿# Мобильный payment flow (архитектура payment-session)
 
-Приложение: `com.zeon.app`.
+Приложение: `com.zeon.hiddify`.
 
 Документ фиксирует текущее поведение оплаты в приложении: единый `user_id`, создание `payment_session_id`, возврат через deep link, проверку статуса, фоновое восстановление без deep link и обновление managed-профиля.
 
