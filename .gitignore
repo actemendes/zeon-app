@@ -95,3 +95,4 @@ out/installers/
 /hiddify-core_backup_*/
 /hiddify-core/tmp_*
 *.bak*
+pubspec.lock
