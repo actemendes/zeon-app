@@ -11,20 +11,22 @@ import 'package:hiddify/core/directories/directories_provider.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/features/connection/model/connection_failure.dart';
+import 'package:hiddify/features/log/model/log_level.dart' as config_log_level;
+import 'package:hiddify/features/settings/data/config_option_repository.dart';
+import 'package:hiddify/hiddifycore/core_interface/core_interface_wrapper_stub.dart'
+    if (dart.library.io) 'package:hiddify/hiddifycore/core_interface/core_interface_wrapper.dart';
 import 'package:hiddify/hiddifycore/generated/v2/config/route_rule.pb.dart' as route_rule;
 import 'package:hiddify/hiddifycore/generated/v2/hcommon/common.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:hiddify/hiddifycore/init_signal.dart';
-import 'package:hiddify/singbox/model/singbox_config_option.dart';
-import 'package:hiddify/features/log/model/log_level.dart' as config_log_level;
 import 'package:hiddify/singbox/model/core_status.dart';
+import 'package:hiddify/singbox/model/singbox_config_enum.dart';
+import 'package:hiddify/singbox/model/singbox_config_option.dart';
 import 'package:hiddify/singbox/model/warp_account.dart';
-
-import 'package:hiddify/hiddifycore/core_interface/core_interface_wrapper_stub.dart'
-    if (dart.library.io) 'package:hiddify/hiddifycore/core_interface/core_interface_wrapper.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
+import 'package:hiddify/utils/windows_privilege_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:loggy/loggy.dart' as loggyl;
 import 'package:rxdart/rxdart.dart';
@@ -496,6 +498,11 @@ class HiddifyCoreService with InfraLogger {
           return right(unit);
         }
 
+        if (_isMissingWindowsTunPrivilege()) {
+          loggy.warning("VPN mode on Windows requires administrator privileges");
+          return left(const ConnectionFailure.missingPrivilege());
+        }
+
         if (_lifecycleState == _CoreLifecycleState.started && currentState == const CoreStatus.started()) {
           loggy.debug("start ignored: already started");
           return right(unit);
@@ -539,6 +546,9 @@ class HiddifyCoreService with InfraLogger {
           loggy.error("failed to start bg core: $e");
           ref.read(coreRestartSignalProvider.notifier).restart();
           _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc error on start");
+          if (_isMissingWindowsTunPrivilege()) {
+            return left(const ConnectionFailure.missingPrivilege());
+          }
           if (e.code == StatusCode.unavailable) {
             return left(const ConnectionFailure.unexpected("background core is not started yet!"));
           }
@@ -550,6 +560,18 @@ class HiddifyCoreService with InfraLogger {
         return right(unit);
       }),
     );
+  }
+
+  bool _isMissingWindowsTunPrivilege() {
+    if (!PlatformUtils.isWindows || ref.read(ConfigOptions.serviceMode) != ServiceMode.tun) {
+      return false;
+    }
+    try {
+      return isWindowsProcessElevated() == false;
+    } catch (e, st) {
+      loggy.warning("failed to check Windows process privilege", e, st);
+      return false;
+    }
   }
 
   TaskEither<String, Unit> stop() {
@@ -1052,17 +1074,23 @@ class HiddifyCoreService with InfraLogger {
     if (!core.isSingleChannel()) {
       try {
         bgStillActive = await core.isActiveBg();
-      } catch (_) {}
+      } catch (_) {
+        // Best-effort lifecycle sync; fall through as inactive when bg check fails.
+      }
     }
     if (!core.isSingleChannel()) {
       await stopListenSingle("fg");
       await stopListenSingle("bg");
       try {
         await core.fgClient.close(CloseRequest(mode: SetupMode.GRPC_NORMAL_INSECURE));
-      } catch (e) {}
+      } catch (_) {
+        // Best-effort close; the alternate mode below may still succeed.
+      }
       try {
         await core.fgClient.close(CloseRequest(mode: SetupMode.GRPC_NORMAL));
-      } catch (e) {}
+      } catch (_) {
+        // Best-effort close during shutdown.
+      }
     }
     if (bgStillActive) {
       _transitionLifecycle(_CoreLifecycleState.started, reason: "close front while bg active");

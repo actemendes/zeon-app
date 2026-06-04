@@ -16,6 +16,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class ConfigOptions {
+  static const _mobileUrlTestInterval = Duration(minutes: 3);
+  static const _desktopUrlTestInterval = Duration(minutes: 15);
+
   static final serviceMode = PreferencesNotifier.create<ServiceMode, String>(
     "service-mode",
     ServiceMode.defaultMode,
@@ -166,7 +169,8 @@ abstract class ConfigOptions {
 
   static final urlTestInterval = PreferencesNotifier.create<Duration, int>(
     "url-test-interval",
-    const Duration(minutes: 3),
+    _mobileUrlTestInterval,
+    defaultValueFunction: (_) => PlatformUtils.isDesktop ? _desktopUrlTestInterval : _mobileUrlTestInterval,
     mapFrom: const IntervalInSecondsConverter().fromJson,
     mapTo: const IntervalInSecondsConverter().toJson,
   );

@@ -11,7 +11,7 @@ ifeq ($(OS),Windows_NT)
 Not available for Windows! use bash in WSL
 endif
 CRONET_GO_VERSION := $(shell cat hiddify-sing-box/.github/CRONET_GO_VERSION)
-CRONET_GO_MODULE_VERSION := $(shell go list -m -f '{{.Version}}' github.com/sagernet/cronet-go)
+CRONET_WINDOWS_AMD64_DIR := $(shell go list -m -f '{{.Dir}}' github.com/sagernet/cronet-go/lib/windows_amd64)
 TAGS=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack
 IOS_ADD_TAGS=with_dhcp,with_low_memory,with_purego
 MACOS_ADD_TAGS=with_dhcp
@@ -68,12 +68,14 @@ webui:
 .PHONY: build
 windows-amd64: prepare
 	rm -rf $(BINDIR)/*
-	go run -v "github.com/sagernet/cronet-go/cmd/build-naive@$(CRONET_GO_MODULE_VERSION)" extract-lib --target windows/amd64 -o $(BINDIR)/
+	mkdir -p $(BINDIR)
+	cp "$(CRONET_WINDOWS_AMD64_DIR)/libcronet.dll" "$(BINDIR)/libcronet.dll"
+	test -f "$(BINDIR)/libcronet.dll"
 	env GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc  $(GOBUILDLIB) -tags $(TAGS),$(WINDOWS_ADD_TAGS)   -o $(BINDIR)/$(LIBNAME).dll ./platform/desktop
 	echo "core built, now building cli" 
 	ls -R $(BINDIR)/
 	go install -mod=readonly github.com/akavel/rsrc@latest ||echo "rsrc error in installation"
-	go run ./cli tunnel exit
+	go run ./cmd/main tunnel exit
 	cp $(BINDIR)/$(LIBNAME).dll ./$(LIBNAME).dll
 	$$(go env GOPATH)/bin/rsrc -ico ./assets/hiddify-cli.ico -o ./cmd/bydll/cli.syso ||echo "rsrc error in syso"
 	env GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc CGO_LDFLAGS="$(LIBNAME).dll" $(GOBUILDSRV) -o $(BINDIR)/$(CLINAME).exe ./cmd/bydll
