@@ -29,6 +29,46 @@ if (localPropertiesFile.exists()) {
     }
 }
 
+def readPubspecAppVersion = {
+    def pubspecFile = rootProject.file('../pubspec.yaml')
+    if (!pubspecFile.exists()) {
+        throw new GradleException("pubspec.yaml not found: ${pubspecFile}")
+    }
+
+    def versionLine = pubspecFile.readLines('UTF-8').find { it ==~ /^\s*version:\s*.+$/ }
+    if (versionLine == null) {
+        throw new GradleException("Could not find 'version:' in ${pubspecFile}")
+    }
+
+    def rawVersion = versionLine.split(':', 2)[1].trim()
+        .replaceAll(/\s+#.*$/, '')
+        .replaceAll(/^["']|["']$/, '')
+    def versionParts = rawVersion.split(/\+/, 2)
+    def versionName = versionParts[0]
+    def semver = versionName =~ /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/
+    if (!semver.matches()) {
+        throw new GradleException("Unsupported pubspec version '${rawVersion}'. Expected 'x.y.z' or 'x.y.z+buildNumber'.")
+    }
+
+    def versionCode
+    if (versionParts.length == 2 && versionParts[1].trim()) {
+        if (!(versionParts[1] ==~ /^\d+$/)) {
+            throw new GradleException("Android versionCode must be numeric in pubspec version '${rawVersion}'.")
+        }
+        versionCode = versionParts[1].toInteger()
+    } else {
+        versionCode = semver[0][1].toInteger() * 10000 + semver[0][2].toInteger() * 100 + semver[0][3].toInteger()
+    }
+
+    if (versionCode < 1) {
+        throw new GradleException("Android versionCode must be positive in pubspec version '${rawVersion}'.")
+    }
+
+    return [name: versionName, code: versionCode]
+}
+
+def pubspecAppVersion = readPubspecAppVersion()
+
 boolean hasKeyStore = false
 
 def keystoreProperties = new Properties()
@@ -47,9 +87,9 @@ if (keystorePropertiesFile.exists()) {
     println "+++"
 }
 
-def flutterVersionCode = localProperties.getProperty('flutter.versionCode')?: '1'
-
-def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '1.0'
+// Keep pubspec.yaml as the source of truth, even when local.properties is stale.
+def flutterVersionCode = pubspecAppVersion.code.toString()
+def flutterVersionName = pubspecAppVersion.name
 
 android {
     namespace 'com.hiddify.hiddify'

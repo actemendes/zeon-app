@@ -3,12 +3,29 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
+import 'package:hiddify/core/http_client/http_client_provider.dart';
+import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:hiddify/features/mobile/data/mobile_embedded_bootstrap_profile_service.dart';
 import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
+import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/data/profile_data_source.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+final mobileBootstrapImportServiceProvider = Provider<MobileBootstrapImportService>((ref) {
+  final preferences = ref.read(sharedPreferencesProvider).requireValue;
+  return MobileBootstrapImportService(
+    httpClient: ref.read(httpClientProvider),
+    stableDeviceIdService: StableDeviceIdService(preferences: preferences),
+    profileDataSource: ref.read(profileDataSourceProvider),
+    connLinkImportService: ref.read(mobileConnLinkImportServiceProvider),
+    embeddedProfileService: ref.read(mobileEmbeddedBootstrapProfileServiceProvider),
+    preferences: preferences,
+  );
+});
 
 class MobileBootstrapImportService with InfraLogger {
   MobileBootstrapImportService({
@@ -16,11 +33,13 @@ class MobileBootstrapImportService with InfraLogger {
     required StableDeviceIdService stableDeviceIdService,
     required ProfileDataSource profileDataSource,
     required MobileConnLinkImportService connLinkImportService,
+    required MobileEmbeddedBootstrapProfileService embeddedProfileService,
     required SharedPreferences preferences,
   }) : _httpClient = httpClient,
        _stableDeviceId = stableDeviceIdService,
        _profileDataSource = profileDataSource,
        _connLinkImportService = connLinkImportService,
+       _embeddedProfileService = embeddedProfileService,
        _preferences = preferences;
 
   static const _apiBaseUrl = MobileConnLinkImportService.apiBaseUrl;
@@ -35,8 +54,10 @@ class MobileBootstrapImportService with InfraLogger {
   final StableDeviceIdService _stableDeviceId;
   final ProfileDataSource _profileDataSource;
   final MobileConnLinkImportService _connLinkImportService;
+  final MobileEmbeddedBootstrapProfileService _embeddedProfileService;
   final SharedPreferences _preferences;
   Future<bool>? _runInFlight;
+  Future<bool>? _postConnectionRunInFlight;
 
   Future<bool> run({
     bool skipIfAlreadyDone = true,
@@ -53,6 +74,22 @@ class MobileBootstrapImportService with InfraLogger {
     bool skipIfAlreadyDone = true,
     MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard,
   }) async {
+    if (mode == MobileConnLinkImportMode.postConnection) {
+      final inFlight = _postConnectionRunInFlight;
+      if (inFlight != null) {
+        return await inFlight;
+      }
+      final future = _runOrThrowInternal(skipIfAlreadyDone: skipIfAlreadyDone, mode: mode);
+      _postConnectionRunInFlight = future;
+      try {
+        return await future;
+      } finally {
+        if (identical(_postConnectionRunInFlight, future)) {
+          _postConnectionRunInFlight = null;
+        }
+      }
+    }
+
     final inFlight = _runInFlight;
     if (inFlight != null) {
       return await inFlight;
@@ -77,7 +114,7 @@ class MobileBootstrapImportService with InfraLogger {
     }
 
     final active = await _activeProfile();
-    if (active != null) {
+    if (active != null && !_embeddedProfileService.isEmbeddedProfile(active)) {
       if (skipIfAlreadyDone && (_preferences.getBool(_prefDone) ?? false)) {
         _refreshSavedConnLinkMetadataInBackground(active);
         return false;
@@ -86,6 +123,9 @@ class MobileBootstrapImportService with InfraLogger {
       loggy.info("mobile auto import: active profile already exists, skipping blocking import");
       _refreshSavedConnLinkMetadataInBackground(active);
       return false;
+    }
+    if (active != null) {
+      loggy.info("mobile auto import: embedded bootstrap profile is active, continuing real import");
     }
 
     if (skipIfAlreadyDone && (_preferences.getBool(_prefDone) ?? false)) {
@@ -118,10 +158,7 @@ class MobileBootstrapImportService with InfraLogger {
 
       var connLink = "";
       if (savedUserId != null && savedUserId > 0) {
-        final lookup = await _lookupSubscriptionByUserId(
-          savedUserId,
-          disableRetry: mode == MobileConnLinkImportMode.fast,
-        );
+        final lookup = await _lookupSubscriptionByUserId(savedUserId, disableRetry: mode.isFastPath, mode: mode);
         if (lookup != null) {
           connLink = lookup.connectionLink;
           apiStatus = lookup.status;
@@ -130,10 +167,7 @@ class MobileBootstrapImportService with InfraLogger {
       }
 
       if (connLink.isEmpty) {
-        final created = await _createOrReuseUser(
-          userId: savedUserId,
-          disableRetry: mode == MobileConnLinkImportMode.fast,
-        );
+        final created = await _createOrReuseUser(userId: savedUserId, disableRetry: mode.isFastPath, mode: mode);
         effectiveUserId = created.userId ?? effectiveUserId;
         apiLogin = created.login;
         apiStatus = created.status ?? apiStatus;
@@ -142,10 +176,7 @@ class MobileBootstrapImportService with InfraLogger {
       }
 
       if (connLink.isEmpty && effectiveUserId != null && effectiveUserId > 0) {
-        final lookup = await _lookupSubscriptionByUserId(
-          effectiveUserId,
-          disableRetry: mode == MobileConnLinkImportMode.fast,
-        );
+        final lookup = await _lookupSubscriptionByUserId(effectiveUserId, disableRetry: mode.isFastPath, mode: mode);
         if (lookup != null) {
           connLink = lookup.connectionLink;
           apiStatus = lookup.status ?? apiStatus;
@@ -179,6 +210,32 @@ class MobileBootstrapImportService with InfraLogger {
 
   Future<void> enforceSingleProfile() => _connLinkImportService.enforceSingleProfile();
 
+  Future<bool> ensureEmbeddedFallbackProfile() => _embeddedProfileService.ensureActiveProfile();
+
+  Future<bool> hasActiveEmbeddedProfile() => _embeddedProfileService.hasActiveEmbeddedProfile();
+
+  Future<bool> canReachBackend({MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard}) async {
+    if (_apiBaseUrl.isEmpty || _apiKey.isEmpty) return false;
+
+    final uri = Uri.parse(
+      _apiBaseUrl,
+    ).resolve("/api/v1/subscriptions/lookup").replace(queryParameters: {"user_id": "0"});
+    try {
+      final response = await _httpClient.get<Map<String, dynamic>>(
+        uri.toString(),
+        headers: {"x-api-key": _apiKey, "Content-Type": "application/json"},
+        proxyOnly: mode == MobileConnLinkImportMode.postConnection,
+        directOnly: mode != MobileConnLinkImportMode.postConnection,
+        disableRetry: true,
+      );
+      return (response.statusCode ?? 0) > 0;
+    } on DioException catch (e) {
+      return e.response != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<ProfileEntry?> _activeProfile() async {
     try {
       return await _profileDataSource.watchActiveProfile().first;
@@ -208,7 +265,11 @@ class MobileBootstrapImportService with InfraLogger {
     );
   }
 
-  Future<_LookupSummary?> _lookupSubscriptionByUserId(int userId, {bool disableRetry = false}) async {
+  Future<_LookupSummary?> _lookupSubscriptionByUserId(
+    int userId, {
+    bool disableRetry = false,
+    MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard,
+  }) async {
     try {
       final uri = Uri.parse(
         _apiBaseUrl,
@@ -216,7 +277,8 @@ class MobileBootstrapImportService with InfraLogger {
       final response = await _httpClient.get<Map<String, dynamic>>(
         uri.toString(),
         headers: {"x-api-key": _apiKey, "Content-Type": "application/json"},
-        directOnly: true,
+        proxyOnly: mode == MobileConnLinkImportMode.postConnection,
+        directOnly: mode != MobileConnLinkImportMode.postConnection,
         disableRetry: disableRetry,
       );
       if ((response.statusCode ?? 0) != 200) return null;
@@ -238,7 +300,11 @@ class MobileBootstrapImportService with InfraLogger {
     }
   }
 
-  Future<_CreateResult> _createOrReuseUser({int? userId, bool disableRetry = false}) async {
+  Future<_CreateResult> _createOrReuseUser({
+    int? userId,
+    bool disableRetry = false,
+    MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard,
+  }) async {
     final deviceId = await _stableDeviceId.getOrCreate();
     final uri = Uri.parse(_apiBaseUrl).resolve("/api/v1/users/create").toString();
     final body = <String, dynamic>{
@@ -251,7 +317,8 @@ class MobileBootstrapImportService with InfraLogger {
       uri,
       data: body,
       headers: {"x-api-key": _apiKey, "Content-Type": "application/json"},
-      directOnly: true,
+      proxyOnly: mode == MobileConnLinkImportMode.postConnection,
+      directOnly: mode != MobileConnLinkImportMode.postConnection,
       disableRetry: disableRetry,
     );
     final statusCode = response.statusCode ?? 0;

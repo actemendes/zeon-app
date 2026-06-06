@@ -178,17 +178,23 @@
 - Home premium CTA: inactive/special servers
 - Profile summary: `UNKNOWN`, `premiumInactive`
 
-2. Есть активный remote профиль, но `subInfo` отсутствует:
+2. Есть active embedded bootstrap-профиль:
+- Home title: `ANONIMOUS`
+- Home premium CTA: active, потому что embedded-профиль хранится как `RemoteProfileEntity` с валидным `subInfo`
+- Profile summary: `anonimous`, дни до `3000-12-31 09:00:00 UTC`
+- Это временное состояние до успешного API/import; профиль не должен выставлять `mobile_auto_import_done`
+
+3. Есть активный remote профиль, но `subInfo` отсутствует:
 - Home premium CTA: inactive/special servers
 - Profile: `daysLabel = premiumInactive`
 - `bindAccount` скрыт
 
-3. Есть `subInfo`, но `expire` в прошлом или осталось < 1 суток:
+4. Есть `subInfo`, но `expire` в прошлом или осталось < 1 суток:
 - Home premium CTA: inactive/special servers (`remaining.inDays < 1`)
 - Profile: `daysLabel = premiumInactive` (дни клампятся до 0)
 - `bindAccount` скрыт
 
-4. Есть `subInfo` и `remaining.inDays >= 1`:
+5. Есть `subInfo` и `remaining.inDays >= 1`:
 - Home premium CTA: active
 - Profile: `daysLabel` с количеством дней
 - `bindAccount` показан

@@ -179,6 +179,19 @@ LINUX_DEPS = $(shell grep -vE '^\s*#|^\s*$$' linux_deps.list)
 # reads the Flutter version from pubspec.yaml
 REQUIRED_VER = $(shell sed -n '/environment:/,/flutter:/ s/.*flutter:[[:space:]]*//p' pubspec.yaml | tr -d " '^\"")
 
+sync-msix-version:
+	@VERSION=$$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d " '\""); \
+	NAME=$${VERSION%%+*}; \
+	BUILD=$$(printf '%s' "$$VERSION" | sed -E -n 's/.*\+([0-9]+)$$/\1/p'); \
+	if [ -z "$$BUILD" ]; then \
+	  BASE=$${NAME%%-*}; \
+	  IFS=.; set -- $$BASE; \
+	  BUILD=$$(( $$1 * 10000 + $$2 * 100 + $$3 )); \
+	fi; \
+	MSIX_VERSION="$${NAME%%-*}.$$BUILD"; \
+	$(SED) "s/^msix_version: .*/msix_version: $$MSIX_VERSION/g" windows/packaging/msix/make_config.yaml; \
+	echo "Synced MSIX version: $$MSIX_VERSION"
+
 linux-amd64-install-deps:linux-install-deps
 linux-amd64-musl-install-deps:linux-install-deps
 linux-arm64-install-deps:linux-install-deps
@@ -309,14 +322,14 @@ windows-zip-release:
 	$(GREEN)Successful$(DONE)
 
 windows-exe-release:
-	fastforge package \
-	  --platform windows \
-	  --targets exe \
-	  --skip-clean \
-	  --build-target=$(TARGET) \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN)
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package_windows_installers.ps1 \
+	  -Target exe \
+	  -NoIsolatedWorkspace \
+	  -SkipClean \
+	  -BuildTarget $(TARGET) \
+	  -SentryDsn "$(SENTRY_DSN)"
 
-windows-msix-release:
+windows-msix-release: sync-msix-version
 	fastforge package \
 	  --platform windows \
 	  --targets msix \
@@ -542,4 +555,3 @@ ios-temp-prepare:
 	flutter build ios-framework
 	cd ios
 	pod install
-	

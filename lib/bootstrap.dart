@@ -6,7 +6,6 @@ import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
-import 'package:hiddify/core/http_client/http_client_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/logger/logger.dart';
 import 'package:hiddify/core/logger/logger_controller.dart';
@@ -21,7 +20,6 @@ import 'package:hiddify/features/bootstrap/widget/bootstrap_splash_screen.dart';
 import 'package:hiddify/features/log/data/log_data_providers.dart';
 import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
-import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
 import 'package:hiddify/features/per_app_proxy/data/selected_data_provider.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_backup.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
@@ -216,19 +214,7 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   await _init("translations", () => container.read(translationsProvider.future));
 
   await _init("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
-  final mobileConnLinkImportService = MobileConnLinkImportService(
-    httpClient: container.read(httpClientProvider),
-    profileRepository: profileRepository,
-    profileDataSource: profileDataSource,
-    preferences: preferences,
-  );
-  final mobileBootstrapImportService = MobileBootstrapImportService(
-    httpClient: container.read(httpClientProvider),
-    stableDeviceIdService: StableDeviceIdService(preferences: preferences),
-    profileDataSource: profileDataSource,
-    connLinkImportService: mobileConnLinkImportService,
-    preferences: preferences,
-  );
+  final mobileBootstrapImportService = container.read(mobileBootstrapImportServiceProvider);
   if (PlatformUtils.isMobile) {
     await _safeInit(
       "mobile single profile cleanup",
@@ -247,6 +233,28 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
       () => profileDataSource.watchActiveProfile().firstWhere((profile) => profile != null),
       timeout: 3000,
     );
+  } else if (PlatformUtils.isMobile) {
+    final activeProfile = await _safeInit(
+      "check active profile before embedded bootstrap",
+      () => profileDataSource.watchActiveProfile().first,
+      timeout: 1000,
+    );
+    final shouldInstallEmbeddedProfile =
+        activeProfile == null || await mobileBootstrapImportService.hasActiveEmbeddedProfile();
+    if (shouldInstallEmbeddedProfile) {
+      final embeddedInstalled = await _safeInit(
+        "mobile embedded bootstrap profile",
+        () => mobileBootstrapImportService.ensureEmbeddedFallbackProfile(),
+        timeout: 5000,
+      );
+      if (embeddedInstalled == true) {
+        await _safeInit(
+          "wait active embedded bootstrap profile",
+          () => profileDataSource.watchActiveProfile().firstWhere((profile) => profile != null),
+          timeout: 3000,
+        );
+      }
+    }
   }
   unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
   await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
@@ -330,6 +338,7 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
     "ru.rostel",
     "ru.rutube.app",
     "ru.sbcs.store",
+    "ru.sberbankmobile",
     "ru.tander.magnit",
     "ru.tele2.mytele2",
     "ru.vk.store",

@@ -306,6 +306,8 @@ class ProfileParser {
     return sanitizeImportedServerConfigs(converted ?? normalized);
   }
 
+  static String normalizeContentForCoreImport(String content) => _normalizeContentForCoreImport(content);
+
   @visibleForTesting
   static String sanitizeImportedServerConfigs(String content) {
     final filteredLines = content.split('\n').where((line) => !_isAutoServerConfigLine(line.trim())).join('\n').trim();

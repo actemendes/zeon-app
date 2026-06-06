@@ -49,6 +49,27 @@ endfunction()
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
+# Flutter can emit FLUTTER_VERSION_BUILD=0 for Windows even when pubspec.yaml
+# contains a +buildNumber. Keep the Windows executable version aligned with
+# the same version source used for Android.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../pubspec.yaml" PUBSPEC_CONTENT)
+string(REGEX MATCH "(^|\n)[ \t]*version:[ \t]*([^\r\n#]+)" PUBSPEC_VERSION_LINE "${PUBSPEC_CONTENT}")
+if(PUBSPEC_VERSION_LINE)
+  string(REGEX REPLACE ".*version:[ \t]*" "" PUBSPEC_VERSION "${PUBSPEC_VERSION_LINE}")
+  string(STRIP "${PUBSPEC_VERSION}" PUBSPEC_VERSION)
+  string(REGEX REPLACE "^['\"]|['\"]$" "" PUBSPEC_VERSION "${PUBSPEC_VERSION}")
+
+  if(PUBSPEC_VERSION MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)(-[0-9A-Za-z.-]+)?\\+([0-9]+)$")
+    set(FLUTTER_VERSION_BUILD "${CMAKE_MATCH_5}")
+  elseif(PUBSPEC_VERSION MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)(-[0-9A-Za-z.-]+)?$")
+    math(EXPR FLUTTER_VERSION_BUILD "${CMAKE_MATCH_1} * 10000 + ${CMAKE_MATCH_2} * 100 + ${CMAKE_MATCH_3}")
+  else()
+    message(FATAL_ERROR "Unsupported pubspec version '${PUBSPEC_VERSION}'. Expected 'x.y.z' or 'x.y.z+buildNumber'.")
+  endif()
+else()
+  message(FATAL_ERROR "Could not find 'version:' in pubspec.yaml.")
+endif()
+
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 

@@ -156,7 +156,7 @@ function Convert-PubspecVersionToMsix {
     $major = [int]$match.Groups["major"].Value
     $minor = [int]$match.Groups["minor"].Value
     $patch = [int]$match.Groups["patch"].Value
-    $build = 0
+    $build = $major * 10000 + $minor * 100 + $patch
     if ($match.Groups["build"].Success) {
         $build = [int]$match.Groups["build"].Value
     }

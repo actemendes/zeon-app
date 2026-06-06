@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,8 @@ import 'package:hiddify/features/connection/data/connection_data_providers.dart'
 import 'package:hiddify/features/connection/data/connection_repository.dart';
 import 'package:hiddify/features/connection/model/connection_failure.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
+import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dart';
+import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/hiddifycore/init_signal.dart';
@@ -24,10 +27,24 @@ part 'connection_notifier.g.dart';
 @Riverpod(keepAlive: true)
 class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
+  static const _embeddedPromotionDelays = <Duration>[
+    Duration.zero,
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 8),
+    Duration(seconds: 13),
+    Duration(seconds: 21),
+  ];
+  static const _embeddedPromotionSlowRetryDelay = Duration(seconds: 30);
+  static const _embeddedPromotionMaxReachableImportFailures = 3;
 
   bool get _useMockConnectionFlow => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
 
   int _mockConnectAttempts = 0;
+  Future<void>? _embeddedPromotionInFlight;
+  ConnectionStatus? _lastObservedConnectionStatus;
 
   @override
   Stream<ConnectionStatus> build() async* {
@@ -39,17 +56,25 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
     listenSelf((previous, next) async {
       if (previous == next) return;
-      if (previous case AsyncData(:final value) when !value.isConnected) {
-        if (next case AsyncData(value: final Connected _)) {
-          await ref.read(hapticServiceProvider.notifier).heavyImpact();
+      final wasConnected = switch (previous) {
+        AsyncData(value: final Connected _) => true,
+        _ => false,
+      };
+      final isConnected = switch (next) {
+        AsyncData(value: final Connected _) => true,
+        _ => false,
+      };
+      if (isConnected && !wasConnected) {
+        await ref.read(hapticServiceProvider.notifier).heavyImpact();
 
-          if (!kIsWeb && Platform.isAndroid && !ref.read(Preferences.storeReviewedByUser)) {
-            if (await InAppReview.instance.isAvailable()) {
-              InAppReview.instance.requestReview();
-              ref.read(Preferences.storeReviewedByUser.notifier).update(true);
-            }
+        if (!kIsWeb && Platform.isAndroid && !ref.read(Preferences.storeReviewedByUser)) {
+          if (await InAppReview.instance.isAvailable()) {
+            InAppReview.instance.requestReview();
+            ref.read(Preferences.storeReviewedByUser.notifier).update(true);
           }
         }
+
+        unawaited(_promoteEmbeddedBootstrapProfileAfterConnection());
       }
     });
 
@@ -70,7 +95,12 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       if (event case Disconnected(connectionFailure: final _?) when PlatformUtils.isDesktop) {
         ref.read(Preferences.startedByUser.notifier).update(false);
       }
+      final previousStatus = _lastObservedConnectionStatus;
+      _lastObservedConnectionStatus = event;
       loggy.info("connection status: ${event.format()}");
+      if (event case Connected() when previousStatus is! Connected) {
+        unawaited(_promoteEmbeddedBootstrapProfileAfterConnection());
+      }
     });
   }
 
@@ -152,6 +182,108 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         default:
       }
     }
+  }
+
+  Future<void> _promoteEmbeddedBootstrapProfileAfterConnection() async {
+    final inFlight = _embeddedPromotionInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _promoteEmbeddedBootstrapProfileAfterConnectionInternal();
+    _embeddedPromotionInFlight = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_embeddedPromotionInFlight, future)) {
+        _embeddedPromotionInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _promoteEmbeddedBootstrapProfileAfterConnectionInternal() async {
+    if (!PlatformUtils.isMobile) return;
+    try {
+      final service = ref.read(mobileBootstrapImportServiceProvider);
+      if (!await service.hasActiveEmbeddedProfile()) return;
+      loggy.info("mobile embedded bootstrap promotion scheduled after CONNECTED");
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      var attempt = 0;
+      var reachableImportFailures = 0;
+      while (true) {
+        final delay = attempt < _embeddedPromotionDelays.length
+            ? _embeddedPromotionDelays[attempt]
+            : _embeddedPromotionSlowRetryDelay;
+        if (delay > Duration.zero) {
+          await Future<void>.delayed(delay);
+        }
+        if (!_canContinueEmbeddedPromotion) return;
+        if (!await service.hasActiveEmbeddedProfile()) return;
+
+        final attemptNo = attempt + 1;
+        attempt++;
+        final canReachBackend = await service
+            .canReachBackend(mode: MobileConnLinkImportMode.postConnection)
+            .timeout(const Duration(seconds: 6), onTimeout: () => false);
+        if (!canReachBackend) {
+          loggy.warning("mobile embedded bootstrap promotion: backend is not reachable yet [attempt=$attemptNo]");
+          continue;
+        }
+
+        final imported = await service
+            .run(skipIfAlreadyDone: false, mode: MobileConnLinkImportMode.postConnection)
+            .timeout(const Duration(seconds: 20), onTimeout: () => false);
+        if (!imported) {
+          reachableImportFailures++;
+          loggy.warning("mobile embedded bootstrap promotion import failed [attempt=$attemptNo]");
+          if (reachableImportFailures >= _embeddedPromotionMaxReachableImportFailures) {
+            await _disconnectTemporaryEmbeddedProfileAfterReachableBackend();
+            return;
+          }
+          continue;
+        }
+
+        for (var wait = 0; wait < 10; wait++) {
+          if (!await service.hasActiveEmbeddedProfile()) {
+            loggy.info("mobile embedded bootstrap profile promoted to device profile");
+            return;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+        reachableImportFailures++;
+        loggy.warning("mobile embedded bootstrap promotion import did not switch active profile [attempt=$attemptNo]");
+        if (reachableImportFailures >= _embeddedPromotionMaxReachableImportFailures) {
+          await _disconnectTemporaryEmbeddedProfileAfterReachableBackend();
+          return;
+        }
+      }
+    } catch (e, st) {
+      loggy.warning("mobile embedded bootstrap promotion failed", e, st);
+    }
+  }
+
+  Future<void> _disconnectTemporaryEmbeddedProfileAfterReachableBackend() async {
+    final service = ref.read(mobileBootstrapImportServiceProvider);
+    if (_isConnected && await service.hasActiveEmbeddedProfile()) {
+      loggy.warning("mobile embedded bootstrap promotion exhausted after reachable backend; disconnecting temporary embedded profile");
+      await ref.read(Preferences.startedByUser.notifier).update(false);
+      await _disconnect();
+    }
+  }
+
+  bool get _isConnected {
+    return switch (state) {
+      AsyncData(value: final Connected _) => true,
+      _ => false,
+    };
+  }
+
+  bool get _canContinueEmbeddedPromotion {
+    return switch (state) {
+      AsyncData(value: final Connected _) || AsyncData(value: final Connecting _) => true,
+      _ => false,
+    };
   }
 
   final _singleStart = SingleCall();

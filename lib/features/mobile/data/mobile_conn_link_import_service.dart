@@ -25,7 +25,7 @@ final mobileConnLinkImportServiceProvider = Provider<MobileConnLinkImportService
   );
 });
 
-enum MobileConnLinkImportMode { standard, fast }
+enum MobileConnLinkImportMode { standard, fast, postConnection }
 
 class MobileConnLinkImportService with InfraLogger {
   MobileConnLinkImportService({
@@ -124,9 +124,7 @@ class MobileConnLinkImportService with InfraLogger {
       throw const MobileConnLinkImportException("validation_error");
     }
 
-    final importCandidates = mode == MobileConnLinkImportMode.fast
-        ? <String>[normalized.primaryConnLink]
-        : normalized.importCandidates;
+    final importCandidates = mode.isFastPath ? <String>[normalized.primaryConnLink] : normalized.importCandidates;
 
     String? importedUrl;
     for (final connLink in importCandidates) {
@@ -300,7 +298,7 @@ class MobileConnLinkImportService with InfraLogger {
         effectiveConnLink = rewritten;
       }
     }
-    final attempts = mode == MobileConnLinkImportMode.fast
+    final attempts = mode.isFastPath
         ? <String>[effectiveConnLink]
         : <String>[
             effectiveConnLink,
@@ -308,7 +306,7 @@ class MobileConnLinkImportService with InfraLogger {
           ].where((e) => e.isNotEmpty).toSet().toList();
 
     for (final attemptLink in attempts) {
-      if (await _tryUpsert(attemptLink, "default", disableRetry: mode == MobileConnLinkImportMode.fast)) {
+      if (await _tryUpsert(attemptLink, "default", disableRetry: mode.isFastPath)) {
         return true;
       }
 
@@ -327,6 +325,17 @@ class MobileConnLinkImportService with InfraLogger {
           disableRetry: true,
         )) {
           return true;
+        }
+        continue;
+      }
+
+      if (mode == MobileConnLinkImportMode.postConnection) {
+        final importUrl = await resolveImportUrl(attemptLink);
+        if (importUrl.isNotEmpty && importUrl != attemptLink) {
+          loggy.info("mobile conn_link resolved url [from=${_maskLink(attemptLink)} to=${_maskLink(importUrl)}]");
+          if (await _tryUpsert(importUrl, "resolved/default", disableRetry: true)) {
+            return true;
+          }
         }
         continue;
       }
@@ -350,7 +359,7 @@ class MobileConnLinkImportService with InfraLogger {
       }
     }
 
-    if (mode == MobileConnLinkImportMode.fast || !allowNoValidateFallback) {
+    if (mode.isFastPath || !allowNoValidateFallback) {
       return false;
     }
 
@@ -766,6 +775,10 @@ class MobileConnLinkImportService with InfraLogger {
     }
     return null;
   }
+}
+
+extension MobileConnLinkImportModeX on MobileConnLinkImportMode {
+  bool get isFastPath => this == MobileConnLinkImportMode.fast || this == MobileConnLinkImportMode.postConnection;
 }
 
 class MobileConnLinkInput {

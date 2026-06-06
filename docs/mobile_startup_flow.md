@@ -10,6 +10,7 @@
 - Профиль: запись `ProfileEntries` и соответствующий файл конфигурации, который импортируется через `ProfileRepository.upsertRemote(...)`.
 - Активный профиль: профиль, который сейчас выбран в приложении. Технически это запись `ProfileEntries` с `active = true`; приложение ожидает один такой профиль.
 - Managed-профиль: профиль, который приложение получило через мобильную цепочку `bootstrap`, ручной импорт `conn_link` или bind confirm и дальше считает управляемым. Приложение может заменить этот профиль новым импортом, удалить старый managed-профиль, удалить лишние профили и сохранить id текущего managed-профиля в `mobile_managed_profile_id`.
+- Embedded bootstrap-профиль: временный active remote-профиль из зашитого в приложение anonymus subscription. Используется только когда сетевой bootstrap не смог создать/импортировать профиль до входа в UI. Не выставляет `mobile_auto_import_done`, помечается через `mobile_embedded_bootstrap_profile_id`, хранится как текущий `mobile_managed_profile_id` и должен быть заменен реальным managed-профилем при следующем успешном API/import.
 - `api_link`: базовый адрес мобильного API из `mobile_api_base_url`. Используется и для backend API (`/api/v1/...`, `/bind/...`), и как host основного импортируемого `conn_link`.
 - `conn_link`: основной импортируемый URL профиля в формате `api_link/open/$openId`. Пример: `https://130.49.151.173/open/649669380`. В API рядом могут встречаться поля `connection_link`, `raw_url`, `conn_link` или технический `subscriptionUrl`; входные `/open/$openId` и публичные ссылки нормализуются к основному `conn_link`.
 - Публичная open-ссылка: `https://zeon-vps.link/open/$openId`. Это публичный alias для ввода; в open-сценарии сервис канонизирует его в primary `https://130.49.151.173/open/$openId` до сетевого импорта.
@@ -43,10 +44,13 @@ flowchart TD
     M --> N
     H --> O[Ждать активный профиль до 3 сек]
     N --> O
-    O --> P[Построить App]
-    P --> Q{introCompleted?}
-    Q -- нет --> R[IntroPage]
-    Q -- да --> S[HomePage]
+    O --> P{Активный профиль есть?}
+    P -- нет --> P1[Установить embedded bootstrap-профиль]
+    P -- да --> Q[Построить App]
+    P1 --> Q
+    Q --> R{introCompleted?}
+    R -- нет --> S[IntroPage]
+    R -- да --> T[HomePage]
 ```
 
 ## 1. Запуск приложения
@@ -73,8 +77,9 @@ flowchart TD
 2. Инициализируются defaults, профильный репозиторий, переводы, hiddify-core.
 3. На mobile вызывается `MobileBootstrapImportService.enforceSingleProfile()`.
 4. Вызывается `MobileBootstrapImportService.run(mode: MobileConnLinkImportMode.fast)` с timeout 18 секунд на чистом старте без профиля.
-5. После этого bootstrap ждёт активный профиль до 3 секунд.
-6. Запускаются фоновые повторы авто-импорта через 5, 10, 20 и 40 секунд.
+5. Если после сетевого bootstrap на mobile активного профиля нет, `MobileEmbeddedBootstrapProfileService` ставит временный embedded bootstrap-профиль.
+6. После успешного сетевого импорта bootstrap ждёт активный профиль до 3 секунд; после embedded fallback ждёт активный embedded-профиль до 3 секунд.
+7. Запускаются фоновые повторы авто-импорта через 5, 10, 20 и 40 секунд.
 
 Жесткая верхняя граница ожидания mobile auto import в прелоадере: 18 секунд. Ручной импорт в Intro ограничен 25 секундами. HTTP-клиент использует timeout 15 секунд и retry interceptor, но в `fast`-режиме ключевые запросы запускаются с `disableRetry=true` для срезания длинных хвостов ожидания.
 Фоновые повторы после прелоадера выполняются `service.run()` с параметрами по умолчанию, то есть в `standard`-режиме и уже без блокировки старта UI.
@@ -82,6 +87,8 @@ flowchart TD
 Если `mobile_auto_import_done = true` и активный профиль есть, `MobileBootstrapImportService` быстро выходит без blocking API/import. Metadata refresh по сохраненному `conn_link` запускается best-effort в фоне с коротким timeout и не держит старт приложения.
 
 Если активный профиль уже есть, приложение также быстро выходит из mobile bootstrap без blocking API/import даже при отсутствующем done-флаге. Для уже подготовленного пользователя цель старта - просто открыть приложение, а не повторять создание/импорт профиля.
+
+Исключение: если активный профиль является embedded bootstrap-профилем, `MobileBootstrapImportService` не считает его финальным и продолжает обычную сетевую цепочку create/lookup/import. При успешном импорте новый remote-профиль становится active, а предыдущий embedded managed-профиль удаляется cleanup-логикой `MobileConnLinkImportService`.
 
 ## 3. MobileConnLinkImportService
 
@@ -167,22 +174,49 @@ flowchart TD
 Алгоритм `runOrThrow()`:
 
 1. Если web - сразу `false`.
-2. Если активный профиль есть:
+2. Если активный профиль есть и это не embedded bootstrap-профиль:
    - запускает metadata refresh по saved `conn_link` в фоне, если активный профиль выглядит managed;
    - возвращает `false`, без blocking API/import.
-3. Если done-флаг есть, но активного профиля нет, считает состояние сломанным и пробует импорт заново.
-4. Если есть saved `mobile_auto_import_conn_link`, импортирует его через `MobileConnLinkImportService`.
-5. Если есть saved `mobile_auto_import_user_id`, делает lookup:
+3. Если активный профиль есть, но это embedded bootstrap-профиль, продолжает реальный API/import, потому что временный профиль не является завершенным bootstrap.
+4. Если done-флаг есть, но активного профиля нет, считает состояние сломанным и пробует импорт заново.
+5. Если есть saved `mobile_auto_import_conn_link`, импортирует его через `MobileConnLinkImportService`.
+6. Если есть saved `mobile_auto_import_user_id`, делает lookup:
    - `GET /api/v1/subscriptions/lookup?user_id=<id>`
    - headers: `x-api-key`.
-6. Если `conn_link` еще нет, создает или переиспользует пользователя:
+7. Если `conn_link` еще нет, создает или переиспользует пользователя:
    - `POST /api/v1/users/create`
    - body: `device_id`, `platform`, `subscription.create_if_missing = true`, опционально `user.user_id`.
-7. Если после create есть `user_id`, но `conn_link` нет, повторяет lookup.
-8. Передает `raw_url`/`connection_link` в `MobileConnLinkImportService`, который нормализует open-ссылку в primary `api_link/open/$openId`.
+8. Если после create есть `user_id`, но `conn_link` нет, повторяет lookup.
+9. Передает `raw_url`/`connection_link` в `MobileConnLinkImportService`, который нормализует open-ссылку в primary `api_link/open/$openId`.
 
 На абсолютном белом старте пользователя всё ещё нужно создавать через API, чтобы новый пользователь автоматически получил профиль.
 После `pm clear`/переустановки bootstrap остается прежним: сервер по `device_id` должен вернуть актуальную серверную привязку. Если backend применил `devices/rebind`, вернется последний вручную выбранный `owner_user_id`.
+
+### 4.1 MobileEmbeddedBootstrapProfileService
+
+Файл: `lib/features/mobile/data/mobile_embedded_bootstrap_profile_service.dart`.
+
+Ответственность сервиса: дать пользователю рабочий active-профиль даже при операторском ограничении сети, чтобы он мог поднять VPN и затем пройти обычный API/bootstrap.
+
+Поведение:
+
+1. Используется только на mobile, если после сетевого bootstrap нет активного профиля.
+2. Восстанавливает зашитый anonymus subscription `open/7697542005` из gzip+xor+base64 payload, прогоняет через `ProfileParser.normalizeContentForCoreImport(...)` и пишет файл `configs/mobile-embedded-bootstrap-anonymous-v1.json`.
+3. Вставляет/обновляет remote-профиль:
+   - `id = mobile-embedded-bootstrap-anonymous-v1`
+   - `url = embedded://mobile-bootstrap/open/7697542005?v=1`
+   - `name = anonimous`
+   - `subInfo` с `expire = 3000-12-31 09:00:00 UTC`
+4. Сохраняет:
+   - `mobile_embedded_bootstrap_profile_id`
+   - `mobile_embedded_bootstrap_profile_version`
+   - `mobile_managed_profile_id = mobile-embedded-bootstrap-anonymous-v1`
+5. Не сохраняет:
+   - `mobile_auto_import_done`
+   - `mobile_auto_import_conn_link`
+   - `mobile_auto_import_user_id`
+
+После перехода подключения в `Connected` `ConnectionNotifier` вызывает `MobileBootstrapImportService.run(skipIfAlreadyDone: false)` для немедленной замены embedded-профиля реальным managed-профилем. Фоновые повторы bootstrap также продолжают работать; если active-профиль embedded, они не делают быстрый выход.
 
 ## 5. MobileBindService
 
