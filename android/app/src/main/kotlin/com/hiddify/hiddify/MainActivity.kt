@@ -103,9 +103,8 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         ) { isGranted ->
             if (Settings.dynamicNotification && !isGranted) {
                 onServiceAlert(Alert.RequestNotificationPermission, null)
-            } else {
-                startService0()
             }
+            startService0()
         }
 
     private val prepareLauncher =
@@ -154,7 +153,10 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startService()
-            } else onServiceAlert(Alert.RequestNotificationPermission, null)
+            } else {
+                onServiceAlert(Alert.RequestNotificationPermission, null)
+                startService0()
+            }
         }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
@@ -166,7 +168,10 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
             else onServiceAlert(Alert.RequestVPNPermission, null)
         } else if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
             if (resultCode == RESULT_OK) startService()
-            else onServiceAlert(Alert.RequestNotificationPermission, null)
+            else {
+                onServiceAlert(Alert.RequestNotificationPermission, null)
+                startService0()
+            }
         }
     }
 }

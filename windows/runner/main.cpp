@@ -1,11 +1,14 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
+#include <shobjidl_core.h>
 
 #include "flutter_window.h"
 #include "utils.h"
 #include "app_links/app_links_plugin_c_api.h"
 // #include <protocol_handler_windows/protocol_handler_windows_plugin_c_api.h>
+
+constexpr wchar_t kZeonAppUserModelId[] = L"ZEON.ZEON";
 
 bool SendAppLinkToInstance(const std::wstring &title)
 {
@@ -48,6 +51,7 @@ bool SendAppLinkToInstance(const std::wstring &title)
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command)
 {
+  SetCurrentProcessExplicitAppUserModelID(kZeonAppUserModelId);
 
   // Replace "example" with the generated title found as parameter of `window.Create` in this file.
   // You may ignore the result if you need to create another window.

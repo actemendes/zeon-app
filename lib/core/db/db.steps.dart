@@ -487,11 +487,291 @@ i1.GeneratedColumn<int> _column_22(String aliasedName) =>
       type: i1.DriftSqlType.int,
       defaultValue: const CustomExpression('0'),
     );
+
+final class Schema6 extends i0.VersionedSchema {
+  Schema6({required super.database}) : super(version: 6);
+  @override
+  late final List<i1.DatabaseSchemaEntity> entities = [
+    profileEntries,
+    appProxyEntries,
+    remoteNotificationEntries,
+    notificationReceiptEntries,
+    notificationSyncStateEntries,
+  ];
+  late final Shape3 profileEntries = Shape3(
+    source: i0.VersionedTable(
+      entityName: 'profile_entries',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['PRIMARY KEY(id)'],
+      columns: [
+        _column_0,
+        _column_1,
+        _column_2,
+        _column_3,
+        _column_4,
+        _column_5,
+        _column_6,
+        _column_7,
+        _column_8,
+        _column_9,
+        _column_10,
+        _column_11,
+        _column_12,
+        _column_17,
+        _column_18,
+        _column_19,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape4 appProxyEntries = Shape4(
+    source: i0.VersionedTable(
+      entityName: 'app_proxy_entries',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['PRIMARY KEY(mode, pkg_name)'],
+      columns: [_column_20, _column_21, _column_22],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape5 remoteNotificationEntries = Shape5(
+    source: i0.VersionedTable(
+      entityName: 'remote_notification_entries',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['PRIMARY KEY(id)'],
+      columns: [
+        _column_0,
+        _column_23,
+        _column_24,
+        _column_25,
+        _column_26,
+        _column_27,
+        _column_28,
+        _column_29,
+        _column_30,
+        _column_31,
+        _column_32,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape6 notificationReceiptEntries = Shape6(
+    source: i0.VersionedTable(
+      entityName: 'notification_receipt_entries',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: [],
+      columns: [_column_33, _column_34, _column_35, _column_36, _column_37],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape7 notificationSyncStateEntries = Shape7(
+    source: i0.VersionedTable(
+      entityName: 'notification_sync_state_entries',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['PRIMARY KEY("key")'],
+      columns: [_column_38, _column_39, _column_40],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+}
+
+class Shape5 extends i0.VersionedTable {
+  Shape5({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<String> get id =>
+      columnsByName['id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get category =>
+      columnsByName['category']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get priority =>
+      columnsByName['priority']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get title =>
+      columnsByName['title']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get body =>
+      columnsByName['body']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get actionUrl =>
+      columnsByName['action_url']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<DateTime> get publishedAt =>
+      columnsByName['published_at']! as i1.GeneratedColumn<DateTime>;
+  i1.GeneratedColumn<DateTime> get expiresAt =>
+      columnsByName['expires_at']! as i1.GeneratedColumn<DateTime>;
+  i1.GeneratedColumn<DateTime> get fetchedAt =>
+      columnsByName['fetched_at']! as i1.GeneratedColumn<DateTime>;
+  i1.GeneratedColumn<DateTime> get displayedAt =>
+      columnsByName['displayed_at']! as i1.GeneratedColumn<DateTime>;
+  i1.GeneratedColumn<DateTime> get openedAt =>
+      columnsByName['opened_at']! as i1.GeneratedColumn<DateTime>;
+}
+
+i1.GeneratedColumn<String> _column_23(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'category',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.string,
+    );
+i1.GeneratedColumn<String> _column_24(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'priority',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.string,
+    );
+i1.GeneratedColumn<String> _column_25(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'title',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.string,
+    );
+i1.GeneratedColumn<String> _column_26(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'body',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.string,
+    );
+i1.GeneratedColumn<String> _column_27(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'action_url',
+      aliasedName,
+      true,
+      type: i1.DriftSqlType.string,
+    );
+i1.GeneratedColumn<DateTime> _column_28(String aliasedName) =>
+    i1.GeneratedColumn<DateTime>(
+      'published_at',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.dateTime,
+    );
+i1.GeneratedColumn<DateTime> _column_29(String aliasedName) =>
+    i1.GeneratedColumn<DateTime>(
+      'expires_at',
+      aliasedName,
+      true,
+      type: i1.DriftSqlType.dateTime,
+    );
+i1.GeneratedColumn<DateTime> _column_30(String aliasedName) =>
+    i1.GeneratedColumn<DateTime>(
+      'fetched_at',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.dateTime,
+    );
+i1.GeneratedColumn<DateTime> _column_31(String aliasedName) =>
+    i1.GeneratedColumn<DateTime>(
+      'displayed_at',
+      aliasedName,
+      true,
+      type: i1.DriftSqlType.dateTime,
+    );
+i1.GeneratedColumn<DateTime> _column_32(String aliasedName) =>
+    i1.GeneratedColumn<DateTime>(
+      'opened_at',
+      aliasedName,
+      true,
+      type: i1.DriftSqlType.dateTime,
+    );
+
+class Shape6 extends i0.VersionedTable {
+  Shape6({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<int> get localId =>
+      columnsByName['local_id']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get notificationId =>
+      columnsByName['notification_id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get event =>
+      columnsByName['event']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<DateTime> get occurredAt =>
+      columnsByName['occurred_at']! as i1.GeneratedColumn<DateTime>;
+  i1.GeneratedColumn<String> get errorCode =>
+      columnsByName['error_code']! as i1.GeneratedColumn<String>;
+}
+
+i1.GeneratedColumn<int> _column_33(String aliasedName) =>
+    i1.GeneratedColumn<int>(
+      'local_id',
+      aliasedName,
+      false,
+      hasAutoIncrement: true,
+      type: i1.DriftSqlType.int,
+      defaultConstraints: i1.GeneratedColumn.constraintIsAlways(
+        'PRIMARY KEY AUTOINCREMENT',
+      ),
+    );
+i1.GeneratedColumn<String> _column_34(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'notification_id',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.string,
+    );
+i1.GeneratedColumn<String> _column_35(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'event',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.string,
+    );
+i1.GeneratedColumn<DateTime> _column_36(String aliasedName) =>
+    i1.GeneratedColumn<DateTime>(
+      'occurred_at',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.dateTime,
+    );
+i1.GeneratedColumn<String> _column_37(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'error_code',
+      aliasedName,
+      true,
+      type: i1.DriftSqlType.string,
+    );
+
+class Shape7 extends i0.VersionedTable {
+  Shape7({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<String> get key =>
+      columnsByName['key']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get value =>
+      columnsByName['value']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<DateTime> get updatedAt =>
+      columnsByName['updated_at']! as i1.GeneratedColumn<DateTime>;
+}
+
+i1.GeneratedColumn<String> _column_38(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'key',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.string,
+    );
+i1.GeneratedColumn<String> _column_39(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'value',
+      aliasedName,
+      true,
+      type: i1.DriftSqlType.string,
+    );
+i1.GeneratedColumn<DateTime> _column_40(String aliasedName) =>
+    i1.GeneratedColumn<DateTime>(
+      'updated_at',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.dateTime,
+    );
 i0.MigrationStepWithVersion migrationSteps({
   required Future<void> Function(i1.Migrator m, Schema2 schema) from1To2,
   required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
   required Future<void> Function(i1.Migrator m, Schema4 schema) from3To4,
   required Future<void> Function(i1.Migrator m, Schema5 schema) from4To5,
+  required Future<void> Function(i1.Migrator m, Schema6 schema) from5To6,
 }) {
   return (currentVersion, database) async {
     switch (currentVersion) {
@@ -515,6 +795,11 @@ i0.MigrationStepWithVersion migrationSteps({
         final migrator = i1.Migrator(database, schema);
         await from4To5(migrator, schema);
         return 5;
+      case 5:
+        final schema = Schema6(database: database);
+        final migrator = i1.Migrator(database, schema);
+        await from5To6(migrator, schema);
+        return 6;
       default:
         throw ArgumentError.value('Unknown migration from $currentVersion');
     }
@@ -526,11 +811,13 @@ i1.OnUpgrade stepByStep({
   required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
   required Future<void> Function(i1.Migrator m, Schema4 schema) from3To4,
   required Future<void> Function(i1.Migrator m, Schema5 schema) from4To5,
+  required Future<void> Function(i1.Migrator m, Schema6 schema) from5To6,
 }) => i0.VersionedSchema.stepByStepHelper(
   step: migrationSteps(
     from1To2: from1To2,
     from2To3: from2To3,
     from3To4: from3To4,
     from4To5: from4To5,
+    from5To6: from5To6,
   ),
 );

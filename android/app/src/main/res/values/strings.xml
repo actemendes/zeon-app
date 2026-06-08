@@ -3,6 +3,8 @@
     <string name="app_name">ZEON</string>
     <string name="stop">Stop</string>
     <string name="quick_toggle">Toggle</string>
+    <string name="notification_channel_connection">VPN-подключение</string>
+    <string name="notification_channel_connection_description">Постоянное уведомление активного VPN-подключения</string>
     <string name="status_starting">Service starting…</string>
     <string name="status_started">Service started</string>
 </resources>

@@ -1,4 +1,6 @@
 app_id: 6L903538-42B1-4596-G479-BJ779F21A65D
+app_user_model_id: ZEON.ZEON
+toast_activator_clsid: 6f903538-42b1-4596-a479-bb779f21a65d
 publisher: ZEON
 publisher_url: https://github.com/actemendes/zeon-app
 display_name: ZEON

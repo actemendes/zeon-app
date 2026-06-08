@@ -179,7 +179,7 @@ try {
     }
 
     if ($Artifacts -in @("universal", "both")) {
-        $universalArgs = @("build", "apk", "--$BuildMode", "--target", $BuildTarget, "--target-platform", "android-arm64")
+        $universalArgs = @("build", "apk", "--$BuildMode", "--target", $BuildTarget)
         Write-Host ("Running: flutter " + ($universalArgs -join " "))
         & flutter @universalArgs
         if ($LASTEXITCODE -ne 0) {

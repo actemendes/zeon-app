@@ -7,6 +7,7 @@ import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
 import 'package:hiddify/features/common/general_pref_tiles.dart';
+import 'package:hiddify/features/notifications/data/notification_data_providers.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -57,6 +58,18 @@ class GeneralPage extends HookConsumerWidget {
               onChanged: ref.read(Preferences.silentStart.notifier).update,
             ),
           ],
+          SwitchListTile.adaptive(
+            title: const Text('Уведомления'),
+            secondary: const Icon(Icons.notifications_active_rounded),
+            value: ref.watch(Preferences.remoteNotifications),
+            onChanged: (value) async {
+              await ref.read(Preferences.remoteNotifications.notifier).update(value);
+              if (value) {
+                await ref.read(systemNotificationServiceProvider).requestPermission();
+              }
+              await ref.read(notificationPollingServiceProvider).configurePlatformSchedulers();
+            },
+          ),
           if (PlatformUtils.isAndroid) const BatteryOptimizationWidget(),
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.general.memoryLimit),

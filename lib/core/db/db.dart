@@ -9,12 +9,20 @@ import 'package:hiddify/utils/custom_loggers.dart';
 
 part 'db.g.dart';
 
-@DriftDatabase(tables: [ProfileEntries, AppProxyEntries])
+@DriftDatabase(
+  tables: [
+    ProfileEntries,
+    AppProxyEntries,
+    RemoteNotificationEntries,
+    NotificationReceiptEntries,
+    NotificationSyncStateEntries,
+  ],
+)
 class Db extends _$Db with InfraLogger {
   Db([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(
@@ -76,6 +84,11 @@ class Db extends _$Db with InfraLogger {
 
           await m.createTable(schema.appProxyEntries);
         },
+        from5To6: (m, schema) async {
+          await m.createTable(remoteNotificationEntries);
+          await m.createTable(notificationReceiptEntries);
+          await m.createTable(notificationSyncStateEntries);
+        },
       ),
     );
   }
@@ -117,4 +130,41 @@ class AppProxyEntries extends Table {
 
   @override
   Set<Column> get primaryKey => {mode, pkgName};
+}
+
+@DataClassName('StoredNotificationEntry')
+class RemoteNotificationEntries extends Table {
+  TextColumn get id => text()();
+  TextColumn get category => text()();
+  TextColumn get priority => text()();
+  TextColumn get title => text()();
+  TextColumn get body => text()();
+  TextColumn get actionUrl => text().nullable()();
+  DateTimeColumn get publishedAt => dateTime()();
+  DateTimeColumn get expiresAt => dateTime().nullable()();
+  DateTimeColumn get fetchedAt => dateTime()();
+  DateTimeColumn get displayedAt => dateTime().nullable()();
+  DateTimeColumn get openedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('NotificationReceiptEntry')
+class NotificationReceiptEntries extends Table {
+  IntColumn get localId => integer().autoIncrement()();
+  TextColumn get notificationId => text()();
+  TextColumn get event => text()();
+  DateTimeColumn get occurredAt => dateTime()();
+  TextColumn get errorCode => text().nullable()();
+}
+
+@DataClassName('NotificationSyncStateEntry')
+class NotificationSyncStateEntries extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {key};
 }

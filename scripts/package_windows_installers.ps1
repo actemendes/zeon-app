@@ -218,6 +218,8 @@ function Build-ExeInstaller {
     }
 
     $appId = Get-YamlScalar -Path $configPath -Key "app_id"
+    $appUserModelId = Get-YamlScalar -Path $configPath -Key "app_user_model_id"
+    $toastActivatorClsid = Get-YamlScalar -Path $configPath -Key "toast_activator_clsid"
     $publisher = Get-YamlScalar -Path $configPath -Key "publisher"
     $publisherUrl = Get-YamlScalar -Path $configPath -Key "publisher_url"
     $displayName = Get-YamlScalar -Path $configPath -Key "display_name"
@@ -227,6 +229,8 @@ function Build-ExeInstaller {
     $launchAtStartupRaw = Get-YamlScalar -Path $configPath -Key "launch_at_startup"
 
     if (-not $appId) { $appId = [guid]::NewGuid().ToString() }
+    if (-not $appUserModelId) { $appUserModelId = "ZEON.ZEON" }
+    if (-not $toastActivatorClsid) { $toastActivatorClsid = "6f903538-42b1-4596-a479-bb779f21a65d" }
     if (-not $publisher) { $publisher = "ZEON" }
     if (-not $publisherUrl) { $publisherUrl = "https://github.com/actemendes/zeon-app" }
     if (-not $displayName) { $displayName = "ZEON" }
@@ -306,9 +310,9 @@ Type: files; Name: "{userstartup}\Hiddify.lnk"
 Source: "${releaseDirForIss}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\${displayName}"; Filename: "{app}\${exeName}"
-Name: "{autodesktop}\${displayName}"; Filename: "{app}\${exeName}"; Tasks: desktopicon
-Name: "{userstartup}\${displayName}"; Filename: "{app}\${exeName}"; WorkingDir: "{app}"; Tasks: launchAtStartup
+Name: "{autoprograms}\${displayName}"; Filename: "{app}\${exeName}"; AppUserModelID: "${appUserModelId}"; AppUserModelToastActivatorCLSID: "${toastActivatorClsid}"
+Name: "{autodesktop}\${displayName}"; Filename: "{app}\${exeName}"; Tasks: desktopicon; AppUserModelID: "${appUserModelId}"; AppUserModelToastActivatorCLSID: "${toastActivatorClsid}"
+Name: "{userstartup}\${displayName}"; Filename: "{app}\${exeName}"; WorkingDir: "{app}"; Tasks: launchAtStartup; AppUserModelID: "${appUserModelId}"; AppUserModelToastActivatorCLSID: "${toastActivatorClsid}"
 
 [Run]
 Filename: "{app}\${exeName}"; Description: "{cm:LaunchProgram,${displayName}}"; Flags: nowait postinstall skipifsilent
@@ -572,6 +576,101 @@ function Patch-FlutterSecureStorageWindowsPlugin {
     Write-Host "Patched secure storage plugin: $cppPath"
 }
 
+function Patch-FlutterLocalNotificationsWindowsPlugin {
+    param([Parameter(Mandatory = $true)][string]$WorkingRoot)
+
+    $pluginLink = Join-Path $WorkingRoot "windows\flutter\ephemeral\.plugin_symlinks\flutter_local_notifications_windows"
+    $pluginTarget = $null
+    if (Test-Path -LiteralPath $pluginLink) {
+        $pluginItem = Get-Item -LiteralPath $pluginLink
+        if (-not $pluginItem.Target) {
+            throw "Plugin symlink target is empty: $pluginLink"
+        }
+
+        $pluginTarget = $pluginItem.Target
+        if ($pluginTarget -is [Array]) {
+            $pluginTarget = $pluginTarget[0]
+        }
+    }
+    else {
+        $packageConfigPath = Join-Path $WorkingRoot ".dart_tool\package_config.json"
+        if (-not (Test-Path -LiteralPath $packageConfigPath)) {
+            throw "Package config not found: $packageConfigPath. Run 'flutter pub get' first."
+        }
+
+        $packageConfig = Get-Content -LiteralPath $packageConfigPath -Raw | ConvertFrom-Json
+        $package = $packageConfig.packages | Where-Object { $_.name -eq "flutter_local_notifications_windows" } | Select-Object -First 1
+        if (-not $package) {
+            throw "Package flutter_local_notifications_windows was not found in $packageConfigPath."
+        }
+
+        $rootUri = [string]$package.rootUri
+        if ($rootUri.StartsWith("file:")) {
+            $pluginTarget = ([Uri]$rootUri).LocalPath
+        }
+        else {
+            $pluginTarget = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $packageConfigPath) $rootUri))
+        }
+    }
+
+    $cppPath = Join-Path $pluginTarget "src\plugin.cpp"
+    if (-not (Test-Path -LiteralPath $cppPath)) {
+        throw "Plugin source file not found: $cppPath"
+    }
+
+    $content = Get-Content -LiteralPath $cppPath -Raw
+    $hasLegacyAtlTokens = $content -match "atlbase\.h|CW2A"
+    $hasHelperFunction = $content -match "std::string\s+WideToUtf8\s*\("
+
+    if (-not $hasLegacyAtlTokens -and $hasHelperFunction) {
+        Write-Host "flutter_local_notifications_windows is already ATL-free."
+        return
+    }
+
+    $updated = $content
+    $updated = $updated.Replace("#include <atlbase.h>`r`n", "")
+    $updated = $updated.Replace("#include <atlbase.h>`n", "")
+
+    if (-not $hasHelperFunction) {
+        $anchorPattern = '(#include "utils\.hpp"\r?\n)'
+        if ($updated -notmatch $anchorPattern) {
+            throw "Could not find insertion anchor for helper functions in: $cppPath"
+        }
+
+        $helperBlock = @"
+
+namespace {
+std::string WideToUtf8(LPCWSTR value) {
+  if (value == nullptr || value[0] == L'\0') {
+    return std::string();
+  }
+  const int required = WideCharToMultiByte(CP_UTF8, 0, value, -1, nullptr, 0, nullptr, nullptr);
+  winrt::check_win32(required > 0 ? ERROR_SUCCESS : GetLastError());
+  std::string utf8(static_cast<size_t>(required), '\0');
+  const int converted = WideCharToMultiByte(CP_UTF8, 0, value, -1, utf8.data(), required, nullptr, nullptr);
+  winrt::check_win32(converted > 0 ? ERROR_SUCCESS : GetLastError());
+  if (!utf8.empty() && utf8.back() == '\0') {
+    utf8.pop_back();
+  }
+  return utf8;
+}
+}
+"@
+        $updated = [regex]::Replace($updated, $anchorPattern, "`$1$helperBlock")
+    }
+
+    $updated = $updated.Replace("const std::string key = CW2A(item.Key, CP_UTF8);", "const std::string key = WideToUtf8(item.Key);")
+    $updated = $updated.Replace("const std::string value = CW2A(item.Value, CP_UTF8);", "const std::string value = WideToUtf8(item.Value);")
+    $updated = $updated.Replace("const auto payload = string(CW2A(args, CP_UTF8));", "const auto payload = WideToUtf8(args);")
+
+    if ($updated -eq $content) {
+        throw "Local notifications patch did not change plugin file: $cppPath"
+    }
+
+    Set-Content -LiteralPath $cppPath -Value $updated -NoNewline
+    Write-Host "Patched local notifications plugin: $cppPath"
+}
+
 function Resolve-LatestArtifact {
     param(
         [Parameter(Mandatory = $true)][string]$RootDir,
@@ -645,6 +744,7 @@ try {
         if (-not $SkipSecureStoragePatch) {
             Patch-FlutterSecureStorageWindowsPlugin -WorkingRoot $workingRoot
         }
+        Patch-FlutterLocalNotificationsWindowsPlugin -WorkingRoot $workingRoot
 
         $isccPath = $null
         if ($targets -contains "exe") {
@@ -707,8 +807,11 @@ try {
                 throw "Could not find built Windows setup .exe in dist."
             }
             $dstExe = Join-Path $workingOutDir "ZEON-Windows-Setup-x64.exe"
+            $repoDstExe = Join-Path $repoOutDir "ZEON-Windows-Setup-x64.exe"
             Copy-Item -LiteralPath $exe.FullName -Destination $dstExe -Force
-            Copy-Item -LiteralPath $dstExe -Destination (Join-Path $repoOutDir "ZEON-Windows-Setup-x64.exe") -Force
+            if (-not [StringComparer]::OrdinalIgnoreCase.Equals([System.IO.Path]::GetFullPath($dstExe), [System.IO.Path]::GetFullPath($repoDstExe))) {
+                Copy-Item -LiteralPath $dstExe -Destination $repoDstExe -Force
+            }
         }
 
         if ($targets -contains "msix") {
@@ -717,8 +820,11 @@ try {
                 throw "Could not find built .msix in dist."
             }
             $dstMsix = Join-Path $workingOutDir "ZEON-Windows-Setup-x64.msix"
+            $repoDstMsix = Join-Path $repoOutDir "ZEON-Windows-Setup-x64.msix"
             Copy-Item -LiteralPath $msix.FullName -Destination $dstMsix -Force
-            Copy-Item -LiteralPath $dstMsix -Destination (Join-Path $repoOutDir "ZEON-Windows-Setup-x64.msix") -Force
+            if (-not [StringComparer]::OrdinalIgnoreCase.Equals([System.IO.Path]::GetFullPath($dstMsix), [System.IO.Path]::GetFullPath($repoDstMsix))) {
+                Copy-Item -LiteralPath $dstMsix -Destination $repoDstMsix -Force
+            }
         }
     }
     finally {
