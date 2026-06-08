@@ -226,10 +226,24 @@
           "oneMonth": "1 месяц",
           "threeMonths": "3 месяца",
           "sixMonths": "6 месяцев",
-          "twelveMonths": "12 месяцев"
+          "twelveMonths": "12 месяцев",
+          "month": {
+            "one": "$n месяц",
+            "few": "$n месяца",
+            "many": "$n месяцев",
+            "other": "$n месяца"
+          }
         },
         "connect": "Подключить",
-        "paymentLaunchError": "Не удалось открыть оплату"
+        "paymentLaunchError": "Не удалось открыть оплату",
+        "pricing": {
+          "personalizedPrice": "Персональная цена",
+          "loadingPrices": "Загружаем цены...",
+          "refreshingPrices": "Обновляем цены...",
+          "showingSavedPrices": "Показываем сохраненные цены",
+          "serverPricesUnavailable": "Цены сервера недоступны",
+          "personalizedPrices": "Персональные цены"
+        }
       },
       "lastUpdate": "Последнее обновление",
       "form": {
@@ -740,3 +754,4 @@
     }
   }
 }
+

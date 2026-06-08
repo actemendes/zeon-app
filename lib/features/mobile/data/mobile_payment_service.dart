@@ -547,16 +547,7 @@ class MobilePaymentService with InfraLogger {
 
   static String _normalizePlan(String plan) {
     final p = plan.trim().toLowerCase();
-    switch (p) {
-      case "1":
-      case "3":
-      case "6":
-      case "12":
-      case "trial":
-        return p;
-      default:
-        return "1";
-    }
+    return p.isEmpty ? "1" : p;
   }
 
   static String? _firstNonEmpty(List<String?> values) {

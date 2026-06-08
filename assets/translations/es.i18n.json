@@ -182,10 +182,22 @@
           "oneMonth": "1 mes",
           "threeMonths": "3 meses",
           "sixMonths": "6 meses",
-          "twelveMonths": "12 meses"
+          "twelveMonths": "12 meses",
+          "month": {
+            "one": "$n mes",
+            "other": "$n meses"
+          }
         },
         "connect": "Conectar",
-        "paymentLaunchError": "No se pudo abrir la página de pago"
+        "paymentLaunchError": "No se pudo abrir la página de pago",
+        "pricing": {
+          "personalizedPrice": "Precio personalizado",
+          "loadingPrices": "Cargando precios...",
+          "refreshingPrices": "Actualizando precios...",
+          "showingSavedPrices": "Mostrando precios guardados",
+          "serverPricesUnavailable": "Precios del servidor no disponibles",
+          "personalizedPrices": "Precios personalizados"
+        }
       },
       "lastUpdate": "Última actualización",
       "form": {

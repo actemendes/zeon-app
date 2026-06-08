@@ -182,10 +182,22 @@
           "oneMonth": "1個月",
           "threeMonths": "3個月",
           "sixMonths": "6個月",
-          "twelveMonths": "12個月"
+          "twelveMonths": "12個月",
+          "month": {
+            "one": "$n個月",
+            "other": "$n個月"
+          }
         },
         "connect": "連接",
-        "paymentLaunchError": "無法開啟付款頁面"
+        "paymentLaunchError": "無法開啟付款頁面",
+        "pricing": {
+          "personalizedPrice": "個人化價格",
+          "loadingPrices": "正在載入價格...",
+          "refreshingPrices": "正在更新價格...",
+          "showingSavedPrices": "正在顯示已儲存價格",
+          "serverPricesUnavailable": "伺服器價格無法使用",
+          "personalizedPrices": "個人化價格"
+        }
       },
       "lastUpdate": "最後更新",
       "form": {

@@ -8,21 +8,10 @@ import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.
 import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:hiddify/features/mobile/data/mobile_payment_service.dart';
+import 'package:hiddify/features/pricing/data/pricing_data_providers.dart';
+import 'package:hiddify/features/pricing/model/pricing_models.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-
-enum _SubscriptionPlan {
-  one(months: 1, amountRub: 150, code: '1'),
-  three(months: 3, amountRub: 400, code: '3'),
-  six(months: 6, amountRub: 700, code: '6'),
-  twelve(months: 12, amountRub: 1200, code: '12');
-
-  const _SubscriptionPlan({required this.months, required this.amountRub, required this.code});
-
-  final int months;
-  final int amountRub;
-  final String code;
-}
 
 class ProfilePaymentPage extends HookConsumerWidget {
   const ProfilePaymentPage({super.key});
@@ -42,9 +31,12 @@ class ProfilePaymentPage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    final specialServers = t.pages.profileDetails.specialServers;
     final theme = Theme.of(context);
     final breakpoint = Breakpoint(context);
-    final selectedPlan = useState(_SubscriptionPlan.one);
+    final pricingState = ref.watch(pricingControllerProvider);
+    final plans = pricingState.catalog?.data.plans ?? const <PricingPlan>[];
+    final selectedPlanCode = useState('1');
     final isProcessingPayment = useState(false);
     final paymentResultState = useState<_PaymentResultState?>(null);
     final lastHandledSid = useRef<String?>(null);
@@ -57,6 +49,8 @@ class ProfilePaymentPage extends HookConsumerWidget {
       const [],
     );
     final sidFromRoute = GoRouterState.of(context).uri.queryParameters["sid"]?.trim();
+    final selectedPlan = _selectPlan(plans, selectedPlanCode.value);
+    final pricingBlocksPayment = pricingState.catalog?.isBundledFallback ?? true;
 
     useEffect(() {
       if (sidFromRoute == null || sidFromRoute.isEmpty) return null;
@@ -72,6 +66,14 @@ class ProfilePaymentPage extends HookConsumerWidget {
       });
       return null;
     }, [sidFromRoute, paymentService]);
+
+    useEffect(() {
+      if (plans.isEmpty) return null;
+      if (plans.every((plan) => plan.code != selectedPlanCode.value)) {
+        selectedPlanCode.value = plans.first.code;
+      }
+      return null;
+    }, [plans]);
 
     final headingColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
     final maxContentWidth = switch (breakpoint.activeBreakpoint) {
@@ -126,68 +128,84 @@ class ProfilePaymentPage extends HookConsumerWidget {
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: maxContentWidth),
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _FeatureItem(
-                            text: t.pages.profileDetails.specialServers.features.prioritySupport,
-                            icon: Icons.support_agent_rounded,
-                          ),
-                          const SizedBox(height: 12),
-                          // _FeatureItem(
-                          //   text: t.pages.profileDetails.specialServers.features.noSupport,
-                          //   icon: Icons.devices_other_rounded,
-                          // ),
-                          // const SizedBox(height: 12),
-                          _FeatureItem(
-                            text: t.pages.profileDetails.specialServers.features.parkingCoverage,
-                            icon: Icons.signal_cellular_alt_rounded,
-                          ),
-                          const SizedBox(height: 20),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: _ServersCard(
-                                  label: t.pages.profileDetails.specialServers.serversLabel,
-                                  value: t.pages.profileDetails.specialServers.serversValue,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _OperatorsCard(
-                                  label: t.pages.profileDetails.specialServers.operatorsLabel,
-                                  operatorAssetPaths: _operatorAssetPaths,
-                                ),
+                    child: RefreshIndicator(
+                      onRefresh: () => ref.read(pricingControllerProvider.notifier).refresh(),
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FeatureItem(
+                              text: t.pages.profileDetails.specialServers.features.prioritySupport,
+                              icon: Icons.support_agent_rounded,
+                            ),
+                            const SizedBox(height: 12),
+                            _FeatureItem(
+                              text: t.pages.profileDetails.specialServers.features.parkingCoverage,
+                              icon: Icons.signal_cellular_alt_rounded,
+                            ),
+                            if (pricingState.status == PricingUiStatus.errorWithoutCache && plans.isEmpty) ...[
+                              const SizedBox(height: 16),
+                              _PricingErrorBanner(
+                                message: specialServers.pricing.serverPricesUnavailable,
+                                onRetry: () => ref.read(pricingControllerProvider.notifier).refresh(),
                               ),
                             ],
-                          ),
-                        ],
+                            const SizedBox(height: 20),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _ServersCard(
+                                    label: t.pages.profileDetails.specialServers.serversLabel,
+                                    value: t.pages.profileDetails.specialServers.serversValue,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _OperatorsCard(
+                                    label: t.pages.profileDetails.specialServers.operatorsLabel,
+                                    operatorAssetPaths: _operatorAssetPaths,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
               _BottomSubscriptionPanel(
-                title: t.pages.profileDetails.specialServers.subscriptionTitle,
-                selectedPlan: selectedPlan.value,
-                optionLabels: (
-                  one: t.pages.profileDetails.specialServers.plans.oneMonth,
-                  three: t.pages.profileDetails.specialServers.plans.threeMonths,
-                  six: t.pages.profileDetails.specialServers.plans.sixMonths,
-                  twelve: t.pages.profileDetails.specialServers.plans.twelveMonths,
-                ),
-                onPlanSelected: isProcessingPayment.value ? null : (plan) => selectedPlan.value = plan,
-                connectLabel: t.pages.profileDetails.specialServers.connect,
-                isLoading: isProcessingPayment.value,
-                onConnectTap: () => _openCheckout(
-                  context,
-                  t,
-                  selectedPlan.value,
-                  paymentService: paymentService,
-                  isProcessingPayment: isProcessingPayment,
+                title: specialServers.subscriptionTitle,
+                plans: plans,
+                planLabel: specialServers.plans.month,
+                personalizedPriceLabel: specialServers.pricing.personalizedPrice,
+                selectedPlanCode: selectedPlanCode.value,
+                onPlanSelected: isProcessingPayment.value ? null : (plan) => selectedPlanCode.value = plan.code,
+                connectLabel: specialServers.connect,
+                isLoading:
+                    isProcessingPayment.value ||
+                    pricingState.status == PricingUiStatus.loading ||
+                    pricingState.status == PricingUiStatus.refreshing,
+                onConnectTap: selectedPlan == null || pricingBlocksPayment
+                    ? null
+                    : () => _openCheckout(
+                        context,
+                        t,
+                        selectedPlan,
+                        paymentService: paymentService,
+                        isProcessingPayment: isProcessingPayment,
+                      ),
+                statusMessage: _pricingStatusMessage(
+                  state: pricingState,
+                  loadingPrices: specialServers.pricing.loadingPrices,
+                  refreshingPrices: specialServers.pricing.refreshingPrices,
+                  showingSavedPrices: specialServers.pricing.showingSavedPrices,
+                  serverPricesUnavailable: specialServers.pricing.serverPricesUnavailable,
+                  personalizedPrices: specialServers.pricing.personalizedPrices,
                 ),
               ),
             ],
@@ -215,6 +233,30 @@ class ProfilePaymentPage extends HookConsumerWidget {
         ],
       ),
     );
+  }
+
+  PricingPlan? _selectPlan(List<PricingPlan> plans, String selectedCode) {
+    for (final plan in plans) {
+      if (plan.code == selectedCode) return plan;
+    }
+    return plans.isEmpty ? null : plans.first;
+  }
+
+  String? _pricingStatusMessage({
+    required PricingUiState state,
+    required String loadingPrices,
+    required String refreshingPrices,
+    required String showingSavedPrices,
+    required String serverPricesUnavailable,
+    required String personalizedPrices,
+  }) {
+    return switch (state.status) {
+      PricingUiStatus.loading => loadingPrices,
+      PricingUiStatus.refreshing => refreshingPrices,
+      PricingUiStatus.offlineCached => showingSavedPrices,
+      PricingUiStatus.errorWithoutCache => serverPricesUnavailable,
+      PricingUiStatus.content => state.catalog?.isPersonalized == true ? personalizedPrices : null,
+    };
   }
 
   Future<void> _processPaymentReturn(
@@ -251,11 +293,11 @@ class ProfilePaymentPage extends HookConsumerWidget {
   Future<void> _openCheckout(
     BuildContext context,
     Translations t,
-    _SubscriptionPlan plan, {
+    PricingPlan plan, {
     required MobilePaymentService paymentService,
     required ValueNotifier<bool> isProcessingPayment,
   }) async {
-    if (isProcessingPayment.value) return;
+    if (isProcessingPayment.value || plan.bundledFallback) return;
     isProcessingPayment.value = true;
     try {
       const retryDelay = Duration(seconds: 5);
@@ -282,6 +324,34 @@ class ProfilePaymentPage extends HookConsumerWidget {
     } finally {
       isProcessingPayment.value = false;
     }
+  }
+}
+
+class _PricingErrorBanner extends StatelessWidget {
+  const _PricingErrorBanner({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(color: theme.colorScheme.errorContainer, borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onErrorContainer),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
   }
 }
 
@@ -548,21 +618,27 @@ class _OperatorsCard extends StatelessWidget {
 class _BottomSubscriptionPanel extends StatelessWidget {
   const _BottomSubscriptionPanel({
     required this.title,
-    required this.selectedPlan,
-    required this.optionLabels,
+    required this.plans,
+    required this.planLabel,
+    required this.personalizedPriceLabel,
+    required this.selectedPlanCode,
     required this.onPlanSelected,
     required this.connectLabel,
     required this.isLoading,
     required this.onConnectTap,
+    required this.statusMessage,
   });
 
   final String title;
-  final _SubscriptionPlan selectedPlan;
-  final ({String one, String three, String six, String twelve}) optionLabels;
-  final ValueChanged<_SubscriptionPlan>? onPlanSelected;
+  final List<PricingPlan> plans;
+  final String Function({required num n}) planLabel;
+  final String personalizedPriceLabel;
+  final String selectedPlanCode;
+  final ValueChanged<PricingPlan>? onPlanSelected;
   final String connectLabel;
   final bool isLoading;
-  final VoidCallback onConnectTap;
+  final VoidCallback? onConnectTap;
+  final String? statusMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -583,47 +659,43 @@ class _BottomSubscriptionPanel extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                child: Text(
-                  title,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontFamily: 'Montserrat',
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontFamily: 'Montserrat',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    if (statusMessage != null)
+                      Text(
+                        statusMessage!,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: .62),
+                        ),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 8),
-              _PlanTile(
-                label: optionLabels.one,
-                price: _formatPrice(_SubscriptionPlan.one.amountRub),
-                selected: selectedPlan == _SubscriptionPlan.one,
-                enabled: onPlanSelected != null,
-                onTap: () => onPlanSelected?.call(_SubscriptionPlan.one),
-              ),
-              const SizedBox(height: 8),
-              _PlanTile(
-                label: optionLabels.three,
-                price: _formatPrice(_SubscriptionPlan.three.amountRub),
-                selected: selectedPlan == _SubscriptionPlan.three,
-                enabled: onPlanSelected != null,
-                onTap: () => onPlanSelected?.call(_SubscriptionPlan.three),
-              ),
-              const SizedBox(height: 8),
-              _PlanTile(
-                label: optionLabels.six,
-                price: _formatPrice(_SubscriptionPlan.six.amountRub),
-                selected: selectedPlan == _SubscriptionPlan.six,
-                enabled: onPlanSelected != null,
-                onTap: () => onPlanSelected?.call(_SubscriptionPlan.six),
-              ),
-              const SizedBox(height: 8),
-              _PlanTile(
-                label: optionLabels.twelve,
-                price: _formatPrice(_SubscriptionPlan.twelve.amountRub),
-                selected: selectedPlan == _SubscriptionPlan.twelve,
-                enabled: onPlanSelected != null,
-                onTap: () => onPlanSelected?.call(_SubscriptionPlan.twelve),
-              ),
+              for (final plan in plans) ...[
+                _PlanTile(
+                  label: _planLabel(plan),
+                  price: plan.formatFinalPrice(),
+                  basePrice: plan.discountAmountMinor > 0 ? plan.formatBasePrice() : null,
+                  discount: plan.discountAmountMinor > 0 ? plan.formatDiscount() : null,
+                  personalized: plan.personalized,
+                  personalizedPriceLabel: personalizedPriceLabel,
+                  selected: selectedPlanCode == plan.code,
+                  enabled: onPlanSelected != null,
+                  onTap: () => onPlanSelected?.call(plan),
+                ),
+                const SizedBox(height: 8),
+              ],
               const SizedBox(height: 12),
               _ConnectButton(label: connectLabel, isLoading: isLoading, onTap: onConnectTap),
             ],
@@ -633,13 +705,17 @@ class _BottomSubscriptionPanel extends StatelessWidget {
     );
   }
 
-  String _formatPrice(int value) => '$value \u20BD';
+  String _planLabel(PricingPlan plan) => planLabel(n: plan.months);
 }
 
 class _PlanTile extends StatelessWidget {
   const _PlanTile({
     required this.label,
     required this.price,
+    required this.basePrice,
+    required this.discount,
+    required this.personalized,
+    required this.personalizedPriceLabel,
     required this.selected,
     required this.enabled,
     required this.onTap,
@@ -647,6 +723,10 @@ class _PlanTile extends StatelessWidget {
 
   final String label;
   final String price;
+  final String? basePrice;
+  final String? discount;
+  final bool personalized;
+  final String personalizedPriceLabel;
   final bool selected;
   final bool enabled;
   final VoidCallback onTap;
@@ -665,7 +745,7 @@ class _PlanTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: Ink(
-        height: 45,
+        height: personalized || discount != null ? 58 : 45,
         decoration: BoxDecoration(
           color: defaultBackground,
           borderRadius: BorderRadius.circular(16),
@@ -678,24 +758,58 @@ class _PlanTile extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    label,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontFamily: 'Montserrat',
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                      color: textColor.withValues(alpha: disabledOpacity),
-                    ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontFamily: 'Montserrat',
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                          color: textColor.withValues(alpha: disabledOpacity),
+                        ),
+                      ),
+                      if (personalized)
+                        Text(
+                          personalizedPriceLabel,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.primary.withValues(alpha: disabledOpacity),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                Text(
-                  price,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontFamily: 'Montserrat',
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                    color: priceColor.withValues(alpha: disabledOpacity),
-                  ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (basePrice != null)
+                      Text(
+                        basePrice!,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: priceColor.withValues(alpha: disabledOpacity * .75),
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                    Text(
+                      price,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontFamily: 'Montserrat',
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                        color: priceColor.withValues(alpha: disabledOpacity),
+                      ),
+                    ),
+                    if (discount != null)
+                      Text(
+                        '-$discount',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary.withValues(alpha: disabledOpacity),
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -715,7 +829,7 @@ class _ConnectButton extends StatelessWidget {
 
   final String label;
   final bool isLoading;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

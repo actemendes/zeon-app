@@ -182,10 +182,22 @@
           "oneMonth": "1 ay",
           "threeMonths": "3 ay",
           "sixMonths": "6 ay",
-          "twelveMonths": "12 ay"
+          "twelveMonths": "12 ay",
+          "month": {
+            "one": "$n ay",
+            "other": "$n ay"
+          }
         },
         "connect": "Bağlan",
-        "paymentLaunchError": "Ödeme sayfası açılamadı"
+        "paymentLaunchError": "Ödeme sayfası açılamadı",
+        "pricing": {
+          "personalizedPrice": "Kişisel fiyat",
+          "loadingPrices": "Fiyatlar yükleniyor...",
+          "refreshingPrices": "Fiyatlar yenileniyor...",
+          "showingSavedPrices": "Kayıtlı fiyatlar gösteriliyor",
+          "serverPricesUnavailable": "Sunucu fiyatları kullanılamıyor",
+          "personalizedPrices": "Kişisel fiyatlar"
+        }
       },
       "lastUpdate": "Son güncelleme",
       "form": {

@@ -220,10 +220,22 @@
           "oneMonth": "1 month",
           "threeMonths": "3 months",
           "sixMonths": "6 months",
-          "twelveMonths": "12 months"
+          "twelveMonths": "12 months",
+          "month": {
+            "one": "$n month",
+            "other": "$n months"
+          }
         },
         "connect": "Connect",
-        "paymentLaunchError": "Unable to open payment page"
+        "paymentLaunchError": "Unable to open payment page",
+        "pricing": {
+          "personalizedPrice": "Personalized price",
+          "loadingPrices": "Loading prices...",
+          "refreshingPrices": "Refreshing prices...",
+          "showingSavedPrices": "Showing saved prices",
+          "serverPricesUnavailable": "Server prices unavailable",
+          "personalizedPrices": "Personalized prices"
+        }
       },
       "lastUpdate": "Last update",
       "form": {
@@ -736,3 +748,4 @@
     }
   }
 }
+

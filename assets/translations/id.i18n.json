@@ -182,10 +182,22 @@
           "oneMonth": "1 bulan",
           "threeMonths": "3 bulan",
           "sixMonths": "6 bulan",
-          "twelveMonths": "12 bulan"
+          "twelveMonths": "12 bulan",
+          "month": {
+            "one": "$n bulan",
+            "other": "$n bulan"
+          }
         },
         "connect": "Hubungkan",
-        "paymentLaunchError": "Halaman pembayaran tidak dapat dibuka"
+        "paymentLaunchError": "Halaman pembayaran tidak dapat dibuka",
+        "pricing": {
+          "personalizedPrice": "Harga personal",
+          "loadingPrices": "Memuat harga...",
+          "refreshingPrices": "Memperbarui harga...",
+          "showingSavedPrices": "Menampilkan harga tersimpan",
+          "serverPricesUnavailable": "Harga server tidak tersedia",
+          "personalizedPrices": "Harga personal"
+        }
       },
       "lastUpdate": "Terakhir diperbarui",
       "form": {

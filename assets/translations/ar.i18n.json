@@ -188,10 +188,26 @@
           "oneMonth": "شهر واحد",
           "threeMonths": "3 أشهر",
           "sixMonths": "6 أشهر",
-          "twelveMonths": "12 شهرًا"
+          "twelveMonths": "12 شهرًا",
+          "month": {
+            "zero": "$n شهر",
+            "one": "شهر واحد",
+            "two": "شهران",
+            "few": "$n أشهر",
+            "many": "$n شهرًا",
+            "other": "$n شهر"
+          }
         },
         "connect": "اتصال",
-        "paymentLaunchError": "تعذر فتح صفحة الدفع"
+        "paymentLaunchError": "تعذر فتح صفحة الدفع",
+        "pricing": {
+          "personalizedPrice": "سعر مخصص",
+          "loadingPrices": "جار تحميل الأسعار...",
+          "refreshingPrices": "جار تحديث الأسعار...",
+          "showingSavedPrices": "عرض الأسعار المحفوظة",
+          "serverPricesUnavailable": "أسعار الخادم غير متاحة",
+          "personalizedPrices": "أسعار مخصصة"
+        }
       },
       "lastUpdate": "آخر تحديث",
       "form": {

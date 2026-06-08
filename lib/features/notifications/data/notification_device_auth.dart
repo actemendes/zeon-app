@@ -24,6 +24,12 @@ class NotificationDeviceAuth {
   final SharedPreferences _preferences;
   final StableDeviceIdService _stableDeviceId;
 
+  String peekCachedDeviceJwt() {
+    final cached = (_preferences.getString(_prefToken) ?? '').trim();
+    if (cached.isEmpty || _isJwtExpired(cached)) return '';
+    return cached;
+  }
+
   Future<String> resolveDeviceJwt({bool forceRefresh = false}) async {
     final now = DateTime.now().toUtc();
     final cached = (_preferences.getString(_prefToken) ?? '').trim();

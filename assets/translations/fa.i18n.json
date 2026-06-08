@@ -182,10 +182,22 @@
           "oneMonth": "۱ ماه",
           "threeMonths": "۳ ماه",
           "sixMonths": "۶ ماه",
-          "twelveMonths": "۱۲ ماه"
+          "twelveMonths": "۱۲ ماه",
+          "month": {
+            "one": "$n ماه",
+            "other": "$n ماه"
+          }
         },
         "connect": "اتصال",
-        "paymentLaunchError": "باز کردن صفحه پرداخت ممکن نشد"
+        "paymentLaunchError": "باز کردن صفحه پرداخت ممکن نشد",
+        "pricing": {
+          "personalizedPrice": "قیمت شخصی",
+          "loadingPrices": "در حال بارگذاری قیمت‌ها...",
+          "refreshingPrices": "در حال به‌روزرسانی قیمت‌ها...",
+          "showingSavedPrices": "نمایش قیمت‌های ذخیره‌شده",
+          "serverPricesUnavailable": "قیمت‌های سرور در دسترس نیست",
+          "personalizedPrices": "قیمت‌های شخصی"
+        }
       },
       "lastUpdate": "آخرین به‌روزرسانی",
       "form": {
@@ -674,5 +686,4 @@
     }
   }
 }
-
 
