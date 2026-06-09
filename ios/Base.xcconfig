@@ -5,6 +5,10 @@
 //  Created by GFWFighter on 7/24/1402 AP.
 //
 
-BASE_BUNDLE_IDENTIFIER=apple.hiddify.com
-SERVICE_IDENTIFIER=com.hiddify.app
-DEVELOPMENT_TEAM=3JFTY5BP58
+BASE_BUNDLE_IDENTIFIER=app.zeon.ios
+SERVICE_IDENTIFIER=app.zeon.ios
+APPLE_DEVELOPMENT_TEAM=
+
+// Keep developer credentials outside git. Copy AppleSigning.xcconfig.example
+// to AppleSigning.xcconfig and fill it in before creating a signed IPA.
+#include? "AppleSigning.xcconfig"

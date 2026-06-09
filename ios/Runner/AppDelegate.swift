@@ -10,8 +10,8 @@ import Sentry
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
         setupFileManager()
-        registerHandlers()
         GeneratedPluginRegistrant.register(with: self)
+        registerHandlers()
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
     
@@ -21,15 +21,25 @@ import Sentry
     }
     
     func registerHandlers() {
-        MethodHandler.register(with: self.registrar(forPlugin: MethodHandler.name)!)
-        PlatformMethodHandler.register(with: self.registrar(forPlugin: PlatformMethodHandler.name)!)
-        FileMethodHandler.register(with: self.registrar(forPlugin: FileMethodHandler.name)!)
-        StatusEventHandler.register(with: self.registrar(forPlugin: StatusEventHandler.name)!)
-        AlertsEventHandler.register(with: self.registrar(forPlugin: AlertsEventHandler.name)!)
+        guard
+            let methodRegistrar = registrar(forPlugin: MethodHandler.name),
+            let platformRegistrar = registrar(forPlugin: PlatformMethodHandler.name),
+            let fileRegistrar = registrar(forPlugin: FileMethodHandler.name),
+            let statusRegistrar = registrar(forPlugin: StatusEventHandler.name),
+            let alertsRegistrar = registrar(forPlugin: AlertsEventHandler.name)
+        else {
+            NSLog("Unable to create Flutter plugin registrars")
+            return
+        }
+
+        MethodHandler.register(with: methodRegistrar)
+        PlatformMethodHandler.register(with: platformRegistrar)
+        FileMethodHandler.register(with: fileRegistrar)
+        StatusEventHandler.register(with: statusRegistrar)
+        AlertsEventHandler.register(with: alertsRegistrar)
 //        LogsEventHandler.register(with: self.registrar(forPlugin: LogsEventHandler.name)!)
 //        GroupsEventHandler.register(with: self.registrar(forPlugin: GroupsEventHandler.name)!)
 //        ActiveGroupsEventHandler.register(with: self.registrar(forPlugin: ActiveGroupsEventHandler.name)!)
 //        StatsEventHandler.register(with: self.registrar(forPlugin: StatsEventHandler.name)!)
     }
 }
-

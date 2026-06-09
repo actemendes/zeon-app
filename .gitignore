@@ -50,6 +50,11 @@ android/local (2).properties
 **/*.xcframework
 /dist/
 /dist_docker/
+/.toolchains/
+/.apple-build/
+/out/apple/
+/ios/AppleSigning.xcconfig
+/ios/ExportOptions.local.plist
 
 /assets/core/*
 !/assets/core/.gitkeep

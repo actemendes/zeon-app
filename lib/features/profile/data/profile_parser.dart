@@ -1059,7 +1059,7 @@ class ProfileParser {
   @visibleForTesting
   static Either<ProfileFailure, ProfileEntity> parse({required String tempFilePath, required ProfileEntity profile}) =>
       Either.tryCatch(() {
-        final rawContent = File(tempFilePath).readAsStringSync();
+        final rawContent = tempFilePath.isEmpty ? '' : File(tempFilePath).readAsStringSync();
         final normalizedContent = _decodeOuterBase64Json(rawContent);
         final headers = Map<String, dynamic>.from(profile.populatedHeaders ?? {});
         // Ensure metadata from raw JSON body reaches parse stage, but do not

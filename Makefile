@@ -480,6 +480,24 @@ macos-release:
 ios-release: #not tested
 	fastforge package --platform ios --targets ipa --build-export-options-plist  ios/exportOptions.plist $(DISTRIBUTOR_ARGS)
 
+apple-setup:
+	./scripts/apple/bootstrap.sh
+
+apple-doctor:
+	./scripts/apple/build.sh doctor
+
+macos-app:
+	./scripts/apple/build.sh macos-app
+
+macos-artifacts:
+	./scripts/apple/build.sh macos-artifacts
+
+ios-unsigned:
+	./scripts/apple/build.sh ios-unsigned
+
+ios-ipa:
+	./scripts/apple/build.sh ios-ipa
+
 android-libs:
 	$(MKDIR) $(ANDROID_OUT) || echo Folder already exists. Skipping...
 	curl -L $(CORE_URL)/$(CORE_NAME)-android.tar.gz | tar xz -C $(ANDROID_OUT)/
