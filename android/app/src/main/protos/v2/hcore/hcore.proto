@@ -105,6 +105,11 @@ message OutboundInfo {
   int64 upload = 15;
   int64 download = 16;
   string detour = 17;
+  int32 quality_score = 18;
+  string quality_level = 19;
+  bool auto_allowed = 20;
+  string last_error = 21;
+  int64 checked_at = 22;
 }
 
 message IpInfo {
@@ -229,7 +234,6 @@ message LogRequest {
 
 message StopRequest{
 }
-
 
 
 

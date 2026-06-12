@@ -9,6 +9,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
+	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing/common"
 	N "github.com/sagernet/sing/common/network"
 	"golang.org/x/net/publicsuffix"
@@ -127,6 +128,80 @@ func sortOutboundsByDelay(outbounds map[string][]adapter.Outbound, history map[s
 
 	return res
 }
+
+func filterRoundRobinOutboundsByQuality(outbounds map[string][]adapter.Outbound, history map[string]*adapter.URLTestHistory, logger log.ContextLogger) map[string][]adapter.Outbound {
+	res := map[string][]adapter.Outbound{}
+	for net, outs := range outbounds {
+		goodCandidates := make([]adapter.Outbound, 0, len(outs))
+		mediumCandidates := make([]adapter.Outbound, 0, len(outs))
+		unknownCandidates := make([]adapter.Outbound, 0, len(outs))
+		knownQuality := 0
+		excludedBad := 0
+		for _, out := range outs {
+			his := history[out.Tag()]
+			level, autoAllowed, known := normalizedQuality(his)
+			if !known {
+				unknownCandidates = append(unknownCandidates, out)
+				continue
+			}
+			knownQuality++
+			switch {
+			case autoAllowed && (level == monitoring.QualityLevelExcellent || level == monitoring.QualityLevelGood):
+				goodCandidates = append(goodCandidates, out)
+			case level == monitoring.QualityLevelMedium:
+				mediumCandidates = append(mediumCandidates, out)
+			default:
+				excludedBad++
+			}
+		}
+
+		switch {
+		case len(goodCandidates) > 0:
+			res[net] = goodCandidates
+			logBalanceQuality(logger, "mode=good candidates=", len(goodCandidates), " excludedBad=", excludedBad)
+		case len(mediumCandidates) > 0:
+			res[net] = mediumCandidates
+			logBalanceQuality(logger, "fallback=medium candidates=", len(mediumCandidates), " reason=no-good-candidates excludedBad=", excludedBad)
+		case knownQuality == 0:
+			res[net] = outs
+			logBalanceQuality(logger, "compatibilityFallback=true reason=unknown-quality candidates=", len(outs))
+		case len(unknownCandidates) > 0:
+			res[net] = unknownCandidates
+			logBalanceQuality(logger, "compatibilityFallback=true reason=no-usable-known-candidates candidates=", len(unknownCandidates), " excludedBad=", excludedBad)
+		default:
+			res[net] = outs
+			logBalanceQuality(logger, "emergencyFallback=true reason=no-quality-candidates candidates=", len(outs), " excludedBad=", excludedBad)
+		}
+	}
+	return res
+}
+
+func normalizedQuality(his *adapter.URLTestHistory) (level string, autoAllowed bool, known bool) {
+	if his == nil || his.QualityLevel == "" || his.QualityLevel == monitoring.QualityLevelUnknown {
+		return monitoring.QualityLevelUnknown, true, false
+	}
+	return his.QualityLevel, his.AutoAllowed, true
+}
+
+func logBalanceQuality(logger log.ContextLogger, args ...any) {
+	if logger == nil {
+		return
+	}
+	logger.Info(append([]any{"[BalanceQuality] "}, args...)...)
+}
+
+func sameOutboundOrder(left []adapter.Outbound, right []adapter.Outbound) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i].Tag() != right[i].Tag() {
+			return false
+		}
+	}
+	return true
+}
+
 func getAcceptableIndex(sortedOutbounds map[string][]adapter.Outbound, history map[string]*adapter.URLTestHistory, delayAcceptableRatio float64) map[string]int {
 	res := map[string]int{}
 	for net, outs := range sortedOutbounds {

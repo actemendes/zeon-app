@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/widget/shimmer_skeleton.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
+import 'package:hiddify/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -67,6 +68,14 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
                 )
               else
                 Semantics(label: t.pages.proxies.delay.testing, child: const ShimmerSkeleton(width: 48, height: 18)),
+              if (delay > 0 ||
+                  proxy.qualityLevel.isNotEmpty ||
+                  proxy.qualityScore != 0 ||
+                  proxy.checkedAt != 0 ||
+                  proxy.lastError.isNotEmpty) ...[
+                const Gap(8),
+                ProxyQualityIndicator(proxy, showDetails: false),
+              ],
             ],
           ),
         ),

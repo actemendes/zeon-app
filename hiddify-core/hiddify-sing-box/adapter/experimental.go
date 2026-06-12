@@ -21,10 +21,30 @@ type ClashServer interface {
 }
 
 type URLTestHistory struct {
-	Time        time.Time      `json:"time"`
-	Delay       uint16         `json:"delay"`
-	IpInfo      *ipinfo.IpInfo `json:"ipinfo"`
-	IsFromCache bool           `json:"from_cache"`
+	Time         time.Time      `json:"time"`
+	Delay        uint16         `json:"delay"`
+	IpInfo       *ipinfo.IpInfo `json:"ipinfo"`
+	IsFromCache  bool           `json:"from_cache"`
+	QualityScore int32          `json:"quality_score"`
+	QualityLevel string         `json:"quality_level"`
+	AutoAllowed  bool           `json:"auto_allowed"`
+	LastError    string         `json:"last_error"`
+	CheckedAt    int64          `json:"checked_at"`
+}
+
+type OutboundQuality struct {
+	QualityScore int32
+	QualityLevel string
+	AutoAllowed  bool
+	LastError    string
+	CheckedAt    int64
+}
+
+type OutboundRuntimeErrorStats struct {
+	Tag        string `json:"tag"`
+	ErrorType  string `json:"error_type"`
+	Count      int    `json:"count"`
+	LastSeenAt int64  `json:"last_seen_at"`
 }
 
 type URLTestHistoryStorage interface {

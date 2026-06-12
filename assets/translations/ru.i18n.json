@@ -132,6 +132,24 @@
         "result": "Задержка: ${delay} мс",
         "timeout": "Тайм-аут теста задержки",
         "testing": "Задержка: тестирование..."
+      },
+      "quality": {
+        "excellent": "Отличное",
+        "good": "Хорошее",
+        "medium": "Среднее",
+        "bad": "Плохое",
+        "unknown": "Качество неизвестно",
+        "notUsedInAuto": "не в авто",
+        "errors": {
+          "timeout": "timeout",
+          "refused": "refused",
+          "reset": "reset",
+          "eof": "EOF",
+          "nxdomain": "NXDOMAIN",
+          "brokenPipe": "broken pipe",
+          "deadline": "deadline",
+          "handshakeFailed": "handshake failed"
+        }
       }
     },
     "profiles": {

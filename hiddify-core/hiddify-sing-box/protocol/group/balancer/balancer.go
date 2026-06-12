@@ -93,7 +93,7 @@ func (s *Balancer) Start() error {
 	}
 	switch s.options.Strategy {
 	case StrategyRoundRobin:
-		s.strategyFn = NewRoundRobin(outbounds, s.options)
+		s.strategyFn = NewRoundRobin(outbounds, s.options, s.logger)
 	case StrategyConsistentHashing:
 		s.strategyFn = NewConsistentHashing(outbounds, s.options)
 	case StrategyStickySessions:
@@ -176,7 +176,12 @@ func (s *Balancer) DialContext(ctx context.Context, network string, destination 
 		return s.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
 	s.logger.ErrorContext(ctx, err)
-	s.monitor.InvalidateTest(outbound.Tag())
+	if s.monitor != nil {
+		if s.options.Strategy == StrategyRoundRobin {
+			s.monitor.RecordRuntimeError(outbound.Tag(), err)
+		}
+		s.monitor.InvalidateTest(outbound.Tag())
+	}
 
 	return nil, err
 }
@@ -199,7 +204,12 @@ func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 		return s.interruptGroup.NewPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
 	s.logger.ErrorContext(ctx, err)
-	s.monitor.InvalidateTest(outbound.Tag())
+	if s.monitor != nil {
+		if s.options.Strategy == StrategyRoundRobin {
+			s.monitor.RecordRuntimeError(outbound.Tag(), err)
+		}
+		s.monitor.InvalidateTest(outbound.Tag())
+	}
 	return nil, err
 }
 

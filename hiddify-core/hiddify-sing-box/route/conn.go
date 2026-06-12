@@ -14,6 +14,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
+	"github.com/sagernet/sing-box/common/monitoring"
 	"github.com/sagernet/sing-box/common/tlsfragment"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing/common"
@@ -55,6 +56,39 @@ func (m *ConnectionManager) Close() error {
 	return nil
 }
 
+func (m *ConnectionManager) recordRuntimeError(ctx context.Context, args ...any) {
+	var (
+		metadata *adapter.InboundContext
+		err      error
+	)
+	for _, arg := range args {
+		switch value := arg.(type) {
+		case adapter.InboundContext:
+			metadata = &value
+		case *adapter.InboundContext:
+			metadata = value
+		case error:
+			err = value
+		}
+	}
+	if err == nil {
+		return
+	}
+	if metadata == nil {
+		metadata = adapter.ContextFrom(ctx)
+	}
+	if metadata == nil {
+		return
+	}
+	tag := metadata.GetRealOutbound()
+	if tag == "" {
+		return
+	}
+	if monitor := monitoring.Get(ctx); monitor != nil {
+		monitor.RecordRuntimeError(tag, err)
+	}
+}
+
 func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	ctx = adapter.WithContext(ctx, &metadata)
 	var (
@@ -82,6 +116,7 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		}
 		err = E.Cause(err, "open connection to ", remoteString, dialerString)
 		N.CloseOnHandshakeFailure(conn, onClose, err)
+		m.recordRuntimeError(ctx, metadata, err)
 		m.logger.ErrorContext(ctx, err)
 		return
 	}
@@ -90,6 +125,7 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		err = E.Cause(err, "report handshake success")
 		remoteConn.Close()
 		N.CloseOnHandshakeFailure(conn, onClose, err)
+		m.recordRuntimeError(ctx, metadata, err)
 		m.logger.ErrorContext(ctx, err)
 		return
 	}
@@ -152,6 +188,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			}
 			err = E.Cause(err, "open packet connection to ", remoteString, dialerString)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
+			m.recordRuntimeError(ctx, metadata, err)
 			m.logger.ErrorContext(ctx, err)
 			return
 		}
@@ -184,6 +221,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 	if err != nil {
 		conn.Close()
 		remotePacketConn.Close()
+		m.recordRuntimeError(ctx, metadata, err)
 		m.logger.ErrorContext(ctx, "report handshake success: ", err)
 		return
 	}
@@ -255,8 +293,10 @@ func (m *ConnectionManager) preConnectionCopy(ctx context.Context, source net.Co
 			}
 			common.Close(source, destination)
 			if !direction {
+				m.recordRuntimeError(ctx, err)
 				m.logger.ErrorContext(ctx, "connection upload handshake: ", err)
 			} else {
+				m.recordRuntimeError(ctx, err)
 				m.logger.ErrorContext(ctx, "connection download handshake: ", err)
 			}
 			return
@@ -285,8 +325,10 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 					}
 					common.Close(source, destination)
 					if !direction {
+						m.recordRuntimeError(ctx, err)
 						m.logger.ErrorContext(ctx, "connection upload payload: ", err)
 					} else {
+						m.recordRuntimeError(ctx, err)
 						m.logger.ErrorContext(ctx, "connection download payload: ", err)
 					}
 					return
@@ -322,6 +364,7 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 		if err == nil {
 			m.logger.DebugContext(ctx, "connection upload finished")
 		} else if !E.IsClosedOrCanceled(err) && !strings.Contains(err.Error(), "NO_ERROR") {
+			m.recordRuntimeError(ctx, err)
 			m.logger.ErrorContext(ctx, "connection upload closed: ", err)
 		} else {
 			m.logger.TraceContext(ctx, "connection upload closed")
@@ -330,6 +373,7 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 		if err == nil {
 			m.logger.DebugContext(ctx, "connection download finished")
 		} else if !E.IsClosedOrCanceled(err) && !strings.Contains(err.Error(), "NO_ERROR") && !strings.Contains(err.Error(), "response body closed") {
+			m.recordRuntimeError(ctx, err)
 			m.logger.ErrorContext(ctx, "connection download closed: ", err)
 		} else {
 			m.logger.TraceContext(ctx, "connection download closed")

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/features/proxy/active/ip_widget.dart';
 import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
+import 'package:hiddify/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:hiddify/gen/fonts.gen.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
@@ -26,6 +27,12 @@ class ProxyTile extends StatelessWidget with PresLogger {
     final hasDelay = proxy.urlTestDelay != 0;
     final hasNoPing = proxy.urlTestDelay > 65000;
     final hasDownload = proxy.download > 0;
+    final hasQuality =
+        hasDelay ||
+        proxy.qualityLevel.isNotEmpty ||
+        proxy.qualityScore != 0 ||
+        proxy.checkedAt != 0 ||
+        proxy.lastError.isNotEmpty;
 
     return ListTile(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -63,25 +70,37 @@ class ProxyTile extends StatelessWidget with PresLogger {
           size: 40,
         ),
       ),
-      trailing: hasDelay || hasDownload
+      trailing: hasDelay || hasDownload || hasQuality
           ? SizedBox(
-              width: 44,
+              width: 88,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (hasDelay)
-                    Text(
-                      hasNoPing ? "\u00D7" : proxy.urlTestDelay.toString(),
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: delayColor(context, proxy.urlTestDelay),
-                        fontSize: hasNoPing ? 16 : null,
-                        height: hasNoPing ? 1 : null,
-                      ),
-                    ),
-                  if (hasDelay && hasDownload) const SizedBox(height: 2),
-                  if (hasDownload) Icon(Icons.download_rounded, size: 16, color: iconColor.withValues(alpha: .85)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (hasDownload) ...[
+                        Icon(Icons.download_rounded, size: 16, color: iconColor.withValues(alpha: .85)),
+                        if (hasDelay) const SizedBox(width: 4),
+                      ],
+                      if (hasDelay)
+                        Text(
+                          hasNoPing ? "\u00D7" : "${proxy.urlTestDelay} ms",
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: delayColor(context, proxy.urlTestDelay),
+                            fontSize: hasNoPing ? 16 : null,
+                            height: hasNoPing ? 1 : null,
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (hasQuality) ...[
+                    const SizedBox(height: 3),
+                    ProxyQualityIndicator(proxy, foregroundColor: iconColor),
+                  ],
                 ],
               ),
             )

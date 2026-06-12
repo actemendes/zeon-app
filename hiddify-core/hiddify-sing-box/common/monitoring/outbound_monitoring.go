@@ -76,6 +76,9 @@ type OutboundMonitoring struct {
 	workersCount     int
 	history          adapter.URLTestHistoryStorage
 
+	runtimeErrorsAccess sync.Mutex
+	runtimeErrors       map[string]map[string]*adapter.OutboundRuntimeErrorStats
+
 	mainTicker *time.Ticker
 
 	priorityQueue chan *testTask
@@ -253,6 +256,7 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		normalQueue:   make(chan *testTask, 10000),
 		outbounds:     make(map[string]*outboundState),
 		groups:        make(map[string]*groupState),
+		runtimeErrors: make(map[string]map[string]*adapter.OutboundRuntimeErrorStats),
 	}
 
 	return m, nil
@@ -592,7 +596,12 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 	}
 	if err != nil || delay >= TimeoutDelay {
 		his.Delay = TimeoutDelay
+		runtimeStats := m.recentRuntimeErrorStats(tag)
+		m.logRuntimeErrorPenalties(tag, runtimeStats)
+		quality := CalculateOutboundQuality(his.Delay, fmt.Sprint(err), false, runtimeStats)
+		applyQualityToHistory(&his, quality)
 		m.logger.Warn("outbound ", tag, " URL test failed: ", err)
+		m.logger.Info("[ServerQuality] tag=", tag, " delay=", his.Delay, " quality=", his.QualityScore, " level=", his.QualityLevel, " error=", his.LastError, " autoAllowed=", his.AutoAllowed, " reason=urltest-failed")
 		return his, err
 	}
 	select {
@@ -618,6 +627,11 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 	} else {
 		m.logger.Info("outbound ", tag, " , IP: -          (", his.Delay, "ms)")
 	}
+	runtimeStats := m.recentRuntimeErrorStats(tag)
+	m.logRuntimeErrorPenalties(tag, runtimeStats)
+	quality := CalculateOutboundQuality(his.Delay, "", true, runtimeStats)
+	applyQualityToHistory(&his, quality)
+	m.logger.Info("[ServerQuality] tag=", tag, " delay=", his.Delay, " quality=", his.QualityScore, " level=", his.QualityLevel, " autoAllowed=", his.AutoAllowed, " reason=urltest-ok")
 	return his, nil
 }
 
@@ -761,11 +775,23 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.enqueuedCycle = 0
 	state.invalid = outcome.err != nil
 	state.lastURL = outcome.url
-	if (outcome.history.Delay != state.history.Delay) || state.history.IpInfo == nil || (outcome.history.IpInfo != nil) {
+	if (outcome.history.Delay != state.history.Delay) ||
+		(outcome.history.QualityScore != state.history.QualityScore) ||
+		(outcome.history.QualityLevel != state.history.QualityLevel) ||
+		(outcome.history.AutoAllowed != state.history.AutoAllowed) ||
+		(outcome.history.LastError != state.history.LastError) ||
+		(outcome.history.CheckedAt != state.history.CheckedAt) ||
+		state.history.IpInfo == nil ||
+		(outcome.history.IpInfo != nil) {
 		m.cacheDirty.Store(true)
 	}
 	state.history.Delay = outcome.history.Delay
 	state.history.Time = outcome.history.Time
+	state.history.QualityScore = outcome.history.QualityScore
+	state.history.QualityLevel = outcome.history.QualityLevel
+	state.history.AutoAllowed = outcome.history.AutoAllowed
+	state.history.LastError = outcome.history.LastError
+	state.history.CheckedAt = outcome.history.CheckedAt
 	state.from_cache = false
 	if outcome.history.IpInfo != nil {
 		state.history.IpInfo = outcome.history.IpInfo

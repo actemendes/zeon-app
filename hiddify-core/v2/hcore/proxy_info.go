@@ -23,7 +23,10 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 	// 	return nil
 	// }
 
-	out := &OutboundInfo{}
+	out := &OutboundInfo{
+		QualityLevel: "unknown",
+		AutoAllowed:  true,
+	}
 	// realTag := ""
 
 	out.Tag = detour.Tag()
@@ -58,6 +61,15 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 	if url_test_history != nil {
 		out.UrlTestTime = timestamppb.New(url_test_history.Time)
 		out.UrlTestDelay = int32(url_test_history.Delay)
+		out.QualityScore = url_test_history.QualityScore
+		out.QualityLevel = url_test_history.QualityLevel
+		out.AutoAllowed = url_test_history.AutoAllowed
+		out.LastError = url_test_history.LastError
+		out.CheckedAt = url_test_history.CheckedAt
+		if out.QualityLevel == "" {
+			out.QualityLevel = "unknown"
+			out.AutoAllowed = true
+		}
 		if url_test_history.IsFromCache {
 			out.UrlTestDelay = 0
 		}

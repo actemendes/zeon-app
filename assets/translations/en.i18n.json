@@ -128,6 +128,24 @@
         "result": "Delay: ${delay}ms",
         "timeout": "Delay test timeout",
         "testing": "Delay: testing..."
+      },
+      "quality": {
+        "excellent": "Excellent",
+        "good": "Good",
+        "medium": "Medium",
+        "bad": "Bad",
+        "unknown": "Quality unknown",
+        "notUsedInAuto": "not in auto",
+        "errors": {
+          "timeout": "timeout",
+          "refused": "refused",
+          "reset": "reset",
+          "eof": "EOF",
+          "nxdomain": "NXDOMAIN",
+          "brokenPipe": "broken pipe",
+          "deadline": "deadline",
+          "handshakeFailed": "handshake failed"
+        }
       }
     },
     "profiles": {

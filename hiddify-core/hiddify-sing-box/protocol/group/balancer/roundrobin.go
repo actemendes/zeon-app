@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	N "github.com/sagernet/sing/common/network"
 )
@@ -19,9 +20,10 @@ type RoundRobin struct {
 	idx                  map[string]int
 	mu                   sync.Mutex
 	delayAcceptableRatio float64
+	logger               log.ContextLogger
 }
 
-func NewRoundRobin(outbounds []adapter.Outbound, options option.BalancerOutboundOptions) *RoundRobin {
+func NewRoundRobin(outbounds []adapter.Outbound, options option.BalancerOutboundOptions, logger log.ContextLogger) *RoundRobin {
 	cOutbounds := convertOutbounds(outbounds)
 	acceptable := map[string]int{}
 	idx := map[string]int{}
@@ -36,6 +38,7 @@ func NewRoundRobin(outbounds []adapter.Outbound, options option.BalancerOutbound
 		maxAcceptableIndex:   acceptable,
 		delayAcceptableRatio: options.DelayAcceptableRatio,
 		idx:                  idx,
+		logger:               logger,
 	}
 }
 
@@ -46,13 +49,15 @@ func (s *RoundRobin) Now() string {
 }
 
 func (s *RoundRobin) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
-	sortedOutbounds := sortOutboundsByDelay(s.outbounds, history)
+	filteredOutbounds := filterRoundRobinOutboundsByQuality(s.outbounds, history, s.logger)
+	sortedOutbounds := sortOutboundsByDelay(filteredOutbounds, history)
 	acceptableIndex := getAcceptableIndex(sortedOutbounds, history, s.delayAcceptableRatio)
 
 	s.mu.Lock()
 	changed := false
 	for net, ix := range acceptableIndex {
 		changed = changed || ix != s.maxAcceptableIndex[net]
+		changed = changed || !sameOutboundOrder(sortedOutbounds[net], s.sortedOutbounds[net])
 	}
 
 	s.sortedOutbounds = sortedOutbounds
