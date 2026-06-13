@@ -74,6 +74,7 @@ class ProxyQualityIndicator extends ConsumerWidget {
       ProxyQualityLevel.excellent => theme.brightness == Brightness.dark ? Colors.lightGreenAccent : Colors.green,
       ProxyQualityLevel.good => theme.brightness == Brightness.dark ? Colors.lightGreen : Colors.green.shade700,
       ProxyQualityLevel.medium => Colors.amber.shade700,
+      ProxyQualityLevel.weak => Colors.orange.shade700,
       ProxyQualityLevel.bad => scheme.error,
       ProxyQualityLevel.unknown => scheme.outline,
     };
@@ -118,7 +119,7 @@ class _QualityBars extends StatelessWidget {
   }
 }
 
-enum ProxyQualityLevel { excellent, good, medium, bad, unknown }
+enum ProxyQualityLevel { excellent, good, medium, weak, bad, unknown }
 
 class ProxyQualityPresentation {
   const ProxyQualityPresentation({
@@ -138,14 +139,32 @@ class ProxyQualityPresentation {
   final String tooltip;
 
   factory ProxyQualityPresentation.from(OutboundInfo proxy, Translations t) {
-    final level = _parseLevel(proxy.qualityLevel);
+    final hasCombinedHealth =
+        proxy.combinedHealthLevel.isNotEmpty ||
+        proxy.combinedHealthScore != 0 ||
+        proxy.externalHealthLevel.isNotEmpty ||
+        proxy.externalHealthScore != 0 ||
+        proxy.healthReason.isNotEmpty ||
+        proxy.speedCheckedAt != 0 ||
+        proxy.speedLevel.isNotEmpty;
+    final level = _parseLevel(hasCombinedHealth ? proxy.combinedHealthLevel : proxy.qualityLevel);
     final label = _levelLabel(level, t);
     final safeError = _safeErrorLabel(proxy.lastError, t);
-    final showReason = (level == ProxyQualityLevel.medium || level == ProxyQualityLevel.bad) && safeError.isNotEmpty;
+    final safeHealthReason = _safeHealthReasonLabel(proxy.healthReason, t);
+    final showReason =
+        (level == ProxyQualityLevel.medium || level == ProxyQualityLevel.weak || level == ProxyQualityLevel.bad) &&
+        (safeError.isNotEmpty || safeHealthReason.isNotEmpty);
     final notInAuto = !proxy.autoAllowed && !isUnknownLevel(level);
-    final detailLabel = showReason ? safeError : (notInAuto ? t.pages.proxies.quality.notUsedInAuto : "");
-    final score = proxy.qualityScore > 0 ? " / ${proxy.qualityScore}" : "";
-    final tooltip = detailLabel.isEmpty ? "$label$score" : "$label$score / $detailLabel";
+    final speedLabel = _speedLabel(proxy.speedKbps);
+    final detailLabel = showReason
+        ? (safeError.isNotEmpty ? safeError : safeHealthReason)
+        : (notInAuto ? t.pages.proxies.quality.notUsedInAuto : (speedLabel.isNotEmpty ? speedLabel : ""));
+    final scoreValue = hasCombinedHealth && proxy.combinedHealthScore > 0
+        ? proxy.combinedHealthScore
+        : proxy.qualityScore;
+    final score = scoreValue > 0 ? " / $scoreValue" : "";
+    final speedTooltip = speedLabel.isNotEmpty ? " / $speedLabel" : "";
+    final tooltip = detailLabel.isEmpty ? "$label$score$speedTooltip" : "$label$score / $detailLabel";
 
     return ProxyQualityPresentation(
       level: level,
@@ -162,6 +181,9 @@ class ProxyQualityPresentation {
       "excellent" => ProxyQualityLevel.excellent,
       "good" => ProxyQualityLevel.good,
       "medium" => ProxyQualityLevel.medium,
+      "slow" => ProxyQualityLevel.medium,
+      "weak" => ProxyQualityLevel.weak,
+      "very_slow" => ProxyQualityLevel.weak,
       "bad" => ProxyQualityLevel.bad,
       _ => ProxyQualityLevel.unknown,
     };
@@ -174,6 +196,7 @@ class ProxyQualityPresentation {
       ProxyQualityLevel.excellent => 4,
       ProxyQualityLevel.good => 3,
       ProxyQualityLevel.medium => 2,
+      ProxyQualityLevel.weak => 1,
       ProxyQualityLevel.bad => 0,
       ProxyQualityLevel.unknown => 0,
     };
@@ -183,10 +206,20 @@ class ProxyQualityPresentation {
     return switch (level) {
       ProxyQualityLevel.excellent => t.pages.proxies.quality.excellent,
       ProxyQualityLevel.good => t.pages.proxies.quality.good,
-      ProxyQualityLevel.medium => t.pages.proxies.quality.medium,
+      ProxyQualityLevel.medium => t.pages.proxies.quality.slow,
+      ProxyQualityLevel.weak => t.pages.proxies.quality.verySlow,
       ProxyQualityLevel.bad => t.pages.proxies.quality.bad,
-      ProxyQualityLevel.unknown => t.pages.proxies.quality.unknown,
+      ProxyQualityLevel.unknown => t.pages.proxies.quality.checking,
     };
+  }
+
+  static String _speedLabel(int speedKbps) {
+    if (speedKbps <= 0) return "";
+    final mbps = speedKbps / 1000;
+    if (mbps >= 10) {
+      return "${mbps.toStringAsFixed(0)} Mbps";
+    }
+    return "${mbps.toStringAsFixed(1)} Mbps";
   }
 
   static String _safeErrorLabel(String rawError, Translations t) {
@@ -205,5 +238,23 @@ class ProxyQualityPresentation {
       return t.pages.proxies.quality.errors.handshakeFailed;
     }
     return "";
+  }
+
+  static String _safeHealthReasonLabel(String rawReason, Translations t) {
+    final normalized = rawReason.trim().toLowerCase();
+    if (normalized.isEmpty) return "";
+    return switch (normalized) {
+      "external-slow" => t.pages.proxies.quality.reasons.externalSlow,
+      "external-timeout" => t.pages.proxies.quality.reasons.externalTimeout,
+      "public-external-slow" => t.pages.proxies.quality.reasons.externalSlow,
+      "public-external-timeout" => t.pages.proxies.quality.reasons.externalTimeout,
+      "cloudflare-only" => t.pages.proxies.quality.reasons.cdnOnly,
+      "discord-timeout" => t.pages.proxies.quality.reasons.discordTimeout,
+      "google-timeout" => t.pages.proxies.quality.reasons.googleTimeout,
+      "external-unknown" => t.pages.proxies.quality.reasons.externalUnknown,
+      "urltest-failed" => "",
+      "quality-not-usable" => "",
+      _ => "",
+    };
   }
 }

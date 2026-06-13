@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -33,6 +35,17 @@ var _ adapter.ConnectionTracker = (*OutboundMonitoring)(nil)
 var _ adapter.LifecycleService = (*OutboundMonitoring)(nil)
 var _ adapter.InterfaceUpdateListener = (*OutboundMonitoring)(nil)
 
+type externalTestTarget struct {
+	name           string
+	url            string
+	kind           string
+	weight         float64
+	bytesLimit     int
+	timeout        time.Duration
+	publicDownload bool
+	cloudflare     bool
+}
+
 const (
 	defaultWorkerCount    = 10
 	defaultDebounceWindow = 500 * time.Millisecond
@@ -40,6 +53,15 @@ const (
 	defaultIdleTimeout    = 10 * time.Minute
 	defaultInterval       = 5 * time.Minute
 	defaultURLTest        = "https://www.gstatic.com/generate_204"
+
+	defaultSpeedTestURL         = "https://speed.cloudflare.com/__down?bytes=262144"
+	defaultSpeedTestBytes       = 256 * 1024
+	defaultSpeedTestTimeout     = 6 * time.Second
+	defaultReachabilityTimeout  = 3 * time.Second
+	defaultSpeedTestConcurrency = 4
+	defaultPublicTargetCount    = 2
+	defaultGoogleReachability   = "https://www.gstatic.com/generate_204"
+	defaultDiscordReachability  = "https://discord.com/api/v10/gateway"
 )
 
 // func RegisterService(registry *boxService.Registry) {
@@ -54,27 +76,35 @@ func Get(ctx context.Context) *OutboundMonitoring {
 
 // OutboundMonitoring orchestrates URL testing and traffic sampling for outbounds.
 type OutboundMonitoring struct {
-	endpointManager  adapter.EndpointManager
-	outboundManager  adapter.OutboundManager
-	logger           log.ContextLogger
-	cache            adapter.CacheFile
-	ctx              context.Context
-	cancel           context.CancelFunc
-	tag              string
-	pause            pause.Manager
-	pauseCallback    *list.Element[pause.Callback]
-	started          bool
-	urls             []string
-	currentLinkIndex atomic.Uint32
-	access           sync.Mutex
-	idleTimeout      time.Duration
-	lastActive       common.TypedValue[time.Time]
-	workersRunning   atomic.Bool
-	mainInterval     time.Duration
-	debounceWindow   time.Duration
-	urlTestTimeout   time.Duration
-	workersCount     int
-	history          adapter.URLTestHistoryStorage
+	endpointManager          adapter.EndpointManager
+	outboundManager          adapter.OutboundManager
+	logger                   log.ContextLogger
+	cache                    adapter.CacheFile
+	ctx                      context.Context
+	cancel                   context.CancelFunc
+	tag                      string
+	pause                    pause.Manager
+	pauseCallback            *list.Element[pause.Callback]
+	started                  bool
+	urls                     []string
+	currentLinkIndex         atomic.Uint32
+	access                   sync.Mutex
+	idleTimeout              time.Duration
+	lastActive               common.TypedValue[time.Time]
+	workersRunning           atomic.Bool
+	mainInterval             time.Duration
+	debounceWindow           time.Duration
+	urlTestTimeout           time.Duration
+	speedTestURL             string
+	speedTestBytes           int
+	speedTestTimeout         time.Duration
+	speedTestSem             chan struct{}
+	externalSpeedTestURL     string
+	externalSpeedTestBytes   int
+	externalSpeedTestEnabled bool
+	reachabilityTimeout      time.Duration
+	workersCount             int
+	history                  adapter.URLTestHistoryStorage
 
 	runtimeErrorsAccess sync.Mutex
 	runtimeErrors       map[string]map[string]*adapter.OutboundRuntimeErrorStats
@@ -234,6 +264,12 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
+	externalSpeedEnabled := options.ExternalSpeedTestURL != ""
+	if options.ExternalSpeedTestEnabled != nil {
+		externalSpeedEnabled = *options.ExternalSpeedTestEnabled && options.ExternalSpeedTestURL != ""
+	}
+	externalSpeedBytes := clampSpeedTestBytes(options.ExternalSpeedTestBytes)
+
 	m := &OutboundMonitoring{
 		ctx:             ctx,
 		cancel:          cancel,
@@ -246,11 +282,19 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 
 		history: history,
 
-		mainInterval:   options.Interval.Build(),
-		idleTimeout:    options.IdleTimeout.Build(),
-		workersCount:   options.Workers,
-		urlTestTimeout: options.URLTestTimeout.Build(),
-		debounceWindow: options.DebounceWindow.Build(),
+		mainInterval:             options.Interval.Build(),
+		idleTimeout:              options.IdleTimeout.Build(),
+		workersCount:             options.Workers,
+		urlTestTimeout:           options.URLTestTimeout.Build(),
+		debounceWindow:           options.DebounceWindow.Build(),
+		speedTestURL:             defaultSpeedTestURL,
+		speedTestBytes:           defaultSpeedTestBytes,
+		speedTestTimeout:         defaultSpeedTestTimeout,
+		speedTestSem:             make(chan struct{}, defaultSpeedTestConcurrency),
+		externalSpeedTestURL:     options.ExternalSpeedTestURL,
+		externalSpeedTestBytes:   externalSpeedBytes,
+		externalSpeedTestEnabled: externalSpeedEnabled,
+		reachabilityTimeout:      defaultReachabilityTimeout,
 
 		priorityQueue: make(chan *testTask, 1000),
 		normalQueue:   make(chan *testTask, 10000),
@@ -600,8 +644,14 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 		m.logRuntimeErrorPenalties(tag, runtimeStats)
 		quality := CalculateOutboundQuality(his.Delay, fmt.Sprint(err), false, runtimeStats)
 		applyQualityToHistory(&his, quality)
+		applySpeedToHistory(&his, CalculateSpeedScore(0, "", 0))
+		applyCombinedHealthToHistory(&his, CalculateCombinedHealthFromExternal(his.QualityScore, his.QualityLevel, his.AutoAllowed, his.LastError, adapter.OutboundHealth{
+			ExternalHealthLevel: HealthLevelUnknown,
+			HealthReason:        "urltest-failed",
+		}))
 		m.logger.Warn("outbound ", tag, " URL test failed: ", err)
 		m.logger.Info("[ServerQuality] tag=", tag, " delay=", his.Delay, " quality=", his.QualityScore, " level=", his.QualityLevel, " error=", his.LastError, " autoAllowed=", his.AutoAllowed, " reason=urltest-failed")
+		m.logger.Info("[ServerHealth] tag=", tag, " quality=", his.QualityScore, " external=", his.ExternalHealthScore, " combined=", his.CombinedHealthScore, " level=", his.CombinedHealthLevel, " reason=", healthReason(his))
 		return his, err
 	}
 	select {
@@ -631,8 +681,243 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 	m.logRuntimeErrorPenalties(tag, runtimeStats)
 	quality := CalculateOutboundQuality(his.Delay, "", true, runtimeStats)
 	applyQualityToHistory(&his, quality)
+	speed, externalHealth := m.externalHealthChecks(parent, tag, out.outbound, quality)
+	applySpeedToHistory(&his, speed)
+	applyCombinedHealthToHistory(&his, CalculateCombinedHealthFromExternal(his.QualityScore, his.QualityLevel, his.AutoAllowed, his.LastError, externalHealth))
 	m.logger.Info("[ServerQuality] tag=", tag, " delay=", his.Delay, " quality=", his.QualityScore, " level=", his.QualityLevel, " autoAllowed=", his.AutoAllowed, " reason=urltest-ok")
+	m.logger.Info("[ServerHealth] tag=", tag, " quality=", his.QualityScore, " external=", his.ExternalHealthScore, " combined=", his.CombinedHealthScore, " level=", his.CombinedHealthLevel, " reason=", healthReason(his))
 	return his, nil
+}
+
+func (m *OutboundMonitoring) externalHealthChecks(parent context.Context, tag string, outbound N.Dialer, quality adapter.OutboundQuality) (adapter.OutboundSpeed, adapter.OutboundHealth) {
+	if !shouldRunMicroSpeedCheck(quality) {
+		return CalculateSpeedScore(0, "", 0), adapter.OutboundHealth{
+			ExternalHealthLevel: HealthLevelUnknown,
+			HealthReason:        "quality-not-usable",
+		}
+	}
+
+	select {
+	case m.speedTestSem <- struct{}{}:
+		defer func() { <-m.speedTestSem }()
+	case <-parent.Done():
+		return CalculateSpeedScore(0, parent.Err().Error(), 0), adapter.OutboundHealth{ExternalHealthLevel: HealthLevelUnknown, HealthReason: "external-unknown"}
+	case <-m.ctx.Done():
+		return CalculateSpeedScore(0, m.ctx.Err().Error(), 0), adapter.OutboundHealth{ExternalHealthLevel: HealthLevelUnknown, HealthReason: "external-unknown"}
+	}
+
+	var targetScores []ExternalTargetScore
+	var selectedSpeed adapter.OutboundSpeed
+	for _, target := range m.externalTestTargets(tag) {
+		switch target.kind {
+		case "download":
+			score, speed := m.runExternalDownloadTarget(parent, tag, outbound, target)
+			targetScores = append(targetScores, score)
+			if speed.SpeedKbps > 0 && shouldUseSpeedForDisplay(selectedSpeed, speed, target.name) {
+				selectedSpeed = speed
+			}
+		case "reachability":
+			targetScores = append(targetScores, m.runExternalReachabilityTarget(parent, tag, outbound, target))
+		}
+	}
+	if selectedSpeed.SpeedLevel == "" {
+		selectedSpeed = CalculateSpeedScore(0, "", 0)
+	}
+	externalHealth := CalculateExternalHealth(targetScores)
+	m.logger.Info("[ExternalHealth] tag=", tag, " externalScore=", externalHealth.ExternalHealthScore, " level=", externalHealth.ExternalHealthLevel, " reason=", externalHealth.HealthReason)
+	return selectedSpeed, externalHealth
+}
+
+func (m *OutboundMonitoring) runExternalDownloadTarget(parent context.Context, tag string, outbound N.Dialer, target externalTestTarget) (ExternalTargetScore, adapter.OutboundSpeed) {
+	ctx, cancel := context.WithTimeout(parent, target.timeout)
+	defer cancel()
+	result, err := urltest.MicroDownloadTest(ctx, target.url, outbound, target.bytesLimit)
+	if err != nil {
+		reason := speedErrorReason(err)
+		m.logger.Info("[ExternalSpeedTarget] tag=", tag, " provider=", target.name, " bytes=0 durationMs=0 speedKbps=0 level=", SpeedLevelUnknown, " error=", reason)
+		return ExternalTargetScore{Name: target.name, Kind: target.kind, Weight: target.weight, Completed: true, Failed: true, Reason: reason, PublicDownload: target.publicDownload, Cloudflare: target.cloudflare}, adapter.OutboundSpeed{
+			SpeedLevel:     SpeedLevelUnknown,
+			SpeedSource:    target.name,
+			SpeedCheckedAt: time.Now().Unix(),
+		}
+	}
+	speed := CalculateSpeedScore(result.SpeedKbps, "", result.DurationMs)
+	speed.SpeedTestBytes = result.Bytes
+	speed.SpeedTestDurationMs = result.DurationMs
+	speed.SpeedSource = target.name
+	m.logger.Info("[ExternalSpeedTarget] tag=", tag, " provider=", target.name, " bytes=", speed.SpeedTestBytes, " durationMs=", speed.SpeedTestDurationMs, " speedKbps=", speed.SpeedKbps, " level=", speed.SpeedLevel)
+	return ExternalTargetScore{Name: target.name, Kind: target.kind, Score: speed.SpeedScore, Level: speed.SpeedLevel, Weight: target.weight, Completed: true, PublicDownload: target.publicDownload, Cloudflare: target.cloudflare}, speed
+}
+
+func (m *OutboundMonitoring) runExternalReachabilityTarget(parent context.Context, tag string, outbound N.Dialer, target externalTestTarget) ExternalTargetScore {
+	ctx, cancel := context.WithTimeout(parent, target.timeout)
+	defer cancel()
+	result, err := urltest.MicroReachabilityTest(ctx, target.url, outbound)
+	if err != nil {
+		reason := reachabilityErrorReason(err)
+		m.logger.Info("[ExternalReachability] tag=", tag, " target=", target.name, " ok=false ttfbMs=0 error=", reason)
+		return ExternalTargetScore{Name: target.name, Kind: target.kind, Weight: target.weight, Completed: true, Failed: true, Reason: reason}
+	}
+	score := reachabilityScore(result.TTFBMs, true)
+	m.logger.Info("[ExternalReachability] tag=", tag, " target=", target.name, " ok=true ttfbMs=", result.TTFBMs)
+	return ExternalTargetScore{Name: target.name, Kind: target.kind, Score: score, Level: externalHealthLevel(score), Weight: target.weight, Completed: true}
+}
+
+func (m *OutboundMonitoring) externalTestTargets(tag string) []externalTestTarget {
+	publicTargets := selectPublicSpeedTargets(tag, defaultPublicTargetCount)
+	if m.externalSpeedTestEnabled && m.externalSpeedTestURL != "" {
+		targets := []externalTestTarget{
+			{name: "cloudflare", url: m.speedTestURL, kind: "download", weight: 0.10, bytesLimit: m.speedTestBytes, timeout: m.speedTestTimeout, cloudflare: true},
+			{name: "external-origin", url: m.externalSpeedTestURL, kind: "download", weight: 0.40, bytesLimit: m.externalSpeedTestBytes, timeout: 8 * time.Second, publicDownload: true},
+		}
+		for i := range publicTargets {
+			publicTargets[i].weight = 0.15
+			targets = append(targets, publicTargets[i])
+			if i == 0 {
+				break
+			}
+		}
+		targets = append(targets,
+			externalTestTarget{name: "google", url: defaultGoogleReachability, kind: "reachability", weight: 0.15, timeout: m.reachabilityTimeout},
+			externalTestTarget{name: "discord", url: defaultDiscordReachability, kind: "reachability", weight: 0.20, timeout: m.reachabilityTimeout},
+		)
+		return targets
+	}
+	targets := []externalTestTarget{
+		{name: "cloudflare", url: m.speedTestURL, kind: "download", weight: 0.15, bytesLimit: m.speedTestBytes, timeout: m.speedTestTimeout, cloudflare: true},
+	}
+	for i := range publicTargets {
+		publicTargets[i].weight = 0.35
+		targets = append(targets, publicTargets[i])
+	}
+	targets = append(targets,
+		externalTestTarget{name: "google", url: defaultGoogleReachability, kind: "reachability", weight: 0.075, timeout: m.reachabilityTimeout},
+		externalTestTarget{name: "discord", url: defaultDiscordReachability, kind: "reachability", weight: 0.075, timeout: m.reachabilityTimeout},
+	)
+	return targets
+}
+
+func publicSpeedTargets() []externalTestTarget {
+	// ThinkBroadband publishes useful test files, but asks clients not to use them for
+	// scripted/automated downloads. Keep the default automatic profile to Hetzner/OVH.
+	return []externalTestTarget{
+		{name: "hetzner-fsn1", url: "https://fsn1-speed.hetzner.com/100MB.bin", kind: "download", bytesLimit: defaultSpeedTestBytes, timeout: defaultSpeedTestTimeout, publicDownload: true},
+		{name: "hetzner-nbg1", url: "https://nbg1-speed.hetzner.com/100MB.bin", kind: "download", bytesLimit: defaultSpeedTestBytes, timeout: defaultSpeedTestTimeout, publicDownload: true},
+		{name: "hetzner-hel1", url: "https://hel1-speed.hetzner.com/100MB.bin", kind: "download", bytesLimit: defaultSpeedTestBytes, timeout: defaultSpeedTestTimeout, publicDownload: true},
+		{name: "ovh-gra", url: "https://gra.proof.ovh.net/files/1Mb.dat", kind: "download", bytesLimit: defaultSpeedTestBytes, timeout: defaultSpeedTestTimeout, publicDownload: true},
+		{name: "ovh-rbx", url: "https://rbx.proof.ovh.net/files/1Mb.dat", kind: "download", bytesLimit: defaultSpeedTestBytes, timeout: defaultSpeedTestTimeout, publicDownload: true},
+		{name: "ovh-sbg", url: "https://sbg.proof.ovh.net/files/1Mb.dat", kind: "download", bytesLimit: defaultSpeedTestBytes, timeout: defaultSpeedTestTimeout, publicDownload: true},
+	}
+}
+
+func selectPublicSpeedTargets(seed string, count int) []externalTestTarget {
+	targets := publicSpeedTargets()
+	if count <= 0 || len(targets) == 0 {
+		return nil
+	}
+	if count >= len(targets) {
+		return targets
+	}
+	start := int(stableHash(seed) % uint32(len(targets)))
+	selected := make([]externalTestTarget, 0, count)
+	for i := 0; i < len(targets) && len(selected) < count; i++ {
+		selected = append(selected, targets[(start+i)%len(targets)])
+	}
+	return selected
+}
+
+func stableHash(value string) uint32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(value))
+	return h.Sum32()
+}
+
+func shouldUseSpeedForDisplay(current adapter.OutboundSpeed, next adapter.OutboundSpeed, targetName string) bool {
+	if next.SpeedKbps <= 0 {
+		return false
+	}
+	nextPublic := isPublicSpeedSource(targetName)
+	currentPublic := isPublicSpeedSource(current.SpeedSource)
+	if current.SpeedKbps <= 0 {
+		return true
+	}
+	if nextPublic && !currentPublic {
+		return true
+	}
+	if currentPublic && !nextPublic {
+		return false
+	}
+	return next.SpeedKbps > current.SpeedKbps
+}
+
+func isPublicSpeedSource(source string) bool {
+	return source == "external-origin" ||
+		strings.HasPrefix(source, "hetzner-") ||
+		strings.HasPrefix(source, "ovh-")
+}
+
+func shouldRunMicroSpeedCheck(quality adapter.OutboundQuality) bool {
+	return quality.QualityLevel == QualityLevelMedium ||
+		quality.QualityLevel == QualityLevelGood ||
+		quality.QualityLevel == QualityLevelExcellent
+}
+
+func clampSpeedTestBytes(bytesLimit int) int {
+	if bytesLimit <= 0 {
+		return defaultSpeedTestBytes
+	}
+	if bytesLimit < 128*1024 {
+		return 128 * 1024
+	}
+	if bytesLimit > 512*1024 {
+		return 512 * 1024
+	}
+	return bytesLimit
+}
+
+func speedErrorReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	if normalized := NormalizeOutboundError(err.Error()); normalized != "" {
+		return normalized
+	}
+	return "download-failed"
+}
+
+func reachabilityErrorReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	if normalized := NormalizeOutboundError(err.Error()); normalized != "" {
+		return normalized
+	}
+	return "timeout"
+}
+
+func healthReason(history adapter.URLTestHistory) string {
+	if history.HealthReason != "" {
+		return history.HealthReason
+	}
+	if history.CombinedHealthLevel == HealthLevelBad && history.LastError != "" {
+		return history.LastError
+	}
+	switch history.SpeedLevel {
+	case SpeedLevelVerySlow:
+		return "speed-very-slow"
+	case SpeedLevelSlow:
+		return "speed-slow"
+	case SpeedLevelUnknown:
+		if history.QualityLevel == QualityLevelBad {
+			return history.LastError
+		}
+		return "speed-unknown"
+	default:
+		if history.QualityLevel == QualityLevelUnknown {
+			return "quality-unknown"
+		}
+		return "ok"
+	}
 }
 
 func (m *OutboundMonitoring) startCycleOnce() bool {
@@ -781,6 +1066,18 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 		(outcome.history.AutoAllowed != state.history.AutoAllowed) ||
 		(outcome.history.LastError != state.history.LastError) ||
 		(outcome.history.CheckedAt != state.history.CheckedAt) ||
+		(outcome.history.SpeedKbps != state.history.SpeedKbps) ||
+		(outcome.history.SpeedScore != state.history.SpeedScore) ||
+		(outcome.history.SpeedLevel != state.history.SpeedLevel) ||
+		(outcome.history.SpeedSource != state.history.SpeedSource) ||
+		(outcome.history.SpeedTestBytes != state.history.SpeedTestBytes) ||
+		(outcome.history.SpeedTestDurationMs != state.history.SpeedTestDurationMs) ||
+		(outcome.history.SpeedCheckedAt != state.history.SpeedCheckedAt) ||
+		(outcome.history.ExternalHealthScore != state.history.ExternalHealthScore) ||
+		(outcome.history.ExternalHealthLevel != state.history.ExternalHealthLevel) ||
+		(outcome.history.CombinedHealthScore != state.history.CombinedHealthScore) ||
+		(outcome.history.CombinedHealthLevel != state.history.CombinedHealthLevel) ||
+		(outcome.history.HealthReason != state.history.HealthReason) ||
 		state.history.IpInfo == nil ||
 		(outcome.history.IpInfo != nil) {
 		m.cacheDirty.Store(true)
@@ -792,6 +1089,18 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.history.AutoAllowed = outcome.history.AutoAllowed
 	state.history.LastError = outcome.history.LastError
 	state.history.CheckedAt = outcome.history.CheckedAt
+	state.history.SpeedKbps = outcome.history.SpeedKbps
+	state.history.SpeedScore = outcome.history.SpeedScore
+	state.history.SpeedLevel = outcome.history.SpeedLevel
+	state.history.SpeedSource = outcome.history.SpeedSource
+	state.history.SpeedTestBytes = outcome.history.SpeedTestBytes
+	state.history.SpeedTestDurationMs = outcome.history.SpeedTestDurationMs
+	state.history.SpeedCheckedAt = outcome.history.SpeedCheckedAt
+	state.history.ExternalHealthScore = outcome.history.ExternalHealthScore
+	state.history.ExternalHealthLevel = outcome.history.ExternalHealthLevel
+	state.history.CombinedHealthScore = outcome.history.CombinedHealthScore
+	state.history.CombinedHealthLevel = outcome.history.CombinedHealthLevel
+	state.history.HealthReason = outcome.history.HealthReason
 	state.from_cache = false
 	if outcome.history.IpInfo != nil {
 		state.history.IpInfo = outcome.history.IpInfo

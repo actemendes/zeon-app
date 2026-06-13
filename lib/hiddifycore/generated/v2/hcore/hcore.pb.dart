@@ -659,6 +659,18 @@ class OutboundInfo extends $pb.GeneratedMessage {
     $core.bool? autoAllowed,
     $core.String? lastError,
     $fixnum.Int64? checkedAt,
+    $core.int? speedKbps,
+    $core.int? speedScore,
+    $core.String? speedLevel,
+    $core.int? speedTestBytes,
+    $core.int? speedTestDurationMs,
+    $fixnum.Int64? speedCheckedAt,
+    $core.int? combinedHealthScore,
+    $core.String? combinedHealthLevel,
+    $core.String? speedSource,
+    $core.int? externalHealthScore,
+    $core.String? externalHealthLevel,
+    $core.String? healthReason,
   }) {
     final $result = create();
     if (tag != null) {
@@ -727,6 +739,42 @@ class OutboundInfo extends $pb.GeneratedMessage {
     if (checkedAt != null) {
       $result.checkedAt = checkedAt;
     }
+    if (speedKbps != null) {
+      $result.speedKbps = speedKbps;
+    }
+    if (speedScore != null) {
+      $result.speedScore = speedScore;
+    }
+    if (speedLevel != null) {
+      $result.speedLevel = speedLevel;
+    }
+    if (speedTestBytes != null) {
+      $result.speedTestBytes = speedTestBytes;
+    }
+    if (speedTestDurationMs != null) {
+      $result.speedTestDurationMs = speedTestDurationMs;
+    }
+    if (speedCheckedAt != null) {
+      $result.speedCheckedAt = speedCheckedAt;
+    }
+    if (combinedHealthScore != null) {
+      $result.combinedHealthScore = combinedHealthScore;
+    }
+    if (combinedHealthLevel != null) {
+      $result.combinedHealthLevel = combinedHealthLevel;
+    }
+    if (speedSource != null) {
+      $result.speedSource = speedSource;
+    }
+    if (externalHealthScore != null) {
+      $result.externalHealthScore = externalHealthScore;
+    }
+    if (externalHealthLevel != null) {
+      $result.externalHealthLevel = externalHealthLevel;
+    }
+    if (healthReason != null) {
+      $result.healthReason = healthReason;
+    }
     return $result;
   }
   OutboundInfo._() : super();
@@ -756,6 +804,18 @@ class OutboundInfo extends $pb.GeneratedMessage {
     ..aOB(20, _omitFieldNames ? '' : 'autoAllowed')
     ..aOS(21, _omitFieldNames ? '' : 'lastError')
     ..aInt64(22, _omitFieldNames ? '' : 'checkedAt')
+    ..a<$core.int>(23, _omitFieldNames ? '' : 'speedKbps', $pb.PbFieldType.O3)
+    ..a<$core.int>(24, _omitFieldNames ? '' : 'speedScore', $pb.PbFieldType.O3)
+    ..aOS(25, _omitFieldNames ? '' : 'speedLevel')
+    ..a<$core.int>(26, _omitFieldNames ? '' : 'speedTestBytes', $pb.PbFieldType.O3)
+    ..a<$core.int>(27, _omitFieldNames ? '' : 'speedTestDurationMs', $pb.PbFieldType.O3)
+    ..aInt64(28, _omitFieldNames ? '' : 'speedCheckedAt')
+    ..a<$core.int>(29, _omitFieldNames ? '' : 'combinedHealthScore', $pb.PbFieldType.O3)
+    ..aOS(30, _omitFieldNames ? '' : 'combinedHealthLevel')
+    ..aOS(31, _omitFieldNames ? '' : 'speedSource')
+    ..a<$core.int>(32, _omitFieldNames ? '' : 'externalHealthScore', $pb.PbFieldType.O3)
+    ..aOS(33, _omitFieldNames ? '' : 'externalHealthLevel')
+    ..aOS(34, _omitFieldNames ? '' : 'healthReason')
     ..hasRequiredFields = false
   ;
 
@@ -981,6 +1041,114 @@ class OutboundInfo extends $pb.GeneratedMessage {
   $core.bool hasCheckedAt() => $_has(21);
   @$pb.TagNumber(22)
   void clearCheckedAt() => clearField(22);
+
+  @$pb.TagNumber(23)
+  $core.int get speedKbps => $_getIZ(22);
+  @$pb.TagNumber(23)
+  set speedKbps($core.int v) { $_setSignedInt32(22, v); }
+  @$pb.TagNumber(23)
+  $core.bool hasSpeedKbps() => $_has(22);
+  @$pb.TagNumber(23)
+  void clearSpeedKbps() => clearField(23);
+
+  @$pb.TagNumber(24)
+  $core.int get speedScore => $_getIZ(23);
+  @$pb.TagNumber(24)
+  set speedScore($core.int v) { $_setSignedInt32(23, v); }
+  @$pb.TagNumber(24)
+  $core.bool hasSpeedScore() => $_has(23);
+  @$pb.TagNumber(24)
+  void clearSpeedScore() => clearField(24);
+
+  @$pb.TagNumber(25)
+  $core.String get speedLevel => $_getSZ(24);
+  @$pb.TagNumber(25)
+  set speedLevel($core.String v) { $_setString(24, v); }
+  @$pb.TagNumber(25)
+  $core.bool hasSpeedLevel() => $_has(24);
+  @$pb.TagNumber(25)
+  void clearSpeedLevel() => clearField(25);
+
+  @$pb.TagNumber(26)
+  $core.int get speedTestBytes => $_getIZ(25);
+  @$pb.TagNumber(26)
+  set speedTestBytes($core.int v) { $_setSignedInt32(25, v); }
+  @$pb.TagNumber(26)
+  $core.bool hasSpeedTestBytes() => $_has(25);
+  @$pb.TagNumber(26)
+  void clearSpeedTestBytes() => clearField(26);
+
+  @$pb.TagNumber(27)
+  $core.int get speedTestDurationMs => $_getIZ(26);
+  @$pb.TagNumber(27)
+  set speedTestDurationMs($core.int v) { $_setSignedInt32(26, v); }
+  @$pb.TagNumber(27)
+  $core.bool hasSpeedTestDurationMs() => $_has(26);
+  @$pb.TagNumber(27)
+  void clearSpeedTestDurationMs() => clearField(27);
+
+  @$pb.TagNumber(28)
+  $fixnum.Int64 get speedCheckedAt => $_getI64(27);
+  @$pb.TagNumber(28)
+  set speedCheckedAt($fixnum.Int64 v) { $_setInt64(27, v); }
+  @$pb.TagNumber(28)
+  $core.bool hasSpeedCheckedAt() => $_has(27);
+  @$pb.TagNumber(28)
+  void clearSpeedCheckedAt() => clearField(28);
+
+  @$pb.TagNumber(29)
+  $core.int get combinedHealthScore => $_getIZ(28);
+  @$pb.TagNumber(29)
+  set combinedHealthScore($core.int v) { $_setSignedInt32(28, v); }
+  @$pb.TagNumber(29)
+  $core.bool hasCombinedHealthScore() => $_has(28);
+  @$pb.TagNumber(29)
+  void clearCombinedHealthScore() => clearField(29);
+
+  @$pb.TagNumber(30)
+  $core.String get combinedHealthLevel => $_getSZ(29);
+  @$pb.TagNumber(30)
+  set combinedHealthLevel($core.String v) { $_setString(29, v); }
+  @$pb.TagNumber(30)
+  $core.bool hasCombinedHealthLevel() => $_has(29);
+  @$pb.TagNumber(30)
+  void clearCombinedHealthLevel() => clearField(30);
+
+  @$pb.TagNumber(31)
+  $core.String get speedSource => $_getSZ(30);
+  @$pb.TagNumber(31)
+  set speedSource($core.String v) { $_setString(30, v); }
+  @$pb.TagNumber(31)
+  $core.bool hasSpeedSource() => $_has(30);
+  @$pb.TagNumber(31)
+  void clearSpeedSource() => clearField(31);
+
+  @$pb.TagNumber(32)
+  $core.int get externalHealthScore => $_getIZ(31);
+  @$pb.TagNumber(32)
+  set externalHealthScore($core.int v) { $_setSignedInt32(31, v); }
+  @$pb.TagNumber(32)
+  $core.bool hasExternalHealthScore() => $_has(31);
+  @$pb.TagNumber(32)
+  void clearExternalHealthScore() => clearField(32);
+
+  @$pb.TagNumber(33)
+  $core.String get externalHealthLevel => $_getSZ(32);
+  @$pb.TagNumber(33)
+  set externalHealthLevel($core.String v) { $_setString(32, v); }
+  @$pb.TagNumber(33)
+  $core.bool hasExternalHealthLevel() => $_has(32);
+  @$pb.TagNumber(33)
+  void clearExternalHealthLevel() => clearField(33);
+
+  @$pb.TagNumber(34)
+  $core.String get healthReason => $_getSZ(33);
+  @$pb.TagNumber(34)
+  set healthReason($core.String v) { $_setString(33, v); }
+  @$pb.TagNumber(34)
+  $core.bool hasHealthReason() => $_has(33);
+  @$pb.TagNumber(34)
+  void clearHealthReason() => clearField(34);
 }
 
 class IpInfo extends $pb.GeneratedMessage {

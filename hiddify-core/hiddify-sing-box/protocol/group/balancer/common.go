@@ -129,11 +129,35 @@ func sortOutboundsByDelay(outbounds map[string][]adapter.Outbound, history map[s
 	return res
 }
 
+func sortOutboundsByHealthThenDelay(outbounds map[string][]adapter.Outbound, history map[string]*adapter.URLTestHistory) map[string][]adapter.Outbound {
+	res := map[string][]adapter.Outbound{}
+	for net, outs := range outbounds {
+		res[net] = append([]adapter.Outbound{}, outs...)
+		sort.SliceStable(res[net], func(i, j int) bool {
+			left := history[res[net][i].Tag()]
+			right := history[res[net][j].Tag()]
+			leftScore, leftKnown := getCombinedHealthScore(left)
+			rightScore, rightKnown := getCombinedHealthScore(right)
+			if leftKnown != rightKnown {
+				return leftKnown
+			}
+			if leftScore != rightScore {
+				return leftScore > rightScore
+			}
+			leftDelay := getTagDelay(res[net][i].Tag(), history)
+			rightDelay := getTagDelay(res[net][j].Tag(), history)
+			return leftDelay < rightDelay
+		})
+	}
+	return res
+}
+
 func filterRoundRobinOutboundsByQuality(outbounds map[string][]adapter.Outbound, history map[string]*adapter.URLTestHistory, logger log.ContextLogger) map[string][]adapter.Outbound {
 	res := map[string][]adapter.Outbound{}
 	for net, outs := range outbounds {
 		goodCandidates := make([]adapter.Outbound, 0, len(outs))
 		mediumCandidates := make([]adapter.Outbound, 0, len(outs))
+		qualityOnlyCandidates := make([]adapter.Outbound, 0, len(outs))
 		unknownCandidates := make([]adapter.Outbound, 0, len(outs))
 		knownQuality := 0
 		excludedBad := 0
@@ -145,9 +169,14 @@ func filterRoundRobinOutboundsByQuality(outbounds map[string][]adapter.Outbound,
 				continue
 			}
 			knownQuality++
+			healthLevel, healthKnown := normalizedCombinedHealth(his)
 			switch {
-			case autoAllowed && (level == monitoring.QualityLevelExcellent || level == monitoring.QualityLevelGood):
+			case autoAllowed && healthKnown && (healthLevel == monitoring.HealthLevelExcellent || healthLevel == monitoring.HealthLevelGood):
 				goodCandidates = append(goodCandidates, out)
+			case autoAllowed && healthKnown && (healthLevel == monitoring.HealthLevelMedium):
+				mediumCandidates = append(mediumCandidates, out)
+			case autoAllowed && !healthKnown && (level == monitoring.QualityLevelExcellent || level == monitoring.QualityLevelGood):
+				qualityOnlyCandidates = append(qualityOnlyCandidates, out)
 			case level == monitoring.QualityLevelMedium:
 				mediumCandidates = append(mediumCandidates, out)
 			default:
@@ -159,6 +188,9 @@ func filterRoundRobinOutboundsByQuality(outbounds map[string][]adapter.Outbound,
 		case len(goodCandidates) > 0:
 			res[net] = goodCandidates
 			logBalanceQuality(logger, "mode=good candidates=", len(goodCandidates), " excludedBad=", excludedBad)
+		case len(qualityOnlyCandidates) > 0:
+			res[net] = qualityOnlyCandidates
+			logBalanceQuality(logger, "compatibilityFallback=true reason=unknown-speed candidates=", len(qualityOnlyCandidates), " excludedBad=", excludedBad)
 		case len(mediumCandidates) > 0:
 			res[net] = mediumCandidates
 			logBalanceQuality(logger, "fallback=medium candidates=", len(mediumCandidates), " reason=no-good-candidates excludedBad=", excludedBad)
@@ -181,6 +213,36 @@ func normalizedQuality(his *adapter.URLTestHistory) (level string, autoAllowed b
 		return monitoring.QualityLevelUnknown, true, false
 	}
 	return his.QualityLevel, his.AutoAllowed, true
+}
+
+func normalizedCombinedHealth(his *adapter.URLTestHistory) (level string, known bool) {
+	if his == nil || his.CombinedHealthLevel == "" || his.CombinedHealthLevel == monitoring.HealthLevelUnknown {
+		return monitoring.HealthLevelUnknown, false
+	}
+	return his.CombinedHealthLevel, true
+}
+
+func getCombinedHealthScore(his *adapter.URLTestHistory) (score int32, known bool) {
+	if his == nil || his.CombinedHealthLevel == "" || his.CombinedHealthLevel == monitoring.HealthLevelUnknown {
+		return 0, false
+	}
+	if his.CombinedHealthScore > 0 {
+		return his.CombinedHealthScore, true
+	}
+	switch his.CombinedHealthLevel {
+	case monitoring.HealthLevelExcellent:
+		return 90, true
+	case monitoring.HealthLevelGood:
+		return 75, true
+	case monitoring.HealthLevelMedium:
+		return 55, true
+	case monitoring.HealthLevelWeak:
+		return 25, true
+	case monitoring.HealthLevelBad:
+		return 0, true
+	default:
+		return 0, false
+	}
 }
 
 func logBalanceQuality(logger log.ContextLogger, args ...any) {

@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/widget/shimmer_skeleton.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
+import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
 import 'package:hiddify/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -22,6 +23,9 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
     }
 
     final proxy = activeProxy.value!;
+    final isAutoSelection = isAutoSelectionProxyOption(tag: proxy.tag, tagDisplay: proxy.tagDisplay);
+    if (isAutoSelection) return const SizedBox();
+
     final delay = proxy.urlTestDelay;
     final timeout = delay > 65000;
 
@@ -72,6 +76,14 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
                   proxy.qualityLevel.isNotEmpty ||
                   proxy.qualityScore != 0 ||
                   proxy.checkedAt != 0 ||
+                  proxy.speedLevel.isNotEmpty ||
+                  proxy.speedKbps != 0 ||
+                  proxy.speedCheckedAt != 0 ||
+                  proxy.externalHealthLevel.isNotEmpty ||
+                  proxy.externalHealthScore != 0 ||
+                  proxy.combinedHealthLevel.isNotEmpty ||
+                  proxy.combinedHealthScore != 0 ||
+                  proxy.healthReason.isNotEmpty ||
                   proxy.lastError.isNotEmpty) ...[
                 const Gap(8),
                 ProxyQualityIndicator(proxy, showDetails: false),

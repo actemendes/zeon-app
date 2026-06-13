@@ -30,6 +30,19 @@ type URLTestHistory struct {
 	AutoAllowed  bool           `json:"auto_allowed"`
 	LastError    string         `json:"last_error"`
 	CheckedAt    int64          `json:"checked_at"`
+
+	SpeedKbps           int32  `json:"speed_kbps"`
+	SpeedScore          int32  `json:"speed_score"`
+	SpeedLevel          string `json:"speed_level"`
+	SpeedSource         string `json:"speed_source"`
+	SpeedTestBytes      int32  `json:"speed_test_bytes"`
+	SpeedTestDurationMs int32  `json:"speed_test_duration_ms"`
+	SpeedCheckedAt      int64  `json:"speed_checked_at"`
+	ExternalHealthScore int32  `json:"external_health_score"`
+	ExternalHealthLevel string `json:"external_health_level"`
+	CombinedHealthScore int32  `json:"combined_health_score"`
+	CombinedHealthLevel string `json:"combined_health_level"`
+	HealthReason        string `json:"health_reason"`
 }
 
 type OutboundQuality struct {
@@ -38,6 +51,24 @@ type OutboundQuality struct {
 	AutoAllowed  bool
 	LastError    string
 	CheckedAt    int64
+}
+
+type OutboundSpeed struct {
+	SpeedKbps           int32
+	SpeedScore          int32
+	SpeedLevel          string
+	SpeedSource         string
+	SpeedTestBytes      int32
+	SpeedTestDurationMs int32
+	SpeedCheckedAt      int64
+}
+
+type OutboundHealth struct {
+	ExternalHealthScore int32
+	ExternalHealthLevel string
+	CombinedHealthScore int32
+	CombinedHealthLevel string
+	HealthReason        string
 }
 
 type OutboundRuntimeErrorStats struct {

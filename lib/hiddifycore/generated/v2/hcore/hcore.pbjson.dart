@@ -242,6 +242,18 @@ const OutboundInfo$json = {
     {'1': 'auto_allowed', '3': 20, '4': 1, '5': 8, '10': 'autoAllowed'},
     {'1': 'last_error', '3': 21, '4': 1, '5': 9, '10': 'lastError'},
     {'1': 'checked_at', '3': 22, '4': 1, '5': 3, '10': 'checkedAt'},
+    {'1': 'speed_kbps', '3': 23, '4': 1, '5': 5, '10': 'speedKbps'},
+    {'1': 'speed_score', '3': 24, '4': 1, '5': 5, '10': 'speedScore'},
+    {'1': 'speed_level', '3': 25, '4': 1, '5': 9, '10': 'speedLevel'},
+    {'1': 'speed_test_bytes', '3': 26, '4': 1, '5': 5, '10': 'speedTestBytes'},
+    {'1': 'speed_test_duration_ms', '3': 27, '4': 1, '5': 5, '10': 'speedTestDurationMs'},
+    {'1': 'speed_checked_at', '3': 28, '4': 1, '5': 3, '10': 'speedCheckedAt'},
+    {'1': 'combined_health_score', '3': 29, '4': 1, '5': 5, '10': 'combinedHealthScore'},
+    {'1': 'combined_health_level', '3': 30, '4': 1, '5': 9, '10': 'combinedHealthLevel'},
+    {'1': 'speed_source', '3': 31, '4': 1, '5': 9, '10': 'speedSource'},
+    {'1': 'external_health_score', '3': 32, '4': 1, '5': 5, '10': 'externalHealthScore'},
+    {'1': 'external_health_level', '3': 33, '4': 1, '5': 9, '10': 'externalHealthLevel'},
+    {'1': 'health_reason', '3': 34, '4': 1, '5': 9, '10': 'healthReason'},
   ],
   '8': [
     {'1': '_ipinfo'},
@@ -265,8 +277,18 @@ final $typed_data.Uint8List outboundInfoDescriptor = $convert.base64Decode(
     'bmxvYWQSFgoGZGV0b3VyGBEgASgJUgZkZXRvdXISIwoNcXVhbGl0eV9zY29yZRgSIAEoBVIMcX'
     'VhbGl0eVNjb3JlEiMKDXF1YWxpdHlfbGV2ZWwYEyABKAlSDHF1YWxpdHlMZXZlbBIhCgxhdXRv'
     'X2FsbG93ZWQYFCABKAhSC2F1dG9BbGxvd2VkEh0KCmxhc3RfZXJyb3IYFSABKAlSCWxhc3RFcn'
-    'JvchIdCgpjaGVja2VkX2F0GBYgASgDUgljaGVja2VkQXRCCQoHX2lwaW5mb0IVChNfZ3JvdXBf'
-    'c2VsZWN0ZWRfdGFnQh0KG19ncm91cF9zZWxlY3RlZF90YWdfZGlzcGxheQ==');
+    'JvchIdCgpjaGVja2VkX2F0GBYgASgDUgljaGVja2VkQXQSHQoKc3BlZWRfa2JwcxgXIAEoBVIJ'
+    'c3BlZWRLYnBzEh8KC3NwZWVkX3Njb3JlGBggASgFUgpzcGVlZFNjb3JlEh8KC3NwZWVkX2xldm'
+    'VsGBkgASgJUgpzcGVlZExldmVsEigKEHNwZWVkX3Rlc3RfYnl0ZXMYGiABKAVSDnNwZWVkVGVz'
+    'dEJ5dGVzEjMKFnNwZWVkX3Rlc3RfZHVyYXRpb25fbXMYGyABKAVSE3NwZWVkVGVzdER1cmF0aW'
+    '9uTXMSKAoQc3BlZWRfY2hlY2tlZF9hdBgcIAEoA1IOc3BlZWRDaGVja2VkQXQSMgoVY29tYmlu'
+    'ZWRfaGVhbHRoX3Njb3JlGB0gASgFUhNjb21iaW5lZEhlYWx0aFNjb3JlEjIKFWNvbWJpbmVkX2'
+    'hlYWx0aF9sZXZlbBgeIAEoCVITY29tYmluZWRIZWFsdGhMZXZlbBIhCgxzcGVlZF9zb3VyY2UY'
+    'HyABKAlSC3NwZWVkU291cmNlEjIKFWV4dGVybmFsX2hlYWx0aF9zY29yZRggIAEoBVITZXh0ZX'
+    'JuYWxIZWFsdGhTY29yZRIyChVleHRlcm5hbF9oZWFsdGhfbGV2ZWwYISABKAlSE2V4dGVybmFs'
+    'SGVhbHRoTGV2ZWwSIwoNaGVhbHRoX3JlYXNvbhgiIAEoCVIMaGVhbHRoUmVhc29uQgkKB19pcG'
+    'luZm9CFQoTX2dyb3VwX3NlbGVjdGVkX3RhZ0IdChtfZ3JvdXBfc2VsZWN0ZWRfdGFnX2Rpc3Bs'
+    'YXk=');
 
 @$core.Deprecated('Use ipInfoDescriptor instead')
 const IpInfo$json = {

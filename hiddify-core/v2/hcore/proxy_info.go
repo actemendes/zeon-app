@@ -66,6 +66,18 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 		out.AutoAllowed = url_test_history.AutoAllowed
 		out.LastError = url_test_history.LastError
 		out.CheckedAt = url_test_history.CheckedAt
+		out.SpeedKbps = url_test_history.SpeedKbps
+		out.SpeedScore = url_test_history.SpeedScore
+		out.SpeedLevel = url_test_history.SpeedLevel
+		out.SpeedSource = url_test_history.SpeedSource
+		out.SpeedTestBytes = url_test_history.SpeedTestBytes
+		out.SpeedTestDurationMs = url_test_history.SpeedTestDurationMs
+		out.SpeedCheckedAt = url_test_history.SpeedCheckedAt
+		out.ExternalHealthScore = url_test_history.ExternalHealthScore
+		out.ExternalHealthLevel = url_test_history.ExternalHealthLevel
+		out.CombinedHealthScore = url_test_history.CombinedHealthScore
+		out.CombinedHealthLevel = url_test_history.CombinedHealthLevel
+		out.HealthReason = url_test_history.HealthReason
 		if out.QualityLevel == "" {
 			out.QualityLevel = "unknown"
 			out.AutoAllowed = true

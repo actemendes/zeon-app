@@ -68,9 +68,12 @@ type InboundOptions struct {
 }
 
 type URLTestOptions struct {
-	ConnectionTestUrl  string            `json:"connection-test-url,omitempty" overridable:"true"`
-	ConnectionTestUrls []string          `json:"connection-test-urls,omitempty" overridable:"true"`
-	URLTestInterval    DurationInSeconds `json:"url-test-interval,omitempty" overridable:"true"`
+	ConnectionTestUrl        string            `json:"connection-test-url,omitempty" overridable:"true"`
+	ConnectionTestUrls       []string          `json:"connection-test-urls,omitempty" overridable:"true"`
+	URLTestInterval          DurationInSeconds `json:"url-test-interval,omitempty" overridable:"true"`
+	ExternalSpeedTestURL     string            `json:"external-speed-test-url,omitempty" overridable:"true"`
+	ExternalSpeedTestBytes   int               `json:"external-speed-test-bytes,omitempty" overridable:"true"`
+	ExternalSpeedTestEnabled *bool             `json:"external-speed-test-enabled,omitempty" overridable:"true"`
 	// URLTestIdleTimeout DurationInSeconds `json:"url-test-idle-timeout"`
 }
 

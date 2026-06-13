@@ -110,6 +110,18 @@ message OutboundInfo {
   bool auto_allowed = 20;
   string last_error = 21;
   int64 checked_at = 22;
+  int32 speed_kbps = 23;
+  int32 speed_score = 24;
+  string speed_level = 25;
+  int32 speed_test_bytes = 26;
+  int32 speed_test_duration_ms = 27;
+  int64 speed_checked_at = 28;
+  int32 combined_health_score = 29;
+  string combined_health_level = 30;
+  string speed_source = 31;
+  int32 external_health_score = 32;
+  string external_health_level = 33;
+  string health_reason = 34;
 }
 
 message IpInfo {
@@ -234,6 +246,4 @@ message LogRequest {
 
 message StopRequest{
 }
-
-
 

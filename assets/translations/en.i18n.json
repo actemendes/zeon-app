@@ -133,9 +133,20 @@
         "excellent": "Excellent",
         "good": "Good",
         "medium": "Medium",
+        "slow": "Slow",
+        "verySlow": "Very slow",
         "bad": "Bad",
         "unknown": "Quality unknown",
+        "checking": "Checking",
         "notUsedInAuto": "not in auto",
+        "reasons": {
+          "externalSlow": "external slow",
+          "externalTimeout": "external timeout",
+          "cdnOnly": "CDN only",
+          "discordTimeout": "Discord timeout",
+          "googleTimeout": "Google timeout",
+          "externalUnknown": "checking"
+        },
         "errors": {
           "timeout": "timeout",
           "refused": "refused",

@@ -24,15 +24,25 @@ class ProxyTile extends StatelessWidget with PresLogger {
     final primaryColor = selected ? selectedTextColor : themeTextColor;
     final iconColor = selected ? selectedTextColor : themeTextColor;
     final tileColor = selected ? theme.colorScheme.primaryContainer : Colors.transparent;
+    final isAutoSelection = isAutoSelectionProxyOption(tag: proxy.tag, tagDisplay: proxy.tagDisplay);
     final hasDelay = proxy.urlTestDelay != 0;
     final hasNoPing = proxy.urlTestDelay > 65000;
     final hasDownload = proxy.download > 0;
     final hasQuality =
-        hasDelay ||
-        proxy.qualityLevel.isNotEmpty ||
-        proxy.qualityScore != 0 ||
-        proxy.checkedAt != 0 ||
-        proxy.lastError.isNotEmpty;
+        !isAutoSelection &&
+        (hasDelay ||
+            proxy.qualityLevel.isNotEmpty ||
+            proxy.qualityScore != 0 ||
+            proxy.checkedAt != 0 ||
+            proxy.speedLevel.isNotEmpty ||
+            proxy.speedKbps != 0 ||
+            proxy.speedCheckedAt != 0 ||
+            proxy.externalHealthLevel.isNotEmpty ||
+            proxy.externalHealthScore != 0 ||
+            proxy.combinedHealthLevel.isNotEmpty ||
+            proxy.combinedHealthScore != 0 ||
+            proxy.healthReason.isNotEmpty ||
+            proxy.lastError.isNotEmpty);
 
     return ListTile(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -70,7 +80,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
           size: 40,
         ),
       ),
-      trailing: hasDelay || hasDownload || hasQuality
+      trailing: !isAutoSelection && (hasDelay || hasDownload || hasQuality)
           ? SizedBox(
               width: 88,
               child: Column(

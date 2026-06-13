@@ -58,5 +58,16 @@ bool shouldHideProxyOption({required String tag, required String tagDisplay}) {
   return rawTag == "lowest" || rawDisplay == "lowest" || _isAutoServerConfig(rawTag) || _isAutoServerConfig(rawDisplay);
 }
 
+bool isAutoSelectionProxyOption({required String tag, required String tagDisplay}) {
+  final rawTag = tag.trim().toLowerCase();
+  final rawDisplay = tagDisplay.trim().toLowerCase();
+  return rawTag == "balance" ||
+      rawDisplay == "balance" ||
+      formatProxyDisplayName(tag).trim().toLowerCase() ==
+          "\u0430\u0432\u0442\u043e\u0432\u044b\u0431\u043e\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u0432" ||
+      formatProxyDisplayName(tagDisplay).trim().toLowerCase() ==
+          "\u0430\u0432\u0442\u043e\u0432\u044b\u0431\u043e\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u0432";
+}
+
 bool _isAutoServerConfig(String value) =>
     RegExp(r"\u0430\u0432\u0442\u043e\s*\|", caseSensitive: false).hasMatch(value);

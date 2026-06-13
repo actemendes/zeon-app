@@ -50,7 +50,7 @@ func (s *RoundRobin) Now() string {
 
 func (s *RoundRobin) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
 	filteredOutbounds := filterRoundRobinOutboundsByQuality(s.outbounds, history, s.logger)
-	sortedOutbounds := sortOutboundsByDelay(filteredOutbounds, history)
+	sortedOutbounds := sortOutboundsByHealthThenDelay(filteredOutbounds, history)
 	acceptableIndex := getAcceptableIndex(sortedOutbounds, history, s.delayAcceptableRatio)
 
 	s.mu.Lock()

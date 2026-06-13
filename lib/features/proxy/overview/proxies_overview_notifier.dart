@@ -32,6 +32,102 @@ enum ProxiesSort {
   };
 }
 
+List<OutboundInfo> sortProxyItemsByCombinedHealth(Iterable<OutboundInfo> items) {
+  final indexed = <({int index, OutboundInfo item})>[];
+  var index = 0;
+  for (final item in items) {
+    indexed.add((index: index, item: item));
+    index++;
+  }
+
+  indexed.sort((a, b) {
+    final result = compareProxyByCombinedHealthForDisplay(a.item, b.item);
+    if (result != 0) return result;
+    return a.index.compareTo(b.index);
+  });
+
+  return [for (final entry in indexed) entry.item];
+}
+
+int compareProxyByCombinedHealthForDisplay(OutboundInfo a, OutboundInfo b) {
+  final specialRank = _compareInt(_proxySpecialRank(a), _proxySpecialRank(b));
+  if (specialRank != 0) return specialRank;
+
+  final bucketRank = _compareInt(_healthBucketRank(a), _healthBucketRank(b));
+  if (bucketRank != 0) return bucketRank;
+
+  final combinedRank = _compareIntDesc(_displayCombinedScore(a), _displayCombinedScore(b));
+  if (combinedRank != 0) return combinedRank;
+
+  final speedRank = _compareIntDesc(a.speedScore, b.speedScore);
+  if (speedRank != 0) return speedRank;
+
+  final qualityRank = _compareIntDesc(a.qualityScore, b.qualityScore);
+  if (qualityRank != 0) return qualityRank;
+
+  return _compareDelay(a.urlTestDelay, b.urlTestDelay);
+}
+
+int _proxySpecialRank(OutboundInfo proxy) {
+  if (_isAutoSelectionProxy(proxy)) return 0;
+  if (proxy.isGroup) return 1;
+  return 2;
+}
+
+bool _isAutoSelectionProxy(OutboundInfo proxy) {
+  return isAutoSelectionProxyOption(tag: proxy.tag, tagDisplay: proxy.tagDisplay);
+}
+
+int _healthBucketRank(OutboundInfo proxy) {
+  final level = _normalizedHealthLevel(proxy);
+  return switch (level) {
+    "excellent" || "good" || "fast" || "normal" => 0,
+    "medium" || "slow" => 1,
+    "weak" || "very_slow" || "very-slow" => 2,
+    "bad" || "failed" => 4,
+    _ => 3,
+  };
+}
+
+String _normalizedHealthLevel(OutboundInfo proxy) {
+  final combined = proxy.combinedHealthLevel.trim().toLowerCase();
+  if (combined.isNotEmpty) return combined;
+  final external = proxy.externalHealthLevel.trim().toLowerCase();
+  if (external.isNotEmpty) return external;
+  final quality = proxy.qualityLevel.trim().toLowerCase();
+  if (quality.isNotEmpty) return quality;
+  return "unknown";
+}
+
+int _displayCombinedScore(OutboundInfo proxy) {
+  if (proxy.combinedHealthScore > 0) return proxy.combinedHealthScore;
+  if (proxy.externalHealthScore > 0) return proxy.externalHealthScore;
+  if (proxy.qualityScore > 0) return proxy.qualityScore;
+  return switch (_normalizedHealthLevel(proxy)) {
+    "excellent" => 95,
+    "good" || "fast" || "normal" => 75,
+    "medium" || "slow" => 55,
+    "weak" || "very_slow" || "very-slow" => 25,
+    "bad" || "failed" => 0,
+    _ => -1,
+  };
+}
+
+int _compareDelay(int a, int b) {
+  final aValid = _hasUsableDelay(a);
+  final bValid = _hasUsableDelay(b);
+  if (aValid && !bValid) return -1;
+  if (!aValid && bValid) return 1;
+  if (!aValid && !bValid) return 0;
+  return a.compareTo(b);
+}
+
+bool _hasUsableDelay(int delay) => delay > 0 && delay < 65000;
+
+int _compareInt(int a, int b) => a.compareTo(b);
+
+int _compareIntDesc(int a, int b) => b.compareTo(a);
+
 @Riverpod(keepAlive: true)
 class ProxiesSortNotifier extends _$ProxiesSortNotifier with AppLogger {
   late final _pref = PreferencesEntry(
@@ -147,17 +243,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
         if (!a.isGroup && b.isGroup) return 1;
         return a.tag.compareTo(b.tag);
       }),
-      ProxiesSort.delay => proxies.items.sortedWith((a, b) {
-        if (a.isGroup && !b.isGroup) return -1;
-        if (!a.isGroup && b.isGroup) return 1;
-
-        final ai = a.urlTestDelay;
-        final bi = b.urlTestDelay;
-        if (ai == 0 && bi == 0) return -1;
-        if (ai == 0 && bi > 0) return 1;
-        if (ai > 0 && bi == 0) return -1;
-        return ai.compareTo(bi);
-      }),
+      ProxiesSort.delay => sortProxyItemsByCombinedHealth(proxies.items),
       ProxiesSort.unsorted => proxies.items,
       ProxiesSort.usage => proxies.items.sortedWith((a, b) {
         if (a.isGroup && !b.isGroup) return -1;

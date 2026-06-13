@@ -406,10 +406,13 @@ func setExperimental(options *option.Options, hopt *HiddifyOptions) {
 			},
 
 			Monitoring: &option.MonitoringOptions{
-				URLs:           hopt.ConnectionTestUrls,
-				Interval:       badoption.Duration(hopt.URLTestInterval.Duration()),
-				DebounceWindow: badoption.Duration(time.Millisecond * 500),
-				IdleTimeout:    badoption.Duration(hopt.URLTestInterval.Duration().Nanoseconds() * 3),
+				URLs:                     hopt.ConnectionTestUrls,
+				Interval:                 badoption.Duration(hopt.URLTestInterval.Duration()),
+				DebounceWindow:           badoption.Duration(time.Millisecond * 500),
+				IdleTimeout:              badoption.Duration(hopt.URLTestInterval.Duration().Nanoseconds() * 3),
+				ExternalSpeedTestURL:     hopt.ExternalSpeedTestURL,
+				ExternalSpeedTestBytes:   hopt.ExternalSpeedTestBytes,
+				ExternalSpeedTestEnabled: hopt.ExternalSpeedTestEnabled,
 			},
 		}
 	}

@@ -137,9 +137,20 @@
         "excellent": "Отличное",
         "good": "Хорошее",
         "medium": "Среднее",
+        "slow": "Медленно",
+        "verySlow": "Очень медленно",
         "bad": "Плохое",
         "unknown": "Качество неизвестно",
+        "checking": "Проверяется",
         "notUsedInAuto": "не в авто",
+        "reasons": {
+          "externalSlow": "медленно вовне",
+          "externalTimeout": "внешний timeout",
+          "cdnOnly": "только CDN",
+          "discordTimeout": "Discord timeout",
+          "googleTimeout": "Google timeout",
+          "externalUnknown": "проверяется"
+        },
         "errors": {
           "timeout": "timeout",
           "refused": "refused",
