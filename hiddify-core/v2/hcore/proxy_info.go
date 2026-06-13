@@ -9,7 +9,6 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
 	G "github.com/sagernet/sing-box/protocol/group"
-	"github.com/sagernet/sing-box/protocol/group/balancer"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/service"
 	"google.golang.org/grpc"
@@ -41,11 +40,6 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 	if tag := monitoring.RealTag(detour); tag != "" {
 		dtag := TrimTagName(tag)
 		out.GroupSelectedTagDisplay = &dtag
-		if balancer, ok := detour.(*balancer.Balancer); ok {
-			if stg := balancer.Strategy(); stg != "lowest-delay" {
-				out.GroupSelectedTagDisplay = &stg
-			}
-		}
 	}
 	// realTag = adapter.OutboundTag(detour)
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
+	"github.com/sagernet/sing-box/option"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 )
@@ -56,6 +57,38 @@ func TestRoundRobinQualityFilterPrefersGoodOverLowDelayBad(t *testing.T) {
 	}
 	if got := filtered[N.NetworkTCP][0].Tag(); got != "ServerB" {
 		t.Fatalf("expected good server to win, got %s", got)
+	}
+}
+
+func TestRoundRobinNowReportsCurrentHealthSortedCandidate(t *testing.T) {
+	lowPingLowerHealth := qualityTestOutbound{tag: "low-ping-lower-health"}
+	higherPingBetterHealth := qualityTestOutbound{tag: "higher-ping-better-health"}
+	strategy := NewRoundRobin(
+		[]adapter.Outbound{lowPingLowerHealth, higherPingBetterHealth},
+		option.BalancerOutboundOptions{DelayAcceptableRatio: 10},
+		nil,
+	)
+	strategy.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{
+		"low-ping-lower-health": {
+			Delay:               29,
+			QualityScore:        80,
+			QualityLevel:        monitoring.QualityLevelGood,
+			AutoAllowed:         true,
+			CombinedHealthScore: 61,
+			CombinedHealthLevel: monitoring.HealthLevelMedium,
+		},
+		"higher-ping-better-health": {
+			Delay:               45,
+			QualityScore:        90,
+			QualityLevel:        monitoring.QualityLevelExcellent,
+			AutoAllowed:         true,
+			CombinedHealthScore: 80,
+			CombinedHealthLevel: monitoring.HealthLevelGood,
+		},
+	})
+
+	if got := strategy.Now(); got != "higher-ping-better-health" {
+		t.Fatalf("expected current candidate to be better combined health tag, got %s", got)
 	}
 }
 

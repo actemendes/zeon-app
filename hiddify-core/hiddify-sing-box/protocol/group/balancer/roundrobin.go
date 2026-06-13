@@ -43,9 +43,20 @@ func NewRoundRobin(outbounds []adapter.Outbound, options option.BalancerOutbound
 }
 
 func (s *RoundRobin) Now() string {
-	// s.idxMutex.Lock()
-	// defer s.idxMutex.Unlock()
-	return ""
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	outs := s.sortedOutbounds[N.NetworkTCP]
+	if len(outs) == 0 {
+		return ""
+	}
+	index := s.idx[N.NetworkTCP]
+	if maxIndex, ok := s.maxAcceptableIndex[N.NetworkTCP]; ok && maxIndex >= 0 && index > maxIndex {
+		index = maxIndex
+	}
+	if index < 0 || index >= len(outs) {
+		index = 0
+	}
+	return outs[index].Tag()
 }
 
 func (s *RoundRobin) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {

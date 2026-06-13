@@ -25,6 +25,9 @@ class ProxyTile extends StatelessWidget with PresLogger {
     final iconColor = selected ? selectedTextColor : themeTextColor;
     final tileColor = selected ? theme.colorScheme.primaryContainer : Colors.transparent;
     final isAutoSelection = isAutoSelectionProxyOption(tag: proxy.tag, tagDisplay: proxy.tagDisplay);
+    final flagTagDisplay = isAutoSelection && proxy.groupSelectedTagDisplay.isNotEmpty
+        ? proxy.groupSelectedTagDisplay
+        : proxy.tagDisplay;
     final hasDelay = proxy.urlTestDelay != 0;
     final hasNoPing = proxy.urlTestDelay > 65000;
     final hasDownload = proxy.download > 0;
@@ -74,8 +77,8 @@ class ProxyTile extends StatelessWidget with PresLogger {
         onLongPress: () {},
         child: IPCountryFlag(
           countryCode: resolveProxyCountryCode(
-            tagDisplay: proxy.tagDisplay,
-            fallbackCountryCode: proxy.ipinfo.countryCode,
+            tagDisplay: flagTagDisplay,
+            fallbackCountryCode: isAutoSelection ? null : proxy.ipinfo.countryCode,
           ),
           size: 40,
         ),

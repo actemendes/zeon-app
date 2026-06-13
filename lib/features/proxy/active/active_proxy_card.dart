@@ -48,6 +48,11 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
       }
     }
 
+    final isAutoSelection = isAutoSelectionProxyOption(tag: activeProxy.tag, tagDisplay: activeProxy.tagDisplay);
+    final flagTagDisplay = isAutoSelection && activeProxy.groupSelectedTagDisplay.isNotEmpty
+        ? activeProxy.groupSelectedTagDisplay
+        : activeProxy.tagDisplay;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
@@ -81,8 +86,8 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                   borderRadius: BorderRadius.circular(_panelRadius),
                   child: IPCountryFlag(
                     countryCode: resolveProxyCountryCode(
-                      tagDisplay: activeProxy.tagDisplay,
-                      fallbackCountryCode: activeProxy.ipinfo.countryCode,
+                      tagDisplay: flagTagDisplay,
+                      fallbackCountryCode: isAutoSelection ? null : activeProxy.ipinfo.countryCode,
                     ),
                     size: 40,
                   ),
