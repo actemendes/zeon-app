@@ -106,7 +106,7 @@
   "pages": {
     "home": {
       "title": "Главная",
-      "quickSettings": "Быстрые настройки",
+      "quickSettings": "Способ подключения",
       "internet": "ИНТЕРНЕТ",
       "forYou": "ДЛЯ ВАС"
     },
@@ -517,7 +517,7 @@
       },
       "inbound": {
         "title": "Системные",
-        "serviceMode": "Режим службы",
+        "serviceMode": "Способ подключения",
         "serviceModes": {
           "proxy": "Только прокси-служба",
           "systemProxy": "Установить системный прокси",

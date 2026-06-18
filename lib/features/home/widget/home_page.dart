@@ -93,34 +93,16 @@ class HomePage extends HookConsumerWidget {
                       Positioned(
                         top: 20,
                         right: 20,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (PlatformUtils.isWindows) ...[
-                              Semantics(
-                                key: const ValueKey("profile_quick_settings"),
-                                label: t.pages.home.quickSettings,
-                                child: IconButton(
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints.tightFor(width: 22, height: 20),
-                                  icon: Icon(Icons.tune_rounded, color: theme.colorScheme.onSurface),
-                                  onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                            ],
-                            IconButton(
-                              tooltip: 'Обновить подписку',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints.tightFor(width: 22, height: 20),
-                              onPressed: () async {
-                                final active = await ref.read(activeProfileProvider.future);
-                                if (active is! RemoteProfileEntity) return;
-                                await ref.read(updateProfileNotifierProvider(active.id).notifier).updateProfile(active);
-                              },
-                              icon: Icon(FluentIcons.arrow_sync_24_regular, color: theme.colorScheme.onSurface),
-                            ),
-                          ],
+                        child: IconButton(
+                          tooltip: 'Обновить подписку',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(width: 22, height: 20),
+                          onPressed: () async {
+                            final active = await ref.read(activeProfileProvider.future);
+                            if (active is! RemoteProfileEntity) return;
+                            await ref.read(updateProfileNotifierProvider(active.id).notifier).updateProfile(active);
+                          },
+                          icon: Icon(FluentIcons.arrow_sync_24_regular, color: theme.colorScheme.onSurface),
                         ),
                       ),
                     ],
@@ -135,21 +117,22 @@ class HomePage extends HookConsumerWidget {
                   child: CustomScrollView(
                     slivers: [
                       MultiSliver(
-                        children: const [
+                        children: [
                           SliverFillRemaining(
                             hasScrollBody: false,
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Expanded(
+                                const Expanded(
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [ConnectionButton(), ActiveProxyDelayIndicator()],
                                   ),
                                 ),
-                                ActiveProxyFooter(),
-                                HomePremiumAccessButton(),
+                                _HomeQuickSettingsButton(label: t.pages.home.quickSettings),
+                                const ActiveProxyFooter(),
+                                const HomePremiumAccessButton(),
                               ],
                             ),
                           ),
@@ -163,6 +146,50 @@ class HomePage extends HookConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _HomeQuickSettingsButton extends ConsumerWidget {
+  const _HomeQuickSettingsButton({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!PlatformUtils.isWindows) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final backgroundColor = theme.navigationBarTheme.backgroundColor ?? theme.colorScheme.surface;
+    final foregroundColor =
+        theme.navigationBarTheme.iconTheme?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Semantics(
+          key: const ValueKey("profile_quick_settings"),
+          label: label,
+          button: true,
+          child: Material(
+            color: backgroundColor,
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: Tooltip(
+              message: label,
+              preferBelow: false,
+              child: IconButton(
+                iconSize: 20,
+                constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                padding: EdgeInsets.zero,
+                icon: Icon(Icons.vpn_key, color: foregroundColor),
+                onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
