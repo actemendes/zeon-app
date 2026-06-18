@@ -139,6 +139,7 @@ class ProxyQualityPresentation {
   final String tooltip;
 
   factory ProxyQualityPresentation.from(OutboundInfo proxy, Translations t) {
+    final stageLabel = _stageLabel(proxy.healthReason, t);
     final hasCombinedHealth =
         proxy.combinedHealthLevel.isNotEmpty ||
         proxy.combinedHealthScore != 0 ||
@@ -156,7 +157,9 @@ class ProxyQualityPresentation {
         (safeError.isNotEmpty || safeHealthReason.isNotEmpty);
     final notInAuto = !proxy.autoAllowed && !isUnknownLevel(level);
     final speedLabel = _speedLabel(proxy.speedKbps);
-    final detailLabel = showReason
+    final detailLabel = stageLabel.isNotEmpty
+        ? stageLabel
+        : showReason
         ? (safeError.isNotEmpty ? safeError : safeHealthReason)
         : (notInAuto ? t.pages.proxies.quality.notUsedInAuto : (speedLabel.isNotEmpty ? speedLabel : ""));
     final scoreValue = hasCombinedHealth && proxy.combinedHealthScore > 0
@@ -170,7 +173,7 @@ class ProxyQualityPresentation {
       level: level,
       label: label,
       activeBars: _activeBars(level),
-      isUnknown: isUnknownLevel(level),
+      isUnknown: stageLabel.isNotEmpty || isUnknownLevel(level),
       detailLabel: detailLabel,
       tooltip: tooltip,
     );
@@ -252,8 +255,22 @@ class ProxyQualityPresentation {
       "discord-timeout" => t.pages.proxies.quality.reasons.discordTimeout,
       "google-timeout" => t.pages.proxies.quality.reasons.googleTimeout,
       "external-unknown" => t.pages.proxies.quality.reasons.externalUnknown,
+      "live-usability-failed" => "not loading",
+      "live-timeout" => "live timeout",
+      "traffic-failed" => "traffic failed",
+      "live-degraded" => "live degraded",
       "urltest-failed" => "",
       "quality-not-usable" => "",
+      _ => "",
+    };
+  }
+
+  static String _stageLabel(String rawReason, Translations t) {
+    final normalized = rawReason.trim().toLowerCase();
+    return switch (normalized) {
+      "ping-checking" => t.pages.proxies.delay.testing,
+      "quality-checking" => t.pages.proxies.quality.checking,
+      "speed-checking" => "скорость...",
       _ => "",
     };
   }

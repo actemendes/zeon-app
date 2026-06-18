@@ -106,11 +106,23 @@ class ServiceConnection(private val context: Context, callback: Callback, privat
         }
 
         override fun onServiceWriteLog(message: String?) {
-            //TODO("Not yet implemented")
+            if (message == null) return
+            if (isSafeAutoDiagnostic(message)) {
+                Log.d("CoreDiagnostics", message)
+            }
         }
 
         override fun onServiceResetLogs(messages: List<String?>?) {
             //TODO("Not yet implemented")
+        }
+
+        private fun isSafeAutoDiagnostic(message: String): Boolean {
+            return message.contains("[AutoDecision]") ||
+                    message.contains("[AutoDecisionCandidates]") ||
+                    message.contains("[LiveProbe]") ||
+                    message.contains("[LiveAvoid]") ||
+                    message.contains("[RoundRobinCandidates]") ||
+                    message.contains("[BalanceQuality]")
         }
     }
 }

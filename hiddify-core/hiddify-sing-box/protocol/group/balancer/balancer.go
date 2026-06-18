@@ -167,6 +167,7 @@ func (s *Balancer) DialContext(ctx context.Context, network string, destination 
 	if outbound == nil {
 		return nil, E.New("missing supported outbound")
 	}
+	s.afterSelection(outbound)
 	if metadata != nil {
 		metadata.SetRealOutbound(outbound.Tag())
 	}
@@ -175,7 +176,7 @@ func (s *Balancer) DialContext(ctx context.Context, network string, destination 
 	if err == nil {
 		return s.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
-	s.logger.ErrorContext(ctx, err)
+	s.logger.ErrorContext(ctx, "outbound dial failed: ", safeOutboundError(err))
 	if s.monitor != nil {
 		if s.options.Strategy == StrategyRoundRobin {
 			s.monitor.RecordRuntimeError(outbound.Tag(), err)
@@ -195,6 +196,7 @@ func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 	if outbound == nil {
 		return nil, E.New("missing supported outbound")
 	}
+	s.afterSelection(outbound)
 	if metadata != nil {
 		metadata.SetRealOutbound(outbound.Tag())
 	}
@@ -203,7 +205,7 @@ func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 	if err == nil {
 		return s.interruptGroup.NewPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
-	s.logger.ErrorContext(ctx, err)
+	s.logger.ErrorContext(ctx, "outbound packet failed: ", safeOutboundError(err))
 	if s.monitor != nil {
 		if s.options.Strategy == StrategyRoundRobin {
 			s.monitor.RecordRuntimeError(outbound.Tag(), err)
@@ -216,6 +218,10 @@ func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 func (s *Balancer) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	ctx = interrupt.ContextWithIsExternalConnection(ctx)
 	selected := s.strategyFn.Select(metadata, metadata.Network, true)
+	if selected == nil {
+		return
+	}
+	s.afterSelection(selected)
 	conn = s.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx))
 	if outboundHandler, isHandler := selected.(adapter.ConnectionHandlerEx); isHandler {
 		outboundHandler.NewConnectionEx(ctx, conn, metadata, onClose)
@@ -230,6 +236,7 @@ func (s *Balancer) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn,
 	if selected == nil {
 		return
 	}
+	s.afterSelection(selected)
 	metadata.SetRealOutbound(selected.Tag())
 	conn = s.interruptGroup.NewSingPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx))
 	if outboundHandler, isHandler := selected.(adapter.PacketConnectionHandlerEx); isHandler {
@@ -244,6 +251,24 @@ func (s *Balancer) NewDirectRouteConnection(metadata adapter.InboundContext, rou
 	if selected == nil {
 		return nil, E.New(metadata.Network, " is not supported by outbound: ")
 	}
+	s.afterSelection(selected)
 	metadata.SetRealOutbound(selected.Tag())
 	return selected.(adapter.DirectRouteOutbound).NewDirectRouteConnection(metadata, routeContext, timeout)
+}
+
+func (s *Balancer) afterSelection(outbound adapter.Outbound) {
+	if s == nil || s.monitor == nil || outbound == nil || s.options.Strategy != StrategyRoundRobin {
+		return
+	}
+	s.monitor.SelectedOutboundLiveProbe(outbound.Tag())
+}
+
+func safeOutboundError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if normalized := monitoring.NormalizeOutboundError(err.Error()); normalized != "" {
+		return normalized
+	}
+	return "outbound failed"
 }

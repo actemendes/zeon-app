@@ -41,18 +41,20 @@ func (h *HiddifyInstance) readStatus(prev *SystemInfo) *SystemInfo {
 			if currentOutBound, ok := box.Outbound().Outbound(config.OutboundSelectTag); ok {
 				if selectOutBound, ok := currentOutBound.(*group.Selector); ok {
 					current = selectOutBound.Now()
-					message.CurrentOutbound = TrimTagName(current)
+					message.CurrentOutbound = displayCurrentOutbound(current, "")
 				}
 			}
-			// if message.CurrentOutbound == config.OutboundURLTestTag {
 			if currentOutBound, ok := box.Outbound().Outbound(current); ok {
 				if g, ok := currentOutBound.(adapter.OutboundGroup); ok {
 					if now := g.Now(); now != "" {
-						message.CurrentOutbound = fmt.Sprint(message.CurrentOutbound, "→", TrimTagName(now))
+						var history *adapter.URLTestHistory
+						if monitor := monitoring.Get(h.Context()); monitor != nil {
+							history = monitor.OutboundsHistory(current)[now]
+						}
+						message.CurrentOutbound = displayCurrentOutboundWithLive(current, now, history)
 					}
 				}
 			}
-			// }
 		}
 
 		if prev == nil || prev.CurrentProfile == "" || message.UplinkTotal < 1000000 {
@@ -67,6 +69,41 @@ func (h *HiddifyInstance) readStatus(prev *SystemInfo) *SystemInfo {
 	}
 
 	return &message
+}
+
+func displayCurrentOutboundSafe(selected string, real string) string {
+	const autoPrefix = "\u0410\u0432\u0442\u043e\u0432\u044b\u0431\u043e\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u0432 \u00b7 "
+	if selected == config.OutboundRoundRobinTag {
+		if real == "" || real == selected {
+			return autoPrefix + "\u0432\u044b\u0431\u0438\u0440\u0430\u0435\u0442\u0441\u044f \u0441\u0435\u0440\u0432\u0435\u0440..."
+		}
+		return autoPrefix + TrimTagName(real)
+	}
+	display := TrimTagName(selected)
+	if real != "" && real != selected {
+		return fmt.Sprint(display, "\u2192", TrimTagName(real))
+	}
+	return display
+}
+
+func displayCurrentOutbound(selected string, real string) string {
+	return displayCurrentOutboundSafe(selected, real)
+}
+
+func displayCurrentOutboundWithLive(selected string, real string, history *adapter.URLTestHistory) string {
+	if selected != config.OutboundRoundRobinTag || real == "" || history == nil {
+		return displayCurrentOutboundSafe(selected, real)
+	}
+	const autoPrefix = "\u0410\u0432\u0442\u043e\u0432\u044b\u0431\u043e\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u0432 \u00b7 "
+	name := TrimTagName(real)
+	switch history.LiveUsabilityStatus {
+	case monitoring.LiveUsabilityChecking:
+		return autoPrefix + name + " \u00b7 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430..."
+	case monitoring.LiveUsabilityFailed:
+		return autoPrefix + name + " \u00b7 \u043d\u0435 \u0433\u0440\u0443\u0437\u0438\u0442, \u043f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0430\u0435\u043c..."
+	default:
+		return displayCurrentOutboundSafe(selected, real)
+	}
 }
 
 func (s *CoreService) GetSystemInfo(ctx context.Context, req *hcommon.Empty) (*SystemInfo, error) {

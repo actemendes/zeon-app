@@ -79,6 +79,7 @@ bool _isAutoSelectionProxy(OutboundInfo proxy) {
 }
 
 int _healthBucketRank(OutboundInfo proxy) {
+  if (_isCheckingProxy(proxy)) return 3;
   final level = _normalizedHealthLevel(proxy);
   return switch (level) {
     "excellent" || "good" || "fast" || "normal" => 0,
@@ -87,6 +88,11 @@ int _healthBucketRank(OutboundInfo proxy) {
     "bad" || "failed" => 4,
     _ => 3,
   };
+}
+
+bool _isCheckingProxy(OutboundInfo proxy) {
+  final reason = proxy.healthReason.trim().toLowerCase();
+  return reason == "ping-checking" || reason == "quality-checking" || reason == "speed-checking";
 }
 
 String _normalizedHealthLevel(OutboundInfo proxy) {
@@ -100,6 +106,7 @@ String _normalizedHealthLevel(OutboundInfo proxy) {
 }
 
 int _displayCombinedScore(OutboundInfo proxy) {
+  if (_isCheckingProxy(proxy)) return -1;
   if (proxy.combinedHealthScore > 0) return proxy.combinedHealthScore;
   if (proxy.externalHealthScore > 0) return proxy.externalHealthScore;
   if (proxy.qualityScore > 0) return proxy.qualityScore;

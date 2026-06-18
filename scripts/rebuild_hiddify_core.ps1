@@ -157,7 +157,7 @@ for platform in "${platforms[@]}"; do
           -androidapi=21 \
           -javapkg=com.hiddify.core \
           -libname=hiddify-core \
-          -tags=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack \
+          -tags=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,badlinkname,tfogo_checklinkname0,with_naive_outbound,with_conntrack \
           -trimpath \
           -ldflags="-w -s -checklinkname=0 -buildid=" \
           -target=android \

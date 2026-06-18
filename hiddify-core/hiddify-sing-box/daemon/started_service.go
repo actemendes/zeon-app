@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -1050,9 +1051,18 @@ func (s *StartedService) WriteMessage(level log.Level, message string) {
 	}
 	s.logAccess.Unlock()
 	s.logSubscriber.Emit(item)
-	if s.debug {
+	if s.debug || isSafeAutoDiagnosticLog(message) {
 		s.handler.WriteDebugMessage(message)
 	}
+}
+
+func isSafeAutoDiagnosticLog(message string) bool {
+	return strings.Contains(message, "[AutoDecision]") ||
+		strings.Contains(message, "[AutoDecisionCandidates]") ||
+		strings.Contains(message, "[LiveProbe]") ||
+		strings.Contains(message, "[LiveAvoid]") ||
+		strings.Contains(message, "[RoundRobinCandidates]") ||
+		strings.Contains(message, "[BalanceQuality]")
 }
 
 func (s *StartedService) Instance() *Instance {

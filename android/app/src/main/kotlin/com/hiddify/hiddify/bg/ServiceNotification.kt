@@ -148,10 +148,37 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
         val downlink=status.downlink_total - previous.downlink_total
         val content = "${Libbox.formatBytes(uplink)}/s ↑\t${Libbox.formatBytes(downlink)}/s ↓ \n${status.current_outbound}"
         val title = "${status.current_profile}"
+        val outboundDisplay = formatOutboundDisplay(status.current_outbound)
+        val displayContent = content.substringBeforeLast("\n", content) + "\n" + outboundDisplay
+        Log.d("NotificationDisplay", "selected=${status.current_outbound} display=\"${outboundDisplay}\"")
         Application.notificationManager.notify(
                 notificationId,
-                notificationBuilder.setContentTitle(title).setContentText(content).build()
+                notificationBuilder.setContentTitle(title).setContentText(displayContent).build()
         )
+    }
+
+    private fun formatOutboundDisplaySafe(rawOutbound: String): String {
+        val autoPrefix = "\u0410\u0432\u0442\u043e\u0432\u044b\u0431\u043e\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u0432 \u00b7 "
+        val choosing = autoPrefix + "\u0432\u044b\u0431\u0438\u0440\u0430\u0435\u0442\u0441\u044f \u0441\u0435\u0440\u0432\u0435\u0440..."
+        val raw = rawOutbound.trim()
+        if (raw.isBlank()) return choosing
+
+        val normalized = raw.lowercase()
+        if (normalized == "balance") {
+            return choosing
+        }
+
+        val arrowParts = raw.split("\u2192", "->", limit = 2).map { it.trim() }
+        if (arrowParts.isNotEmpty() && arrowParts[0].lowercase() == "balance") {
+            val real = arrowParts.getOrNull(1).orEmpty()
+            return if (real.isBlank() || real.lowercase() == "balance") choosing else autoPrefix + real
+        }
+
+        return raw
+    }
+
+    private fun formatOutboundDisplay(rawOutbound: String): String {
+        return formatOutboundDisplaySafe(rawOutbound)
     }
 
     override fun onReceive(context: Context, intent: Intent) {

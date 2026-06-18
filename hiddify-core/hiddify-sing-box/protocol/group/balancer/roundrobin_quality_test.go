@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
@@ -133,10 +134,10 @@ func TestRoundRobinQualityFilterUsesUnknownCompatibilityWithoutKnownBad(t *testi
 
 	filtered := filterRoundRobinOutboundsByQuality(outbounds, history, nil)
 	if got := len(filtered[N.NetworkTCP]); got != 1 {
-		t.Fatalf("expected one unknown compatibility candidate, got %d", got)
+		t.Fatalf("expected unknown fallback to exclude known bad, got %d", got)
 	}
 	if got := filtered[N.NetworkTCP][0].Tag(); got != "unknown" {
-		t.Fatalf("expected unknown fallback to exclude known bad, got %s", got)
+		t.Fatalf("expected unknown candidate, got %s", got)
 	}
 }
 
@@ -313,6 +314,49 @@ func TestRoundRobinSortsCombinedHealthBeforeDelay(t *testing.T) {
 	}
 }
 
+func TestRoundRobinSortKeepsCheckingBelowReadyAndAboveBad(t *testing.T) {
+	ready := qualityTestOutbound{tag: "ready-good"}
+	checking := qualityTestOutbound{tag: "checking"}
+	bad := qualityTestOutbound{tag: "bad"}
+	outbounds := map[string][]adapter.Outbound{
+		N.NetworkTCP: {checking, bad, ready},
+	}
+	history := map[string]*adapter.URLTestHistory{
+		"ready-good": {
+			Delay:               120,
+			QualityScore:        90,
+			QualityLevel:        monitoring.QualityLevelExcellent,
+			AutoAllowed:         true,
+			CombinedHealthScore: 82,
+			CombinedHealthLevel: monitoring.HealthLevelGood,
+		},
+		"checking": {
+			Delay:               45,
+			QualityScore:        95,
+			QualityLevel:        monitoring.QualityLevelExcellent,
+			AutoAllowed:         true,
+			CombinedHealthLevel: monitoring.HealthLevelUnknown,
+			HealthReason:        "speed-checking",
+		},
+		"bad": {
+			Delay:               30,
+			QualityScore:        0,
+			QualityLevel:        monitoring.QualityLevelBad,
+			AutoAllowed:         false,
+			CombinedHealthLevel: monitoring.HealthLevelBad,
+		},
+	}
+
+	sorted := sortOutboundsByHealthThenDelay(outbounds, history)
+	got := []string{sorted[N.NetworkTCP][0].Tag(), sorted[N.NetworkTCP][1].Tag(), sorted[N.NetworkTCP][2].Tag()}
+	want := []string{"ready-good", "checking", "bad"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected order %v, got %v", want, got)
+		}
+	}
+}
+
 func TestRoundRobinQualityFilterExcludesCloudflareOnlyMediumWhenGoodPublicExists(t *testing.T) {
 	cloudflareOnly := qualityTestOutbound{tag: "cloudflare-only"}
 	publicGood := qualityTestOutbound{tag: "public-good"}
@@ -351,5 +395,290 @@ func TestRoundRobinQualityFilterExcludesCloudflareOnlyMediumWhenGoodPublicExists
 	}
 	if got := filtered[N.NetworkTCP][0].Tag(); got != "public-good" {
 		t.Fatalf("expected public-good candidate, got %s", got)
+	}
+}
+
+func TestRoundRobinKeepsCurrentGoodBeforeMinDwell(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	current := qualityTestOutbound{tag: "current-good"}
+	best := qualityTestOutbound{tag: "best-excellent"}
+	strategy := newRoundRobinForAntiFlapTest(now, current, best)
+	strategy.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{
+		current.Tag(): rrHistory(80, monitoring.HealthLevelGood, 80, 75, 120),
+		best.Tag():    rrHistory(95, monitoring.HealthLevelExcellent, 95, 90, 90),
+	})
+	strategy.currentTag[N.NetworkTCP] = current.Tag()
+	strategy.selectedAt[N.NetworkTCP] = now.Add(-90 * time.Second)
+
+	if got := strategy.Select(adapter.InboundContext{}, N.NetworkTCP, true).Tag(); got != current.Tag() {
+		t.Fatalf("expected current good server before min dwell, got %s", got)
+	}
+}
+
+func TestRoundRobinKeepsCurrentGoodWhenScoreDiffSmall(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	current := qualityTestOutbound{tag: "current-good"}
+	best := qualityTestOutbound{tag: "slightly-better"}
+	strategy := newRoundRobinForAntiFlapTest(now, current, best)
+	strategy.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{
+		current.Tag(): rrHistory(80, monitoring.HealthLevelGood, 80, 75, 120),
+		best.Tag():    rrHistory(84, monitoring.HealthLevelGood, 84, 75, 90),
+	})
+	strategy.currentTag[N.NetworkTCP] = current.Tag()
+	strategy.selectedAt[N.NetworkTCP] = now.Add(-180 * time.Second)
+
+	if got := strategy.Select(adapter.InboundContext{}, N.NetworkTCP, true).Tag(); got != current.Tag() {
+		t.Fatalf("expected current server when score diff is small, got %s", got)
+	}
+}
+
+func TestRoundRobinSwitchesAfterDwellWhenBestMuchBetter(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	current := qualityTestOutbound{tag: "current-good"}
+	best := qualityTestOutbound{tag: "much-better"}
+	strategy := newRoundRobinForAntiFlapTest(now, current, best)
+	strategy.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{
+		current.Tag(): rrHistory(75, monitoring.HealthLevelGood, 75, 75, 120),
+		best.Tag():    rrHistory(92, monitoring.HealthLevelExcellent, 92, 90, 90),
+	})
+	strategy.currentTag[N.NetworkTCP] = current.Tag()
+	strategy.selectedAt[N.NetworkTCP] = now.Add(-130 * time.Second)
+
+	if got := strategy.Select(adapter.InboundContext{}, N.NetworkTCP, true).Tag(); got != best.Tag() {
+		t.Fatalf("expected switch to much better server after dwell, got %s", got)
+	}
+}
+
+func TestRoundRobinSwitchesWhenCurrentWorseByAllMetricsAfterCooldown(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	current := qualityTestOutbound{tag: "current-low-ping-lower-health"}
+	best := qualityTestOutbound{tag: "best-higher-ping-better-health"}
+	strategy := newRoundRobinForAntiFlapTest(now, current, best)
+	strategy.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{
+		current.Tag(): rrHistory(69, monitoring.HealthLevelMedium, 69, 56, 51),
+		best.Tag():    rrHistory(83, monitoring.HealthLevelGood, 83, 90, 68),
+	})
+	strategy.currentTag[N.NetworkTCP] = current.Tag()
+	strategy.selectedAt[N.NetworkTCP] = now.Add(-roundRobinSwitchCooldown)
+
+	if got := strategy.Select(adapter.InboundContext{}, N.NetworkTCP, true).Tag(); got != best.Tag() {
+		t.Fatalf("expected switch to best when current is worse by all health metrics after cooldown, got %s", got)
+	}
+}
+
+func TestRoundRobinSwitchesImmediatelyWhenCurrentBad(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	current := qualityTestOutbound{tag: "current-bad"}
+	best := qualityTestOutbound{tag: "best-good"}
+	strategy := newRoundRobinForAntiFlapTest(now, current, best)
+	strategy.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{
+		current.Tag(): rrHistory(10, monitoring.HealthLevelBad, 10, 10, 40),
+		best.Tag():    rrHistory(75, monitoring.HealthLevelGood, 75, 75, 120),
+	})
+	strategy.currentTag[N.NetworkTCP] = current.Tag()
+	strategy.selectedAt[N.NetworkTCP] = now.Add(-5 * time.Second)
+
+	if got := strategy.Select(adapter.InboundContext{}, N.NetworkTCP, true).Tag(); got != best.Tag() {
+		t.Fatalf("expected immediate switch away from bad server, got %s", got)
+	}
+}
+
+func TestRoundRobinSwitchesImmediatelyWhenCurrentLiveFailed(t *testing.T) {
+	now := time.Now()
+	current := qualityTestOutbound{tag: "current-live-failed"}
+	best := qualityTestOutbound{tag: "best-good"}
+	strategy := newRoundRobinForAntiFlapTest(now, current, best)
+	currentHistory := rrHistory(80, monitoring.HealthLevelGood, 90, 80, 80)
+	currentHistory.LiveUsabilityStatus = monitoring.LiveUsabilityFailed
+	currentHistory.LiveAvoidUntil = now.Add(10 * time.Minute).Unix()
+	currentHistory.HealthReason = "live-usability-failed"
+	strategy.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{
+		current.Tag(): currentHistory,
+		best.Tag():    rrHistory(75, monitoring.HealthLevelGood, 80, 75, 120),
+	})
+	strategy.currentTag[N.NetworkTCP] = current.Tag()
+	strategy.selectedAt[N.NetworkTCP] = now.Add(-5 * time.Second)
+
+	if got := strategy.Select(adapter.InboundContext{}, N.NetworkTCP, true).Tag(); got != best.Tag() {
+		t.Fatalf("expected immediate switch away from live failed server, got %s", got)
+	}
+}
+
+func TestRoundRobinLiveFailedServerTemporarilyExcluded(t *testing.T) {
+	now := time.Now()
+	failed := qualityTestOutbound{tag: "paper-good-live-failed"}
+	good := qualityTestOutbound{tag: "good"}
+	outbounds := map[string][]adapter.Outbound{N.NetworkTCP: {failed, good}}
+	failedHistory := rrHistory(90, monitoring.HealthLevelExcellent, 90, 90, 40)
+	failedHistory.LiveUsabilityStatus = monitoring.LiveUsabilityFailed
+	failedHistory.LiveAvoidUntil = now.Add(10 * time.Minute).Unix()
+	failedHistory.HealthReason = "live-usability-failed"
+	filtered := filterRoundRobinOutboundsByQuality(outbounds, map[string]*adapter.URLTestHistory{
+		failed.Tag(): failedHistory,
+		good.Tag():   rrHistory(75, monitoring.HealthLevelGood, 75, 75, 120),
+	}, nil)
+
+	if got := len(filtered[N.NetworkTCP]); got != 1 {
+		t.Fatalf("expected live failed server excluded from auto candidates, got %d", got)
+	}
+	if got := filtered[N.NetworkTCP][0].Tag(); got != good.Tag() {
+		t.Fatalf("expected good server after live failed exclusion, got %s", got)
+	}
+	if !containsOutboundTag(outbounds[N.NetworkTCP], failed.Tag()) {
+		t.Fatal("live failed server must remain available for manual selection")
+	}
+}
+
+func TestRoundRobinSwitchesMediumToGoodAfterThreshold(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	current := qualityTestOutbound{tag: "current-medium"}
+	best := qualityTestOutbound{tag: "best-good"}
+	strategy := newRoundRobinForAntiFlapTest(now, current, best)
+	strategy.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{
+		current.Tag(): rrHistory(55, monitoring.HealthLevelMedium, 72, 50, 160),
+		best.Tag():    rrHistory(75, monitoring.HealthLevelGood, 80, 75, 120),
+	})
+	strategy.currentTag[N.NetworkTCP] = current.Tag()
+	strategy.selectedAt[N.NetworkTCP] = now.Add(-5 * time.Second)
+
+	if got := strategy.Select(adapter.InboundContext{}, N.NetworkTCP, true).Tag(); got != best.Tag() {
+		t.Fatalf("expected medium server to switch to good after threshold, got %s", got)
+	}
+}
+
+func TestRoundRobinCandidateOrderStableAfterMinorScoreChanges(t *testing.T) {
+	a := qualityTestOutbound{tag: "a"}
+	b := qualityTestOutbound{tag: "b"}
+	c := qualityTestOutbound{tag: "c"}
+	outbounds := map[string][]adapter.Outbound{N.NetworkTCP: {a, b, c}}
+	first := sortOutboundsByHealthThenDelay(outbounds, map[string]*adapter.URLTestHistory{
+		a.Tag(): rrHistory(82, monitoring.HealthLevelGood, 82, 75, 120),
+		b.Tag(): rrHistory(80, monitoring.HealthLevelGood, 80, 75, 120),
+		c.Tag(): rrHistory(80, monitoring.HealthLevelGood, 80, 75, 120),
+	})
+	second := sortOutboundsByHealthThenDelay(outbounds, map[string]*adapter.URLTestHistory{
+		a.Tag(): rrHistory(82, monitoring.HealthLevelGood, 82, 75, 120),
+		b.Tag(): rrHistory(81, monitoring.HealthLevelGood, 81, 75, 120),
+		c.Tag(): rrHistory(80, monitoring.HealthLevelGood, 80, 75, 120),
+	})
+
+	if !sameOutboundOrder(first[N.NetworkTCP], second[N.NetworkTCP]) {
+		t.Fatalf("expected minor score update to preserve candidate order")
+	}
+}
+
+func TestRoundRobinKeepsCurrentInsteadOfRotatingToWorseCandidate(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	a := qualityTestOutbound{tag: "a"}
+	b := qualityTestOutbound{tag: "b"}
+	c := qualityTestOutbound{tag: "c"}
+	strategy := newRoundRobinForAntiFlapTest(now, a, b, c)
+	history := map[string]*adapter.URLTestHistory{
+		a.Tag(): rrHistory(90, monitoring.HealthLevelExcellent, 90, 90, 100),
+		b.Tag(): rrHistory(88, monitoring.HealthLevelExcellent, 88, 90, 110),
+		c.Tag(): rrHistory(86, monitoring.HealthLevelExcellent, 86, 90, 120),
+	}
+	strategy.UpdateOutboundsInfo(history)
+	strategy.currentTag[N.NetworkTCP] = b.Tag()
+	strategy.selectedAt[N.NetworkTCP] = now.Add(-roundRobinPreferredDwellTime)
+
+	if got := strategy.Select(adapter.InboundContext{}, N.NetworkTCP, true).Tag(); got != b.Tag() {
+		t.Fatalf("expected current b to stay because it is close to best and better than c, got %s", got)
+	}
+	history[c.Tag()] = rrHistory(87, monitoring.HealthLevelExcellent, 87, 90, 120)
+	strategy.UpdateOutboundsInfo(history)
+	if got := strategy.Now(); got != b.Tag() {
+		t.Fatalf("expected current tag to survive monitoring update, got %s", got)
+	}
+}
+
+func TestRoundRobinWeakAndBadNotInNormalRotation(t *testing.T) {
+	weak := qualityTestOutbound{tag: "weak"}
+	bad := qualityTestOutbound{tag: "bad"}
+	good := qualityTestOutbound{tag: "good"}
+	outbounds := map[string][]adapter.Outbound{N.NetworkTCP: {weak, bad, good}}
+	filtered := filterRoundRobinOutboundsByQuality(outbounds, map[string]*adapter.URLTestHistory{
+		weak.Tag(): rrHistory(25, monitoring.HealthLevelWeak, 90, 25, 80),
+		bad.Tag():  rrHistory(0, monitoring.HealthLevelBad, 0, 0, 40),
+		good.Tag(): rrHistory(75, monitoring.HealthLevelGood, 75, 75, 120),
+	}, nil)
+
+	if got := len(filtered[N.NetworkTCP]); got != 1 {
+		t.Fatalf("expected only good normal candidate, got %d", got)
+	}
+	if got := filtered[N.NetworkTCP][0].Tag(); got != good.Tag() {
+		t.Fatalf("expected weak/bad excluded from normal rotation, got %s", got)
+	}
+}
+
+func TestRoundRobinUnknownOnlyStartupCompatibilityFallback(t *testing.T) {
+	a := qualityTestOutbound{tag: "unknown-a"}
+	b := qualityTestOutbound{tag: "unknown-b"}
+	outbounds := map[string][]adapter.Outbound{N.NetworkTCP: {a, b}}
+	filtered := filterRoundRobinOutboundsByQuality(outbounds, map[string]*adapter.URLTestHistory{}, nil)
+
+	if got := len(filtered[N.NetworkTCP]); got != 2 {
+		t.Fatalf("expected startup unknown compatibility fallback, got %d", got)
+	}
+}
+
+func TestRoundRobinDestinationAffinityKeepsSameHost(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	a := qualityTestOutbound{tag: "a"}
+	b := qualityTestOutbound{tag: "b"}
+	strategy := newRoundRobinForAntiFlapTest(now, a, b)
+	strategy.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{
+		a.Tag(): rrHistory(90, monitoring.HealthLevelExcellent, 90, 90, 100),
+		b.Tag(): rrHistory(88, monitoring.HealthLevelExcellent, 88, 90, 110),
+	})
+	strategy.currentTag[N.NetworkTCP] = a.Tag()
+	strategy.selectedAt[N.NetworkTCP] = now.Add(-roundRobinPreferredDwellTime)
+	metadata := adapter.InboundContext{
+		Network:     N.NetworkTCP,
+		Destination: M.ParseSocksaddrHostPort("discord.com", 443),
+	}
+
+	first := strategy.Select(metadata, N.NetworkTCP, true).Tag()
+	strategy.selectedAt[N.NetworkTCP] = now.Add(-roundRobinPreferredDwellTime)
+	second := strategy.Select(metadata, N.NetworkTCP, true).Tag()
+	if first != second {
+		t.Fatalf("expected destination affinity to keep same host on %s, got %s then %s", metadata.Destination.Fqdn, first, second)
+	}
+}
+
+func newRoundRobinForAntiFlapTest(now time.Time, outbounds ...adapter.Outbound) *RoundRobin {
+	strategy := NewRoundRobin(outbounds, option.BalancerOutboundOptions{DelayAcceptableRatio: 10}, nil)
+	strategy.now = func() time.Time {
+		return now
+	}
+	return strategy
+}
+
+func rrHistory(combinedScore int32, combinedLevel string, qualityScore int32, speedScore int32, delay uint16) *adapter.URLTestHistory {
+	qualityLevel := monitoring.QualityLevelGood
+	if qualityScore >= 85 {
+		qualityLevel = monitoring.QualityLevelExcellent
+	} else if qualityScore < 40 {
+		qualityLevel = monitoring.QualityLevelBad
+	} else if qualityScore < 70 {
+		qualityLevel = monitoring.QualityLevelMedium
+	}
+	speedLevel := monitoring.SpeedLevelNormal
+	if speedScore >= 90 {
+		speedLevel = monitoring.SpeedLevelFast
+	} else if speedScore < 40 {
+		speedLevel = monitoring.SpeedLevelVerySlow
+	} else if speedScore < 70 {
+		speedLevel = monitoring.SpeedLevelSlow
+	}
+	return &adapter.URLTestHistory{
+		Delay:               delay,
+		QualityScore:        qualityScore,
+		QualityLevel:        qualityLevel,
+		AutoAllowed:         qualityLevel == monitoring.QualityLevelGood || qualityLevel == monitoring.QualityLevelExcellent,
+		SpeedScore:          speedScore,
+		SpeedLevel:          speedLevel,
+		CombinedHealthScore: combinedScore,
+		CombinedHealthLevel: combinedLevel,
 	}
 }

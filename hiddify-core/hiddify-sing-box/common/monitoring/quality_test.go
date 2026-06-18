@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/common/urltest"
 )
 
 func TestCalculateOutboundQualityHardFailures(t *testing.T) {
@@ -15,8 +16,8 @@ func TestCalculateOutboundQualityHardFailures(t *testing.T) {
 	}{
 		{name: "nxdomain", err: "lookup example: NXDOMAIN", score: 0},
 		{name: "refused", err: "dial tcp: connection refused", score: 0},
-		{name: "auth", err: "authentication handshake failed", score: 20},
-		{name: "timeout", err: "i/o timeout", score: 20},
+		{name: "auth", err: "authentication handshake failed", score: 0},
+		{name: "timeout", err: "i/o timeout", score: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -256,4 +257,59 @@ func TestCalculateExternalHealthFastTargetsCanBeExcellent(t *testing.T) {
 	if combined.CombinedHealthLevel != HealthLevelExcellent {
 		t.Fatalf("expected excellent when external/reachability are good, got level=%s score=%d", combined.CombinedHealthLevel, combined.CombinedHealthScore)
 	}
+}
+
+func TestRuntimeTrafficErrorsIncreaseLiveFailureCount(t *testing.T) {
+	tag := "current"
+	storage := urltest.NewHistoryStorage()
+	m := &OutboundMonitoring{
+		history:       storage,
+		outbounds:     map[string]*outboundState{tag: {groupTags: []string{""}}},
+		groups:        map[string]*groupState{"": {notifyCh: make(chan struct{}, 1)}},
+		runtimeErrors: make(map[string]map[string]*adapter.OutboundRuntimeErrorStats),
+	}
+
+	m.RecordRuntimeError(tag, errString("i/o timeout"))
+	time.Sleep(50 * time.Millisecond)
+	m.RecordRuntimeError(tag, errString("i/o timeout"))
+	time.Sleep(50 * time.Millisecond)
+
+	history := storage.LoadURLTestHistory(tag)
+	if history == nil {
+		t.Fatal("expected stored live history")
+	}
+	if history.LiveFailureCount < 2 {
+		t.Fatalf("expected live failures to increase, got %d", history.LiveFailureCount)
+	}
+	if history.LiveUsabilityStatus != LiveUsabilityFailed {
+		t.Fatalf("expected live failed after repeated runtime errors, got %s", history.LiveUsabilityStatus)
+	}
+	if history.LiveAvoidUntil == 0 || history.AutoAllowed {
+		t.Fatalf("expected temporary avoid and auto disallow, avoidUntil=%d autoAllowed=%v", history.LiveAvoidUntil, history.AutoAllowed)
+	}
+}
+
+func TestUnknownRuntimeTrafficErrorDoesNotPenalizeRandomServer(t *testing.T) {
+	tag := "known"
+	storage := urltest.NewHistoryStorage()
+	m := &OutboundMonitoring{
+		history:       storage,
+		outbounds:     map[string]*outboundState{tag: {groupTags: []string{""}}},
+		groups:        map[string]*groupState{"": {notifyCh: make(chan struct{}, 1)}},
+		runtimeErrors: make(map[string]map[string]*adapter.OutboundRuntimeErrorStats),
+	}
+
+	m.RecordRuntimeError("", errString("i/o timeout"))
+	m.RecordRuntimeError("missing", errString("i/o timeout"))
+	time.Sleep(50 * time.Millisecond)
+
+	if history := storage.LoadURLTestHistory(tag); history != nil && history.LiveFailureCount != 0 {
+		t.Fatalf("known server should not be penalized by unknown tag, got failures=%d", history.LiveFailureCount)
+	}
+}
+
+type errString string
+
+func (e errString) Error() string {
+	return string(e)
 }

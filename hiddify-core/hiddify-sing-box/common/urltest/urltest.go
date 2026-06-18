@@ -82,6 +82,12 @@ func (s *HistoryStorage) StoreURLTestHistory(tag string, history *adapter.URLTes
 		old.CombinedHealthScore = history.CombinedHealthScore
 		old.CombinedHealthLevel = history.CombinedHealthLevel
 		old.HealthReason = history.HealthReason
+		old.LiveUsabilityStatus = history.LiveUsabilityStatus
+		old.LiveUsabilityScore = history.LiveUsabilityScore
+		old.LiveFailureCount = history.LiveFailureCount
+		old.LiveLastError = history.LiveLastError
+		old.LiveCheckedAt = history.LiveCheckedAt
+		old.LiveAvoidUntil = history.LiveAvoidUntil
 	} else {
 		s.delayHistory[tag] = history
 	}

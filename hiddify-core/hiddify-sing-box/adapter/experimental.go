@@ -43,6 +43,13 @@ type URLTestHistory struct {
 	CombinedHealthScore int32  `json:"combined_health_score"`
 	CombinedHealthLevel string `json:"combined_health_level"`
 	HealthReason        string `json:"health_reason"`
+
+	LiveUsabilityStatus string `json:"live_usability_status"`
+	LiveUsabilityScore  int32  `json:"live_usability_score"`
+	LiveFailureCount    int32  `json:"live_failure_count"`
+	LiveLastError       string `json:"live_last_error"`
+	LiveCheckedAt       int64  `json:"live_checked_at"`
+	LiveAvoidUntil      int64  `json:"live_avoid_until"`
 }
 
 type OutboundQuality struct {

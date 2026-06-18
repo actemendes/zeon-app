@@ -82,6 +82,15 @@ func CalculateOutboundQuality(delay uint16, lastError string, urlTestSuccess boo
 			CheckedAt:    checkedAt,
 		}
 	}
+	if !urlTestSuccess || delay >= TimeoutDelay {
+		return adapter.OutboundQuality{
+			QualityScore: 0,
+			QualityLevel: QualityLevelBad,
+			AutoAllowed:  false,
+			LastError:    normalizedError,
+			CheckedAt:    checkedAt,
+		}
+	}
 
 	score := scoreForURLTest(delay, normalizedError, urlTestSuccess)
 	score = applyRuntimeErrorPenalties(score, recentRuntimeErrors)
@@ -587,6 +596,7 @@ func (m *OutboundMonitoring) RecordRuntimeError(tag string, err error) {
 	}
 	stats.Count++
 	stats.LastSeenAt = now
+	go m.RecordLiveFailure(tag, errorType, "traffic-failed")
 }
 
 func (m *OutboundMonitoring) recentRuntimeErrorStats(tag string) []adapter.OutboundRuntimeErrorStats {

@@ -64,6 +64,13 @@ const (
 	defaultDiscordReachability  = "https://discord.com/api/v10/gateway"
 )
 
+const (
+	checkStagePingChecking    = "ping-checking"
+	checkStageQualityChecking = "quality-checking"
+	checkStageSpeedChecking   = "speed-checking"
+	checkStageCombinedReady   = "combined-ready"
+)
+
 // func RegisterService(registry *boxService.Registry) {
 // 	boxService.Register[option.MonitoringOptions](registry, C.TypeOutboundMonitor, func(ctx context.Context, logger log.ContextLogger, tag string, options option.MonitoringOptions) (adapter.Service, error) {
 // 		return NewOutboundMonitoring(ctx, logger, tag, options)
@@ -629,6 +636,24 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 
 	idx := m.currentLinkIndex.Load()
 
+	checking := adapter.URLTestHistory{
+		Time:                time.Now(),
+		Delay:               0,
+		QualityLevel:        QualityLevelUnknown,
+		AutoAllowed:         true,
+		SpeedLevel:          SpeedLevelUnknown,
+		ExternalHealthLevel: HealthLevelUnknown,
+		CombinedHealthLevel: HealthLevelUnknown,
+		HealthReason:        checkStagePingChecking,
+	}
+	m.logServerCheckStage(tag, checkStagePingChecking)
+	m.applyResult(testOutcome{
+		outboundTag: tag,
+		history:     checking,
+		cycleID:     m.cycleSeq,
+		partial:     true,
+	})
+
 	ctx, cancel := context.WithTimeout(parent, m.urlTestTimeout)
 	defer cancel()
 
@@ -649,6 +674,7 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 			ExternalHealthLevel: HealthLevelUnknown,
 			HealthReason:        "urltest-failed",
 		}))
+		m.logServerCheckStage(tag, "failed", " error=", healthReason(his))
 		m.logger.Warn("outbound ", tag, " URL test failed: ", err)
 		m.logger.Info("[ServerQuality] tag=", tag, " delay=", his.Delay, " quality=", his.QualityScore, " level=", his.QualityLevel, " error=", his.LastError, " autoAllowed=", his.AutoAllowed, " reason=urltest-failed")
 		m.logger.Info("[ServerHealth] tag=", tag, " quality=", his.QualityScore, " external=", his.ExternalHealthScore, " combined=", his.CombinedHealthScore, " level=", his.CombinedHealthLevel, " reason=", healthReason(his))
@@ -659,34 +685,107 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 		return his, parent.Err()
 	default:
 	}
-	if out.history.IpInfo == nil || out.from_cache {
+	his.QualityLevel = QualityLevelUnknown
+	his.AutoAllowed = true
+	his.SpeedLevel = SpeedLevelUnknown
+	his.ExternalHealthLevel = HealthLevelUnknown
+	his.CombinedHealthLevel = HealthLevelUnknown
+	his.HealthReason = checkStageQualityChecking
+	m.logServerCheckStage(tag, "ping-ok", " delay=", his.Delay)
+	m.applyResult(testOutcome{
+		outboundTag: tag,
+		history:     his,
+		cycleID:     m.cycleSeq,
+		partial:     true,
+	})
 
-		ctx, cancel2 := context.WithTimeout(parent, m.urlTestTimeout)
-		defer cancel2()
-
-		newip, t, err := ipinfo.GetIpInfo(m.logger, ctx, out.outbound)
-		if err == nil {
-			his.IpInfo = mergeIpInfo(out.history.IpInfo, newip)
-			if t < his.Delay {
-				his.Delay = t
-			}
-		}
-	}
-	if his.IpInfo != nil {
-		m.logger.Info("outbound ", tag, " IP ", fmt.Sprint(his.IpInfo), " (", his.Delay, "ms): ", err)
-	} else {
-		m.logger.Info("outbound ", tag, " , IP: -          (", his.Delay, "ms)")
-	}
 	runtimeStats := m.recentRuntimeErrorStats(tag)
 	m.logRuntimeErrorPenalties(tag, runtimeStats)
 	quality := CalculateOutboundQuality(his.Delay, "", true, runtimeStats)
 	applyQualityToHistory(&his, quality)
-	speed, externalHealth := m.externalHealthChecks(parent, tag, out.outbound, quality)
-	applySpeedToHistory(&his, speed)
-	applyCombinedHealthToHistory(&his, CalculateCombinedHealthFromExternal(his.QualityScore, his.QualityLevel, his.AutoAllowed, his.LastError, externalHealth))
+	if !shouldRunMicroSpeedCheck(quality) {
+		applySpeedToHistory(&his, CalculateSpeedScore(0, "", 0))
+		applyCombinedHealthToHistory(&his, CalculateCombinedHealthFromExternal(his.QualityScore, his.QualityLevel, his.AutoAllowed, his.LastError, adapter.OutboundHealth{
+			ExternalHealthLevel: HealthLevelUnknown,
+			HealthReason:        "quality-not-usable",
+		}))
+		his.HealthReason = healthReason(his)
+		m.logServerCheckStage(tag, checkStageCombinedReady, " combined=", his.CombinedHealthScore)
+		m.logger.Info("[ServerQuality] tag=", tag, " delay=", his.Delay, " quality=", his.QualityScore, " level=", his.QualityLevel, " autoAllowed=", his.AutoAllowed, " reason=urltest-ok")
+		m.logger.Info("[ServerHealth] tag=", tag, " quality=", his.QualityScore, " external=", his.ExternalHealthScore, " combined=", his.CombinedHealthScore, " level=", his.CombinedHealthLevel, " reason=", healthReason(his))
+		return his, nil
+	}
+	his.SpeedLevel = SpeedLevelUnknown
+	his.ExternalHealthLevel = HealthLevelUnknown
+	his.CombinedHealthLevel = HealthLevelUnknown
+	his.HealthReason = checkStageSpeedChecking
+	m.logServerCheckStage(tag, "quality-ok", " quality=", his.QualityScore)
+	m.logServerCheckStage(tag, checkStageSpeedChecking)
+	m.applyResult(testOutcome{
+		outboundTag: tag,
+		history:     his,
+		cycleID:     m.cycleSeq,
+		partial:     true,
+	})
+	m.startExternalHealthCheck(parent, tag, his, out.outbound, quality)
 	m.logger.Info("[ServerQuality] tag=", tag, " delay=", his.Delay, " quality=", his.QualityScore, " level=", his.QualityLevel, " autoAllowed=", his.AutoAllowed, " reason=urltest-ok")
-	m.logger.Info("[ServerHealth] tag=", tag, " quality=", his.QualityScore, " external=", his.ExternalHealthScore, " combined=", his.CombinedHealthScore, " level=", his.CombinedHealthLevel, " reason=", healthReason(his))
 	return his, nil
+}
+
+func (m *OutboundMonitoring) startExternalHealthCheck(parent context.Context, tag string, base adapter.URLTestHistory, outbound N.Dialer, quality adapter.OutboundQuality) {
+	state := m.getState(tag)
+	if state == nil {
+		return
+	}
+	state.mu.Lock()
+	if state.speedTesting {
+		state.mu.Unlock()
+		return
+	}
+	state.speedTesting = true
+	state.mu.Unlock()
+
+	go func() {
+		defer func() {
+			state.mu.Lock()
+			state.speedTesting = false
+			state.mu.Unlock()
+		}()
+
+		his := base
+		state.mu.Lock()
+		cachedIpInfo := state.history.IpInfo
+		fromCache := state.from_cache
+		state.mu.Unlock()
+		if cachedIpInfo == nil || fromCache {
+			ctx, cancel := context.WithTimeout(parent, m.urlTestTimeout)
+			newip, t, err := ipinfo.GetIpInfo(m.logger, ctx, outbound)
+			cancel()
+			if err == nil {
+				his.IpInfo = mergeIpInfo(cachedIpInfo, newip)
+				if t < his.Delay {
+					his.Delay = t
+				}
+			}
+		}
+		if his.IpInfo != nil {
+			m.logger.Info("outbound ", tag, " IP ", fmt.Sprint(his.IpInfo), " (", his.Delay, "ms)")
+		} else {
+			m.logger.Info("outbound ", tag, " , IP: -          (", his.Delay, "ms)")
+		}
+
+		speed, externalHealth := m.externalHealthChecks(parent, tag, outbound, quality)
+		applySpeedToHistory(&his, speed)
+		applyCombinedHealthToHistory(&his, CalculateCombinedHealthFromExternal(his.QualityScore, his.QualityLevel, his.AutoAllowed, his.LastError, externalHealth))
+		his.HealthReason = healthReason(his)
+		m.logServerCheckStage(tag, checkStageCombinedReady, " combined=", his.CombinedHealthScore)
+		m.logger.Info("[ServerHealth] tag=", tag, " quality=", his.QualityScore, " external=", his.ExternalHealthScore, " combined=", his.CombinedHealthScore, " level=", his.CombinedHealthLevel, " reason=", healthReason(his))
+		m.applyResult(testOutcome{
+			outboundTag: tag,
+			history:     his,
+			cycleID:     m.cycleSeq,
+		})
+	}()
 }
 
 func (m *OutboundMonitoring) externalHealthChecks(parent context.Context, tag string, outbound N.Dialer, quality adapter.OutboundQuality) (adapter.OutboundSpeed, adapter.OutboundHealth) {
@@ -1055,11 +1154,16 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
-	state.queued = false
-	state.priorityQueued = false
-	state.enqueuedCycle = 0
-	state.invalid = outcome.err != nil
+	if !outcome.partial {
+		state.queued = false
+		state.priorityQueued = false
+		state.enqueuedCycle = 0
+		state.invalid = outcome.err != nil
+	}
 	state.lastURL = outcome.url
+	if outcome.history.LiveUsabilityStatus == "" {
+		copyLiveFields(&outcome.history, state.history)
+	}
 	if (outcome.history.Delay != state.history.Delay) ||
 		(outcome.history.QualityScore != state.history.QualityScore) ||
 		(outcome.history.QualityLevel != state.history.QualityLevel) ||
@@ -1078,6 +1182,12 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 		(outcome.history.CombinedHealthScore != state.history.CombinedHealthScore) ||
 		(outcome.history.CombinedHealthLevel != state.history.CombinedHealthLevel) ||
 		(outcome.history.HealthReason != state.history.HealthReason) ||
+		(outcome.history.LiveUsabilityStatus != state.history.LiveUsabilityStatus) ||
+		(outcome.history.LiveUsabilityScore != state.history.LiveUsabilityScore) ||
+		(outcome.history.LiveFailureCount != state.history.LiveFailureCount) ||
+		(outcome.history.LiveLastError != state.history.LiveLastError) ||
+		(outcome.history.LiveCheckedAt != state.history.LiveCheckedAt) ||
+		(outcome.history.LiveAvoidUntil != state.history.LiveAvoidUntil) ||
 		state.history.IpInfo == nil ||
 		(outcome.history.IpInfo != nil) {
 		m.cacheDirty.Store(true)
@@ -1101,6 +1211,12 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.history.CombinedHealthScore = outcome.history.CombinedHealthScore
 	state.history.CombinedHealthLevel = outcome.history.CombinedHealthLevel
 	state.history.HealthReason = outcome.history.HealthReason
+	state.history.LiveUsabilityStatus = outcome.history.LiveUsabilityStatus
+	state.history.LiveUsabilityScore = outcome.history.LiveUsabilityScore
+	state.history.LiveFailureCount = outcome.history.LiveFailureCount
+	state.history.LiveLastError = outcome.history.LiveLastError
+	state.history.LiveCheckedAt = outcome.history.LiveCheckedAt
+	state.history.LiveAvoidUntil = outcome.history.LiveAvoidUntil
 	state.from_cache = false
 	if outcome.history.IpInfo != nil {
 		state.history.IpInfo = outcome.history.IpInfo
@@ -1109,6 +1225,15 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 
 	m.emitGroupEvent(state.groupTags)
 	return &state.history
+}
+
+func copyLiveFields(dst *adapter.URLTestHistory, src adapter.URLTestHistory) {
+	dst.LiveUsabilityStatus = src.LiveUsabilityStatus
+	dst.LiveUsabilityScore = src.LiveUsabilityScore
+	dst.LiveFailureCount = src.LiveFailureCount
+	dst.LiveLastError = src.LiveLastError
+	dst.LiveCheckedAt = src.LiveCheckedAt
+	dst.LiveAvoidUntil = src.LiveAvoidUntil
 }
 
 func mergeIpInfo(old, new *ipinfo.IpInfo) *ipinfo.IpInfo {
@@ -1140,6 +1265,10 @@ func (m *OutboundMonitoring) collectCycleTargets() []string {
 		}
 		state.mu.Lock()
 		if state.testing || state.queued || state.priorityQueued {
+			state.mu.Unlock()
+			continue
+		}
+		if state.speedTesting {
 			state.mu.Unlock()
 			continue
 		}
@@ -1305,6 +1434,7 @@ type testOutcome struct {
 	err         error
 	cycleID     uint64
 	priority    bool
+	partial     bool
 }
 
 type outboundState struct {
@@ -1320,10 +1450,21 @@ type outboundState struct {
 	queued         bool
 	priorityQueued bool
 	testing        bool
+	speedTesting   bool
+	liveChecking   bool
 	enqueuedCycle  uint64
 	from_cache     bool
 
 	history adapter.URLTestHistory
+}
+
+func (m *OutboundMonitoring) logServerCheckStage(tag string, stage string, args ...any) {
+	if m.logger == nil {
+		return
+	}
+	values := []any{"[ServerCheckStage] tag=", tag, " stage=", stage}
+	values = append(values, args...)
+	m.logger.Info(values...)
 }
 
 type GroupEvent struct {
