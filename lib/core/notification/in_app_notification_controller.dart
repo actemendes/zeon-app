@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:hiddify/core/router/dialog/widgets/custom_alert_dialog.dart';
+import 'package:hiddify/core/router/go_router/go_router_notifier.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -18,6 +20,7 @@ class InAppNotificationController with AppLogger {
     String message, {
     NotificationType type = NotificationType.info,
     Duration duration = const Duration(seconds: 3),
+    String? diagnosticText,
   }) {
     try {
       toastification.dismissAll();
@@ -32,6 +35,14 @@ class InAppNotificationController with AppLogger {
         dragToClose: true,
         closeOnClick: true,
         closeButtonShowType: CloseButtonShowType.onHover,
+        callbacks: ToastificationCallbacks(
+          onTap: diagnosticText == null
+              ? null
+              : (item) {
+                  toastification.dismiss(item);
+                  _showDiagnosticDialog(message, diagnosticText);
+                },
+        ),
       );
     } catch (error, stackTrace) {
       final errorText = error.toString();
@@ -47,8 +58,12 @@ class InAppNotificationController with AppLogger {
     }
   }
 
-  ToastificationItem? showErrorToast(String message) =>
-      _show(message, type: NotificationType.error, duration: const Duration(seconds: 5));
+  ToastificationItem? showErrorToast(String message, {String? diagnosticText}) => _show(
+    message,
+    type: NotificationType.error,
+    duration: const Duration(seconds: 5),
+    diagnosticText: diagnosticText ?? message,
+  );
 
   ToastificationItem? showSuccessToast(String message) => _show(message, type: NotificationType.success);
 
@@ -88,6 +103,17 @@ class InAppNotificationController with AppLogger {
     return errorText.contains("Toastification is not initialized") ||
         errorText.contains("ToastificationOverlayState") ||
         errorText.contains("ToastificationWrapper");
+  }
+
+  void _showDiagnosticDialog(String title, String diagnosticText) {
+    final context = rootNavKey.currentContext;
+    if (context == null) return;
+    Navigator.of(context, rootNavigator: true).push<void>(
+      DialogRoute(
+        context: context,
+        builder: (context) => CustomAlertDialog(title: title, message: diagnosticText, diagnosticText: diagnosticText),
+      ),
+    );
   }
 }
 

@@ -33,7 +33,11 @@ class AppUpdateRepositoryImpl with ExceptionHandler, InfraLogger implements AppU
       final response = await httpClient.get<dynamic>(Constants.githubReleasesApiUrl);
       if (response.statusCode != 200 || response.data == null) {
         loggy.warning("failed to fetch latest version info");
-        return left(const AppUpdateFailure.unexpected());
+        return left(
+          AppUpdateFailure.unexpected(
+            "failed to fetch latest version info: status=${response.statusCode}, data=${response.data}",
+          ),
+        );
       }
 
       final dynamic raw = response.data;
@@ -44,17 +48,19 @@ class AppUpdateRepositoryImpl with ExceptionHandler, InfraLogger implements AppU
         final decoded = jsonDecode(raw);
         if (decoded is! List) {
           loggy.warning("invalid releases payload type after decode: [${decoded.runtimeType}]");
-          return left(const AppUpdateFailure.unexpected());
+          return left(
+            AppUpdateFailure.unexpected("invalid releases payload type after decode: ${decoded.runtimeType}"),
+          );
         }
         releaseList = decoded;
       } else {
         loggy.warning("invalid releases payload type: [${raw.runtimeType}]");
-        return left(const AppUpdateFailure.unexpected());
+        return left(AppUpdateFailure.unexpected("invalid releases payload type: ${raw.runtimeType}"));
       }
 
       if (releaseList.isEmpty) {
         loggy.warning("no releases found in repository");
-        return left(const AppUpdateFailure.unexpected());
+        return left(const AppUpdateFailure.unexpected("no releases found in repository"));
       }
 
       final releases = releaseList.map((e) => GithubReleaseParser.parse(e as Map<String, dynamic>)).toList();

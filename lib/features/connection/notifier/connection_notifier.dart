@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/connection/data/connection_data_providers.dart';
@@ -149,9 +150,10 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit)).mapLeft((err) async {
         loggy.warning("error reconnecting", err);
         state = AsyncError(err, StackTrace.current);
+        final t = ref.read(translationsProvider).requireValue;
         await ref
             .read(dialogNotifierProvider.notifier)
-            .showCustomAlertFromErr(err.present(ref.read(translationsProvider).requireValue));
+            .showCustomAlertFromErrWithDiagnostic(err.present(t), diagnosticText: t.diagnosticError(err));
       }).run();
     }
   }
@@ -266,7 +268,9 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   Future<void> _disconnectTemporaryEmbeddedProfileAfterReachableBackend() async {
     final service = ref.read(mobileBootstrapImportServiceProvider);
     if (_isConnected && await service.hasActiveEmbeddedProfile()) {
-      loggy.warning("mobile embedded bootstrap promotion exhausted after reachable backend; disconnecting temporary embedded profile");
+      loggy.warning(
+        "mobile embedded bootstrap promotion exhausted after reachable backend; disconnecting temporary embedded profile",
+      );
       await ref.read(Preferences.startedByUser.notifier).update(false);
       await _disconnect();
     }
@@ -313,10 +317,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       ConnectionFailure err,
     ) async {
       loggy.warning("error connecting", err);
+      final t = ref.read(translationsProvider).requireValue;
       //Go err is not normal object to see the go errors are string and need to be dumped
       await ref
           .read(dialogNotifierProvider.notifier)
-          .showCustomAlertFromErr(err.present(ref.read(translationsProvider).requireValue));
+          .showCustomAlertFromErrWithDiagnostic(err.present(t), diagnosticText: t.diagnosticError(err));
       loggy.warning(err);
       if (err.toString().contains("panic")) {
         await Sentry.captureException(Exception(err.toString()));
@@ -333,9 +338,10 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }
     await _connectionRepo.disconnect().mapLeft((err) {
       loggy.warning("error disconnecting", err);
+      final t = ref.read(translationsProvider).requireValue;
       ref
           .read(dialogNotifierProvider.notifier)
-          .showCustomAlertFromErr(err.present(ref.read(translationsProvider).requireValue));
+          .showCustomAlertFromErrWithDiagnostic(err.present(t), diagnosticText: t.diagnosticError(err));
       state = AsyncError(err, StackTrace.current);
     }).run();
   }
@@ -357,7 +363,10 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       await ref.read(Preferences.startedByUser.notifier).update(false);
       await ref
           .read(dialogNotifierProvider.notifier)
-          .showCustomAlertFromErr(err.present(ref.read(translationsProvider).requireValue));
+          .showCustomAlertFromErrWithDiagnostic(
+            err.present(ref.read(translationsProvider).requireValue),
+            diagnosticText: ref.read(translationsProvider).requireValue.diagnosticError(err),
+          );
       state = AsyncError(err, StackTrace.current);
       return;
     }

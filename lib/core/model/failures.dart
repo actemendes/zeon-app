@@ -38,8 +38,78 @@ extension ErrorPresenter on TranslationsEn {
 
   String presentShortError(Object error, {String? action}) {
     final pair = errorToPair(error);
-    if (action == null) return pair.type;
-    return "$action: ${pair.type}";
+    final message = pair.message;
+    final errorText = message == null || message.trim().isEmpty ? pair.type : "${pair.type}: $message";
+    if (action == null) return errorText;
+    return "$action: $errorText";
+  }
+
+  String diagnosticError(Object error, {String? action, StackTrace? stackTrace}) {
+    final pair = presentError(error, action: action);
+    final buffer = StringBuffer()
+      ..writeln(pair.type)
+      ..writeln(pair.message ?? '');
+
+    void writeObject(Object value, [StackTrace? fallbackStackTrace]) {
+      switch (value) {
+        case GrpcError(message: final nested?):
+          buffer
+            ..writeln()
+            ..writeln('Caused by:')
+            ..writeln(nested);
+          writeObject(nested);
+        case UnexpectedFailure(error: final nested?, :final stackTrace):
+          buffer
+            ..writeln()
+            ..writeln('Caused by:')
+            ..writeln(nested);
+          writeObject(nested, stackTrace ?? fallbackStackTrace);
+        case UnexpectedFailure(:final error, :final stackTrace):
+          if (error != null) {
+            buffer
+              ..writeln()
+              ..writeln('Error:')
+              ..writeln(error);
+          }
+          final trace = stackTrace ?? fallbackStackTrace;
+          if (trace != null) {
+            buffer
+              ..writeln()
+              ..writeln('Stack trace:')
+              ..writeln(trace);
+          }
+        case DioException(:final message, :final response):
+          buffer
+            ..writeln()
+            ..writeln('DioException:')
+            ..writeln(message ?? value.toString());
+          if (response != null) {
+            buffer
+              ..writeln('Status: ${response.statusCode}')
+              ..writeln('Response: ${response.data}');
+          }
+          if (fallbackStackTrace != null) {
+            buffer
+              ..writeln()
+              ..writeln('Stack trace:')
+              ..writeln(fallbackStackTrace);
+          }
+        default:
+          buffer
+            ..writeln()
+            ..writeln('Error:')
+            ..writeln(value);
+          if (fallbackStackTrace != null) {
+            buffer
+              ..writeln()
+              ..writeln('Stack trace:')
+              ..writeln(fallbackStackTrace);
+          }
+      }
+    }
+
+    writeObject(error, stackTrace);
+    return buffer.toString().trim();
   }
 }
 

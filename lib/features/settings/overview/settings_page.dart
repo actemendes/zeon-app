@@ -220,7 +220,7 @@ Future<void> _checkForUpdate(BuildContext context, WidgetRef ref) async {
           .read(dialogNotifierProvider.notifier)
           .showNewVersion(currentVersion: appInfo.presentVersion, newVersion: versionInfo, canIgnore: false);
     case AppUpdateStateError(:final error):
-      CustomToast.error(t.presentShortError(error)).show(context);
+      CustomToast.error(t.presentShortError(error), diagnosticText: t.diagnosticError(error)).show(context);
     case AppUpdateStateNotAvailable():
       CustomToast.success(t.pages.about.notAvailableMsg).show(context);
     case AppUpdateStateInitial() || AppUpdateStateDisabled() || AppUpdateStateChecking():

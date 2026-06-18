@@ -48,7 +48,10 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
           } else {
             ref
                 .read(dialogNotifierProvider.notifier)
-                .showCustomAlertFromErr(t.presentError(error, action: t.pages.profiles.msg.add.failure));
+                .showCustomAlertFromErrWithDiagnostic(
+                  t.presentError(error, action: t.pages.profiles.msg.add.failure),
+                  diagnosticText: t.diagnosticError(error, action: t.pages.profiles.msg.add.failure),
+                );
           }
       }
     });
@@ -145,7 +148,10 @@ class UpdateProfileNotifier extends _$UpdateProfileNotifier with AppLogger {
         case AsyncError(:final error):
           ref
               .read(dialogNotifierProvider.notifier)
-              .showCustomAlertFromErr(t.presentError(error, action: t.pages.profiles.msg.update.failure));
+              .showCustomAlertFromErrWithDiagnostic(
+                t.presentError(error, action: t.pages.profiles.msg.update.failure),
+                diagnosticText: t.diagnosticError(error, action: t.pages.profiles.msg.update.failure),
+              );
       }
     });
     return const AsyncData(null);

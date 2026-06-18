@@ -1,5 +1,6 @@
 import 'package:dartx/dartx.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
@@ -99,7 +100,16 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
                 loggy.debug("error updating profile [${profile.id}]", l);
                 ref
                     .read(inAppNotificationControllerProvider)
-                    .showErrorToast(t.pages.profiles.msg.update.failureNamed(name: displayProfileName));
+                    .showErrorToast(
+                      t.presentShortError(
+                        l,
+                        action: t.pages.profiles.msg.update.failureNamed(name: displayProfileName),
+                      ),
+                      diagnosticText: t.diagnosticError(
+                        l,
+                        action: t.pages.profiles.msg.update.failureNamed(name: displayProfileName),
+                      ),
+                    );
                 state = AsyncData((name: displayProfileName, success: false));
               })
               .map((_) {

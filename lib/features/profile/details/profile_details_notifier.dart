@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:developer';
 
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
@@ -111,8 +110,12 @@ class ProfileDetailsNotifier extends _$ProfileDetailsNotifier with AppLogger {
                     : value.profile.name;
                 await ref
                     .read(dialogNotifierProvider.notifier)
-                    .showCustomAlertFromErr(
+                    .showCustomAlertFromErrWithDiagnostic(
                       t.presentError(l, action: t.pages.profiles.msg.update.failureNamed(name: displayProfileName)),
+                      diagnosticText: t.diagnosticError(
+                        l,
+                        action: t.pages.profiles.msg.update.failureNamed(name: displayProfileName),
+                      ),
                     );
                 return false;
               },

@@ -243,4 +243,17 @@ class DialogNotifier extends _$DialogNotifier {
   Future<void> showCustomAlertFromErr(({String type, String? message}) err) async {
     return await _show<void>(CustomAlertDialog.fromErr(err));
   }
+
+  Future<void> showCustomAlertFromErrWithDiagnostic(
+    ({String type, String? message}) err, {
+    required String diagnosticText,
+  }) async {
+    return await _show<void>(
+      CustomAlertDialog(
+        title: err.message == null ? null : err.type,
+        message: err.message ?? err.type,
+        diagnosticText: diagnosticText,
+      ),
+    );
+  }
 }

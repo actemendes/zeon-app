@@ -40,7 +40,7 @@ class ProfileTile extends HookConsumerWidget {
 
     final selectActiveMutation = useMutation(
       initialOnFailure: (err) {
-        CustomToast.error(t.presentShortError(err)).show(context);
+        CustomToast.error(t.presentShortError(err), diagnosticText: t.diagnosticError(err)).show(context);
       },
       initialOnSuccess: () {
         if (context.mounted && context.canPop()) context.pop();

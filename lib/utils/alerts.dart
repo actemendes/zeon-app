@@ -1,5 +1,7 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:hiddify/core/router/dialog/widgets/custom_alert_dialog.dart';
+import 'package:hiddify/core/router/go_router/go_router_notifier.dart';
 import 'package:toastification/toastification.dart';
 
 enum AlertType {
@@ -15,20 +17,28 @@ enum AlertType {
 }
 
 class CustomToast extends StatelessWidget {
-  const CustomToast(this.message, {this.type = AlertType.info, this.icon, this.duration = const Duration(seconds: 3)});
+  const CustomToast(
+    this.message, {
+    this.type = AlertType.info,
+    this.icon,
+    this.duration = const Duration(seconds: 3),
+    this.diagnosticText,
+  });
 
-  const CustomToast.error(this.message, {this.duration = const Duration(seconds: 5)})
+  const CustomToast.error(this.message, {this.duration = const Duration(seconds: 5), this.diagnosticText})
     : type = AlertType.error,
       icon = FluentIcons.error_circle_24_regular;
 
   const CustomToast.success(this.message, {this.duration = const Duration(seconds: 3)})
     : type = AlertType.success,
-      icon = FluentIcons.checkmark_24_regular;
+      icon = FluentIcons.checkmark_24_regular,
+      diagnosticText = null;
 
   final String message;
   final AlertType type;
   final IconData? icon;
   final Duration duration;
+  final String? diagnosticText;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +78,22 @@ class CustomToast extends StatelessWidget {
       dragToClose: true,
       closeOnClick: true,
       closeButtonShowType: CloseButtonShowType.onHover,
+      callbacks: ToastificationCallbacks(
+        onTap: type != AlertType.error
+            ? null
+            : (item) {
+                toastification.dismiss(item);
+                final context = rootNavKey.currentContext;
+                if (context == null) return;
+                final details = diagnosticText ?? message;
+                Navigator.of(context, rootNavigator: true).push<void>(
+                  DialogRoute(
+                    context: context,
+                    builder: (context) => CustomAlertDialog(title: message, message: details, diagnosticText: details),
+                  ),
+                );
+              },
+      ),
     );
   }
 }
