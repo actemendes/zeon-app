@@ -1,7 +1,7 @@
 name: hiddify
 description: Cross Platform Multi Protocol Proxy Frontend.
 publish_to: "none"
-version: 1.2.0+10200
+version: 1.2.0-dev.1+1
 
 environment:
   sdk: ^3.10.4
@@ -10,7 +10,7 @@ environment:
   # It is parsed/grep-ed by Makefile and Dockerfile to configure the build environment.
   # Ensure this matches the target Flutter version.
   flutter: ^3.38.5
-  
+
 dependencies:
   flutter:
     sdk: flutter

@@ -21,11 +21,9 @@ class ProxyTile extends StatelessWidget with PresLogger {
     final selectedTextColor = isDark ? themeTextColor : theme.colorScheme.onPrimaryContainer;
 
     final primaryColor = selected ? selectedTextColor : themeTextColor;
-    final iconColor = selected ? selectedTextColor : themeTextColor;
     final tileColor = selected ? theme.colorScheme.primaryContainer : Colors.transparent;
     final hasDelay = proxy.urlTestDelay != 0;
     final hasNoPing = proxy.urlTestDelay > 65000;
-    final hasDownload = proxy.download > 0;
 
     return ListTile(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -63,7 +61,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
           size: 40,
         ),
       ),
-      trailing: hasDelay || hasDownload
+      trailing: hasDelay
           ? SizedBox(
               width: 44,
               child: Column(
@@ -80,8 +78,6 @@ class ProxyTile extends StatelessWidget with PresLogger {
                         height: hasNoPing ? 1 : null,
                       ),
                     ),
-                  if (hasDelay && hasDownload) const SizedBox(height: 2),
-                  if (hasDownload) Icon(Icons.download_rounded, size: 16, color: iconColor.withValues(alpha: .85)),
                 ],
               ),
             )

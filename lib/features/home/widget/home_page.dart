@@ -1,4 +1,5 @@
 import 'package:dartx/dartx.dart';
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
@@ -8,9 +9,12 @@ import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/home/widget/connection_button.dart';
 import 'package:hiddify/features/home/widget/home_premium_access_button.dart';
 import 'package:hiddify/features/profile/data/profile_name_parser.dart';
+import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_card.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_delay_indicator.dart';
+import 'package:hiddify/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:sliver_tools/sliver_tools.dart';
 
@@ -48,7 +52,7 @@ class HomePage extends HookConsumerWidget {
               ),
             ),
             Scaffold(
-      key: const ValueKey(UiNames.screenHome),
+              key: const ValueKey(UiNames.screenHome),
               backgroundColor: Colors.transparent,
               appBar: AppBar(
                 backgroundColor: Colors.transparent,
@@ -89,15 +93,34 @@ class HomePage extends HookConsumerWidget {
                       Positioned(
                         top: 20,
                         right: 20,
-                        child: Semantics(
-                          key: const ValueKey("profile_quick_settings"),
-                          label: t.pages.home.quickSettings,
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints.tightFor(width: 22, height: 20),
-                            icon: Icon(Icons.tune_rounded, color: theme.colorScheme.onSurface),
-                            onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),
-                          ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (PlatformUtils.isWindows) ...[
+                              Semantics(
+                                key: const ValueKey("profile_quick_settings"),
+                                label: t.pages.home.quickSettings,
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints.tightFor(width: 22, height: 20),
+                                  icon: Icon(Icons.tune_rounded, color: theme.colorScheme.onSurface),
+                                  onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                            IconButton(
+                              tooltip: 'Обновить подписку',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(width: 22, height: 20),
+                              onPressed: () async {
+                                final active = await ref.read(activeProfileProvider.future);
+                                if (active is! RemoteProfileEntity) return;
+                                await ref.read(updateProfileNotifierProvider(active.id).notifier).updateProfile(active);
+                              },
+                              icon: Icon(FluentIcons.arrow_sync_24_regular, color: theme.colorScheme.onSurface),
+                            ),
+                          ],
                         ),
                       ),
                     ],

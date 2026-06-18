@@ -32,10 +32,10 @@
             "type": "dart",
             "flutterMode": "debug",
             "program": "lib/main.dart",
-            "deviceId": "chrome",
+            "deviceId": "edge",
             "cwd": "${workspaceFolder}",
             "env": {
-                "CHROME_EXECUTABLE": "C:/Program Files/Google/Chrome/Application/chrome.exe"
+                "CHROME_EXECUTABLE": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
             },
             "toolArgs": [
                 "--web-browser-flag=--auto-open-devtools-for-tabs",

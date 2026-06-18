@@ -8,7 +8,9 @@ param(
     [ValidateSet("split", "universal", "both")]
     [string]$Artifacts = "both",
 
-    [switch]$SkipPubGet
+    [switch]$SkipPubGet,
+
+    [switch]$SkipCodeGeneration
 )
 
 $ErrorActionPreference = "Stop"
@@ -87,6 +89,99 @@ function Ensure-AndroidCoreAar {
     Write-Host "Android core library ready: $aarPath"
 }
 
+function New-RandomPassword {
+    $bytes = New-Object byte[] 24
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    }
+    finally {
+        $rng.Dispose()
+    }
+    return [Convert]::ToBase64String($bytes)
+}
+
+function Ensure-AndroidReleaseSigningKey {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $androidDir = Join-Path $RepoRoot "android"
+    $androidAppDir = Join-Path $androidDir "app"
+    $keyPropertiesPath = Join-Path $androidDir "key.properties"
+    $storeFileName = "upload-keystore.jks"
+    $storePath = Join-Path $androidDir $storeFileName
+    $storeFileForGradle = "../$storeFileName"
+
+    if (Test-Path -LiteralPath $keyPropertiesPath) {
+        $keyPropertiesContent = Get-Content -LiteralPath $keyPropertiesPath
+        $storeFileLine = $keyPropertiesContent |
+            Where-Object { $_ -match '^\s*storeFile\s*=' } |
+            Select-Object -First 1
+        if ($storeFileLine) {
+            $configuredStoreFile = ($storeFileLine -split '=', 2)[1].Trim()
+            $configuredStorePath = [System.IO.Path]::GetFullPath((Join-Path $androidAppDir $configuredStoreFile))
+            if (Test-Path -LiteralPath $configuredStorePath) {
+                Write-Host "Android signing config found: $keyPropertiesPath"
+                return
+            }
+        }
+
+        if (Test-Path -LiteralPath $storePath) {
+            $updatedKeyProperties = $keyPropertiesContent -replace '^\s*storeFile\s*=.*$', "storeFile=$storeFileForGradle"
+            if (-not ($updatedKeyProperties | Where-Object { $_ -match '^\s*storeFile\s*=' })) {
+                $updatedKeyProperties += "storeFile=$storeFileForGradle"
+            }
+            Set-Content -LiteralPath $keyPropertiesPath -Value ($updatedKeyProperties -join "`r`n") -NoNewline
+            Write-Host "Android signing config fixed: $keyPropertiesPath"
+            return
+        }
+
+        Write-Warning "Android signing config exists but its keystore is missing. Regenerating local signing config."
+    }
+
+    Assert-Command "keytool"
+
+    $storePassword = New-RandomPassword
+    $keyPassword = New-RandomPassword
+    $keyAlias = "zeon-release"
+
+    Write-Host "Android signing config was not found. Generating local release keystore..."
+    $keytoolArgs = @(
+        "-genkeypair",
+        "-v",
+        "-keystore", $storePath,
+        "-storetype", "JKS",
+        "-keyalg", "RSA",
+        "-keysize", "2048",
+        "-validity", "10000",
+        "-alias", $keyAlias,
+        "-storepass", $storePassword,
+        "-keypass", $keyPassword,
+        "-dname", "CN=ZEON, OU=Local Build, O=ZEON, L=Local, S=Local, C=US"
+    )
+    & keytool @keytoolArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to generate Android release keystore."
+    }
+
+    $keyProperties = @"
+storePassword=$storePassword
+keyPassword=$keyPassword
+keyAlias=$keyAlias
+storeFile=$storeFileForGradle
+"@
+    Set-Content -LiteralPath $keyPropertiesPath -Value $keyProperties -NoNewline
+    Write-Host "Android signing config generated: $keyPropertiesPath"
+    Write-Host "Android release keystore generated: $storePath"
+}
+
+function Invoke-DartCodeGeneration {
+    Write-Host "Running: dart run build_runner build --delete-conflicting-outputs"
+    & dart run build_runner build --delete-conflicting-outputs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Dart code generation failed."
+    }
+}
+
 function Copy-AndroidInstallersToOut {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
@@ -153,6 +248,9 @@ try {
     }
 
     Ensure-AndroidCoreAar -RepoRoot $repoRoot
+    if ($BuildMode -eq "release") {
+        Ensure-AndroidReleaseSigningKey -RepoRoot $repoRoot
+    }
     $appVersion = ConvertTo-ArtifactVersion -Version (Get-PubspecVersion -RepoRoot $repoRoot)
 
     if (-not $SkipPubGet) {
@@ -161,6 +259,10 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "flutter pub get failed."
         }
+    }
+
+    if (-not $SkipCodeGeneration) {
+        Invoke-DartCodeGeneration
     }
 
     Write-Host "Running: dart run slang"

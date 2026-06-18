@@ -11,6 +11,8 @@ param(
 
     [switch]$SkipDependencyInstall,
 
+    [switch]$SkipCodeGeneration,
+
     [switch]$SkipClean
 )
 
@@ -33,6 +35,7 @@ $params = @{
 if ($SentryDsn) { $params.SentryDsn = $SentryDsn }
 if ($SkipSecureStoragePatch) { $params.SkipSecureStoragePatch = $true }
 if ($SkipDependencyInstall) { $params.SkipDependencyInstall = $true }
+if ($SkipCodeGeneration) { $params.SkipCodeGeneration = $true }
 if ($SkipClean) { $params.SkipClean = $true }
 
 & $innerScript @params

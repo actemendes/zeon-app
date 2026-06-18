@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
@@ -16,6 +17,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 class ProfilePaymentPage extends HookConsumerWidget {
   const ProfilePaymentPage({super.key});
 
+  static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
   static const _headerGradient = LinearGradient(colors: [Color(0xFF3CE74F), Color(0xFFBFDD71)]);
   static const _operatorAssetPaths = <String>[
     'assets/images/2x/operator-mts@2x.png',
@@ -35,7 +37,8 @@ class ProfilePaymentPage extends HookConsumerWidget {
     final theme = Theme.of(context);
     final breakpoint = Breakpoint(context);
     final pricingState = ref.watch(pricingControllerProvider);
-    final plans = pricingState.catalog?.data.plans ?? const <PricingPlan>[];
+    final useDebugPricing = kDebugMode && _debugSeedProfileEnabled;
+    final plans = useDebugPricing ? _debugPricingPlans : pricingState.catalog?.data.plans ?? const <PricingPlan>[];
     final selectedPlanCode = useState('1');
     final isProcessingPayment = useState(false);
     final paymentResultState = useState<_PaymentResultState?>(null);
@@ -50,7 +53,7 @@ class ProfilePaymentPage extends HookConsumerWidget {
     );
     final sidFromRoute = GoRouterState.of(context).uri.queryParameters["sid"]?.trim();
     final selectedPlan = _selectPlan(plans, selectedPlanCode.value);
-    final pricingBlocksPayment = pricingState.catalog?.isBundledFallback ?? true;
+    final pricingBlocksPayment = useDebugPricing || (pricingState.catalog?.isBundledFallback ?? true);
 
     useEffect(() {
       if (sidFromRoute == null || sidFromRoute.isEmpty) return null;
@@ -187,9 +190,10 @@ class ProfilePaymentPage extends HookConsumerWidget {
                 onPlanSelected: isProcessingPayment.value ? null : (plan) => selectedPlanCode.value = plan.code,
                 connectLabel: specialServers.connect,
                 isLoading:
-                    isProcessingPayment.value ||
-                    pricingState.status == PricingUiStatus.loading ||
-                    pricingState.status == PricingUiStatus.refreshing,
+                    !useDebugPricing &&
+                    (isProcessingPayment.value ||
+                        pricingState.status == PricingUiStatus.loading ||
+                        pricingState.status == PricingUiStatus.refreshing),
                 onConnectTap: selectedPlan == null || pricingBlocksPayment
                     ? null
                     : () => _openCheckout(
@@ -326,6 +330,57 @@ class ProfilePaymentPage extends HookConsumerWidget {
     }
   }
 }
+
+const _debugPricingPlans = <PricingPlan>[
+  PricingPlan(
+    planId: 9001,
+    code: '1',
+    months: 1,
+    name: 'Debug regular price',
+    currency: 'RUB',
+    baseAmountMinor: 19900,
+    discountAmountMinor: 0,
+    finalAmountMinor: 19900,
+    personalized: false,
+    appliedRule: null,
+  ),
+  PricingPlan(
+    planId: 9003,
+    code: '3',
+    months: 3,
+    name: 'Debug discount price',
+    currency: 'RUB',
+    baseAmountMinor: 69900,
+    discountAmountMinor: 20000,
+    finalAmountMinor: 49900,
+    personalized: false,
+    appliedRule: AppliedPricingRule(source: 'debug', id: 1, type: 'discount'),
+  ),
+  PricingPlan(
+    planId: 9006,
+    code: '6',
+    months: 6,
+    name: 'Debug personal price',
+    currency: 'RUB',
+    baseAmountMinor: 89900,
+    discountAmountMinor: 0,
+    finalAmountMinor: 89900,
+    personalized: true,
+    appliedRule: AppliedPricingRule(source: 'debug', id: 2, type: 'fixed_price'),
+  ),
+  PricingPlan(
+    planId: 9012,
+    code: '12',
+    months: 12,
+    name: 'Debug personal discount price',
+    currency: 'RUB',
+    baseAmountMinor: 238800,
+    discountAmountMinor: 88900,
+    finalAmountMinor: 149900,
+    personalized: true,
+    appliedRule: AppliedPricingRule(source: 'debug', id: 3, type: 'personal_discount'),
+  ),
+];
 
 class _PricingErrorBanner extends StatelessWidget {
   const _PricingErrorBanner({required this.message, required this.onRetry});
@@ -686,7 +741,6 @@ class _BottomSubscriptionPanel extends StatelessWidget {
                 _PlanTile(
                   label: _planLabel(plan),
                   price: plan.formatFinalPrice(),
-                  basePrice: plan.discountAmountMinor > 0 ? plan.formatBasePrice() : null,
                   discount: plan.discountAmountMinor > 0 ? plan.formatDiscount() : null,
                   personalized: plan.personalized,
                   personalizedPriceLabel: personalizedPriceLabel,
@@ -712,7 +766,6 @@ class _PlanTile extends StatelessWidget {
   const _PlanTile({
     required this.label,
     required this.price,
-    required this.basePrice,
     required this.discount,
     required this.personalized,
     required this.personalizedPriceLabel,
@@ -723,7 +776,6 @@ class _PlanTile extends StatelessWidget {
 
   final String label;
   final String price;
-  final String? basePrice;
   final String? discount;
   final bool personalized;
   final String personalizedPriceLabel;
@@ -785,14 +837,6 @@ class _PlanTile extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (basePrice != null)
-                      Text(
-                        basePrice!,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: priceColor.withValues(alpha: disabledOpacity * .75),
-                          decoration: TextDecoration.lineThrough,
-                        ),
-                      ),
                     Text(
                       price,
                       style: theme.textTheme.bodyMedium?.copyWith(

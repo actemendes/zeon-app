@@ -240,8 +240,8 @@
           "personalizedPrice": "Персональная цена",
           "loadingPrices": "Загружаем цены...",
           "refreshingPrices": "Обновляем цены...",
-          "showingSavedPrices": "Показываем сохраненные цены",
-          "serverPricesUnavailable": "Цены сервера недоступны",
+          "showingSavedPrices": "Общие цены",
+          "serverPricesUnavailable": "Общие цены",
           "personalizedPrices": "Персональные цены"
         }
       },
@@ -516,7 +516,7 @@
         }
       },
       "inbound": {
-        "title": "Входящие",
+        "title": "Системные",
         "serviceMode": "Режим службы",
         "serviceModes": {
           "proxy": "Только прокси-служба",
@@ -754,4 +754,3 @@
     }
   }
 }
-

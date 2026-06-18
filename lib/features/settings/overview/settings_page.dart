@@ -164,14 +164,14 @@ class SettingsPage extends HookConsumerWidget {
             namedLocation: context.namedLocation('routeOptions'),
           ),
           SettingsSection(
-            title: t.pages.settings.inbound.title,
-            icon: Icons.input_rounded,
-            namedLocation: context.namedLocation('inboundOptions'),
-          ),
-          SettingsSection(
             title: t.pages.settings.tlsTricks.title,
             icon: Icons.content_cut_rounded,
             namedLocation: context.namedLocation('tlsTricks'),
+          ),
+          SettingsSection(
+            title: t.pages.settings.inbound.title,
+            icon: Icons.input_rounded,
+            namedLocation: context.namedLocation('inboundOptions'),
           ),
           if (PlatformUtils.isIOS)
             Material(
@@ -183,6 +183,13 @@ class SettingsPage extends HookConsumerWidget {
                 },
               ),
             ),
+          if (Breakpoint(context).isMobile()) ...[
+            SettingsSection(
+              title: t.pages.about.title,
+              icon: Icons.info_rounded,
+              namedLocation: context.namedLocation('about'),
+            ),
+          ],
           if (appInfo.release.allowCustomUpdateChecker)
             Material(
               child: ListTile(
@@ -195,13 +202,6 @@ class SettingsPage extends HookConsumerWidget {
                 onTap: appUpdateState is AppUpdateStateChecking ? null : () => _checkForUpdate(context, ref),
               ),
             ),
-          if (Breakpoint(context).isMobile()) ...[
-            SettingsSection(
-              title: t.pages.about.title,
-              icon: Icons.info_rounded,
-              namedLocation: context.namedLocation('about'),
-            ),
-          ],
         ],
       ),
     );

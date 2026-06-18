@@ -9,6 +9,8 @@ param(
 
     [switch]$SkipSecureStoragePatch,
 
+    [switch]$SkipCodeGeneration,
+
     [switch]$SkipClean
 )
 
@@ -28,6 +30,14 @@ function Invoke-FlutterPubGet {
     & flutter pub get
     if ($LASTEXITCODE -ne 0) {
         throw "flutter pub get failed."
+    }
+}
+
+function Invoke-DartCodeGeneration {
+    Write-Host "Running: dart run build_runner build --delete-conflicting-outputs"
+    & dart run build_runner build --delete-conflicting-outputs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Dart code generation failed."
     }
 }
 
@@ -357,6 +367,10 @@ try {
 
         Invoke-FlutterPubGet
 
+        if (-not $SkipCodeGeneration) {
+            Invoke-DartCodeGeneration
+        }
+
         if (-not $SkipSecureStoragePatch) {
             Patch-FlutterSecureStorageWindowsPlugin -WorkingRoot $workingRoot
         }
@@ -377,6 +391,10 @@ try {
                 }
 
                 Invoke-FlutterPubGet
+
+                if (-not $SkipCodeGeneration) {
+                    Invoke-DartCodeGeneration
+                }
 
                 if (-not $SkipSecureStoragePatch) {
                     Patch-FlutterSecureStorageWindowsPlugin -WorkingRoot $workingRoot

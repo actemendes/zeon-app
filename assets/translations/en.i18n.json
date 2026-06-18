@@ -232,8 +232,8 @@
           "personalizedPrice": "Personalized price",
           "loadingPrices": "Loading prices...",
           "refreshingPrices": "Refreshing prices...",
-          "showingSavedPrices": "Showing saved prices",
-          "serverPricesUnavailable": "Server prices unavailable",
+          "showingSavedPrices": "General prices",
+          "serverPricesUnavailable": "General prices",
           "personalizedPrices": "Personalized prices"
         }
       },
@@ -508,7 +508,7 @@
         }
       },
       "inbound": {
-        "title": "Inbound",
+        "title": "System",
         "serviceMode": "Service mode",
         "serviceModes": {
           "proxy": "Proxy service only",
@@ -748,4 +748,3 @@
     }
   }
 }
-

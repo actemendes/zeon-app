@@ -17,6 +17,8 @@ param(
 
     [switch]$SkipDependencyInstall,
 
+    [switch]$SkipCodeGeneration,
+
     [switch]$SkipClean
 )
 
@@ -203,6 +205,14 @@ function Build-WindowsRelease {
     & flutter @args
     if ($LASTEXITCODE -ne 0) {
         throw "flutter build windows failed."
+    }
+}
+
+function Invoke-DartCodeGeneration {
+    Write-Host "Running: dart run build_runner build --delete-conflicting-outputs"
+    & dart run build_runner build --delete-conflicting-outputs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Dart code generation failed."
     }
 }
 
@@ -739,6 +749,10 @@ try {
         & flutter pub get
         if ($LASTEXITCODE -ne 0) {
             throw "flutter pub get failed."
+        }
+
+        if (-not $SkipCodeGeneration) {
+            Invoke-DartCodeGeneration
         }
 
         if (-not $SkipSecureStoragePatch) {

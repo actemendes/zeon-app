@@ -9,6 +9,8 @@ param(
 
     [switch]$SkipSecureStoragePatch,
 
+    [switch]$SkipCodeGeneration,
+
     [switch]$SkipClean
 )
 
@@ -29,6 +31,7 @@ $params = @{
 
 if ($Launch) { $params.Launch = $true }
 if ($SkipSecureStoragePatch) { $params.SkipSecureStoragePatch = $true }
+if ($SkipCodeGeneration) { $params.SkipCodeGeneration = $true }
 if ($SkipClean) { $params.SkipClean = $true }
 
 Write-Host "Building Windows app in build\\windows\\x64\\runner\\Release..."
@@ -38,4 +41,3 @@ Write-Host "Build target: $BuildTarget"
 if ($LASTEXITCODE -ne 0) {
     throw "Windows release folder build failed."
 }
-

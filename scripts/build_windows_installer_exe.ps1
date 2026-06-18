@@ -5,6 +5,7 @@ param(
     [switch]$UseExistingCertificateOnly,
     [switch]$SkipSecureStoragePatch,
     [switch]$SkipDependencyInstall,
+    [switch]$SkipCodeGeneration,
     [switch]$SkipClean
 )
 
@@ -50,6 +51,7 @@ if ($SentryDsn) { $params.SentryDsn = $SentryDsn }
 if ($UseExistingCertificateOnly) { $params.UseExistingCertificateOnly = $true }
 if ($SkipSecureStoragePatch) { $params.SkipSecureStoragePatch = $true }
 if ($SkipDependencyInstall) { $params.SkipDependencyInstall = $true }
+if ($SkipCodeGeneration) { $params.SkipCodeGeneration = $true }
 if ($SkipClean) { $params.SkipClean = $true }
 
 Write-Host "Building Windows EXE installer (release/prod)..."
