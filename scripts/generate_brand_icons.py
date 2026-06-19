@@ -46,9 +46,26 @@ MASTER_ICON_SIZE = 1024
 #    CONTAINER_PAD_RATIO: внутренние поля контейнера от края иконки
 #    CONTAINER_RADIUS_RATIO: скругление контейнера
 CONTAINER_PAD_RATIO = 0.15
-CONTAINER_RADIUS_RATIO = 0.2
+CONTAINER_RADIUS_RATIO = 0.1
 CONTAINER_GRADIENT_TOP = (24, 24, 24, 255)
 CONTAINER_GRADIENT_BOTTOM = (0, 0, 0, 255)
+
+# Android launchers that do not support adaptive icons normalize transparent
+# bitmaps themselves. Keep the legacy fallback fully opaque, otherwise MIUI
+# and similar launchers apply their own inset on top of ours.
+ANDROID_LEGACY_CONTAINER_PAD_RATIO = 0.0
+ANDROID_LEGACY_CONTAINER_RADIUS_RATIO = 0.0
+
+# Adaptive icons are specified on a 108 dp canvas; the visible logo remains
+# well within Android's 66 dp safe zone while the launcher owns the outer mask.
+ANDROID_ADAPTIVE_FOREGROUND_LOGO_WIDTH_RATIO = 0.40
+ANDROID_ADAPTIVE_FOREGROUND_SIZES = {
+    "drawable-mdpi": 108,
+    "drawable-hdpi": 162,
+    "drawable-xhdpi": 216,
+    "drawable-xxhdpi": 324,
+    "drawable-xxxhdpi": 432,
+}
 
 # 5) Размер логотипа внутри контейнера (safe area)
 MASTER_LOGO_WIDTH_RATIO = 0.4
@@ -279,21 +296,23 @@ def _build_linear_gradient_image(
         color = stops[-1][1]
         return Image.new("RGBA", (width, height), color)
 
-    xs = np.arange(width, dtype=np.float32)
-    ys = np.arange(height, dtype=np.float32)
-    grid_x, grid_y = np.meshgrid(xs, ys)
-    t = ((grid_x - x1) * dx + (grid_y - y1) * dy) / denom
-    t = np.clip(t, 0.0, 1.0)
-
     stops_pos = np.array([s[0] for s in stops], dtype=np.float32)
     stop_colors = np.array([s[1] for s in stops], dtype=np.float32)
-    rgba = np.empty((height, width, 4), dtype=np.uint8)
-    flat_t = t.reshape(-1)
-    for channel in range(4):
-        vals = np.interp(flat_t, stops_pos, stop_colors[:, channel])
-        rgba[..., channel] = vals.reshape(height, width).astype(np.uint8)
+    xs = np.arange(width, dtype=np.float32)
+    gradient = Image.new("RGBA", (width, height))
 
-    return Image.fromarray(rgba, mode="RGBA")
+    # A full meshgrid at the SVG oversample size uses several hundred MiB.
+    # Building one row at a time keeps the same output while remaining usable
+    # in constrained CI and developer environments.
+    for y in range(height):
+        t = ((xs - x1) * dx + (y - y1) * dy) / denom
+        t = np.clip(t, 0.0, 1.0)
+        rgba = np.empty((width, 4), dtype=np.uint8)
+        for channel in range(4):
+            rgba[:, channel] = np.interp(t, stops_pos, stop_colors[:, channel]).astype(np.uint8)
+        gradient.paste(Image.fromarray(rgba.reshape((1, width, 4)), mode="RGBA"), (0, y))
+
+    return gradient
 
 
 def _sample_svg_path_points(d: str, samples: int) -> list[tuple[float, float]]:
@@ -423,12 +442,16 @@ def _recolor_logo(logo: Image.Image, color: tuple[int, int, int, int]) -> Image.
     return solid
 
 
-def _compose_container(size: int) -> Image.Image:
+def _compose_container(
+    size: int,
+    pad_ratio: float = CONTAINER_PAD_RATIO,
+    radius_ratio: float = CONTAINER_RADIUS_RATIO,
+) -> Image.Image:
     layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
 
     # Safe margins and corner rounding for the app icon container.
-    pad = int(round(size * CONTAINER_PAD_RATIO))
-    radius = int(round(size * CONTAINER_RADIUS_RATIO))
+    pad = int(round(size * pad_ratio))
+    radius = int(round(size * radius_ratio))
     rect = (pad, pad, size - pad, size - pad)
 
     mask = Image.new("L", (size, size), 0)
@@ -459,8 +482,13 @@ def _crop_visible_square(image: Image.Image, output_size: int) -> Image.Image:
     return square.resize((output_size, output_size), Image.Resampling.LANCZOS)
 
 
-def _compose_master_icon(size: int, logo: Image.Image) -> Image.Image:
-    icon = _compose_container(size)
+def _compose_master_icon(
+    size: int,
+    logo: Image.Image,
+    container_pad_ratio: float = CONTAINER_PAD_RATIO,
+    container_radius_ratio: float = CONTAINER_RADIUS_RATIO,
+) -> Image.Image:
+    icon = _compose_container(size, container_pad_ratio, container_radius_ratio)
     logo_w = int(round(size * MASTER_LOGO_WIDTH_RATIO))
     logo_img = _fit_logo(logo, logo_w)
 
@@ -519,6 +547,30 @@ def _write_android_launcher(master: Image.Image) -> None:
 
     playstore = master.resize((ANDROID_PLAYSTORE_SIZE, ANDROID_PLAYSTORE_SIZE), Image.Resampling.LANCZOS)
     _save_png(ROOT / "android/app/src/main/ic_launcher-playstore.png", playstore)
+
+
+def _write_android_adaptive_icon(logo: Image.Image) -> None:
+    for bucket, px in ANDROID_ADAPTIVE_FOREGROUND_SIZES.items():
+        foreground = _compose_startup_canvas(
+            px,
+            logo,
+            ANDROID_ADAPTIVE_FOREGROUND_LOGO_WIDTH_RATIO,
+        )
+        _save_png(
+            ROOT / f"android/app/src/main/res/{bucket}/ic_launcher_adaptive_foreground.png",
+            foreground,
+        )
+
+    adaptive_background = """<shape xmlns:android=\"http://schemas.android.com/apk/res/android\"\n    android:shape=\"rectangle\">\n    <solid android:color=\"#FF000000\" />\n</shape>\n"""
+    adaptive_icon = """<adaptive-icon xmlns:android=\"http://schemas.android.com/apk/res/android\">\n    <background android:drawable=\"@drawable/ic_launcher_adaptive_background\" />\n    <foreground android:drawable=\"@drawable/ic_launcher_adaptive_foreground\" />\n</adaptive-icon>\n"""
+    background_target = ROOT / "android/app/src/main/res/drawable/ic_launcher_adaptive_background.xml"
+    background_target.write_text(adaptive_background, encoding="utf-8")
+    print(f"wrote {background_target.relative_to(ROOT)}")
+
+    for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
+        target = ROOT / f"android/app/src/main/res/mipmap-anydpi-v26/{name}"
+        target.write_text(adaptive_icon, encoding="utf-8")
+        print(f"wrote {target.relative_to(ROOT)}")
 
 
 def _write_android_stat_icons(logo_mono: Image.Image) -> None:
@@ -809,10 +861,17 @@ def main() -> None:
     startup_dark_logo = _load_logo_image(STARTUP_LOGO_DARK_PNG)
     logo_mono_white = _recolor_logo(logo, STAT_ICON_MONO_COLOR)
     master = _compose_master_icon(MASTER_ICON_SIZE, logo)
+    android_master = _compose_master_icon(
+        MASTER_ICON_SIZE,
+        logo,
+        ANDROID_LEGACY_CONTAINER_PAD_RATIO,
+        ANDROID_LEGACY_CONTAINER_RADIUS_RATIO,
+    )
     startup_light = _compose_startup_canvas(STARTUP_SOURCE_SIZE, startup_light_logo, STARTUP_LOGO_WIDTH_RATIO)
     startup_dark = _compose_startup_canvas(STARTUP_SOURCE_SIZE, startup_dark_logo, STARTUP_LOGO_WIDTH_RATIO)
 
-    _write_android_launcher(master)
+    _write_android_launcher(android_master)
+    _write_android_adaptive_icon(logo)
     _write_android_stat_icons(logo_mono_white)
     _write_android_banner(master)
     _write_ios_and_macos(master)
