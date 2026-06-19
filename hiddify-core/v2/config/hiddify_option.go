@@ -37,6 +37,15 @@ type HiddifyOptions struct {
 	ProfileDnsStrategy   string `json:"profile-dns-strategy,omitempty"`
 	NetworkTransportType string `json:"network-transport-type,omitempty"`
 	NetworkInterfaceMTU  int    `json:"network-interface-mtu,omitempty"`
+	UDPProbeEnabled      bool   `json:"udp-probe-enabled,omitempty"`
+	UDPProbeEndpoint     string `json:"udp-probe-endpoint,omitempty"`
+	UDPProbeSecret       string `json:"udp-probe-secret,omitempty"`
+	UDPProbeCount        int    `json:"udp-probe-count,omitempty"`
+	UDPProbeSize         int    `json:"udp-probe-size,omitempty"`
+	UDPProbeIntervalMs   int    `json:"udp-probe-interval-ms,omitempty"`
+	UDPProbeTimeoutMs    int    `json:"udp-probe-timeout-ms,omitempty"`
+	UDPProbeCooldownSec  int    `json:"udp-probe-cooldown-sec,omitempty"`
+	UDPProbeTopN         int    `json:"udp-probe-top-n,omitempty"`
 
 	DNSOptions
 	InboundOptions
@@ -159,6 +168,13 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 		ProfileDnsStrategy:   "default",
 		NetworkTransportType: "unknown",
 		NetworkInterfaceMTU:  0,
+		UDPProbeEndpoint:     "udp-probe.zeon-vps.link:8443",
+		UDPProbeCount:        10,
+		UDPProbeSize:         160,
+		UDPProbeIntervalMs:   40,
+		UDPProbeTimeoutMs:    1000,
+		UDPProbeCooldownSec:  60,
+		UDPProbeTopN:         3,
 
 		ClashApiPort:   16756,
 		ClashApiSecret: "",

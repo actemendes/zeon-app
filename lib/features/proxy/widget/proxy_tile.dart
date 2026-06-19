@@ -24,6 +24,8 @@ class ProxyTile extends StatelessWidget with PresLogger {
     final tileColor = selected ? theme.colorScheme.primaryContainer : Colors.transparent;
     final hasDelay = proxy.urlTestDelay != 0;
     final hasNoPing = proxy.urlTestDelay > 65000;
+    final qualityLabel = _qualityLabel(proxy);
+    final statusLabel = _statusLabel(proxy);
 
     return ListTile(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -63,7 +65,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
       ),
       trailing: hasDelay
           ? SizedBox(
-              width: 44,
+              width: 68,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -76,6 +78,28 @@ class ProxyTile extends StatelessWidget with PresLogger {
                         color: delayColor(context, proxy.urlTestDelay),
                         fontSize: hasNoPing ? 16 : null,
                         height: hasNoPing ? 1 : null,
+                      ),
+                    ),
+                  if (statusLabel != null)
+                    Text(
+                      statusLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: selected ? primaryColor : theme.colorScheme.error,
+                        fontSize: 10,
+                        height: 1,
+                      ),
+                    )
+                  else if (qualityLabel != null)
+                    Text(
+                      qualityLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: selected ? primaryColor : theme.colorScheme.onSurfaceVariant,
+                        fontSize: 10,
+                        height: 1,
                       ),
                     ),
                 ],
@@ -98,6 +122,32 @@ class ProxyTile extends StatelessWidget with PresLogger {
       < 800 => Colors.green,
       < 1500 => Colors.deepOrangeAccent,
       _ => Colors.red,
+    };
+  }
+
+  String? _statusLabel(OutboundInfo proxy) {
+    final errorType = proxy.errorType;
+    if (errorType.isEmpty || errorType == 'none') return null;
+    return switch (errorType) {
+      'tls_handshake_failed' || 'unsupported_curve' => 'TLS',
+      'context_deadline_exceeded' || 'deadline' || 'timeout' || 'dns_timeout' || 'quic_timeout' => 'timeout',
+      'connection_refused' || 'refused' => 'refused',
+      'connection_reset' || 'reset' => 'reset',
+      'broken_pipe' => 'pipe',
+      'eof' => 'EOF',
+      _ => 'unstable',
+    };
+  }
+
+  String? _qualityLabel(OutboundInfo proxy) {
+    final score = proxy.healthScore;
+    if (score <= 0) return null;
+    return switch (score) {
+      >= 90 => 'excellent',
+      >= 75 => 'good',
+      >= 55 => 'medium',
+      >= 35 => 'weak',
+      _ => 'bad',
     };
   }
 }

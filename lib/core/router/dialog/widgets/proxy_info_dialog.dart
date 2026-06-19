@@ -46,6 +46,13 @@ class OutboundInfoWidget extends HookConsumerWidget {
             DateFormat('yyyy-MM-dd HH:mm:ss').format(outboundInfo.urlTestTime.toDateTime().toLocal()),
           ),
           _buildInfoRow(t.dialogs.proxyInfo.testDelay, '${outboundInfo.urlTestDelay} ms'),
+          _buildInfoRow('Quality', _qualityLabel(outboundInfo.healthScore)),
+          _buildInfoRow('Probe error', outboundInfo.errorType == 'none' ? '' : outboundInfo.errorType),
+          _buildInfoRow('Probe error text', outboundInfo.errorText),
+          _buildInfoRow('Runtime penalty', outboundInfo.runtimePenalty.toString()),
+          _buildInfoRow('Freshness penalty', outboundInfo.freshnessPenalty.toString()),
+          _buildInfoRow('UDP', _udpLabel(outboundInfo)),
+          _buildInfoRow('UDP penalty', outboundInfo.udpPenalty.toString()),
           _buildIpInfo(outboundInfo.ipinfo, ref),
           _buildInfoRow(t.dialogs.proxyInfo.upload, formatBytes(outboundInfo.upload.toInt())),
           _buildInfoRow(t.dialogs.proxyInfo.download, formatBytes(outboundInfo.download.toInt())),
@@ -107,6 +114,22 @@ class OutboundInfoWidget extends HookConsumerWidget {
         ],
       ),
     );
+  }
+
+  String _qualityLabel(int score) {
+    if (score <= 0) return '';
+    return switch (score) {
+      >= 90 => 'excellent ($score)',
+      >= 75 => 'good ($score)',
+      >= 55 => 'medium ($score)',
+      >= 35 => 'weak ($score)',
+      _ => 'bad ($score)',
+    };
+  }
+
+  String _udpLabel(OutboundInfo outboundInfo) {
+    if (!outboundInfo.udpProbeAvailable) return '';
+    return 'loss ${outboundInfo.udpLoss.toStringAsFixed(1)}%, jitter ${outboundInfo.udpJitterMs} ms';
   }
 
   Widget _buildIpInfo(IpInfo ipInfo, WidgetRef ref) {

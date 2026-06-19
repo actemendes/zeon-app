@@ -1,0 +1,2480 @@
+{
+  "log": {
+    "level": "warn",
+    "output": "data/box.log"
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "hosts",
+        "tag": "dns-static"
+      },
+      {
+        "type": "tcp",
+        "tag": "dns-remote",
+        "detour": "select",
+        "server": "8.8.8.8"
+      },
+      {
+        "type": "https",
+        "tag": "dns-remote-fallback",
+        "detour": "select",
+        "server": "8.8.8.8",
+        "tls": {
+          "enabled": true
+        }
+      },
+      {
+        "type": "https",
+        "tag": "dns-trick-direct",
+        "detour": "direct-fragment §hide§",
+        "domain_resolver": {
+          "server": "dns-direct",
+          "strategy": "prefer_ipv4"
+        },
+        "server": "dns.cloudflare.com",
+        "tls": {
+          "enabled": true,
+          "fragment": true,
+          "fragment_fallback_delay": "300ms",
+          "record_fragment": true
+        }
+      },
+      {
+        "type": "udp",
+        "tag": "dns-direct",
+        "connect_timeout": "5s",
+        "disable_tcp_keep_alive": true,
+        "server": "77.88.8.8"
+      },
+      {
+        "type": "local",
+        "tag": "dns-local",
+        "prefer_go": true
+      },
+      {
+        "type": "tcp",
+        "tag": "dns-remote-no-warp",
+        "detour": "direct-fragment §hide§",
+        "server": "8.8.8.8"
+      }
+    ],
+    "rules": [
+      {
+        "domain": "api.cloudflareclient.com",
+        "server": "dns-remote-no-warp",
+        "rewrite_ttl": 86400,
+        "bypass_if_failed": true
+      },
+      {
+        "domain": [
+          "captive.apple.com",
+          "cp.cloudflare.com",
+          "google.com",
+          "api.cloudflareclient.com",
+          "zeon-vps.link"
+        ],
+        "server": "dns-direct",
+        "rewrite_ttl": 86400,
+        "bypass_if_failed": true
+      },
+      {
+        "domain_suffix": [
+          "ya.ru",
+          "yandex.ru",
+          "yandex.net",
+          "yastatic.net",
+          "wildberries.ru",
+          "wb.ru",
+          "wbbasket.ru",
+          "wbstatic.net",
+          "wbcontent.net",
+          "rwb.ru",
+          "wibes.ru"
+        ],
+        "server": "dns-remote",
+        "rewrite_ttl": 86400,
+        "bypass_if_failed": true
+      },
+      {
+        "domain_suffix": ".ru",
+        "server": "dns-direct",
+        "rewrite_ttl": 86400,
+        "bypass_if_failed": true
+      },
+      {
+        "rule_set": "geosite-ru",
+        "server": "dns-direct",
+        "rewrite_ttl": 86400,
+        "bypass_if_failed": true
+      },
+      {
+        "server": "dns-remote",
+        "rewrite_ttl": 86400
+      }
+    ],
+    "final": "dns-remote",
+    "disable_expire": true,
+    "independent_cache": true
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "mtu": 1500,
+      "address": [
+        "172.19.0.1/28",
+        "fdfe:dcba:9876::1/126"
+      ],
+      "auto_route": true,
+      "strict_route": true,
+      "stack": "gvisor"
+    },
+    {
+      "type": "mixed",
+      "tag": "mixed-in::1",
+      "listen": "::1",
+      "listen_port": 12334
+    },
+    {
+      "type": "direct",
+      "tag": "dns-in::1",
+      "listen": "::1",
+      "listen_port": 12337
+    },
+    {
+      "type": "mixed",
+      "tag": "mixed-in127.0.0.1",
+      "listen": "127.0.0.1",
+      "listen_port": 12334
+    },
+    {
+      "type": "direct",
+      "tag": "dns-in127.0.0.1",
+      "listen": "127.0.0.1",
+      "listen_port": 12337
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "selector",
+      "tag": "select",
+      "outbounds": [
+        "lowest",
+        "balance",
+        "🇵🇱Польша | СВЯЗЬ📱 § 0",
+        "🇵🇱Польша2 | СВЯЗЬ📱 § 1",
+        "🇵🇱Польша3 | СВЯЗЬ📱 § 2",
+        "🇵🇱Польша4 | СВЯЗЬ📱 § 3",
+        "🇵🇱Польша5 | СВЯЗЬ📱 § 4",
+        "🇵🇱Польша6 | СВЯЗЬ📱 § 5",
+        "🇵🇱Польша7 | СВЯЗЬ📱 § 6",
+        "🇵🇱Польша8 | СВЯЗЬ📱 § 7",
+        "🇵🇱Польша9 | БЫСТРЫЙ⚡ § 8",
+        "🇵🇱Польша10 | БЫСТРЫЙ⚡ § 9",
+        "🇷🇺Россия | СВЯЗЬ📱 § 10",
+        "🇷🇺Россия2 | СВЯЗЬ📱 § 11",
+        "🇷🇺Россия3 | СВЯЗЬ📱 § 12",
+        "🇷🇺Россия4 | СВЯЗЬ📱 § 13",
+        "🇷🇺Россия5 | СВЯЗЬ📱 § 14",
+        "🇷🇺Россия6 | СВЯЗЬ📱 § 15",
+        "🇷🇺Россия7 | СВЯЗЬ📱 § 16",
+        "🇷🇺Россия8 | СВЯЗЬ📱 § 17",
+        "🇷🇺Россия9 | СВЯЗЬ📱 § 18",
+        "🇷🇺Россия10 | СВЯЗЬ📱 § 19",
+        "🇷🇺Россия11 | СВЯЗЬ📱 § 20",
+        "🇷🇺Россия12 | СВЯЗЬ📱 § 21",
+        "🇷🇺Россия13 | СВЯЗЬ📱 § 22",
+        "🇷🇺Россия14 | БЫСТРЫЙ⚡ § 23",
+        "🇷🇺Россия15 | БЫСТРЫЙ⚡ § 24",
+        "🇷🇺Россия16 | БЫСТРЫЙ⚡ § 25",
+        "🇷🇺Россия17 | БЫСТРЫЙ⚡ § 26",
+        "🇷🇺Россия18 | БЫСТРЫЙ⚡ § 27",
+        "🇷🇺Россия19 | БЫСТРЫЙ⚡ § 28",
+        "🇩🇪Германия | СВЯЗЬ📱 § 29",
+        "🇩🇪Германия2 | СВЯЗЬ📱 § 30",
+        "🇩🇪Германия3 | СВЯЗЬ📱 § 31",
+        "🇩🇪Германия4 | СВЯЗЬ📱 § 32",
+        "🇩🇪Германия5 | СВЯЗЬ📱 § 33",
+        "🇩🇪Германия6 | БЫСТРЫЙ⚡ § 34",
+        "🇩🇪Германия7 | БЫСТРЫЙ⚡ § 35",
+        "🇩🇪Германия8 | БЫСТРЫЙ⚡ § 36",
+        "🇩🇪Германия9 | БЫСТРЫЙ⚡ § 37",
+        "🇩🇪Германия10 | БЫСТРЫЙ⚡ § 38",
+        "🇳🇱Нидерланды | СВЯЗЬ📱 § 39",
+        "🇳🇱Нидерланды2 | СВЯЗЬ📱 § 40",
+        "🇳🇱Нидерланды3 | СВЯЗЬ📱 § 41",
+        "🇳🇱Нидерланды4 | БЫСТРЫЙ⚡ § 42",
+        "🇳🇱Нидерланды5 | БЫСТРЫЙ⚡ § 43",
+        "🇳🇱Нидерланды6 | БЫСТРЫЙ⚡ § 44",
+        "🇨🇾Кипр | БЫСТРЫЙ⚡ § 45",
+        "🇨🇾Кипр2 | БЫСТРЫЙ⚡ § 46",
+        "🇪🇸Испания | БЫСТРЫЙ⚡ § 47",
+        "🇪🇸Испания2 | БЫСТРЫЙ⚡ § 48",
+        "🇯🇵Япония | БЫСТРЫЙ⚡ § 49",
+        "🇯🇵Япония2 | БЫСТРЫЙ⚡ § 50",
+        "🇯🇵Япония3 | БЫСТРЫЙ⚡ § 51",
+        "🇯🇵Япония4 | БЫСТРЫЙ⚡ § 52",
+        "🇨🇳Китай | БЫСТРЫЙ⚡ § 53",
+        "🇨🇳Китай2 | БЫСТРЫЙ⚡ § 54",
+        "🇲🇩Молдова | БЫСТРЫЙ⚡ § 55",
+        "🇲🇩Молдова2 | БЫСТРЫЙ⚡ § 56",
+        "🇸🇪Швеция | БЫСТРЫЙ⚡ § 57",
+        "🇸🇪Швеция2 | БЫСТРЫЙ⚡ § 58",
+        "🇸🇪Швеция3 | БЫСТРЫЙ⚡ § 59",
+        "🇫🇷Франция | БЫСТРЫЙ⚡ § 60",
+        "🇫🇷Франция2 | БЫСТРЫЙ⚡ § 61",
+        "🇪🇪Эстония | БЫСТРЫЙ⚡ § 62",
+        "🇪🇪Эстония2 | БЫСТРЫЙ⚡ § 63",
+        "🇫🇮Финляндия | БЫСТРЫЙ⚡ § 64",
+        "🇫🇮Финляндия2 | БЫСТРЫЙ⚡ § 65",
+        "🇭🇺Венгрия | СВЯЗЬ📱 § 66",
+        "🇦🇶Антарктида | БЫСТРЫЙ⚡ § 67",
+        "🇻🇳Вьетнам | БЫСТРЫЙ⚡ § 68",
+        "🇹🇷Турция | БЫСТРЫЙ⚡ § 69",
+        "🇦🇪ОАЭ | БЫСТРЫЙ⚡ § 70",
+        "🇧🇾Беларусь | БЫСТРЫЙ⚡ § 71",
+        "🇳🇴Норвегия | БЫСТРЫЙ⚡ § 72",
+        "🇮🇸Исландия | БЫСТРЫЙ⚡ § 73",
+        "🇦🇱Албания | БЫСТРЫЙ⚡ § 74",
+        "🇨🇭Швейцария | БЫСТРЫЙ⚡ § 75",
+        "🇧🇪Бельгия | БЫСТРЫЙ⚡ § 76",
+        "🇭🇷Хорватия | БЫСТРЫЙ⚡ § 77",
+        "🇮🇹Италия | БЫСТРЫЙ⚡ § 78",
+        "🇱🇻Латвия | БЫСТРЫЙ⚡ § 79",
+        "🇧🇷Бразилия | БЫСТРЫЙ⚡ § 80",
+        "🇺🇦Украина | БЫСТРЫЙ⚡ § 81",
+        "🇪🇬Египет | БЫСТРЫЙ⚡ § 82",
+        "🇦🇷Аргентина | БЫСТРЫЙ⚡ § 83",
+        "🇳🇬Нигерия | БЫСТРЫЙ⚡ § 84",
+        "🇰🇿Казахстан | БЫСТРЫЙ⚡ § 85",
+        "🇺🇸США | БЫСТРЫЙ⚡ § 86",
+        "🇬🇷Греция | БЫСТРЫЙ⚡ § 87"
+      ],
+      "default": "balance",
+      "interrupt_exist_connections": true
+    },
+    {
+      "type": "balancer",
+      "tag": "balance",
+      "outbounds": [
+        "🇵🇱Польша | СВЯЗЬ📱 § 0",
+        "🇵🇱Польша2 | СВЯЗЬ📱 § 1",
+        "🇵🇱Польша3 | СВЯЗЬ📱 § 2",
+        "🇵🇱Польша4 | СВЯЗЬ📱 § 3",
+        "🇵🇱Польша5 | СВЯЗЬ📱 § 4",
+        "🇵🇱Польша6 | СВЯЗЬ📱 § 5",
+        "🇵🇱Польша7 | СВЯЗЬ📱 § 6",
+        "🇵🇱Польша8 | СВЯЗЬ📱 § 7",
+        "🇵🇱Польша9 | БЫСТРЫЙ⚡ § 8",
+        "🇵🇱Польша10 | БЫСТРЫЙ⚡ § 9",
+        "🇷🇺Россия | СВЯЗЬ📱 § 10",
+        "🇷🇺Россия2 | СВЯЗЬ📱 § 11",
+        "🇷🇺Россия3 | СВЯЗЬ📱 § 12",
+        "🇷🇺Россия4 | СВЯЗЬ📱 § 13",
+        "🇷🇺Россия5 | СВЯЗЬ📱 § 14",
+        "🇷🇺Россия6 | СВЯЗЬ📱 § 15",
+        "🇷🇺Россия7 | СВЯЗЬ📱 § 16",
+        "🇷🇺Россия8 | СВЯЗЬ📱 § 17",
+        "🇷🇺Россия9 | СВЯЗЬ📱 § 18",
+        "🇷🇺Россия10 | СВЯЗЬ📱 § 19",
+        "🇷🇺Россия11 | СВЯЗЬ📱 § 20",
+        "🇷🇺Россия12 | СВЯЗЬ📱 § 21",
+        "🇷🇺Россия13 | СВЯЗЬ📱 § 22",
+        "🇷🇺Россия14 | БЫСТРЫЙ⚡ § 23",
+        "🇷🇺Россия15 | БЫСТРЫЙ⚡ § 24",
+        "🇷🇺Россия16 | БЫСТРЫЙ⚡ § 25",
+        "🇷🇺Россия17 | БЫСТРЫЙ⚡ § 26",
+        "🇷🇺Россия18 | БЫСТРЫЙ⚡ § 27",
+        "🇷🇺Россия19 | БЫСТРЫЙ⚡ § 28",
+        "🇩🇪Германия | СВЯЗЬ📱 § 29",
+        "🇩🇪Германия2 | СВЯЗЬ📱 § 30",
+        "🇩🇪Германия3 | СВЯЗЬ📱 § 31",
+        "🇩🇪Германия4 | СВЯЗЬ📱 § 32",
+        "🇩🇪Германия5 | СВЯЗЬ📱 § 33",
+        "🇩🇪Германия6 | БЫСТРЫЙ⚡ § 34",
+        "🇩🇪Германия7 | БЫСТРЫЙ⚡ § 35",
+        "🇩🇪Германия8 | БЫСТРЫЙ⚡ § 36",
+        "🇩🇪Германия9 | БЫСТРЫЙ⚡ § 37",
+        "🇩🇪Германия10 | БЫСТРЫЙ⚡ § 38",
+        "🇳🇱Нидерланды | СВЯЗЬ📱 § 39",
+        "🇳🇱Нидерланды2 | СВЯЗЬ📱 § 40",
+        "🇳🇱Нидерланды3 | СВЯЗЬ📱 § 41",
+        "🇳🇱Нидерланды4 | БЫСТРЫЙ⚡ § 42",
+        "🇳🇱Нидерланды5 | БЫСТРЫЙ⚡ § 43",
+        "🇳🇱Нидерланды6 | БЫСТРЫЙ⚡ § 44",
+        "🇨🇾Кипр | БЫСТРЫЙ⚡ § 45",
+        "🇨🇾Кипр2 | БЫСТРЫЙ⚡ § 46",
+        "🇪🇸Испания | БЫСТРЫЙ⚡ § 47",
+        "🇪🇸Испания2 | БЫСТРЫЙ⚡ § 48",
+        "🇯🇵Япония | БЫСТРЫЙ⚡ § 49",
+        "🇯🇵Япония2 | БЫСТРЫЙ⚡ § 50",
+        "🇯🇵Япония3 | БЫСТРЫЙ⚡ § 51",
+        "🇯🇵Япония4 | БЫСТРЫЙ⚡ § 52",
+        "🇨🇳Китай | БЫСТРЫЙ⚡ § 53",
+        "🇨🇳Китай2 | БЫСТРЫЙ⚡ § 54",
+        "🇲🇩Молдова | БЫСТРЫЙ⚡ § 55",
+        "🇲🇩Молдова2 | БЫСТРЫЙ⚡ § 56",
+        "🇸🇪Швеция | БЫСТРЫЙ⚡ § 57",
+        "🇸🇪Швеция2 | БЫСТРЫЙ⚡ § 58",
+        "🇸🇪Швеция3 | БЫСТРЫЙ⚡ § 59",
+        "🇫🇷Франция | БЫСТРЫЙ⚡ § 60",
+        "🇫🇷Франция2 | БЫСТРЫЙ⚡ § 61",
+        "🇪🇪Эстония | БЫСТРЫЙ⚡ § 62",
+        "🇪🇪Эстония2 | БЫСТРЫЙ⚡ § 63",
+        "🇫🇮Финляндия | БЫСТРЫЙ⚡ § 64",
+        "🇫🇮Финляндия2 | БЫСТРЫЙ⚡ § 65",
+        "🇭🇺Венгрия | СВЯЗЬ📱 § 66",
+        "🇦🇶Антарктида | БЫСТРЫЙ⚡ § 67",
+        "🇻🇳Вьетнам | БЫСТРЫЙ⚡ § 68",
+        "🇹🇷Турция | БЫСТРЫЙ⚡ § 69",
+        "🇦🇪ОАЭ | БЫСТРЫЙ⚡ § 70",
+        "🇧🇾Беларусь | БЫСТРЫЙ⚡ § 71",
+        "🇳🇴Норвегия | БЫСТРЫЙ⚡ § 72",
+        "🇮🇸Исландия | БЫСТРЫЙ⚡ § 73",
+        "🇦🇱Албания | БЫСТРЫЙ⚡ § 74",
+        "🇨🇭Швейцария | БЫСТРЫЙ⚡ § 75",
+        "🇧🇪Бельгия | БЫСТРЫЙ⚡ § 76",
+        "🇭🇷Хорватия | БЫСТРЫЙ⚡ § 77",
+        "🇮🇹Италия | БЫСТРЫЙ⚡ § 78",
+        "🇱🇻Латвия | БЫСТРЫЙ⚡ § 79",
+        "🇧🇷Бразилия | БЫСТРЫЙ⚡ § 80",
+        "🇺🇦Украина | БЫСТРЫЙ⚡ § 81",
+        "🇪🇬Египет | БЫСТРЫЙ⚡ § 82",
+        "🇦🇷Аргентина | БЫСТРЫЙ⚡ § 83",
+        "🇳🇬Нигерия | БЫСТРЫЙ⚡ § 84",
+        "🇰🇿Казахстан | БЫСТРЫЙ⚡ § 85",
+        "🇺🇸США | БЫСТРЫЙ⚡ § 86",
+        "🇬🇷Греция | БЫСТРЫЙ⚡ § 87"
+      ],
+      "tolerance": 1,
+      "interrupt_exist_connections": true,
+      "strategy": "round-robin",
+      "delay_acceptable_ratio": 2
+    },
+    {
+      "type": "balancer",
+      "tag": "lowest",
+      "outbounds": [
+        "🇵🇱Польша | СВЯЗЬ📱 § 0",
+        "🇵🇱Польша2 | СВЯЗЬ📱 § 1",
+        "🇵🇱Польша3 | СВЯЗЬ📱 § 2",
+        "🇵🇱Польша4 | СВЯЗЬ📱 § 3",
+        "🇵🇱Польша5 | СВЯЗЬ📱 § 4",
+        "🇵🇱Польша6 | СВЯЗЬ📱 § 5",
+        "🇵🇱Польша7 | СВЯЗЬ📱 § 6",
+        "🇵🇱Польша8 | СВЯЗЬ📱 § 7",
+        "🇵🇱Польша9 | БЫСТРЫЙ⚡ § 8",
+        "🇵🇱Польша10 | БЫСТРЫЙ⚡ § 9",
+        "🇷🇺Россия | СВЯЗЬ📱 § 10",
+        "🇷🇺Россия2 | СВЯЗЬ📱 § 11",
+        "🇷🇺Россия3 | СВЯЗЬ📱 § 12",
+        "🇷🇺Россия4 | СВЯЗЬ📱 § 13",
+        "🇷🇺Россия5 | СВЯЗЬ📱 § 14",
+        "🇷🇺Россия6 | СВЯЗЬ📱 § 15",
+        "🇷🇺Россия7 | СВЯЗЬ📱 § 16",
+        "🇷🇺Россия8 | СВЯЗЬ📱 § 17",
+        "🇷🇺Россия9 | СВЯЗЬ📱 § 18",
+        "🇷🇺Россия10 | СВЯЗЬ📱 § 19",
+        "🇷🇺Россия11 | СВЯЗЬ📱 § 20",
+        "🇷🇺Россия12 | СВЯЗЬ📱 § 21",
+        "🇷🇺Россия13 | СВЯЗЬ📱 § 22",
+        "🇷🇺Россия14 | БЫСТРЫЙ⚡ § 23",
+        "🇷🇺Россия15 | БЫСТРЫЙ⚡ § 24",
+        "🇷🇺Россия16 | БЫСТРЫЙ⚡ § 25",
+        "🇷🇺Россия17 | БЫСТРЫЙ⚡ § 26",
+        "🇷🇺Россия18 | БЫСТРЫЙ⚡ § 27",
+        "🇷🇺Россия19 | БЫСТРЫЙ⚡ § 28",
+        "🇩🇪Германия | СВЯЗЬ📱 § 29",
+        "🇩🇪Германия2 | СВЯЗЬ📱 § 30",
+        "🇩🇪Германия3 | СВЯЗЬ📱 § 31",
+        "🇩🇪Германия4 | СВЯЗЬ📱 § 32",
+        "🇩🇪Германия5 | СВЯЗЬ📱 § 33",
+        "🇩🇪Германия6 | БЫСТРЫЙ⚡ § 34",
+        "🇩🇪Германия7 | БЫСТРЫЙ⚡ § 35",
+        "🇩🇪Германия8 | БЫСТРЫЙ⚡ § 36",
+        "🇩🇪Германия9 | БЫСТРЫЙ⚡ § 37",
+        "🇩🇪Германия10 | БЫСТРЫЙ⚡ § 38",
+        "🇳🇱Нидерланды | СВЯЗЬ📱 § 39",
+        "🇳🇱Нидерланды2 | СВЯЗЬ📱 § 40",
+        "🇳🇱Нидерланды3 | СВЯЗЬ📱 § 41",
+        "🇳🇱Нидерланды4 | БЫСТРЫЙ⚡ § 42",
+        "🇳🇱Нидерланды5 | БЫСТРЫЙ⚡ § 43",
+        "🇳🇱Нидерланды6 | БЫСТРЫЙ⚡ § 44",
+        "🇨🇾Кипр | БЫСТРЫЙ⚡ § 45",
+        "🇨🇾Кипр2 | БЫСТРЫЙ⚡ § 46",
+        "🇪🇸Испания | БЫСТРЫЙ⚡ § 47",
+        "🇪🇸Испания2 | БЫСТРЫЙ⚡ § 48",
+        "🇯🇵Япония | БЫСТРЫЙ⚡ § 49",
+        "🇯🇵Япония2 | БЫСТРЫЙ⚡ § 50",
+        "🇯🇵Япония3 | БЫСТРЫЙ⚡ § 51",
+        "🇯🇵Япония4 | БЫСТРЫЙ⚡ § 52",
+        "🇨🇳Китай | БЫСТРЫЙ⚡ § 53",
+        "🇨🇳Китай2 | БЫСТРЫЙ⚡ § 54",
+        "🇲🇩Молдова | БЫСТРЫЙ⚡ § 55",
+        "🇲🇩Молдова2 | БЫСТРЫЙ⚡ § 56",
+        "🇸🇪Швеция | БЫСТРЫЙ⚡ § 57",
+        "🇸🇪Швеция2 | БЫСТРЫЙ⚡ § 58",
+        "🇸🇪Швеция3 | БЫСТРЫЙ⚡ § 59",
+        "🇫🇷Франция | БЫСТРЫЙ⚡ § 60",
+        "🇫🇷Франция2 | БЫСТРЫЙ⚡ § 61",
+        "🇪🇪Эстония | БЫСТРЫЙ⚡ § 62",
+        "🇪🇪Эстония2 | БЫСТРЫЙ⚡ § 63",
+        "🇫🇮Финляндия | БЫСТРЫЙ⚡ § 64",
+        "🇫🇮Финляндия2 | БЫСТРЫЙ⚡ § 65",
+        "🇭🇺Венгрия | СВЯЗЬ📱 § 66",
+        "🇦🇶Антарктида | БЫСТРЫЙ⚡ § 67",
+        "🇻🇳Вьетнам | БЫСТРЫЙ⚡ § 68",
+        "🇹🇷Турция | БЫСТРЫЙ⚡ § 69",
+        "🇦🇪ОАЭ | БЫСТРЫЙ⚡ § 70",
+        "🇧🇾Беларусь | БЫСТРЫЙ⚡ § 71",
+        "🇳🇴Норвегия | БЫСТРЫЙ⚡ § 72",
+        "🇮🇸Исландия | БЫСТРЫЙ⚡ § 73",
+        "🇦🇱Албания | БЫСТРЫЙ⚡ § 74",
+        "🇨🇭Швейцария | БЫСТРЫЙ⚡ § 75",
+        "🇧🇪Бельгия | БЫСТРЫЙ⚡ § 76",
+        "🇭🇷Хорватия | БЫСТРЫЙ⚡ § 77",
+        "🇮🇹Италия | БЫСТРЫЙ⚡ § 78",
+        "🇱🇻Латвия | БЫСТРЫЙ⚡ § 79",
+        "🇧🇷Бразилия | БЫСТРЫЙ⚡ § 80",
+        "🇺🇦Украина | БЫСТРЫЙ⚡ § 81",
+        "🇪🇬Египет | БЫСТРЫЙ⚡ § 82",
+        "🇦🇷Аргентина | БЫСТРЫЙ⚡ § 83",
+        "🇳🇬Нигерия | БЫСТРЫЙ⚡ § 84",
+        "🇰🇿Казахстан | БЫСТРЫЙ⚡ § 85",
+        "🇺🇸США | БЫСТРЫЙ⚡ § 86",
+        "🇬🇷Греция | БЫСТРЫЙ⚡ § 87"
+      ],
+      "tolerance": 1,
+      "interrupt_exist_connections": true,
+      "strategy": "lowest-delay",
+      "delay_acceptable_ratio": 2
+    },
+    {
+      "type": "vless",
+      "tag": "🇵🇱Польша | СВЯЗЬ📱 § 0",
+      "server": "158.160.166.9",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "ads.x5.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇵🇱Польша2 | СВЯЗЬ📱 § 1",
+      "server": "158.160.166.9",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "ads.x5.ru",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "6b2f4e6ac9b1d2f0"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇵🇱Польша3 | СВЯЗЬ📱 § 2",
+      "server": "84.201.141.97",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "ads.x5.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇵🇱Польша4 | СВЯЗЬ📱 § 3",
+      "server": "84.201.141.97",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "sun6-22.userapi.com",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "6b2f4e6ac9b1d2f0"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇵🇱Польша5 | СВЯЗЬ📱 § 4",
+      "server": "87.239.104.97",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "tworecord.speedload.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇵🇱Польша6 | СВЯЗЬ📱 § 5",
+      "server": "109.120.190.146",
+      "server_port": 8443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "threerecord.speedload.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇵🇱Польша7 | СВЯЗЬ📱 § 6",
+      "server": "109.120.191.129",
+      "server_port": 8443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "onerecord.speedload.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇵🇱Польша8 | СВЯЗЬ📱 § 7",
+      "server": "79.174.95.188",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "magic.speedload.ru",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇵🇱Польша9 | БЫСТРЫЙ⚡ § 8",
+      "server": "144.31.5.45",
+      "server_port": 7443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "polli.speedload.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇵🇱Польша10 | БЫСТРЫЙ⚡ § 9",
+      "server": "144.31.5.45",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "polli.speedload.online",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "6b2f4e6ac9b1d2f0"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия | СВЯЗЬ📱 § 10",
+      "server": "51.250.86.198",
+      "server_port": 7443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "ads.x5.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия2 | СВЯЗЬ📱 § 11",
+      "server": "84.201.163.193",
+      "server_port": 7443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "io.ozone.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия3 | СВЯЗЬ📱 § 12",
+      "server": "84.201.163.193",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "io.ozone.ru",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "6b2f4e6ac9b1d2f0"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия4 | СВЯЗЬ📱 § 13",
+      "server": "84.201.163.193",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "eh.vk.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇷🇺Россия5 | СВЯЗЬ📱 § 14",
+      "server": "5.188.115.131",
+      "server_port": 8443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "magic.speedload.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия6 | СВЯЗЬ📱 § 15",
+      "server": "84.38.181.104",
+      "server_port": 8090,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "eh.vk.com",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "6b2f4e6ac9b1d2f0"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия7 | СВЯЗЬ📱 § 16",
+      "server": "5.53.125.192",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "eh.vk.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия8 | СВЯЗЬ📱 § 17",
+      "server": "151.236.114.215",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "media.mediavitrina.ru",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "lCwVDvngXM3kLz86XpOJmZ46coOVaV7Kl7vB7cCPeQI",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия9 | СВЯЗЬ📱 § 18",
+      "server": "37.18.15.239",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "media.mediavitrina.ru",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "lCwVDvngXM3kLz86XpOJmZ46coOVaV7Kl7vB7cCPeQI",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия10 | СВЯЗЬ📱 § 19",
+      "server": "78.159.250.173",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "media.mediavitrina.ru",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "lCwVDvngXM3kLz86XpOJmZ46coOVaV7Kl7vB7cCPeQI",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия11 | СВЯЗЬ📱 § 20",
+      "server": "78.159.240.196",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "media.mediavitrina.ru",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "lCwVDvngXM3kLz86XpOJmZ46coOVaV7Kl7vB7cCPeQI",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия12 | СВЯЗЬ📱 § 21",
+      "server": "78.159.245.35",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "media.mediavitrina.ru",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "lCwVDvngXM3kLz86XpOJmZ46coOVaV7Kl7vB7cCPeQI",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇷🇺Россия13 | СВЯЗЬ📱 § 22",
+      "server": "46.8.209.152",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "cont.rushtaxi.ru",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия14 | БЫСТРЫЙ⚡ § 23",
+      "server": "92.63.97.191",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "sun6-21.userapi.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "5JkeRhrvxxdW7Y-jJNnvMUZ6W37yWegXl4-Ea-zl9BU",
+          "short_id": "89bee0f1e450d3cf"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия15 | БЫСТРЫЙ⚡ § 24",
+      "server": "176.12.71.182",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "sun6-21.userapi.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "tFOva4mDqw-noGSk4B5gdh4X4WhyXHs0eNxM3QogyE4",
+          "short_id": "f5563ddfa2847b32"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия16 | БЫСТРЫЙ⚡ § 25",
+      "server": "109.172.115.71",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "sun6-21.userapi.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "H6Ka1r2xZnRf29vhxygofvtwGD2KelEFcYHKXTEt2wk",
+          "short_id": "d87a6ae332fd4d2d"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия17 | БЫСТРЫЙ⚡ § 26",
+      "server": "155.212.164.103",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "sun6-21.userapi.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "VtTa1_wXkB9yxDN5p-DIXq-jC5bcnQM_62fYfFLuX04",
+          "short_id": "7f9eb0824a7dbef7"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия18 | БЫСТРЫЙ⚡ § 27",
+      "server": "149.154.64.31",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "sun6-21.userapi.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "VsFcOuqknetiqOCyyUJRQ_yzu0S-PfZ7ZSap2iZnyCA",
+          "short_id": "1c17fc2737fd1064"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇷🇺Россия19 | БЫСТРЫЙ⚡ § 28",
+      "server": "82.146.43.242",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "rutwo.serserstats.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇩🇪Германия | СВЯЗЬ📱 § 29",
+      "server": "51.250.46.241",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "ads.x5.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇩🇪Германия2 | СВЯЗЬ📱 § 30",
+      "server": "51.250.46.241",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "ads.x5.ru",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "6b2f4e6ac9b1d2f0"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇩🇪Германия3 | СВЯЗЬ📱 § 31",
+      "server": "84.201.175.72",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "ads.x5.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇩🇪Германия4 | СВЯЗЬ📱 § 32",
+      "server": "84.201.175.72",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "ads.x5.ru",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "6b2f4e6ac9b1d2f0"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇩🇪Германия5 | СВЯЗЬ📱 § 33",
+      "server": "37.9.4.138",
+      "server_port": 8443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "speed.overload.ovh",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇩🇪Германия6 | БЫСТРЫЙ⚡ § 34",
+      "server": "45.145.40.61",
+      "server_port": 7443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "speed.overload.ovh",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "lCwVDvngXM3kLz86XpOJmZ46coOVaV7Kl7vB7cCPeQI",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇩🇪Германия7 | БЫСТРЫЙ⚡ § 35",
+      "server": "109.122.196.60",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "detwo.serverstats.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇩🇪Германия8 | БЫСТРЫЙ⚡ § 36",
+      "server": "178.17.49.85",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "deone.serverstats.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇩🇪Германия9 | БЫСТРЫЙ⚡ § 37",
+      "server": "213.176.78.162",
+      "server_port": 8443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "dews.serverstats.ru",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇩🇪Германия10 | БЫСТРЫЙ⚡ § 38",
+      "server": "178.72.141.108",
+      "server_port": 7443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "rumost.overload.ovh",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇳🇱Нидерланды | СВЯЗЬ📱 § 39",
+      "server": "178.154.219.134",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "ads.x5.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇳🇱Нидерланды2 | СВЯЗЬ📱 § 40",
+      "server": "178.154.219.134",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "ads.x5.ru",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "6b2f4e6ac9b1d2f0"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇳🇱Нидерланды3 | СВЯЗЬ📱 § 41",
+      "server": "62.152.59.194",
+      "server_port": 8443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "plreverse.fastload.site",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇳🇱Нидерланды4 | БЫСТРЫЙ⚡ § 42",
+      "server": "50.7.95.187",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "gotraf.nodesecure.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "2PTRgqqGEOXjMP22yFAIMJX4kHhMyftYok2y4K7YrRk",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇳🇱Нидерланды5 | БЫСТРЫЙ⚡ § 43",
+      "server": "50.7.95.187",
+      "server_port": 8090,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "gotraf.nodesecure.ru",
+        "alpn": "http/1.1",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/ws",
+        "headers": {
+          "Host": "gotraf.nodesecure.ru"
+        },
+        "early_data_header_name": "Sec-WebSocket-Protocol"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇳🇱Нидерланды6 | БЫСТРЫЙ⚡ § 44",
+      "server": "72.57.78.174",
+      "server_port": 8443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "neth.speedload.ru",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇨🇾Кипр | БЫСТРЫЙ⚡ § 45",
+      "server": "144.31.1.182",
+      "server_port": 8443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "cypr.speedload.online",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇨🇾Кипр2 | БЫСТРЫЙ⚡ § 46",
+      "server": "144.31.1.182",
+      "server_port": 9443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "cypr.speedload.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "2PTRgqqGEOXjMP22yFAIMJX4kHhMyftYok2y4K7YrRk",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇪🇸Испания | БЫСТРЫЙ⚡ § 47",
+      "server": "144.31.50.114",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "sp.federal-usa.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇪🇸Испания2 | БЫСТРЫЙ⚡ § 48",
+      "server": "144.31.50.114",
+      "server_port": 7443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "sp.federal-usa.com",
+        "alpn": "http/1.1",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "android"
+        }
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/ws",
+        "headers": {
+          "Host": "sp.federal-usa.com"
+        },
+        "early_data_header_name": "Sec-WebSocket-Protocol"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇯🇵Япония | БЫСТРЫЙ⚡ § 49",
+      "server": "144.31.50.115",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "jp.federal-usa.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇯🇵Япония2 | БЫСТРЫЙ⚡ § 50",
+      "server": "144.31.50.115",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "jp.federal-usa.com",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇯🇵Япония3 | БЫСТРЫЙ⚡ § 51",
+      "server": "2.27.27.81",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "japp.speedload.online",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇯🇵Япония4 | БЫСТРЫЙ⚡ § 52",
+      "server": "147.45.49.53",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "jap.fastload.site",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇨🇳Китай | БЫСТРЫЙ⚡ § 53",
+      "server": "144.31.50.117",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "ch.federal-usa.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇨🇳Китай2 | БЫСТРЫЙ⚡ § 54",
+      "server": "144.31.50.117",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "ch.federal-usa.com",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇲🇩Молдова | БЫСТРЫЙ⚡ § 55",
+      "server": "144.31.1.137",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "mold.speedload.online",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "safari"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇲🇩Молдова2 | БЫСТРЫЙ⚡ § 56",
+      "server": "144.31.1.137",
+      "server_port": 8090,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "tls": {
+        "enabled": true,
+        "server_name": "mold.speedload.online",
+        "alpn": "h2",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "safari"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "6b2f4e6ac9b1d2f0"
+        }
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc",
+        "idle_timeout": "15s",
+        "ping_timeout": "15s"
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇸🇪Швеция | БЫСТРЫЙ⚡ § 57",
+      "server": "130.49.190.10",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "swedd.fastload.site",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇸🇪Швеция2 | БЫСТРЫЙ⚡ § 58",
+      "server": "178.20.211.215",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "reserve.ayagut.ovh",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇸🇪Швеция3 | БЫСТРЫЙ⚡ § 59",
+      "server": "144.31.107.73",
+      "server_port": 4249,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "swe.serverstats.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇫🇷Франция | БЫСТРЫЙ⚡ § 60",
+      "server": "151.243.217.63",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "fra.fastload.site",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇫🇷Франция2 | БЫСТРЫЙ⚡ § 61",
+      "server": "144.31.107.73",
+      "server_port": 2443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "fr.serverstats.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇪🇪Эстония | БЫСТРЫЙ⚡ § 62",
+      "server": "23.230.179.168",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "eh.vk.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J2yJCkBI-GDKHgH0OuRP0Bm0aqZ8qL_fXhITn4titAg",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇪🇪Эстония2 | БЫСТРЫЙ⚡ § 63",
+      "server": "82.47.22.214",
+      "server_port": 4249,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "est.speedload.ru",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇫🇮Финляндия | БЫСТРЫЙ⚡ § 64",
+      "server": "109.120.184.7",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "flone.nice-chat.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇫🇮Финляндия2 | БЫСТРЫЙ⚡ § 65",
+      "server": "109.120.184.52",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "flfive.nice-chat.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇭🇺Венгрия | СВЯЗЬ📱 § 66",
+      "server": "217.13.104.196",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "sun6-22.userapi.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "-cDQPpiRCwOtfQ22cdCd3NkDlqpubdklZXaFGhwUfS8",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇦🇶Антарктида | БЫСТРЫЙ⚡ § 67",
+      "server": "144.31.50.116",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "ant.federal-usa.com",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇻🇳Вьетнам | БЫСТРЫЙ⚡ § 68",
+      "server": "144.31.50.117",
+      "server_port": 9443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "viet.federal-usa.com",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇹🇷Турция | БЫСТРЫЙ⚡ § 69",
+      "server": "144.31.131.251",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "tur.fastload.site",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇦🇪ОАЭ | БЫСТРЫЙ⚡ § 70",
+      "server": "2.27.27.99",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "dub.speedload.online",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇧🇾Беларусь | БЫСТРЫЙ⚡ § 71",
+      "server": "144.31.131.8",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "bel.speedload.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇳🇴Норвегия | БЫСТРЫЙ⚡ § 72",
+      "server": "2.27.27.196",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "norw.speedload.online",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇮🇸Исландия | БЫСТРЫЙ⚡ § 73",
+      "server": "2.27.27.233",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "ice.speedload.online",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇦🇱Албания | БЫСТРЫЙ⚡ § 74",
+      "server": "144.31.131.44",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "alb.speedload.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇨🇭Швейцария | БЫСТРЫЙ⚡ § 75",
+      "server": "45.143.200.195",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "shve.fastload.site",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇧🇪Бельгия | БЫСТРЫЙ⚡ § 76",
+      "server": "113.30.152.110",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "brus.speedload.online",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇭🇷Хорватия | БЫСТРЫЙ⚡ § 77",
+      "server": "5.181.2.26",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "xor.speedload.online",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇮🇹Италия | БЫСТРЫЙ⚡ § 78",
+      "server": "151.241.215.169",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "itl.fastload.site",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇱🇻Латвия | БЫСТРЫЙ⚡ § 79",
+      "server": "62.60.234.102",
+      "server_port": 7443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "lat.fastload.site",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      }
+    },
+    {
+      "type": "trojan",
+      "tag": "🇧🇷Бразилия | БЫСТРЫЙ⚡ § 80",
+      "server": "91.224.75.82",
+      "server_port": 7454,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "braz.serverstats.ru",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "🇺🇦Украина | БЫСТРЫЙ⚡ § 81",
+      "server": "91.224.75.82",
+      "server_port": 7444,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "ua.overload.ovh",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇪🇬Египет | БЫСТРЫЙ⚡ § 82",
+      "server": "91.224.75.82",
+      "server_port": 6442,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "eg.speedload.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇦🇷Аргентина | БЫСТРЫЙ⚡ § 83",
+      "server": "91.224.75.82",
+      "server_port": 6441,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "arg.speedload.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇳🇬Нигерия | БЫСТРЫЙ⚡ § 84",
+      "server": "91.224.75.82",
+      "server_port": 6440,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "ng.speedload.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇰🇿Казахстан | БЫСТРЫЙ⚡ § 85",
+      "server": "185.125.46.134",
+      "server_port": 8443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "kzt.overload.ovh",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "J5ITJbg5FQFembAfkogKHHQB6DigsFXQxK7xu-QMWUs",
+          "short_id": "a20d3ed244c76426"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "vless",
+      "tag": "🇺🇸США | БЫСТРЫЙ⚡ § 86",
+      "server": "77.110.127.237",
+      "server_port": 443,
+      "uuid": "5ef9910a-bc23-4ae5-af57-6c0eba102932",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "usa.speedload.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "PJpzVbj0GtXk1whLlAYnmj6Xc5ZWJwrl8We8aBtMS3c",
+          "short_id": "0b5dcf0244a7cbf1"
+        }
+      },
+      "packet_encoding": "xudp"
+    },
+    {
+      "type": "trojan",
+      "tag": "🇬🇷Греция | БЫСТРЫЙ⚡ § 87",
+      "server": "217.12.204.110",
+      "server_port": 8443,
+      "password": "S-vzSnUwN0B5w-LRqXksHW3CL5MyUYrZ",
+      "tls": {
+        "enabled": true,
+        "server_name": "gr.serverstats.ru",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      }
+    },
+    {
+      "type": "direct",
+      "tag": "direct §hide§"
+    },
+    {
+      "type": "direct",
+      "tag": "direct-fragment §hide§",
+      "tls_fragment": {
+        "enabled": true,
+        "size": "10-30",
+        "sleep": "2-8"
+      }
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "ip_cidr": [
+          "10.10.34.0/24",
+          "2001:4188:2:600:10:10:34:0/120"
+        ],
+        "outbound": "select"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct §hide§"
+      },
+      {
+        "domain_suffix": [
+          "ya.ru",
+          "yandex.ru",
+          "yandex.net",
+          "yastatic.net",
+          "wildberries.ru",
+          "wb.ru",
+          "wbbasket.ru",
+          "wbstatic.net",
+          "wbcontent.net",
+          "rwb.ru",
+          "wibes.ru"
+        ],
+        "outbound": "select"
+      },
+      {
+        "domain_suffix": ".ru",
+        "outbound": "direct §hide§"
+      },
+      {
+        "rule_set": [
+          "geoip-ru",
+          "geosite-ru"
+        ],
+        "outbound": "direct §hide§"
+      }
+    ],
+    "rule_set": [
+      {
+        "type": "remote",
+        "tag": "geoip-ru",
+        "url": "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/country/geoip-ru.srs",
+        "download_detour": "select",
+        "update_interval": "120h0m0s"
+      },
+      {
+        "type": "remote",
+        "tag": "geosite-ru",
+        "url": "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/country/geosite-ru.srs",
+        "download_detour": "select",
+        "update_interval": "120h0m0s"
+      }
+    ],
+    "final": "select",
+    "default_domain_resolver": "dns-direct"
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true,
+      "path": "data/clash.db",
+      "store_warp_config": true
+    },
+    "clash_api": {
+      "external_controller": "127.0.0.1:16756",
+      "secret": "epGWafQ957gbh-Tw"
+    },
+    "unified_delay": {
+      "enabled": true
+    },
+    "monitoring": {
+      "interval": "3m0s",
+      "urls": [
+        "https://1.1.1.1",
+        "https://zeon-vps.link/generate_204",
+        "http://captive.apple.com/generate_204",
+        "https://cp.cloudflare.com",
+        "https://google.com/generate_204"
+      ],
+      "debounce_window": "500ms",
+      "idle_timeout": "9m0s"
+    }
+  }
+}

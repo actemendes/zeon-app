@@ -151,6 +151,12 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
         if (a.isGroup && !b.isGroup) return -1;
         if (!a.isGroup && b.isGroup) return 1;
 
+        final aScore = a.healthScore;
+        final bScore = b.healthScore;
+        if (aScore > 0 || bScore > 0) {
+          if (a.success != b.success) return a.success ? -1 : 1;
+          if (aScore != bScore) return bScore.compareTo(aScore);
+        }
         final ai = a.urlTestDelay;
         final bi = b.urlTestDelay;
         if (ai == 0 && bi == 0) return -1;

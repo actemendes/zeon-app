@@ -139,7 +139,7 @@ func (s *URLTest) DialContext(ctx context.Context, network string, destination M
 		return s.group.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
 	s.logger.ErrorContext(ctx, err)
-	s.group.history.DeleteURLTestHistory(outbound.Tag())
+	s.group.history.StoreURLTestHistory(outbound.Tag(), urltest.NewURLTestHistory(0, err, 0))
 	return nil, err
 }
 
@@ -157,7 +157,7 @@ func (s *URLTest) ListenPacket(ctx context.Context, destination M.Socksaddr) (ne
 		return s.group.interruptGroup.NewPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
 	s.logger.ErrorContext(ctx, err)
-	s.group.history.DeleteURLTestHistory(outbound.Tag())
+	s.group.history.StoreURLTestHistory(outbound.Tag(), urltest.NewURLTestHistory(0, err, 0))
 	return nil, err
 }
 
@@ -390,13 +390,10 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 			t, err := urltest.URLTest(testCtx, g.link, p)
 			if err != nil {
 				g.logger.Debug("outbound ", tag, " unavailable: ", err)
-				g.history.DeleteURLTestHistory(realTag)
+				g.history.StoreURLTestHistory(realTag, urltest.NewURLTestHistory(0, err, 0))
 			} else {
 				g.logger.Debug("outbound ", tag, " available: ", t, "ms")
-				g.history.StoreURLTestHistory(realTag, &adapter.URLTestHistory{
-					Time:  time.Now(),
-					Delay: t,
-				})
+				g.history.StoreURLTestHistory(realTag, urltest.NewURLTestHistory(t, nil, 0))
 				resultAccess.Lock()
 				result[tag] = t
 				resultAccess.Unlock()

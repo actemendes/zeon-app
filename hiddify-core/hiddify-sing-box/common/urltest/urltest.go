@@ -47,8 +47,11 @@ func (s *HistoryStorage) LoadURLTestHistory(tag string) *adapter.URLTestHistory 
 
 func (s *HistoryStorage) DeleteURLTestHistory(tag string) {
 	s.StoreURLTestHistory(tag, &adapter.URLTestHistory{
-		Delay: 65535,
-		Time:  time.Now(),
+		Delay:       65535,
+		Time:        time.Now(),
+		Success:     false,
+		ErrorType:   ErrorTypeUnknown,
+		HealthScore: 0,
 	})
 	// s.access.Lock()
 	// // delete(s.delayHistory, tag)
@@ -59,8 +62,7 @@ func (s *HistoryStorage) DeleteURLTestHistory(tag string) {
 func (s *HistoryStorage) StoreURLTestHistory(tag string, history *adapter.URLTestHistory) *adapter.URLTestHistory {
 	s.access.Lock()
 	if old, ok := s.delayHistory[tag]; ok && history != nil {
-		old.Delay = history.Delay
-		old.Time = history.Time
+		mergeURLTestHistory(old, history)
 		if history.IpInfo != nil {
 			old.IpInfo = history.IpInfo
 		}
@@ -71,6 +73,22 @@ func (s *HistoryStorage) StoreURLTestHistory(tag string, history *adapter.URLTes
 	s.access.Unlock()
 	s.notifyUpdated()
 	return history
+}
+
+func mergeURLTestHistory(old *adapter.URLTestHistory, history *adapter.URLTestHistory) {
+	old.Delay = history.Delay
+	old.Time = history.Time
+	old.IsFromCache = history.IsFromCache
+	old.Success = history.Success
+	old.ErrorType = history.ErrorType
+	old.ErrorText = history.ErrorText
+	old.HealthScore = history.HealthScore
+	old.RuntimePenalty = history.RuntimePenalty
+	old.FreshnessPenalty = history.FreshnessPenalty
+	old.UDPProbeAvailable = history.UDPProbeAvailable
+	old.UDPPenalty = history.UDPPenalty
+	old.UDPLoss = history.UDPLoss
+	old.UDPJitterMs = history.UDPJitterMs
 }
 
 func (s *HistoryStorage) AddOnlyIpToHistory(tag string, history *adapter.URLTestHistory) {

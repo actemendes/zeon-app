@@ -14,7 +14,9 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
+	healthmonitoring "github.com/sagernet/sing-box/common/monitoring"
 	"github.com/sagernet/sing-box/common/tlsfragment"
+	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
@@ -259,6 +261,7 @@ func (m *ConnectionManager) preConnectionCopy(ctx context.Context, source net.Co
 			} else {
 				m.logger.ErrorContext(ctx, "connection download handshake: ", err)
 			}
+			m.recordRuntimePenalty(ctx, err, true)
 			return
 		}
 	}
@@ -323,6 +326,7 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 			m.logger.DebugContext(ctx, "connection upload finished")
 		} else if !E.IsClosedOrCanceled(err) && !strings.Contains(err.Error(), "NO_ERROR") {
 			m.logger.ErrorContext(ctx, "connection upload closed: ", err)
+			m.recordRuntimePenalty(ctx, err, true)
 		} else {
 			m.logger.TraceContext(ctx, "connection upload closed")
 		}
@@ -331,6 +335,7 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 			m.logger.DebugContext(ctx, "connection download finished")
 		} else if !E.IsClosedOrCanceled(err) && !strings.Contains(err.Error(), "NO_ERROR") && !strings.Contains(err.Error(), "response body closed") {
 			m.logger.ErrorContext(ctx, "connection download closed: ", err)
+			m.recordRuntimePenalty(ctx, err, true)
 		} else {
 			m.logger.TraceContext(ctx, "connection download closed")
 		}
@@ -376,6 +381,23 @@ func (m *ConnectionManager) connectionCopyEarlyWrite(source net.Conn, destinatio
 		return io.EOF
 	}
 	return nil
+}
+
+func (m *ConnectionManager) recordRuntimePenalty(ctx context.Context, err error, strict bool) {
+	if err == nil {
+		return
+	}
+	metadata := adapter.ContextFrom(ctx)
+	if metadata == nil || metadata.GetRealOutbound() == "" {
+		return
+	}
+	errorType, _ := urltest.ClassifyProbeError(err)
+	if !urltest.ShouldApplyRuntimePenalty(errorType, strict) {
+		return
+	}
+	if monitor := healthmonitoring.Get(ctx); monitor != nil {
+		monitor.RecordRuntimeError(metadata.GetRealOutbound(), err)
+	}
 }
 
 func (m *ConnectionManager) packetConnectionCopy(ctx context.Context, source N.PacketReader, destination N.PacketWriter, direction bool, done *atomic.Bool, onClose N.CloseHandlerFunc) {

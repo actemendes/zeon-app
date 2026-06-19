@@ -823,8 +823,18 @@ class HiddifyCoreService with InfraLogger {
             final roll = random.nextInt(100);
             if (roll < 8) {
               item.urlTestDelay = 65001;
+              item.success = false;
+              item.errorType = 'timeout';
+              item.healthScore = 20;
             } else {
               item.urlTestDelay = 80 + random.nextInt(260);
+              item.success = true;
+              item.errorType = 'none';
+              item.healthScore = item.urlTestDelay < 150 ? 90 : 75;
+              item.udpProbeAvailable = roll % 3 == 0;
+              item.udpLoss = item.udpProbeAvailable ? random.nextInt(6).toDouble() : 0;
+              item.udpJitterMs = item.udpProbeAvailable ? 8 + random.nextInt(45) : 0;
+              item.udpPenalty = item.udpProbeAvailable && item.udpLoss > 3 ? 4 : 0;
             }
           }
         }

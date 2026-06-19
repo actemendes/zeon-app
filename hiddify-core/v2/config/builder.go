@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	sync "sync"
@@ -406,13 +407,35 @@ func setExperimental(options *option.Options, hopt *HiddifyOptions) {
 			},
 
 			Monitoring: &option.MonitoringOptions{
-				URLs:           hopt.ConnectionTestUrls,
-				Interval:       badoption.Duration(hopt.URLTestInterval.Duration()),
-				DebounceWindow: badoption.Duration(time.Millisecond * 500),
-				IdleTimeout:    badoption.Duration(hopt.URLTestInterval.Duration().Nanoseconds() * 3),
+				URLs:             hopt.ConnectionTestUrls,
+				Interval:         badoption.Duration(hopt.URLTestInterval.Duration()),
+				DebounceWindow:   badoption.Duration(time.Millisecond * 500),
+				IdleTimeout:      badoption.Duration(hopt.URLTestInterval.Duration().Nanoseconds() * 3),
+				UDPProbeEnabled:  hopt.UDPProbeEnabled || parseEnvBool("ZEON_UDP_PROBE_ENABLED"),
+				UDPProbeEndpoint: envOrDefault("ZEON_UDP_PROBE_ENDPOINT", hopt.UDPProbeEndpoint),
+				UDPProbeSecret:   envOrDefault("ZEON_UDP_PROBE_SECRET", hopt.UDPProbeSecret),
+				UDPProbeCount:    hopt.UDPProbeCount,
+				UDPProbeSize:     hopt.UDPProbeSize,
+				UDPProbeInterval: badoption.Duration(time.Duration(hopt.UDPProbeIntervalMs) * time.Millisecond),
+				UDPProbeTimeout:  badoption.Duration(time.Duration(hopt.UDPProbeTimeoutMs) * time.Millisecond),
+				UDPProbeCooldown: badoption.Duration(time.Duration(hopt.UDPProbeCooldownSec) * time.Second),
+				UDPProbeTopN:     hopt.UDPProbeTopN,
 			},
 		}
 	}
+}
+
+func parseEnvBool(key string) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	return value == "1" || value == "true" || value == "yes" || value == "on"
+}
+
+func envOrDefault(key string, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func setLog(options *option.Options, opt *HiddifyOptions) {

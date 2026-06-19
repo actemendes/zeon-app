@@ -6,13 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/urltest"
+	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -40,6 +43,10 @@ const (
 	defaultIdleTimeout    = 10 * time.Minute
 	defaultInterval       = 5 * time.Minute
 	defaultURLTest        = "https://www.gstatic.com/generate_204"
+	runtimePenaltyTTL     = 90 * time.Second
+	defaultUDPProbe       = "udp-probe.zeon-vps.link:8443"
+	defaultUDPProbeTopN   = 3
+	defaultUDPCooldown    = 60 * time.Second
 )
 
 // func RegisterService(registry *boxService.Registry) {
@@ -89,7 +96,21 @@ type OutboundMonitoring struct {
 	cycleSeq     uint64
 	cycleRunning atomic.Bool
 
+	runtimeAccess sync.Mutex
+	runtimeStats  map[string]*adapter.RuntimePenaltyStats
+
+	udpProbeEnabled  bool
+	udpProbeEndpoint string
+	udpProbeSecret   []byte
+	udpProbeOptions  urltest.UDPProbeOptions
+	udpProbeCooldown time.Duration
+	udpProbeTopN     int
+	udpProbeQueue    chan string
+	udpProbeAccess   sync.Mutex
+	udpProbeQueued   map[string]bool
+
 	workerWG    sync.WaitGroup
+	udpProbeWG  sync.WaitGroup
 	schedulerWG sync.WaitGroup
 	closerOnce  sync.Once
 }
@@ -141,6 +162,7 @@ func (m *OutboundMonitoring) getUrlTest(outboundTag string) *adapter.URLTestHist
 	his := state.history
 	his.IsFromCache = state.from_cache
 	state.mu.Unlock()
+	m.applyDynamicHealth(outboundTag, &his)
 	return &his
 
 }
@@ -160,18 +182,16 @@ func (m *OutboundMonitoring) getMinGroupOutboundHistory(groupTag string) *adapte
 		if !his.IsFromCache {
 			if minHis == nil {
 				minHis = his
-			} else if his.Delay < minHis.Delay {
-				minHis.Delay = his.Delay
-				minHis.IpInfo = his.IpInfo
+			} else if preferHistory(his, minHis) {
+				minHis = his
 			} else if minHis.IpInfo == nil {
 				minHis.IpInfo = his.IpInfo
 			}
 		} else {
 			if minHisFromCache == nil {
 				minHisFromCache = his
-			} else if his.Delay < minHisFromCache.Delay {
-				minHisFromCache.Delay = his.Delay
-				minHisFromCache.IpInfo = his.IpInfo
+			} else if preferHistory(his, minHisFromCache) {
+				minHisFromCache = his
 			} else if minHisFromCache.IpInfo == nil {
 				minHisFromCache.IpInfo = his.IpInfo
 			}
@@ -253,7 +273,11 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		normalQueue:   make(chan *testTask, 10000),
 		outbounds:     make(map[string]*outboundState),
 		groups:        make(map[string]*groupState),
+		runtimeStats:  make(map[string]*adapter.RuntimePenaltyStats),
+
+		udpProbeQueued: make(map[string]bool),
 	}
+	m.configureUDPProbe(options)
 
 	return m, nil
 }
@@ -310,6 +334,10 @@ func (m *OutboundMonitoring) Start(stage adapter.StartStage) error {
 		for i := 0; i < m.workersCount; i++ {
 			m.workerWG.Add(1)
 			go m.workerLoop()
+		}
+		if m.udpProbeEnabled {
+			m.udpProbeWG.Add(1)
+			go m.udpProbeLoop()
 		}
 		for groupTag := range m.groups {
 			m.schedulerWG.Add(1)
@@ -426,6 +454,247 @@ func (m *OutboundMonitoring) InvalidateTest(outboundTag string) error {
 	return nil
 }
 
+func (m *OutboundMonitoring) RecordRuntimeError(outboundTag string, err error) {
+	if outboundTag == "" || err == nil {
+		return
+	}
+	errorType, errorText := urltest.ClassifyProbeError(err)
+	if !urltest.ShouldApplyRuntimePenalty(errorType, false) {
+		return
+	}
+
+	now := time.Now()
+	m.runtimeAccess.Lock()
+	stats := m.runtimeStats[outboundTag]
+	if stats == nil || now.Sub(stats.UpdatedAt) > runtimePenaltyTTL {
+		stats = &adapter.RuntimePenaltyStats{Tag: outboundTag}
+		m.runtimeStats[outboundTag] = stats
+	}
+	incrementRuntimeStats(stats, errorType)
+	stats.UpdatedAt = now
+	stats.Penalty = calculateRuntimePenalty(stats)
+	penalty := stats.Penalty
+	m.runtimeAccess.Unlock()
+
+	state := m.getState(outboundTag)
+	if state != nil {
+		state.mu.Lock()
+		state.history.RuntimePenalty = penalty
+		state.history.FreshnessPenalty = urltest.CalculateFreshnessPenalty(state.from_cache, state.history.Time)
+		state.history.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(state.history.Delay, state.history.Success, state.history.ErrorType, state.from_cache, state.history.Time, penalty, state.history.UDPPenalty)
+		state.invalid = true
+		history := state.history
+		groupTags := append([]string(nil), state.groupTags...)
+		state.mu.Unlock()
+		m.history.StoreURLTestHistory(outboundTag, &history)
+		m.emitGroupEvent(groupTags)
+	}
+
+	m.logger.Warn("[RuntimePenalty] tag=", outboundTag, " error=", errorType, " penalty=", penalty, " text=", errorText)
+}
+
+func (m *OutboundMonitoring) configureUDPProbe(options option.MonitoringOptions) {
+	enabled := options.UDPProbeEnabled || parseBoolEnv("ZEON_UDP_PROBE_ENABLED")
+	secretText := strings.TrimSpace(options.UDPProbeSecret)
+	if secretText == "" {
+		secretText = strings.TrimSpace(os.Getenv("ZEON_UDP_PROBE_SECRET"))
+	}
+	endpoint := strings.TrimSpace(options.UDPProbeEndpoint)
+	if endpoint == "" {
+		endpoint = defaultUDPProbe
+	}
+
+	probeOptions := urltest.DefaultUDPProbeOptions()
+	if options.UDPProbeCount > 0 {
+		probeOptions.Count = options.UDPProbeCount
+	}
+	if options.UDPProbeSize > 0 {
+		probeOptions.Size = options.UDPProbeSize
+	}
+	if options.UDPProbeInterval > 0 {
+		probeOptions.Interval = options.UDPProbeInterval.Build()
+	}
+	if options.UDPProbeTimeout > 0 {
+		probeOptions.Timeout = options.UDPProbeTimeout.Build()
+	}
+
+	cooldown := defaultUDPCooldown
+	if options.UDPProbeCooldown > 0 {
+		cooldown = options.UDPProbeCooldown.Build()
+	}
+	topN := options.UDPProbeTopN
+	if topN <= 0 {
+		topN = defaultUDPProbeTopN
+	}
+	if topN > 5 {
+		topN = 5
+	}
+
+	m.udpProbeEndpoint = endpoint
+	m.udpProbeOptions = probeOptions
+	m.udpProbeCooldown = cooldown
+	m.udpProbeTopN = topN
+	m.udpProbeQueue = make(chan string, 64)
+
+	if !enabled {
+		return
+	}
+	secret, err := urltest.ParseUDPProbeSecret(secretText)
+	if err != nil {
+		m.logger.Warn("[UDPProbe] disabled: ", err)
+		return
+	}
+	m.udpProbeSecret = secret
+	m.udpProbeEnabled = true
+	m.logger.Info("[UDPProbe] enabled endpoint=", endpoint, " count=", probeOptions.Count, " size=", probeOptions.Size, " cooldown=", cooldown, " top_n=", topN)
+}
+
+func parseBoolEnv(key string) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	return value == "1" || value == "true" || value == "yes" || value == "on"
+}
+
+func (m *OutboundMonitoring) scheduleUDPProbesFromOutcomes(outcomes []testOutcome) {
+	if !m.udpProbeEnabled || len(outcomes) == 0 {
+		return
+	}
+	candidates := make([]testOutcome, 0, len(outcomes))
+	for _, outcome := range outcomes {
+		if outcome.err != nil || !outcome.history.Success {
+			continue
+		}
+		state := m.getState(outcome.outboundTag)
+		if state == nil || !m.isUDPProbeCandidate(state.outbound) {
+			continue
+		}
+		candidates = append(candidates, outcome)
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		left := candidates[i].history.HealthScore
+		right := candidates[j].history.HealthScore
+		if left != right {
+			return left > right
+		}
+		return candidates[i].history.Delay < candidates[j].history.Delay
+	})
+	if len(candidates) > m.udpProbeTopN {
+		candidates = candidates[:m.udpProbeTopN]
+	}
+	for _, candidate := range candidates {
+		m.enqueueUDPProbe(candidate.outboundTag)
+	}
+}
+
+func (m *OutboundMonitoring) isUDPProbeCandidate(outbound adapter.Outbound) bool {
+	if outbound == nil {
+		return false
+	}
+	switch outbound.Type() {
+	case C.TypeDirect, C.TypeBlock, C.TypeDNS:
+		return false
+	}
+	return common.Contains(outbound.Network(), N.NetworkUDP)
+}
+
+func (m *OutboundMonitoring) enqueueUDPProbe(tag string) {
+	state := m.getState(tag)
+	if state == nil {
+		return
+	}
+	now := time.Now()
+	state.mu.Lock()
+	if state.udpProbeRunning || (!state.udpProbeLast.IsZero() && now.Sub(state.udpProbeLast) < m.udpProbeCooldown) {
+		state.mu.Unlock()
+		return
+	}
+	state.udpProbeRunning = true
+	state.mu.Unlock()
+
+	m.udpProbeAccess.Lock()
+	if m.udpProbeQueued[tag] {
+		m.udpProbeAccess.Unlock()
+		state.mu.Lock()
+		state.udpProbeRunning = false
+		state.mu.Unlock()
+		return
+	}
+	m.udpProbeQueued[tag] = true
+	m.udpProbeAccess.Unlock()
+
+	select {
+	case m.udpProbeQueue <- tag:
+	case <-m.ctx.Done():
+		m.clearUDPProbeQueued(tag)
+	default:
+		m.logger.Warn("[UDPProbe] queue full tag=", tag)
+		m.clearUDPProbeQueued(tag)
+	}
+}
+
+func (m *OutboundMonitoring) clearUDPProbeQueued(tag string) {
+	m.udpProbeAccess.Lock()
+	delete(m.udpProbeQueued, tag)
+	m.udpProbeAccess.Unlock()
+	if state := m.getState(tag); state != nil {
+		state.mu.Lock()
+		state.udpProbeRunning = false
+		state.mu.Unlock()
+	}
+}
+
+func (m *OutboundMonitoring) udpProbeLoop() {
+	defer m.udpProbeWG.Done()
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case tag := <-m.udpProbeQueue:
+			m.udpProbeAccess.Lock()
+			delete(m.udpProbeQueued, tag)
+			m.udpProbeAccess.Unlock()
+			m.runUDPProbe(tag)
+		}
+	}
+}
+
+func (m *OutboundMonitoring) runUDPProbe(tag string) {
+	state := m.getState(tag)
+	if state == nil {
+		return
+	}
+	state.mu.Lock()
+	outbound := state.outbound
+	groupTags := append([]string(nil), state.groupTags...)
+	state.mu.Unlock()
+
+	totalTimeout := time.Duration(m.udpProbeOptions.Count)*(m.udpProbeOptions.Timeout+m.udpProbeOptions.Interval) + time.Second
+	ctx, cancel := context.WithTimeout(m.ctx, totalTimeout)
+	defer cancel()
+
+	result := urltest.RunUDPProbeThroughOutbound(ctx, outbound, m.udpProbeEndpoint, m.udpProbeSecret, m.udpProbeOptions)
+
+	state.mu.Lock()
+	state.udpProbeRunning = false
+	state.udpProbeLast = result.UpdatedAt
+	state.history.UDPProbeAvailable = result.Available
+	state.history.UDPPenalty = result.Penalty
+	state.history.UDPLoss = result.Loss
+	state.history.UDPJitterMs = result.JitterMs
+	state.history.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(state.history.Delay, state.history.Success, state.history.ErrorType, state.from_cache, state.history.Time, state.history.RuntimePenalty, state.history.UDPPenalty)
+	history := state.history
+	state.mu.Unlock()
+
+	m.history.StoreURLTestHistory(tag, &history)
+	m.cacheDirty.Store(true)
+	m.emitGroupEvent(groupTags)
+
+	if result.Available {
+		m.logger.Warn("[UDPProbe] tag=", tag, " sent=", result.Sent, " recv=", result.Received, " loss=", fmt.Sprintf("%.1f", result.Loss), " jitter=", result.JitterMs, " penalty=", result.Penalty, " score=", history.HealthScore)
+	} else {
+		m.logger.Warn("[UDPProbe] tag=", tag, " unavailable reason=", result.ErrorType, " text=", result.ErrorText)
+	}
+}
+
 func (m *OutboundMonitoring) SubscribeGroup(groupTag string) (observer <-chan GroupEvent, err error) {
 
 	if g, ok := m.groups[groupTag]; ok {
@@ -454,6 +723,7 @@ func (m *OutboundMonitoring) Close() error {
 		}
 		m.cancel()
 		m.workerWG.Wait()
+		m.udpProbeWG.Wait()
 		m.schedulerWG.Wait()
 
 	})
@@ -586,13 +856,26 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 
 	delay, err := urltest.URLTest(ctx, m.urls[idx], out.outbound)
 
+	errorType, errorText := urltest.ClassifyProbeError(err)
+	runtimePenalty := m.runtimePenaltyForTag(tag)
 	his := adapter.URLTestHistory{
-		Time:  time.Now(),
-		Delay: delay,
+		Time:           time.Now(),
+		Delay:          delay,
+		Success:        err == nil && delay < TimeoutDelay,
+		ErrorType:      errorType,
+		ErrorText:      errorText,
+		RuntimePenalty: runtimePenalty,
 	}
 	if err != nil || delay >= TimeoutDelay {
 		his.Delay = TimeoutDelay
+		his.Success = false
+		if his.ErrorType == "" || his.ErrorType == urltest.ErrorTypeNone {
+			his.ErrorType = urltest.ErrorTypeTimeout
+		}
+		his.FreshnessPenalty = urltest.CalculateFreshnessPenalty(false, his.Time)
+		his.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(his.Delay, his.Success, his.ErrorType, false, his.Time, runtimePenalty, his.UDPPenalty)
 		m.logger.Warn("outbound ", tag, " URL test failed: ", err)
+		m.logger.Warn("[HealthScore] tag=", tag, " delay=", his.Delay, " success=", his.Success, " error=", his.ErrorType, " score=", his.HealthScore)
 		return his, err
 	}
 	select {
@@ -613,6 +896,9 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 			}
 		}
 	}
+	his.FreshnessPenalty = urltest.CalculateFreshnessPenalty(false, his.Time)
+	his.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(his.Delay, his.Success, his.ErrorType, false, his.Time, runtimePenalty, his.UDPPenalty)
+	m.logger.Warn("[HealthScore] tag=", tag, " delay=", his.Delay, " success=", his.Success, " error=", his.ErrorType, " score=", his.HealthScore)
 	if his.IpInfo != nil {
 		m.logger.Info("outbound ", tag, " IP ", fmt.Sprint(his.IpInfo), " (", his.Delay, "ms): ", err)
 	} else {
@@ -695,6 +981,7 @@ func (m *OutboundMonitoring) runStage(cycleID uint64, tags []string) []testOutco
 		}
 	}
 
+	m.scheduleUDPProbesFromOutcomes(results)
 	return results
 }
 
@@ -761,11 +1048,33 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.enqueuedCycle = 0
 	state.invalid = outcome.err != nil
 	state.lastURL = outcome.url
-	if (outcome.history.Delay != state.history.Delay) || state.history.IpInfo == nil || (outcome.history.IpInfo != nil) {
+	if (outcome.history.Delay != state.history.Delay) || state.history.IpInfo == nil || (outcome.history.IpInfo != nil) || (outcome.history.HealthScore != state.history.HealthScore) || (outcome.history.ErrorType != state.history.ErrorType) {
 		m.cacheDirty.Store(true)
 	}
+	udpAvailable := state.history.UDPProbeAvailable
+	udpPenalty := state.history.UDPPenalty
+	udpLoss := state.history.UDPLoss
+	udpJitter := state.history.UDPJitterMs
 	state.history.Delay = outcome.history.Delay
 	state.history.Time = outcome.history.Time
+	state.history.Success = outcome.history.Success
+	state.history.ErrorType = outcome.history.ErrorType
+	state.history.ErrorText = outcome.history.ErrorText
+	state.history.HealthScore = outcome.history.HealthScore
+	state.history.RuntimePenalty = outcome.history.RuntimePenalty
+	state.history.FreshnessPenalty = outcome.history.FreshnessPenalty
+	if state.udpProbeLast.IsZero() || time.Since(state.udpProbeLast) > m.udpProbeCooldown*3 {
+		state.history.UDPProbeAvailable = false
+		state.history.UDPPenalty = 0
+		state.history.UDPLoss = 0
+		state.history.UDPJitterMs = 0
+	} else {
+		state.history.UDPProbeAvailable = udpAvailable
+		state.history.UDPPenalty = udpPenalty
+		state.history.UDPLoss = udpLoss
+		state.history.UDPJitterMs = udpJitter
+		state.history.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(state.history.Delay, state.history.Success, state.history.ErrorType, false, state.history.Time, state.history.RuntimePenalty, state.history.UDPPenalty)
+	}
 	state.from_cache = false
 	if outcome.history.IpInfo != nil {
 		state.history.IpInfo = outcome.history.IpInfo
@@ -791,6 +1100,93 @@ func mergeIpInfo(old, new *ipinfo.IpInfo) *ipinfo.IpInfo {
 		new2.Org = old.Org
 	}
 	return &new2
+}
+
+func preferHistory(candidate, current *adapter.URLTestHistory) bool {
+	if current == nil {
+		return true
+	}
+	if candidate == nil {
+		return false
+	}
+	candidateScore := candidate.HealthScore
+	currentScore := current.HealthScore
+	if candidateScore > 0 || currentScore > 0 {
+		if candidate.Success != current.Success {
+			return candidate.Success
+		}
+		if candidateScore != currentScore {
+			return candidateScore > currentScore
+		}
+	}
+	return candidate.Delay < current.Delay
+}
+
+func (m *OutboundMonitoring) applyDynamicHealth(tag string, his *adapter.URLTestHistory) {
+	if his == nil {
+		return
+	}
+	if his.Delay > 0 && his.Delay < TimeoutDelay && his.ErrorType == "" {
+		his.Success = true
+		his.ErrorType = urltest.ErrorTypeNone
+	}
+	if his.ErrorType == "" {
+		his.ErrorType = urltest.ErrorTypeUnknown
+	}
+	his.RuntimePenalty = m.runtimePenaltyForTag(tag)
+	his.FreshnessPenalty = urltest.CalculateFreshnessPenalty(his.IsFromCache, his.Time)
+	his.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(his.Delay, his.Success, his.ErrorType, his.IsFromCache, his.Time, his.RuntimePenalty, his.UDPPenalty)
+}
+
+func (m *OutboundMonitoring) runtimePenaltyForTag(tag string) int {
+	m.runtimeAccess.Lock()
+	defer m.runtimeAccess.Unlock()
+	stats := m.runtimeStats[tag]
+	if stats == nil {
+		return 0
+	}
+	if time.Since(stats.UpdatedAt) > runtimePenaltyTTL {
+		delete(m.runtimeStats, tag)
+		return 0
+	}
+	return stats.Penalty
+}
+
+func incrementRuntimeStats(stats *adapter.RuntimePenaltyStats, errorType string) {
+	switch errorType {
+	case urltest.ErrorTypeTimeout, urltest.ErrorTypeDeadline:
+		stats.TimeoutCount++
+	case urltest.ErrorTypeReset:
+		stats.ResetCount++
+	case urltest.ErrorTypeRefused:
+		stats.RefusedCount++
+	case urltest.ErrorTypeEOF:
+		stats.EOFCount++
+	case urltest.ErrorTypeBrokenPipe:
+		stats.BrokenPipeCount++
+	case urltest.ErrorTypeDNSTimeout:
+		stats.DNSErrorCount++
+	case urltest.ErrorTypeTLSHandshakeFailed, urltest.ErrorTypeUnsupportedCurve:
+		stats.TLSErrorCount++
+	case urltest.ErrorTypeQUICTimeout:
+		stats.QUICErrorCount++
+	}
+}
+
+func calculateRuntimePenalty(stats *adapter.RuntimePenaltyStats) int {
+	penalty := 0
+	penalty += min(stats.EOFCount*2, 6)
+	penalty += min(stats.RefusedCount*4, 10)
+	penalty += min(stats.ResetCount*5, 15)
+	penalty += min(stats.BrokenPipeCount*5, 15)
+	penalty += min(stats.TimeoutCount*7, 20)
+	penalty += min(stats.DNSErrorCount*8, 20)
+	penalty += min(stats.TLSErrorCount*8, 20)
+	penalty += min(stats.QUICErrorCount*7, 20)
+	if penalty > 25 {
+		return 25
+	}
+	return penalty
 }
 
 func (m *OutboundMonitoring) collectCycleTargets() []string {
@@ -988,6 +1384,9 @@ type outboundState struct {
 	enqueuedCycle  uint64
 	from_cache     bool
 
+	udpProbeRunning bool
+	udpProbeLast    time.Time
+
 	history adapter.URLTestHistory
 }
 
@@ -1057,6 +1456,21 @@ func (m *OutboundMonitoring) loadHistory() *History {
 			if his.Delay >= TimeoutDelay {
 				his.Delay = 0
 			}
+			his.RuntimePenalty = 0
+			his.UDPProbeAvailable = false
+			his.UDPPenalty = 0
+			his.UDPLoss = 0
+			his.UDPJitterMs = 0
+			if his.Delay > 0 && his.ErrorType == "" {
+				his.Success = true
+				his.ErrorType = urltest.ErrorTypeNone
+				his.ErrorText = ""
+			}
+			if his.ErrorType == "" {
+				his.ErrorType = urltest.ErrorTypeUnknown
+			}
+			his.FreshnessPenalty = urltest.CalculateFreshnessPenalty(true, his.Time)
+			his.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(his.Delay, his.Success, his.ErrorType, true, his.Time, 0, his.UDPPenalty)
 			state.mu.Lock()
 			state.history = *his
 			state.from_cache = true

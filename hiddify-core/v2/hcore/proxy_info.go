@@ -61,6 +61,16 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 		if url_test_history.IsFromCache {
 			out.UrlTestDelay = 0
 		}
+		out.Success = url_test_history.Success
+		out.ErrorType = url_test_history.ErrorType
+		out.ErrorText = url_test_history.ErrorText
+		out.HealthScore = int32(url_test_history.HealthScore)
+		out.RuntimePenalty = int32(url_test_history.RuntimePenalty)
+		out.FreshnessPenalty = int32(url_test_history.FreshnessPenalty)
+		out.UdpProbeAvailable = url_test_history.UDPProbeAvailable
+		out.UdpLoss = url_test_history.UDPLoss
+		out.UdpJitterMs = int32(url_test_history.UDPJitterMs)
+		out.UdpPenalty = int32(url_test_history.UDPPenalty)
 		if url_test_history.IpInfo != nil {
 			out.Ipinfo = &IpInfo{
 				Ip:          url_test_history.IpInfo.IP,
