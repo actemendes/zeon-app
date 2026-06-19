@@ -160,7 +160,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
         val uplink=status.uplink_total - previous.uplink_total
         val downlink=status.downlink_total - previous.downlink_total
         val currentOutbound = presentOutbound(status.current_outbound)
-        val content = "${Libbox.formatBytes(uplink)}/s ↑\t${Libbox.formatBytes(downlink)}/s ↓ \n$currentOutbound"
+        val content = "${Libbox.formatBytes(uplink)}/s \u2191\t${Libbox.formatBytes(downlink)}/s \u2193 \n$currentOutbound"
         val title = "${status.current_profile}"
         Application.notificationManager.notify(
                 notificationId,
@@ -170,12 +170,26 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
 
     private fun presentOutbound(outbound: String): String {
         val normalized = outbound.trim()
-        if (Regex("^$AUTO_BALANCER_TAG(?:\\s*(?:->|→|>)|\\s|$).*", RegexOption.IGNORE_CASE).matches(normalized)) {
+        val match = Regex("^$AUTO_BALANCER_TAG\\s*(?:->|>|→|•)\\s*(.+?)\\s*$", RegexOption.IGNORE_CASE)
+            .find(normalized)
+        if (match != null) {
+            val realOutbound = presentServerName(match.groupValues[1])
+            if (realOutbound.isNotBlank()) {
+                return "${service.getString(R.string.auto_selection)} • $realOutbound"
+            }
             return service.getString(R.string.auto_selection)
         }
-        return normalized
+        if (Regex("^$AUTO_BALANCER_TAG(?:\\s|$).*", RegexOption.IGNORE_CASE).matches(normalized)) {
+            return service.getString(R.string.auto_selection)
+        }
+        return presentServerName(normalized)
     }
 
+    private fun presentServerName(outbound: String): String {
+        return outbound
+            .substringBefore("§")
+            .trim()
+    }
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_SCREEN_ON -> {

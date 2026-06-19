@@ -9,7 +9,6 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
 	G "github.com/sagernet/sing-box/protocol/group"
-	"github.com/sagernet/sing-box/protocol/group/balancer"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/service"
 	"google.golang.org/grpc"
@@ -38,11 +37,6 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 	if tag := monitoring.RealTag(detour); tag != "" {
 		dtag := TrimTagName(tag)
 		out.GroupSelectedTagDisplay = &dtag
-		if balancer, ok := detour.(*balancer.Balancer); ok {
-			if stg := balancer.Strategy(); stg != "lowest-delay" {
-				out.GroupSelectedTagDisplay = &stg
-			}
-		}
 	}
 	// realTag = adapter.OutboundTag(detour)
 
@@ -147,10 +141,10 @@ func (h *HiddifyInstance) GetAllProxiesInfo(hismap map[string]*adapter.URLTestHi
 			pinfo := outbounds_converted[itemTag]
 			pinfo.IsSelected = itemTag == selectedTag
 			if onlyGroupitems && pinfo.GroupSelectedTagDisplay != nil && pinfo.TagDisplay != *pinfo.GroupSelectedTagDisplay {
-				pinfo.TagDisplay = pinfo.TagDisplay + " → " + *pinfo.GroupSelectedTagDisplay
+				pinfo.TagDisplay = pinfo.TagDisplay + " • " + *pinfo.GroupSelectedTagDisplay
 			}
 			group.Items = append(group.Items, pinfo)
-			pinfo.IsVisible = !strings.Contains(itemTag, "§hide§")
+			pinfo.IsVisible = !strings.Contains(itemTag, "§hide§") && !strings.Contains(itemTag, "В§hideВ§")
 
 		}
 		if len(group.Items) == 0 {
@@ -161,7 +155,7 @@ func (h *HiddifyInstance) GetAllProxiesInfo(hismap map[string]*adapter.URLTestHi
 
 		if onlyGroupitems && group.Tag == config.OutboundSelectTag {
 			if warp_info, ok := outbounds_converted[config.WARPConfigTag]; ok {
-				warp_info.TagDisplay = config.WARPConfigTag + " → " + outbounds_converted[group.Selected].TagDisplay
+				warp_info.TagDisplay = config.WARPConfigTag + " • " + outbounds_converted[group.Selected].TagDisplay
 				group.Selected = warp_info.Tag
 				group.Items = append([]*OutboundInfo{warp_info}, group.Items...)
 			}
@@ -174,7 +168,7 @@ func (h *HiddifyInstance) GetAllProxiesInfo(hismap map[string]*adapter.URLTestHi
 }
 
 func TrimTagName(tag string) string {
-	return strings.Trim(strings.Split(tag, "§")[0], " ")
+	return strings.Trim(strings.Split(strings.Split(tag, "§")[0], "В§")[0], " ")
 }
 
 func (s *CoreService) OutboundsInfo(req *hcommon.Empty, stream grpc.ServerStreamingServer[OutboundGroupList]) error {

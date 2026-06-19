@@ -7,7 +7,6 @@ import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/proxy/active/ip_widget.dart';
 import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -31,6 +30,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
     }
 
     final theme = Theme.of(context);
+    final displayInfo = resolveOutboundDisplayInfo(activeProxy);
     final navBarBackground = theme.navigationBarTheme.backgroundColor ?? theme.colorScheme.surface;
     final navBarTextColor =
         theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
@@ -82,7 +82,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                   child: IPCountryFlag(
                     countryCode: resolveProxyCountryCode(
                       tagDisplay: activeProxy.tagDisplay,
-                      fallbackCountryCode: activeProxy.ipinfo.countryCode,
+                      fallbackCountryCode: displayInfo.countryCode ?? activeProxy.ipinfo.countryCode,
                     ),
                     size: 40,
                   ),
@@ -96,7 +96,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                       child: Semantics(
                         label: t.pages.proxies.activeProxy,
                         child: Text(
-                          getRealOutboundTag(activeProxy),
+                          displayInfo.title,
                           style: theme.textTheme.bodyLarge?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: navBarTextColor,
@@ -117,28 +117,4 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
       ),
     );
   }
-}
-
-String getRealOutboundTag(OutboundInfo group) {
-  if (_isBalancerGroup(group)) {
-    return "Автовыбор";
-  }
-
-  var tag = formatProxyDisplayName(group.tagDisplay);
-  final selected = formatProxyDisplayName(group.groupSelectedTagDisplay);
-  if (selected.isNotEmpty && selected != tag && selected.toLowerCase() != 'round-robin') {
-    tag = '$tag → $selected';
-  }
-  return tag;
-}
-
-bool _isBalancerGroup(OutboundInfo group) {
-  final tag = group.tag.trim().toLowerCase();
-  if (tag == "balance") return true;
-
-  final type = group.type.trim().toLowerCase();
-  if (type == "balancer") return true;
-
-  final display = group.tagDisplay.trim().toLowerCase();
-  return RegExp(r'^balance(\s*(?:->|>|→).*)?$').hasMatch(display);
 }

@@ -17,6 +17,7 @@ type RoundRobin struct {
 
 	maxAcceptableIndex   map[string]int
 	idx                  map[string]int
+	lastSelected         map[string]adapter.Outbound
 	mu                   sync.Mutex
 	delayAcceptableRatio float64
 }
@@ -29,6 +30,12 @@ func NewRoundRobin(outbounds []adapter.Outbound, options option.BalancerOutbound
 		acceptable[net] = len(outs) - 1
 		idx[net] = 0
 	}
+	lastSelected := map[string]adapter.Outbound{}
+	for net, outs := range cOutbounds {
+		if len(outs) > 0 {
+			lastSelected[net] = outs[0]
+		}
+	}
 	return &RoundRobin{
 		outbounds: cOutbounds,
 
@@ -36,12 +43,19 @@ func NewRoundRobin(outbounds []adapter.Outbound, options option.BalancerOutbound
 		maxAcceptableIndex:   acceptable,
 		delayAcceptableRatio: options.DelayAcceptableRatio,
 		idx:                  idx,
+		lastSelected:         lastSelected,
 	}
 }
 
 func (s *RoundRobin) Now() string {
-	// s.idxMutex.Lock()
-	// defer s.idxMutex.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if selected := s.lastSelected[N.NetworkTCP]; selected != nil {
+		return selected.Tag()
+	}
+	if outs := s.sortedOutbounds[N.NetworkTCP]; len(outs) > 0 {
+		return outs[0].Tag()
+	}
 	return ""
 }
 
@@ -76,6 +90,7 @@ func (s *RoundRobin) Select(metadata adapter.InboundContext, net string, touch b
 	proxy := s.sortedOutbounds[net][id]
 	if touch {
 		s.idx[net] = id
+		s.lastSelected[net] = proxy
 	}
 	return proxy
 

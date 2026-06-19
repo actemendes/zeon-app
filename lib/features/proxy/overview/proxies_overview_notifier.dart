@@ -10,11 +10,13 @@ import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
 import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
 import 'package:hiddify/features/proxy/model/proxy_failure.dart';
+import 'package:hiddify/features/stats/data/stats_data_providers.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/hiddifycore/init_signal.dart';
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:rxdart/rxdart.dart';
 
 part 'proxies_overview_notifier.g.dart';
 
@@ -57,6 +59,7 @@ class ProxiesSortNotifier extends _$ProxiesSortNotifier with AppLogger {
 
 @riverpod
 class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
+  String? _lastAutoDisplaySignature;
   @override
   Stream<OutboundGroup?> build() async* {
     ref.disposeDelay(const Duration(seconds: 15));
@@ -66,6 +69,11 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       throw const ServiceNotRunning();
     }
     final sortBy = ref.watch(proxiesSortNotifierProvider);
+    final statsStream = ref
+        .watch(statsRepositoryProvider)
+        .watchStats()
+        .map((event) => event.getOrElse((_) => SystemInfo.create()))
+        .startWith(SystemInfo.create());
     // yield* ref
     //     .watch(proxyRepositoryProvider)
     //     .watchProxies()
@@ -83,7 +91,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     //       ),
     //     )
     //     .asyncMap((proxies) async => _sortOutbounds(proxies, sortBy));
-    yield* ref
+    final proxyStream = ref
         .watch(proxyRepositoryProvider)
         .watchProxies()
         .map(
@@ -91,8 +99,12 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
             loggy.warning("error receiving proxies", err);
             throw err;
           }),
-        )
-        .asyncMap((proxies) async => await _sortOutbounds(proxies, sortBy));
+        );
+    yield* Rx.combineLatest2<OutboundGroup?, SystemInfo, ({OutboundGroup? proxies, SystemInfo stats})>(
+      proxyStream,
+      statsStream,
+      (proxies, stats) => (proxies: proxies, stats: stats),
+    ).asyncMap((event) async => await _sortOutbounds(event.proxies, sortBy, event.stats));
   }
 
   // Future<List<OutboundGroup>> _sortOutbounds(
@@ -138,7 +150,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
   //   return sortedProxies;
   // }
 
-  Future<OutboundGroup?> _sortOutbounds(OutboundGroup? proxies, ProxiesSort sortBy) async {
+  Future<OutboundGroup?> _sortOutbounds(OutboundGroup? proxies, ProxiesSort sortBy, SystemInfo stats) async {
     if (proxies == null) return null;
 
     final sortedItems = switch (sortBy) {
@@ -176,6 +188,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       if (shouldHideProxyOption(tag: item.tag, tagDisplay: item.tagDisplay)) {
         continue;
       }
+      _resolveAutoDisplayName(item, sortedItems, stats);
       // if (groupWithSelected.keys.contains(item.tag)) {
       //   items.add(item.copyWith(selectedTag: groupWithSelected[item.tag]));
       // } else {
@@ -185,6 +198,41 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     proxies.items.clear();
     proxies.items.addAll(items);
     return proxies;
+  }
+
+  void _resolveAutoDisplayName(OutboundInfo item, List<OutboundInfo> allItems, SystemInfo stats) {
+    if (!isAutoSelectedOutbound(item)) return;
+    final fromStats = extractRealOutboundTag(stats.currentOutbound);
+    final statsItem = findOutboundByTagOrDisplay(allItems, fromStats);
+    if (statsItem != null) {
+      item.groupSelectedTag = statsItem.tag;
+      item.groupSelectedTagDisplay = statsItem.tagDisplay;
+      _logAutoDisplay(item, statsItem);
+      return;
+    }
+
+    final realTag = item.hasGroupSelectedTag() ? item.groupSelectedTag.trim() : '';
+    if (realTag.isEmpty) return;
+
+    final realItem = findOutboundByTagOrDisplay(allItems, realTag);
+    if (realItem != null) {
+      item.groupSelectedTagDisplay = realItem.tagDisplay;
+      _logAutoDisplay(item, realItem);
+    }
+  }
+
+  void _logAutoDisplay(OutboundInfo autoItem, OutboundInfo realItem) {
+    final flag = resolveProxyCountryCode(
+      tagDisplay: realItem.tagDisplay,
+      fallbackCountryCode: realItem.ipinfo.countryCode,
+    );
+    final signature = '${autoItem.tag}|${realItem.tag}|${realItem.tagDisplay}|$flag';
+    if (signature == _lastAutoDisplaySignature) return;
+    _lastAutoDisplaySignature = signature;
+    loggy.info(
+      '[AutoDisplay] selectedTag=${autoItem.tag} realOutboundTag=${realItem.tag} '
+      'realDisplayName=${realItem.tagDisplay} realFlag=$flag',
+    );
   }
 
   // Future<void> changeProxy(String groupTag, String outboundTag) async {

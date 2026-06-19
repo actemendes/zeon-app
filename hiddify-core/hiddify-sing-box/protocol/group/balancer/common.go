@@ -101,30 +101,38 @@ func getTagDelay(tag string, history map[string]*adapter.URLTestHistory) uint16 
 }
 
 func hasUsableHealth(history map[string]*adapter.URLTestHistory) bool {
-	for _, his := range history {
-		if his != nil && his.Success && getHealthScore(his) > 0 {
+	for tag, his := range history {
+		if his != nil && his.Success && getHealthScore(tag, his) > 0 {
 			return true
 		}
 	}
 	return false
 }
 
-func getHealthScore(his *adapter.URLTestHistory) int {
+func getHealthScore(tag string, his *adapter.URLTestHistory) int {
 	if his == nil {
 		return 0
 	}
+	policyPenalty := his.PolicyPenalty
+	if policyPenalty == 0 {
+		countryCode := ""
+		if his.IpInfo != nil {
+			countryCode = his.IpInfo.CountryCode
+		}
+		policyPenalty = urltest.CalculatePolicyPenalty(tag, countryCode)
+	}
 	if his.Delay > 0 && his.Delay < monitoring.TimeoutDelay && his.ErrorType == "" {
-		return urltest.CalculateHealthScoreWithUDPPenalty(his.Delay, true, urltest.ErrorTypeNone, his.IsFromCache, his.Time, his.RuntimePenalty, his.UDPPenalty)
+		return urltest.CalculateHealthScoreWithPenalties(his.Delay, true, urltest.ErrorTypeNone, his.IsFromCache, his.Time, his.RuntimePenalty, his.UDPPenalty, policyPenalty)
 	}
 	if his.ErrorType == "" {
 		return 0
 	}
-	return urltest.CalculateHealthScoreWithUDPPenalty(his.Delay, his.Success, his.ErrorType, his.IsFromCache, his.Time, his.RuntimePenalty, his.UDPPenalty)
+	return urltest.CalculateHealthScoreWithPenalties(his.Delay, his.Success, his.ErrorType, his.IsFromCache, his.Time, his.RuntimePenalty, his.UDPPenalty, policyPenalty)
 }
 
 func getTagHealthScore(tag string, history map[string]*adapter.URLTestHistory) int {
 	if his, ok := history[tag]; ok && his != nil {
-		return getHealthScore(his)
+		return getHealthScore(tag, his)
 	}
 	return 0
 }

@@ -48,7 +48,7 @@ func (h *HiddifyInstance) readStatus(prev *SystemInfo) *SystemInfo {
 			if currentOutBound, ok := box.Outbound().Outbound(current); ok {
 				if g, ok := currentOutBound.(adapter.OutboundGroup); ok {
 					if now := g.Now(); now != "" {
-						message.CurrentOutbound = fmt.Sprint(message.CurrentOutbound, "→", TrimTagName(now))
+						message.CurrentOutbound = fmt.Sprint(message.CurrentOutbound, " • ", TrimTagName(now))
 					}
 				}
 			}

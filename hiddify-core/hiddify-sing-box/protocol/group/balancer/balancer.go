@@ -3,6 +3,7 @@ package balancer
 import (
 	"context"
 	"net"
+	"sort"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -134,11 +135,53 @@ func (s *Balancer) worker() {
 			}
 			outbounds := s.monitor.OutboundsHistory(s.Tag())
 			if s.strategyFn.UpdateOutboundsInfo(outbounds) {
+				s.logAutoDecision(outbounds)
 				s.interruptGroup.Interrupt(s.interruptExternalConnections)
 			}
 
 		}
 	}
+}
+
+// logAutoDecision records enough information to explain a strategy change
+// without logging config secrets or probe credentials. It is emitted only when
+// the strategy's selected/acceptable set actually changes.
+func (s *Balancer) logAutoDecision(history map[string]*adapter.URLTestHistory) {
+	tags := append([]string(nil), s.tags...)
+	sort.Strings(tags)
+	bestTag := ""
+	bestScore := -1
+	bestDelay := monitoring.TimeoutDelay
+	for _, tag := range tags {
+		his := history[tag]
+		delay := getTagDelay(tag, history)
+		success := getTagSuccess(tag, history)
+		score := getTagHealthScore(tag, history)
+		runtimePenalty, udpPenalty, freshnessPenalty, fromCache := 0, 0, 0, false
+		if his != nil {
+			runtimePenalty = his.RuntimePenalty
+			udpPenalty = his.UDPPenalty
+			freshnessPenalty = his.FreshnessPenalty
+			fromCache = his.IsFromCache
+		}
+		s.logger.Info("[AutoDecisionCandidates] tag=", tag, " name=", tag, " delay=", delay,
+			" success=", success, " health_score=", score, " runtime_penalty=", runtimePenalty,
+			" udp_penalty=", udpPenalty, " freshness_penalty=", freshnessPenalty,
+			" is_from_cache=", fromCache, " selected=", tag == s.strategyFn.Now())
+		if success && (score > bestScore || (score == bestScore && delay < bestDelay)) {
+			bestTag, bestScore, bestDelay = tag, score, delay
+		}
+	}
+	selectedTag := s.strategyFn.Now()
+	selectedScore := getTagHealthScore(selectedTag, history)
+	selectedDelay := getTagDelay(selectedTag, history)
+	reason := s.options.Strategy
+	if s.options.Strategy == StrategyRoundRobin {
+		reason += "_acceptable_pool"
+	}
+	s.logger.Info("[AutoDecision] selected_tag=", selectedTag, " selected_name=", selectedTag,
+		" reason=", reason, " best_tag=", bestTag, " best_score=", bestScore,
+		" selected_score=", selectedScore, " selected_delay=", selectedDelay)
 }
 func (s *Balancer) Close() error {
 	if s.close != nil {

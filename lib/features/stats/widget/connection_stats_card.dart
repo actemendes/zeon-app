@@ -4,6 +4,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/widget/shimmer_skeleton.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/proxy/active/ip_widget.dart';
+import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
 import 'package:hiddify/features/stats/widget/stats_card.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -23,7 +24,7 @@ class ConnectionStatsCard extends HookConsumerWidget {
         switch (activeProxy) {
           AsyncData(value: final proxy) => (
             label: const Icon(FluentIcons.arrow_routing_20_regular),
-            data: Text(proxy.tagDisplay),
+            data: Text(formatOutboundTitle(proxy)),
             semanticLabel: null,
           ),
           _ => (label: const Icon(FluentIcons.arrow_routing_20_regular), data: const Text("..."), semanticLabel: null),
@@ -32,14 +33,14 @@ class ConnectionStatsCard extends HookConsumerWidget {
           AsyncData(value: final proxy) when proxy.ipinfo.ip.isNotEmpty => (
             label: Row(
               children: [
-                IPCountryFlag(countryCode: proxy.ipinfo.countryCode, size: 16),
+                IPCountryFlag(countryCode: proxy.ipinfo.countryCode),
                 // const Gap(4),
                 // OrganisationFlag(organization: proxy.ipinfo.org, size: 16),
               ],
             ),
             data: IPText(
               ip: proxy.ipinfo.ip,
-              onLongPress: () async {
+              onLongPress: () {
                 ref.read(ipInfoNotifierProvider.notifier).refresh();
               },
               constrained: true,

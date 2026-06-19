@@ -85,6 +85,7 @@ func mergeURLTestHistory(old *adapter.URLTestHistory, history *adapter.URLTestHi
 	old.HealthScore = history.HealthScore
 	old.RuntimePenalty = history.RuntimePenalty
 	old.FreshnessPenalty = history.FreshnessPenalty
+	old.PolicyPenalty = history.PolicyPenalty
 	old.UDPProbeAvailable = history.UDPProbeAvailable
 	old.UDPPenalty = history.UDPPenalty
 	old.UDPLoss = history.UDPLoss

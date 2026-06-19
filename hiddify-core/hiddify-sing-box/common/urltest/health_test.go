@@ -66,6 +66,38 @@ func TestHealthScoreAppliesSoftUDPPenalty(t *testing.T) {
 	}
 }
 
+func TestRussianServerPolicyPenalty(t *testing.T) {
+	tests := []struct {
+		tag         string
+		countryCode string
+		want        int
+	}{
+		{tag: "🇷🇺Россия16 | БЫСТРЫЙ", want: RussianServerPolicyPenalty},
+		{tag: "Russia Moscow 1", want: RussianServerPolicyPenalty},
+		{tag: "fast-node", countryCode: "RU", want: RussianServerPolicyPenalty},
+		{tag: "🇵🇱Польша8 | СВЯЗЬ", countryCode: "PL", want: 0},
+	}
+	for _, tt := range tests {
+		if got := CalculatePolicyPenalty(tt.tag, tt.countryCode); got != tt.want {
+			t.Fatalf("CalculatePolicyPenalty(%q, %q) = %d, want %d", tt.tag, tt.countryCode, got, tt.want)
+		}
+	}
+}
+
+func TestRussianPolicyPenaltyKeepsRussiaAsFallback(t *testing.T) {
+	now := time.Now()
+	russiaFast := CalculateHealthScoreWithPenalties(40, true, ErrorTypeNone, false, now, 0, 0, RussianServerPolicyPenalty)
+	foreignStable := CalculateHealthScoreWithPenalties(90, true, ErrorTypeNone, false, now, 0, 0, 0)
+	foreignBad := CalculateHealthScoreWithPenalties(260, true, ErrorTypeNone, false, now, 0, 0, 0)
+
+	if russiaFast >= foreignStable {
+		t.Fatalf("Russian fast server score %d should be below stable foreign score %d", russiaFast, foreignStable)
+	}
+	if russiaFast <= foreignBad {
+		t.Fatalf("Russian server should remain a fallback: score %d should beat bad foreign score %d", russiaFast, foreignBad)
+	}
+}
+
 func TestCalculateUDPPenaltyIsCapped(t *testing.T) {
 	if penalty := CalculateUDPPenalty(100, 200); penalty != 15 {
 		t.Fatalf("expected capped penalty 15, got %d", penalty)

@@ -480,8 +480,7 @@ func (m *OutboundMonitoring) RecordRuntimeError(outboundTag string, err error) {
 	if state != nil {
 		state.mu.Lock()
 		state.history.RuntimePenalty = penalty
-		state.history.FreshnessPenalty = urltest.CalculateFreshnessPenalty(state.from_cache, state.history.Time)
-		state.history.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(state.history.Delay, state.history.Success, state.history.ErrorType, state.from_cache, state.history.Time, penalty, state.history.UDPPenalty)
+		refreshHealthScore(outboundTag, &state.history, state.from_cache)
 		state.invalid = true
 		history := state.history
 		groupTags := append([]string(nil), state.groupTags...)
@@ -680,7 +679,7 @@ func (m *OutboundMonitoring) runUDPProbe(tag string) {
 	state.history.UDPPenalty = result.Penalty
 	state.history.UDPLoss = result.Loss
 	state.history.UDPJitterMs = result.JitterMs
-	state.history.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(state.history.Delay, state.history.Success, state.history.ErrorType, state.from_cache, state.history.Time, state.history.RuntimePenalty, state.history.UDPPenalty)
+	refreshHealthScore(tag, &state.history, state.from_cache)
 	history := state.history
 	state.mu.Unlock()
 
@@ -872,10 +871,9 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 		if his.ErrorType == "" || his.ErrorType == urltest.ErrorTypeNone {
 			his.ErrorType = urltest.ErrorTypeTimeout
 		}
-		his.FreshnessPenalty = urltest.CalculateFreshnessPenalty(false, his.Time)
-		his.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(his.Delay, his.Success, his.ErrorType, false, his.Time, runtimePenalty, his.UDPPenalty)
+		refreshHealthScore(tag, &his, false)
 		m.logger.Warn("outbound ", tag, " URL test failed: ", err)
-		m.logger.Warn("[HealthScore] tag=", tag, " delay=", his.Delay, " success=", his.Success, " error=", his.ErrorType, " score=", his.HealthScore)
+		m.logger.Warn("[HealthScore] tag=", tag, " delay=", his.Delay, " success=", his.Success, " error=", his.ErrorType, " policy=", his.PolicyPenalty, " score=", his.HealthScore)
 		return his, err
 	}
 	select {
@@ -896,9 +894,8 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 			}
 		}
 	}
-	his.FreshnessPenalty = urltest.CalculateFreshnessPenalty(false, his.Time)
-	his.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(his.Delay, his.Success, his.ErrorType, false, his.Time, runtimePenalty, his.UDPPenalty)
-	m.logger.Warn("[HealthScore] tag=", tag, " delay=", his.Delay, " success=", his.Success, " error=", his.ErrorType, " score=", his.HealthScore)
+	refreshHealthScore(tag, &his, false)
+	m.logger.Warn("[HealthScore] tag=", tag, " delay=", his.Delay, " success=", his.Success, " error=", his.ErrorType, " policy=", his.PolicyPenalty, " score=", his.HealthScore)
 	if his.IpInfo != nil {
 		m.logger.Info("outbound ", tag, " IP ", fmt.Sprint(his.IpInfo), " (", his.Delay, "ms): ", err)
 	} else {
@@ -1063,6 +1060,7 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.history.HealthScore = outcome.history.HealthScore
 	state.history.RuntimePenalty = outcome.history.RuntimePenalty
 	state.history.FreshnessPenalty = outcome.history.FreshnessPenalty
+	state.history.PolicyPenalty = outcome.history.PolicyPenalty
 	if state.udpProbeLast.IsZero() || time.Since(state.udpProbeLast) > m.udpProbeCooldown*3 {
 		state.history.UDPProbeAvailable = false
 		state.history.UDPPenalty = 0
@@ -1073,7 +1071,7 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 		state.history.UDPPenalty = udpPenalty
 		state.history.UDPLoss = udpLoss
 		state.history.UDPJitterMs = udpJitter
-		state.history.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(state.history.Delay, state.history.Success, state.history.ErrorType, false, state.history.Time, state.history.RuntimePenalty, state.history.UDPPenalty)
+		refreshHealthScore(outcome.outboundTag, &state.history, false)
 	}
 	state.from_cache = false
 	if outcome.history.IpInfo != nil {
@@ -1100,6 +1098,28 @@ func mergeIpInfo(old, new *ipinfo.IpInfo) *ipinfo.IpInfo {
 		new2.Org = old.Org
 	}
 	return &new2
+}
+
+func refreshHealthScore(tag string, history *adapter.URLTestHistory, isFromCache bool) {
+	if history == nil {
+		return
+	}
+	countryCode := ""
+	if history.IpInfo != nil {
+		countryCode = history.IpInfo.CountryCode
+	}
+	history.FreshnessPenalty = urltest.CalculateFreshnessPenalty(isFromCache, history.Time)
+	history.PolicyPenalty = urltest.CalculatePolicyPenalty(tag, countryCode)
+	history.HealthScore = urltest.CalculateHealthScoreWithPenalties(
+		history.Delay,
+		history.Success,
+		history.ErrorType,
+		isFromCache,
+		history.Time,
+		history.RuntimePenalty,
+		history.UDPPenalty,
+		history.PolicyPenalty,
+	)
 }
 
 func preferHistory(candidate, current *adapter.URLTestHistory) bool {
@@ -1134,8 +1154,7 @@ func (m *OutboundMonitoring) applyDynamicHealth(tag string, his *adapter.URLTest
 		his.ErrorType = urltest.ErrorTypeUnknown
 	}
 	his.RuntimePenalty = m.runtimePenaltyForTag(tag)
-	his.FreshnessPenalty = urltest.CalculateFreshnessPenalty(his.IsFromCache, his.Time)
-	his.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(his.Delay, his.Success, his.ErrorType, his.IsFromCache, his.Time, his.RuntimePenalty, his.UDPPenalty)
+	refreshHealthScore(tag, his, his.IsFromCache)
 }
 
 func (m *OutboundMonitoring) runtimePenaltyForTag(tag string) int {
@@ -1469,8 +1488,7 @@ func (m *OutboundMonitoring) loadHistory() *History {
 			if his.ErrorType == "" {
 				his.ErrorType = urltest.ErrorTypeUnknown
 			}
-			his.FreshnessPenalty = urltest.CalculateFreshnessPenalty(true, his.Time)
-			his.HealthScore = urltest.CalculateHealthScoreWithUDPPenalty(his.Delay, his.Success, his.ErrorType, true, his.Time, 0, his.UDPPenalty)
+			refreshHealthScore(tag, his, true)
 			state.mu.Lock()
 			state.history = *his
 			state.from_cache = true

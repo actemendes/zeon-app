@@ -8,7 +8,9 @@ import 'package:hiddify/core/utils/throttler.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
 import 'package:hiddify/features/proxy/model/ip_info_entity.dart' as oldipinfo;
+import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
 import 'package:hiddify/features/proxy/model/proxy_failure.dart';
+import 'package:hiddify/features/stats/data/stats_data_providers.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/hiddifycore/init_signal.dart';
 import 'package:hiddify/utils/riverpod_utils.dart';
@@ -96,16 +98,23 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
         .map((event) => event.getOrElse((l) => List<OutboundGroup>.empty()))
         .map((event) => event.firstOrNull?.items.first ?? OutboundInfo());
     final selectorStream = proxyProvider.watchProxies().map((event) => event.getOrElse((l) => null)).startWith(null);
+    final statsStream = ref
+        .watch(statsRepositoryProvider)
+        .watchStats()
+        .map((event) => event.getOrElse((_) => SystemInfo.create()))
+        .startWith(SystemInfo.create());
 
-    yield* Rx.combineLatest2<OutboundInfo, OutboundGroup?, OutboundInfo>(activeProxyStream, selectorStream, (
-      activeProxy,
-      selector,
-    ) {
-      if (_isAutoBalancerSelected(selector)) {
-        return _asAutoBalancer(activeProxy);
-      }
-      return activeProxy;
-    });
+    yield* Rx.combineLatest3<OutboundInfo, OutboundGroup?, SystemInfo, OutboundInfo>(
+      activeProxyStream,
+      selectorStream,
+      statsStream,
+      (activeProxy, selector, stats) {
+        if (_isAutoBalancerSelected(selector)) {
+          return _asAutoBalancer(activeProxy, selector, stats);
+        }
+        return activeProxy;
+      },
+    );
   }
 
   final _urlTestThrottler = Throttler(const Duration(seconds: 1));
@@ -132,15 +141,33 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
 
   bool _isAutoBalancerTag(String tag) => tag.trim().toLowerCase() == _autoBalancerTag;
 
-  OutboundInfo _asAutoBalancer(OutboundInfo activeProxy) {
+  OutboundInfo _asAutoBalancer(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {
+    final realOutbound = _realOutbound(activeProxy, selector, stats);
     return activeProxy.copyWith((info) {
       info.tag = _autoBalancerTag;
       info.type = "balancer";
       info.tagDisplay = _autoBalancerTag;
-      info.groupSelectedTag = "";
-      info.groupSelectedTagDisplay = "";
+      if (realOutbound != null) {
+        info.groupSelectedTag = realOutbound.tag;
+        info.groupSelectedTagDisplay = realOutbound.tagDisplay;
+      }
       info.isSelected = true;
       info.isGroup = true;
     });
+  }
+
+  OutboundInfo? _realOutbound(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {
+    final items = selector?.items ?? const <OutboundInfo>[];
+    final fromStats = extractRealOutboundTag(stats.currentOutbound);
+    final fromStatsItem = findOutboundByTagOrDisplay(items, fromStats);
+    if (fromStatsItem != null) return fromStatsItem;
+
+    final realTag = activeProxy.hasGroupSelectedTag() ? activeProxy.groupSelectedTag.trim() : '';
+    return findOutboundByTagOrDisplay(items, realTag) ??
+        findOutboundByTagOrDisplay(
+          items,
+          activeProxy.hasGroupSelectedTagDisplay() ? activeProxy.groupSelectedTagDisplay : null,
+        ) ??
+        findOutboundByTagOrDisplay(items, extractRealOutboundTag(activeProxy.tagDisplay));
   }
 }

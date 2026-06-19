@@ -31,6 +31,7 @@ type URLTestHistory struct {
 	HealthScore       int            `json:"health_score,omitempty"`
 	RuntimePenalty    int            `json:"runtime_penalty,omitempty"`
 	FreshnessPenalty  int            `json:"freshness_penalty,omitempty"`
+	PolicyPenalty     int            `json:"policy_penalty,omitempty"`
 	UDPProbeAvailable bool           `json:"udp_probe_available,omitempty"`
 	UDPPenalty        int            `json:"udp_penalty,omitempty"`
 	UDPLoss           float64        `json:"udp_loss,omitempty"`

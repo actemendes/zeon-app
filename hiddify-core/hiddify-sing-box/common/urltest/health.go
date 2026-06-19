@@ -29,6 +29,8 @@ const (
 
 const maxErrorTextLength = 240
 
+const RussianServerPolicyPenalty = 15
+
 func ClassifyProbeError(err error) (errorType string, errorText string) {
 	if err == nil {
 		return ErrorTypeNone, ""
@@ -80,6 +82,10 @@ func CalculateHealthScore(delay uint16, success bool, errorType string, isFromCa
 }
 
 func CalculateHealthScoreWithUDPPenalty(delay uint16, success bool, errorType string, isFromCache bool, updatedAt time.Time, runtimePenalty int, udpPenalty int) int {
+	return CalculateHealthScoreWithPenalties(delay, success, errorType, isFromCache, updatedAt, runtimePenalty, udpPenalty, 0)
+}
+
+func CalculateHealthScoreWithPenalties(delay uint16, success bool, errorType string, isFromCache bool, updatedAt time.Time, runtimePenalty int, udpPenalty int, policyPenalty int) int {
 	score := delayScore(delay)
 	freshnessPenalty := CalculateFreshnessPenalty(isFromCache, updatedAt)
 	if runtimePenalty < 0 {
@@ -94,12 +100,25 @@ func CalculateHealthScoreWithUDPPenalty(delay uint16, success bool, errorType st
 	if udpPenalty > 15 {
 		udpPenalty = 15
 	}
+	if policyPenalty < 0 {
+		policyPenalty = 0
+	}
+	if policyPenalty > 25 {
+		policyPenalty = 25
+	}
 
 	if !success {
 		score = min(score, errorScoreCap(errorType))
 	}
-	score -= freshnessPenalty + runtimePenalty + udpPenalty
+	score -= freshnessPenalty + runtimePenalty + udpPenalty + policyPenalty
 	return clamp(score, 0, 100)
+}
+
+func CalculatePolicyPenalty(tag string, countryCode string) int {
+	if isRussianServer(tag, countryCode) {
+		return RussianServerPolicyPenalty
+	}
+	return 0
 }
 
 func CalculateFreshnessPenalty(isFromCache bool, updatedAt time.Time) int {
@@ -163,6 +182,17 @@ func NewURLTestHistory(delay uint16, err error, runtimePenalty int) *adapter.URL
 		RuntimePenalty:   runtimePenalty,
 		FreshnessPenalty: CalculateFreshnessPenalty(false, now),
 	}
+}
+
+func isRussianServer(tag string, countryCode string) bool {
+	if strings.EqualFold(strings.TrimSpace(countryCode), "RU") {
+		return true
+	}
+	lowerTag := strings.ToLower(tag)
+	return strings.Contains(lowerTag, "🇷🇺") ||
+		strings.Contains(lowerTag, "россия") ||
+		strings.Contains(lowerTag, "russia") ||
+		strings.Contains(lowerTag, "russian")
 }
 
 func delayScore(delay uint16) int {
