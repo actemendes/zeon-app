@@ -4,6 +4,7 @@ import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
+import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/data/profile_name_parser.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
@@ -85,6 +86,7 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
             }).whereType<RemoteProfileEntity>(),
           )
           .first;
+      final proxyOnly = ref.read(connectionNotifierProvider).valueOrNull?.isConnected ?? false;
 
       await for (final profile in Stream.fromIterable(remoteProfiles)) {
         final normalizedProfileName = parseProfileName(profile.name).trim();
@@ -95,7 +97,7 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
           await ref
               .read(profileRepositoryProvider)
               .requireValue
-              .upsertRemote(profile.url)
+              .upsertRemote(profile.url, proxyOnly: proxyOnly)
               .mapLeft((l) {
                 loggy.debug("error updating profile [${profile.id}]", l);
                 ref

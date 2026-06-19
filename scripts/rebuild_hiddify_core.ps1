@@ -52,11 +52,61 @@ function Invoke-Wsl {
     }
 }
 
+function Get-WslCommandPrefix {
+    $wslArguments = @()
+    if ($WslDistribution) {
+        $wslArguments += @("--distribution", $WslDistribution)
+    }
+    return $wslArguments
+}
+
+function Get-WslDistributionList {
+    $output = & wsl.exe --list --quiet 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return ""
+    }
+
+    return (($output -replace "[`0`r`n]", "") | Where-Object { $_.Trim() } | ForEach-Object { $_.Trim() }) -join ", "
+}
+
+function Assert-WslBash {
+    $wslArguments = Get-WslCommandPrefix
+    $wslArguments += @("--", "sh", "-lc", "command -v bash >/dev/null 2>&1")
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & wsl.exe @wslArguments 2>$null
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($exitCode -eq 0) {
+        return
+    }
+
+    $selectedDistribution = if ($WslDistribution) { $WslDistribution } else { "the default WSL distribution" }
+    $availableDistributions = Get-WslDistributionList
+    $hint = "Install a regular Linux distribution, for example: wsl --install -d Ubuntu-24.04"
+    if ($WslDistribution) {
+        $hint = "Install bash in '$WslDistribution' or pass a different -WslDistribution value."
+    }
+    elseif ($availableDistributions -match "(^|,\s*)docker-desktop($|,)") {
+        $hint = "Your default WSL distribution appears to be docker-desktop. Set Ubuntu as default with 'wsl --set-default Ubuntu-24.04', or pass -WslDistribution Ubuntu-24.04."
+    }
+
+    $details = if ($availableDistributions) { " Available WSL distributions: $availableDistributions." } else { "" }
+    throw "Required command 'bash' was not found inside $selectedDistribution.$details $hint"
+}
+
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
 $coreDir = Join-Path $repoRoot "hiddify-core"
 
 Assert-Command "wsl.exe"
+Assert-WslBash
 
 if (-not (Test-Path -LiteralPath (Join-Path $coreDir "go.mod"))) {
     throw "hiddify-core sources were not found: $coreDir"

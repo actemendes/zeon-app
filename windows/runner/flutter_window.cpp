@@ -1,8 +1,35 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <wininet.h>
 
 #include "flutter/generated_plugin_registrant.h"
+
+namespace {
+
+// The core enables the WinINet proxy for System Proxy mode. Windows can end
+// the process during logoff/reboot before the core gets a chance to stop,
+// leaving the proxy pointed at a now-dead localhost listener. Disable it from
+// the runner as a synchronous, last-resort cleanup so the next Windows session
+// retains direct Internet access even when ZEON is not launched.
+void DisableSystemProxy() {
+  INTERNET_PER_CONN_OPTION option{};
+  option.dwOption = INTERNET_PER_CONN_FLAGS;
+  option.Value.dwValue = PROXY_TYPE_DIRECT;
+
+  INTERNET_PER_CONN_OPTION_LIST option_list{};
+  option_list.dwSize = sizeof(option_list);
+  option_list.pszConnection = nullptr;
+  option_list.dwOptionCount = 1;
+  option_list.pOptions = &option;
+
+  InternetSetOption(nullptr, INTERNET_OPTION_PER_CONNECTION_OPTION,
+                    &option_list, sizeof(option_list));
+  InternetSetOption(nullptr, INTERNET_OPTION_SETTINGS_CHANGED, nullptr, 0);
+  InternetSetOption(nullptr, INTERNET_OPTION_REFRESH, nullptr, 0);
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -13,6 +40,11 @@ bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;
   }
+
+  // Recover from an interrupted previous Windows shutdown before Flutter and
+  // the core are initialized. The active connection, if any, will set the
+  // proxy again after the core starts.
+  DisableSystemProxy();
 
   RECT frame = GetClientArea();
 
@@ -41,6 +73,8 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  DisableSystemProxy();
+
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -52,6 +86,13 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // WM_ENDSESSION is sent only after Windows confirms the session is ending.
+  // Do this before dispatching to Flutter: teardown time is limited and Dart
+  // cleanup is asynchronous.
+  if (message == WM_ENDSESSION && wparam) {
+    DisableSystemProxy();
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

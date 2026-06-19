@@ -32,6 +32,7 @@ abstract interface class ProfileRepository {
     String url, {
     UserOverride? userOverride,
     CancelToken? cancelToken,
+    bool proxyOnly = false,
     bool directOnly = false,
     bool disableRetry = false,
     bool validateConfigOnImport = true,
@@ -135,6 +136,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
     String url, {
     UserOverride? userOverride,
     CancelToken? cancelToken,
+    bool proxyOnly = false,
     bool directOnly = false,
     bool disableRetry = false,
     bool validateConfigOnImport = true,
@@ -159,6 +161,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                   rp: updatedRemote,
                   tempFilePath: tempFile.path,
                   cancelToken: cancelToken,
+                  proxyOnly: proxyOnly,
                   directOnly: directOnly,
                   disableRetry: disableRetry,
                 )
@@ -191,6 +194,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                   tempFilePath: tempFile.path,
                   userOverride: userOverride,
                   cancelToken: cancelToken,
+                  proxyOnly: proxyOnly,
                   directOnly: directOnly,
                   disableRetry: disableRetry,
                 )

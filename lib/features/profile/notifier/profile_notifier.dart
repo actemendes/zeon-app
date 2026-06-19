@@ -163,9 +163,10 @@ class UpdateProfileNotifier extends _$UpdateProfileNotifier with AppLogger {
     if (state.isLoading) return;
     state = const AsyncLoading();
     await ref.read(hapticServiceProvider.notifier).lightImpact();
+    final proxyOnly = ref.read(connectionNotifierProvider).valueOrNull?.isConnected ?? false;
     state = await AsyncValue.guard(() async {
       return await _profilesRepo
-          .upsertRemote(profile.url)
+          .upsertRemote(profile.url, proxyOnly: proxyOnly)
           .match(
             (err) {
               loggy.warning("failed to update profile", err);

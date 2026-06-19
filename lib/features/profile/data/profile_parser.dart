@@ -95,49 +95,67 @@ class ProfileParser {
     required String tempFilePath,
     required UserOverride? userOverride,
     CancelToken? cancelToken,
+    bool proxyOnly = false,
     bool directOnly = false,
     bool disableRetry = false,
-  }) => _downloadProfile(url, tempFilePath, cancelToken, directOnly: directOnly, disableRetry: disableRetry).flatMap(
-    (remoteHeaders) =>
-        TaskEither.fromEither(
-          populateHeaders(content: File(tempFilePath).readAsStringSync(), remoteHeaders: remoteHeaders),
-        ).flatMap(
-          (populatedHeaders) => TaskEither.fromEither(
-            parse(
-              tempFilePath: tempFilePath,
-              profile: ProfileEntity.remote(
-                id: id,
-                active: true,
-                name: '',
-                url: url,
-                lastUpdate: DateTime.now(),
-                userOverride: userOverride,
-                populatedHeaders: populatedHeaders,
+  }) =>
+      _downloadProfile(
+        url,
+        tempFilePath,
+        cancelToken,
+        proxyOnly: proxyOnly,
+        directOnly: directOnly,
+        disableRetry: disableRetry,
+      ).flatMap(
+        (remoteHeaders) =>
+            TaskEither.fromEither(
+              populateHeaders(content: File(tempFilePath).readAsStringSync(), remoteHeaders: remoteHeaders),
+            ).flatMap(
+              (populatedHeaders) => TaskEither.fromEither(
+                parse(
+                  tempFilePath: tempFilePath,
+                  profile: ProfileEntity.remote(
+                    id: id,
+                    active: true,
+                    name: '',
+                    url: url,
+                    lastUpdate: DateTime.now(),
+                    userOverride: userOverride,
+                    populatedHeaders: populatedHeaders,
+                  ),
+                ).flatMap((profEntity) => Either.tryCatch(() => profEntity.toInsertEntry(), ProfileFailure.unexpected)),
               ),
-            ).flatMap((profEntity) => Either.tryCatch(() => profEntity.toInsertEntry(), ProfileFailure.unexpected)),
-          ),
-        ),
-  );
+            ),
+      );
 
   TaskEither<ProfileFailure, ProfileEntriesCompanion> updateRemote({
     required RemoteProfileEntity rp,
     required String tempFilePath,
     CancelToken? cancelToken,
+    bool proxyOnly = false,
     bool directOnly = false,
     bool disableRetry = false,
-  }) => _downloadProfile(rp.url, tempFilePath, cancelToken, directOnly: directOnly, disableRetry: disableRetry).flatMap(
-    (remoteHeaders) =>
-        TaskEither.fromEither(
-          populateHeaders(content: File(tempFilePath).readAsStringSync(), remoteHeaders: remoteHeaders),
-        ).flatMap(
-          (populatedHeaders) => TaskEither.fromEither(
-            parse(
-              tempFilePath: tempFilePath,
-              profile: rp.copyWith(populatedHeaders: populatedHeaders),
-            ).flatMap((profEntity) => Either.tryCatch(() => profEntity.toUpdateEntry(), ProfileFailure.unexpected)),
-          ),
-        ),
-  );
+  }) =>
+      _downloadProfile(
+        rp.url,
+        tempFilePath,
+        cancelToken,
+        proxyOnly: proxyOnly,
+        directOnly: directOnly,
+        disableRetry: disableRetry,
+      ).flatMap(
+        (remoteHeaders) =>
+            TaskEither.fromEither(
+              populateHeaders(content: File(tempFilePath).readAsStringSync(), remoteHeaders: remoteHeaders),
+            ).flatMap(
+              (populatedHeaders) => TaskEither.fromEither(
+                parse(
+                  tempFilePath: tempFilePath,
+                  profile: rp.copyWith(populatedHeaders: populatedHeaders),
+                ).flatMap((profEntity) => Either.tryCatch(() => profEntity.toUpdateEntry(), ProfileFailure.unexpected)),
+              ),
+            ),
+      );
 
   Either<ProfileFailure, ProfileEntriesCompanion> offlineUpdate({
     required ProfileEntity profile,
@@ -156,6 +174,7 @@ class ProfileParser {
     String url,
     String tempFilePath,
     CancelToken? cancelToken, {
+    bool proxyOnly = false,
     bool directOnly = false,
     bool disableRetry = false,
   }) => TaskEither.tryCatch(() async {
@@ -170,6 +189,7 @@ class ProfileParser {
           userAgent: _ref.read(ConfigOptions.useXrayCoreWhenPossible)
               ? _httpClient.userAgent.replaceAll("HiddifyNext", "HiddifyNextX")
               : null,
+          proxyOnly: proxyOnly,
           directOnly: directOnly,
           disableRetry: disableRetry,
         )
@@ -184,6 +204,7 @@ class ProfileParser {
       httpClient: _httpClient,
       cancelToken: cancelToken ?? CancelToken(),
       ref: _ref,
+      proxyOnly: proxyOnly,
       directOnly: directOnly,
       disableRetry: disableRetry,
     );
@@ -738,6 +759,7 @@ class ProfileParser {
     required CancelToken cancelToken,
     required Ref ref,
     int parallelism = 4,
+    bool proxyOnly = false,
     bool directOnly = false,
     bool disableRetry = false,
   }) async {
@@ -773,6 +795,7 @@ class ProfileParser {
             userAgent: ref.read(ConfigOptions.useXrayCoreWhenPossible)
                 ? httpClient.userAgent.replaceAll('HiddifyNext', 'HiddifyNextX')
                 : null,
+            proxyOnly: proxyOnly,
             directOnly: directOnly,
             disableRetry: disableRetry,
           );

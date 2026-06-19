@@ -93,13 +93,7 @@ class DioHttpClient with InfraLogger {
     bool directOnly = false,
     bool disableRetry = false,
   }) async {
-    final mode = directOnly
-        ? "direct"
-        : proxyOnly
-        ? "proxy"
-        : await isPortOpen("127.0.0.1", port)
-        ? "both"
-        : "direct";
+    final mode = await _resolveMode(directOnly: directOnly, proxyOnly: proxyOnly);
     final dio = _dio[mode]!;
 
     return dio.get<T>(
@@ -126,13 +120,7 @@ class DioHttpClient with InfraLogger {
     bool directOnly = false,
     bool disableRetry = false,
   }) async {
-    final mode = directOnly
-        ? "direct"
-        : proxyOnly
-        ? "proxy"
-        : await isPortOpen("127.0.0.1", port)
-        ? "both"
-        : "direct";
+    final mode = await _resolveMode(directOnly: directOnly, proxyOnly: proxyOnly);
     final dio = _dio[mode]!;
 
     return dio.post<T>(
@@ -160,13 +148,7 @@ class DioHttpClient with InfraLogger {
     bool directOnly = false,
     bool disableRetry = false,
   }) async {
-    final mode = directOnly
-        ? "direct"
-        : proxyOnly
-        ? "proxy"
-        : await isPortOpen("127.0.0.1", port)
-        ? "both"
-        : "direct";
+    final mode = await _resolveMode(directOnly: directOnly, proxyOnly: proxyOnly);
     final dio = _dio[mode]!;
     return dio.download(
       url,
@@ -180,6 +162,18 @@ class DioHttpClient with InfraLogger {
         disableRetry: disableRetry,
       ),
     );
+  }
+
+  Future<String> _resolveMode({required bool directOnly, required bool proxyOnly}) async {
+    if (directOnly) return "direct";
+    if (proxyOnly) {
+      loggy.debug("using required local proxy [port=$port]");
+      return "proxy";
+    }
+    final proxyAvailable = await isPortOpen("127.0.0.1", port);
+    final mode = proxyAvailable ? "both" : "direct";
+    loggy.debug("using HTTP mode [$mode, port=$port]");
+    return mode;
   }
 
   Options _options(
