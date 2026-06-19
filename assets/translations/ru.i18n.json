@@ -346,7 +346,7 @@
             "bypassMsg": "В обход VPN для выбранных приложений"
           },
           "autoSelection": {
-            "title": "Автовыбор",
+            "title": "Автовыбор сервера",
             "performNow": "Выполнить сейчас",
             "resetToDefault": "Сбросить по умолчанию",
             "autoUpdateInterval": "Интервал автообновления",

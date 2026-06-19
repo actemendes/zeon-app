@@ -121,7 +121,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
 
 String getRealOutboundTag(OutboundInfo group) {
   if (_isBalancerGroup(group)) {
-    return "Автовыбор сервера";
+    return "Автовыбор";
   }
 
   var tag = formatProxyDisplayName(group.tagDisplay);

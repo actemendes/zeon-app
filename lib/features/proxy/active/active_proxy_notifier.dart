@@ -14,6 +14,7 @@ import 'package:hiddify/hiddifycore/init_signal.dart';
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:rxdart/rxdart.dart';
 
 part 'active_proxy_notifier.g.dart';
 
@@ -75,6 +76,7 @@ class IpInfoNotifier extends _$IpInfoNotifier with AppLogger {
 @Riverpod(keepAlive: true)
 class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
   static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
+  static const _autoBalancerTag = "balance";
 
   bool get _useMockProxyFlow => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
 
@@ -88,11 +90,22 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
     if (!serviceRunning) {
       throw const ServiceNotRunning();
     }
-    final proxyprovider = ref.watch(proxyRepositoryProvider);
-    yield* proxyprovider
+    final proxyProvider = ref.watch(proxyRepositoryProvider);
+    final activeProxyStream = proxyProvider
         .watchActiveProxies()
         .map((event) => event.getOrElse((l) => List<OutboundGroup>.empty()))
         .map((event) => event.firstOrNull?.items.first ?? OutboundInfo());
+    final selectorStream = proxyProvider.watchProxies().map((event) => event.getOrElse((l) => null)).startWith(null);
+
+    yield* Rx.combineLatest2<OutboundInfo, OutboundGroup?, OutboundInfo>(activeProxyStream, selectorStream, (
+      activeProxy,
+      selector,
+    ) {
+      if (_isAutoBalancerSelected(selector)) {
+        return _asAutoBalancer(activeProxy);
+      }
+      return activeProxy;
+    });
   }
 
   final _urlTestThrottler = Throttler(const Duration(seconds: 1));
@@ -108,6 +121,26 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
           throw err;
         }).run();
       }
+    });
+  }
+
+  bool _isAutoBalancerSelected(OutboundGroup? group) {
+    if (group == null) return false;
+    if (_isAutoBalancerTag(group.selected)) return true;
+    return group.items.any((item) => item.isSelected && _isAutoBalancerTag(item.tag));
+  }
+
+  bool _isAutoBalancerTag(String tag) => tag.trim().toLowerCase() == _autoBalancerTag;
+
+  OutboundInfo _asAutoBalancer(OutboundInfo activeProxy) {
+    return activeProxy.copyWith((info) {
+      info.tag = _autoBalancerTag;
+      info.type = "balancer";
+      info.tagDisplay = _autoBalancerTag;
+      info.groupSelectedTag = "";
+      info.groupSelectedTagDisplay = "";
+      info.isSelected = true;
+      info.isGroup = true;
     });
   }
 }

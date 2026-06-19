@@ -50,6 +50,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     companion object {
         private const val notificationId = 1
         private const val notificationChannel = "service"
+        private const val AUTO_BALANCER_TAG = "balance"
         var coreClient: CoreClient?=null
         val flags =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
@@ -158,12 +159,21 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     fun updateStatus(previous:SystemInfo,status: SystemInfo) {
         val uplink=status.uplink_total - previous.uplink_total
         val downlink=status.downlink_total - previous.downlink_total
-        val content = "${Libbox.formatBytes(uplink)}/s ↑\t${Libbox.formatBytes(downlink)}/s ↓ \n${status.current_outbound}"
+        val currentOutbound = presentOutbound(status.current_outbound)
+        val content = "${Libbox.formatBytes(uplink)}/s ↑\t${Libbox.formatBytes(downlink)}/s ↓ \n$currentOutbound"
         val title = "${status.current_profile}"
         Application.notificationManager.notify(
                 notificationId,
                 notificationBuilder.setContentTitle(title).setContentText(content).build()
         )
+    }
+
+    private fun presentOutbound(outbound: String): String {
+        val normalized = outbound.trim()
+        if (Regex("^$AUTO_BALANCER_TAG(?:\\s*(?:->|→|>)|\\s|$).*", RegexOption.IGNORE_CASE).matches(normalized)) {
+            return service.getString(R.string.auto_selection)
+        }
+        return normalized
     }
 
     override fun onReceive(context: Context, intent: Intent) {
