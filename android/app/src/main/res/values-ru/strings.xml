@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="stop">Остановить</string>
+    <string name="re_ping">Перевыбор</string>
+    <string name="quick_toggle">Переключить</string>
+    <string name="notification_channel_connection">VPN-подключение</string>
+    <string name="notification_channel_connection_description">Постоянное уведомление активного VPN-подключения</string>
+    <string name="status_starting">Сервис запускается…</string>
+    <string name="status_started">Сервис запущен</string>
+</resources>

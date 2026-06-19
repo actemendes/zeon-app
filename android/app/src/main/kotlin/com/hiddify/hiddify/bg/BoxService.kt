@@ -39,6 +39,12 @@ import com.hiddify.core.libbox.SystemProxyStatus
 import com.hiddify.hiddify.BuildConfig
 import com.hiddify.hiddify.MainActivity
 import com.hiddify.hiddify.constant.Bugs
+import com.hiddify.hiddify.utils.GrpcClientProvider
+import com.hiddify.core.api.v2.hcommon.Empty
+import com.hiddify.core.api.v2.hcore.CoreClient
+import com.hiddify.core.api.v2.hcore.SelectOutboundRequest
+import com.hiddify.core.api.v2.hcore.UrlTestRequest
+import com.squareup.wire.GrpcClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,6 +61,8 @@ class BoxService(
 
     companion object {
         private const val TAG = "A/BoxService"
+        private const val OUTBOUND_SELECTOR_TAG = "select"
+        private const val AUTO_BALANCER_TAG = "balance"
 
         private var initializeOnce = false
         private lateinit var workingDir: File
@@ -126,11 +134,45 @@ class BoxService(
                     stopService()
                 }
 
+                Action.SERVICE_REPING -> {
+                    rePingServers()
+                }
+
                 PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         serviceUpdateIdleMode()
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Restores the built-in automatic balancer after a manual server choice,
+     * then immediately schedules URL tests for every server in the selector.
+     */
+    private fun rePingServers() {
+        serviceScope.launch {
+            try {
+                val coreClient = GrpcClientProvider.grpcClient.create(CoreClient::class)
+                val currentOutbound = coreClient.GetSystemInfo().executeBlocking(Empty()).current_outbound
+
+                // "balance" is the automatic balancer selected by the core. A
+                // manual server selection is reported as its server tag instead.
+                if (!currentOutbound.startsWith(AUTO_BALANCER_TAG)) {
+                    coreClient.SelectOutbound().executeBlocking(
+                        SelectOutboundRequest(
+                            group_tag = OUTBOUND_SELECTOR_TAG,
+                            outbound_tag = AUTO_BALANCER_TAG,
+                        ),
+                    )
+                }
+
+                // Testing the selector recursively schedules tests for all of
+                // its children, including the automatic balancer's servers.
+                coreClient.UrlTest().executeBlocking(UrlTestRequest(tag = OUTBOUND_SELECTOR_TAG))
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to re-ping servers", e)
             }
         }
     }

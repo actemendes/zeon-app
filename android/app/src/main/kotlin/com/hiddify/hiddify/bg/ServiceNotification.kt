@@ -102,6 +102,18 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
                             )
                             ).build()
                     )
+                    addAction(
+                            NotificationCompat.Action.Builder(
+                                    0, service.getText(R.string.re_ping), PendingIntent.getBroadcast(
+                                    service,
+                                    1,
+                                    Intent(Action.SERVICE_REPING).setPackage(
+                                        Application.application.packageName
+                                    ),
+                                    flags
+                            )
+                            ).build()
+                    )
                 }
     }
 
