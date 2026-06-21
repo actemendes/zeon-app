@@ -5,6 +5,7 @@ import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/ui/ui_names.dart';
+import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
 import 'package:hiddify/features/proxy/overview/proxies_overview_notifier.dart';
 import 'package:hiddify/features/proxy/widget/proxy_tile.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -66,9 +67,18 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                     ),
                     itemBuilder: (context, index) {
                       final proxy = group.items[index];
+                      final selectedProxy = findOutboundByTagOrDisplay(group.items, group.selected);
+                      final isAutoSelected = selectedProxy != null && isAutoSelectedOutbound(selectedProxy);
+                      final realAutoTag = isAutoSelected
+                          ? resolveRealOutboundTag(autoOutbound: selectedProxy, allOutbounds: group.items)
+                          : null;
+                      final isActive = proxy.tag == group.selected || (isAutoSelected && proxy.tag == realAutoTag);
+                      final displayInfo = resolveOutboundDisplayInfo(proxy, allOutbounds: group.items);
                       return ProxyTile(
                         proxy,
                         selected: group.selected == proxy.tag,
+                        isActive: isActive,
+                        countryCode: displayInfo.countryCode,
                         onTap: () async {
                           await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
                           // if (selectActiveProxyMutation.state.isInProgress) return;

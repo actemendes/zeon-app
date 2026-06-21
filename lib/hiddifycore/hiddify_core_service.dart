@@ -42,6 +42,15 @@ class HiddifyCoreService with InfraLogger {
   static const _debugFragmentMode = String.fromEnvironment("debug_fragment_mode");
   static const _debugProfileDnsStrategy = String.fromEnvironment("debug_profile_dns_strategy");
   static const _debugTunImplementation = String.fromEnvironment("debug_tun_implementation");
+  static const _debugUdpProbeEnabled = bool.fromEnvironment("debug_udp_probe_enabled");
+  static const _debugUdpProbeEndpoint = String.fromEnvironment("debug_udp_probe_endpoint");
+  static const _debugUdpProbeSecret = String.fromEnvironment("debug_udp_probe_secret");
+  static const _debugUdpProbeCount = int.fromEnvironment("debug_udp_probe_count", defaultValue: 10);
+  static const _debugUdpProbeSize = int.fromEnvironment("debug_udp_probe_size", defaultValue: 160);
+  static const _debugUdpProbeIntervalMs = int.fromEnvironment("debug_udp_probe_interval_ms", defaultValue: 40);
+  static const _debugUdpProbeTimeoutMs = int.fromEnvironment("debug_udp_probe_timeout_ms", defaultValue: 1000);
+  static const _debugUdpProbeCooldownSec = int.fromEnvironment("debug_udp_probe_cooldown_sec", defaultValue: 60);
+  static const _debugUdpProbeTopN = int.fromEnvironment("debug_udp_probe_top_n", defaultValue: 3);
   static const _listenerBackoffBaseMs = 300;
   static const _listenerBackoffMaxMs = 6000;
 
@@ -82,7 +91,10 @@ class HiddifyCoreService with InfraLogger {
             isSecure: true,
             host: "de1.zeon.dev",
             port: 443,
-            urlTestDelay: 148,
+            urlTestDelay: 29,
+            success: true,
+            errorType: "none",
+            healthScore: 100,
             ipinfo: IpInfo(ip: "91.107.233.10", countryCode: "DE", city: "Frankfurt", org: "Hetzner Online GmbH"),
           ),
           OutboundInfo(
@@ -94,7 +106,10 @@ class HiddifyCoreService with InfraLogger {
             isSecure: true,
             host: "nl1.zeon.dev",
             port: 443,
-            urlTestDelay: 186,
+            urlTestDelay: 90,
+            success: true,
+            errorType: "none",
+            healthScore: 82,
             ipinfo: IpInfo(ip: "95.211.44.52", countryCode: "NL", city: "Amsterdam", org: "LeaseWeb Netherlands B.V."),
           ),
           OutboundInfo(
@@ -106,8 +121,56 @@ class HiddifyCoreService with InfraLogger {
             isSecure: true,
             host: "us1.zeon.dev",
             port: 443,
-            urlTestDelay: 232,
+            urlTestDelay: 180,
+            success: true,
+            errorType: "none",
+            healthScore: 60,
             ipinfo: IpInfo(ip: "198.74.58.101", countryCode: "US", city: "New York", org: "Akamai Connected Cloud"),
+          ),
+          OutboundInfo(
+            tag: "jp-tokyo-1",
+            tagDisplay: "Japan - Tokyo 1",
+            type: "VLESS",
+            isSelected: false,
+            isVisible: true,
+            isSecure: true,
+            host: "jp1.zeon.dev",
+            port: 443,
+            urlTestDelay: 650,
+            success: true,
+            errorType: "none",
+            healthScore: 40,
+            ipinfo: IpInfo(ip: "139.162.65.37", countryCode: "JP", city: "Tokyo", org: "Akamai Connected Cloud"),
+          ),
+          OutboundInfo(
+            tag: "br-penalized-1",
+            tagDisplay: "Brazil - Penalized",
+            type: "Trojan",
+            isSelected: false,
+            isVisible: true,
+            isSecure: true,
+            host: "br1.zeon.dev",
+            port: 443,
+            urlTestDelay: 42,
+            success: true,
+            errorType: "none",
+            healthScore: 20,
+            ipinfo: IpInfo(ip: "45.79.1.20", countryCode: "BR", city: "Sao Paulo", org: "Akamai Connected Cloud"),
+          ),
+          OutboundInfo(
+            tag: "failed-1",
+            tagDisplay: "Failed Probe",
+            type: "VLESS",
+            isSelected: false,
+            isVisible: true,
+            isSecure: true,
+            host: "bad.zeon.dev",
+            port: 443,
+            urlTestDelay: 65535,
+            success: false,
+            errorType: "timeout",
+            healthScore: 0,
+            ipinfo: IpInfo(ip: "203.0.113.10", countryCode: "ZZ", city: "Unknown", org: "Example"),
           ),
         ],
       ),
@@ -281,7 +344,11 @@ class HiddifyCoreService with InfraLogger {
       }
       try {
         final directories = ref.read(appDirectoriesProvider).requireValue;
-        final debug = ref.read(debugModeNotifierProvider);
+        // In Flutter debug builds we need the core platform log bridge enabled
+        // even when the user-facing debug setting is off. The hcore bridge still
+        // exposes only warning+ logs by default, with selected Smart Active
+        // diagnostics promoted explicitly on the Go side.
+        final debug = ref.read(debugModeNotifierProvider) || kDebugMode;
         final setupResponse = await core.setup(directories, debug, 3);
 
         if (setupResponse.isNotEmpty) {
@@ -384,6 +451,24 @@ class HiddifyCoreService with InfraLogger {
     if (_debugTunImplementation.isNotEmpty) {
       map["tun-implementation"] = _debugTunImplementation;
     }
+    if (_debugUdpProbeEnabled) {
+      if (_debugUdpProbeSecret.isEmpty) {
+        map["udp-probe-enabled"] = false;
+        loggy.warning("debug UDP probe requested without secret; keeping probe disabled");
+      } else {
+        map["udp-probe-enabled"] = true;
+        map["udp-probe-endpoint"] = _debugUdpProbeEndpoint.isNotEmpty
+            ? _debugUdpProbeEndpoint
+            : "udp-probe.zeon-vps.link:8443";
+        map["udp-probe-secret"] = _debugUdpProbeSecret;
+        map["udp-probe-count"] = _debugUdpProbeCount;
+        map["udp-probe-size"] = _debugUdpProbeSize;
+        map["udp-probe-interval-ms"] = _debugUdpProbeIntervalMs;
+        map["udp-probe-timeout-ms"] = _debugUdpProbeTimeoutMs;
+        map["udp-probe-cooldown-sec"] = _debugUdpProbeCooldownSec;
+        map["udp-probe-top-n"] = _debugUdpProbeTopN;
+      }
+    }
     final runtime = await _readRuntimeNetworkInfo();
     map["network-transport-type"] = runtime.$1;
     map["network-interface-mtu"] = runtime.$2;
@@ -416,6 +501,12 @@ class HiddifyCoreService with InfraLogger {
       "mtu": payload["mtu"],
       "tun-implementation": payload["tun-implementation"],
       "strict-route": payload["strict-route"],
+      "udp-probe-enabled": payload["udp-probe-enabled"],
+      "udp-probe-endpoint": payload["udp-probe-endpoint"],
+      "udp-probe-count": payload["udp-probe-count"],
+      "udp-probe-size": payload["udp-probe-size"],
+      "udp-probe-timeout-ms": payload["udp-probe-timeout-ms"],
+      "udp-probe-top-n": payload["udp-probe-top-n"],
       "rules-count": (payload["rules"] as List?)?.length ?? 0,
     };
     return safe;
@@ -823,8 +914,18 @@ class HiddifyCoreService with InfraLogger {
             final roll = random.nextInt(100);
             if (roll < 8) {
               item.urlTestDelay = 65001;
+              item.success = false;
+              item.errorType = 'timeout';
+              item.healthScore = 20;
             } else {
               item.urlTestDelay = 80 + random.nextInt(260);
+              item.success = true;
+              item.errorType = 'none';
+              item.healthScore = item.urlTestDelay < 150 ? 90 : 75;
+              item.udpProbeAvailable = roll % 3 == 0;
+              item.udpLoss = item.udpProbeAvailable ? random.nextInt(6).toDouble() : 0;
+              item.udpJitterMs = item.udpProbeAvailable ? 8 + random.nextInt(45) : 0;
+              item.udpPenalty = item.udpProbeAvailable && item.udpLoss > 3 ? 4 : 0;
             }
           }
         }

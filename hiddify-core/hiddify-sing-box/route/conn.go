@@ -14,7 +14,9 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
+	healthmonitoring "github.com/sagernet/sing-box/common/monitoring"
 	"github.com/sagernet/sing-box/common/tlsfragment"
+	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
@@ -83,6 +85,7 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		err = E.Cause(err, "open connection to ", remoteString, dialerString)
 		N.CloseOnHandshakeFailure(conn, onClose, err)
 		m.logger.ErrorContext(ctx, err)
+		m.recordRuntimePenalty(ctx, err, false)
 		return
 	}
 	err = N.ReportConnHandshakeSuccess(conn, remoteConn)
@@ -91,8 +94,10 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		remoteConn.Close()
 		N.CloseOnHandshakeFailure(conn, onClose, err)
 		m.logger.ErrorContext(ctx, err)
+		m.recordRuntimePenalty(ctx, err, true)
 		return
 	}
+	m.recordRuntimeSuccess(ctx)
 	if metadata.TLSFragment || metadata.TLSRecordFragment {
 		remoteConn = tf.NewConn(remoteConn, ctx, metadata.TLSFragment, metadata.TLSRecordFragment, metadata.TLSFragmentFallbackDelay)
 	}
@@ -153,6 +158,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			err = E.Cause(err, "open packet connection to ", remoteString, dialerString)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
 			m.logger.ErrorContext(ctx, err)
+			m.recordRuntimePenalty(ctx, err, false)
 			return
 		}
 		remotePacketConn = bufio.NewUnbindPacketConn(remoteConn)
@@ -177,6 +183,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			err = E.Cause(err, "listen packet connection using ", dialerString)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
 			m.logger.ErrorContext(ctx, err)
+			m.recordRuntimePenalty(ctx, err, false)
 			return
 		}
 	}
@@ -185,6 +192,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 		conn.Close()
 		remotePacketConn.Close()
 		m.logger.ErrorContext(ctx, "report handshake success: ", err)
+		m.recordRuntimePenalty(ctx, err, true)
 		return
 	}
 	if destinationAddress.IsValid() {
@@ -259,6 +267,7 @@ func (m *ConnectionManager) preConnectionCopy(ctx context.Context, source net.Co
 			} else {
 				m.logger.ErrorContext(ctx, "connection download handshake: ", err)
 			}
+			m.recordRuntimePenalty(ctx, err, true)
 			return
 		}
 	}
@@ -303,7 +312,8 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 		break
 	}
 
-	_, err := bufio.CopyWithCounters(destinationWriter, sourceReader, source, readCounters, writeCounters, bufio.DefaultIncreaseBufferAfter, bufio.DefaultBatchSize)
+	bytes, err := bufio.CopyWithCounters(destinationWriter, sourceReader, source, readCounters, writeCounters, bufio.DefaultIncreaseBufferAfter, bufio.DefaultBatchSize)
+	m.recordRuntimeTraffic(ctx, bytes)
 	if err != nil {
 		common.Close(source, destination)
 	} else if duplexDst, isDuplex := destination.(N.WriteCloser); isDuplex {
@@ -323,6 +333,7 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 			m.logger.DebugContext(ctx, "connection upload finished")
 		} else if !E.IsClosedOrCanceled(err) && !strings.Contains(err.Error(), "NO_ERROR") {
 			m.logger.ErrorContext(ctx, "connection upload closed: ", err)
+			m.recordRuntimePenalty(ctx, err, true)
 		} else {
 			m.logger.TraceContext(ctx, "connection upload closed")
 		}
@@ -331,6 +342,7 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 			m.logger.DebugContext(ctx, "connection download finished")
 		} else if !E.IsClosedOrCanceled(err) && !strings.Contains(err.Error(), "NO_ERROR") && !strings.Contains(err.Error(), "response body closed") {
 			m.logger.ErrorContext(ctx, "connection download closed: ", err)
+			m.recordRuntimePenalty(ctx, err, true)
 		} else {
 			m.logger.TraceContext(ctx, "connection download closed")
 		}
@@ -376,6 +388,43 @@ func (m *ConnectionManager) connectionCopyEarlyWrite(source net.Conn, destinatio
 		return io.EOF
 	}
 	return nil
+}
+
+func (m *ConnectionManager) recordRuntimePenalty(ctx context.Context, err error, strict bool) {
+	if err == nil {
+		return
+	}
+	metadata := adapter.ContextFrom(ctx)
+	if metadata == nil || metadata.GetRealOutbound() == "" {
+		return
+	}
+	errorType, _ := urltest.ClassifyProbeError(err)
+	if !urltest.ShouldApplyRuntimePenalty(errorType, strict) {
+		return
+	}
+	if monitor := healthmonitoring.Get(ctx); monitor != nil {
+		monitor.RecordRuntimeError(metadata.GetRealOutbound(), err)
+	}
+}
+
+func (m *ConnectionManager) recordRuntimeSuccess(ctx context.Context) {
+	metadata := adapter.ContextFrom(ctx)
+	if metadata == nil || metadata.GetRealOutbound() == "" {
+		return
+	}
+	if monitor := healthmonitoring.Get(ctx); monitor != nil {
+		monitor.RecordRuntimeSuccess(metadata.GetRealOutbound())
+	}
+}
+
+func (m *ConnectionManager) recordRuntimeTraffic(ctx context.Context, bytes int64) {
+	metadata := adapter.ContextFrom(ctx)
+	if metadata == nil || metadata.GetRealOutbound() == "" || bytes <= 0 {
+		return
+	}
+	if monitor := healthmonitoring.Get(ctx); monitor != nil {
+		monitor.RecordRuntimeTraffic(metadata.GetRealOutbound(), bytes)
+	}
 }
 
 func (m *ConnectionManager) packetConnectionCopy(ctx context.Context, source N.PacketReader, destination N.PacketWriter, direction bool, done *atomic.Bool, onClose N.CloseHandlerFunc) {

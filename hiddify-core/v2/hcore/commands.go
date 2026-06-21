@@ -48,7 +48,7 @@ func (h *HiddifyInstance) readStatus(prev *SystemInfo) *SystemInfo {
 			if currentOutBound, ok := box.Outbound().Outbound(current); ok {
 				if g, ok := currentOutBound.(adapter.OutboundGroup); ok {
 					if now := g.Now(); now != "" {
-						message.CurrentOutbound = fmt.Sprint(message.CurrentOutbound, "→", TrimTagName(now))
+						message.CurrentOutbound = fmt.Sprint(message.CurrentOutbound, " • ", TrimTagName(now))
 					}
 				}
 			}
@@ -324,7 +324,14 @@ func (h *HiddifyInstance) UrlTest(in *UrlTestRequest) (*hcommon.Response, error)
 		return nil, E.New("service not ready")
 	}
 	monitor := monitoring.Get(h.Context())
-	monitor.TestNow(in.Tag)
+	if monitor == nil {
+		return nil, E.New("monitoring service not ready")
+	}
+	go func() {
+		if err := monitor.TestNowAndWait(in.Tag, 0); err != nil {
+			Log(LogLevel_WARNING, LogType_CORE, "[ManualRefresh] failed tag=", in.Tag, " error=", err)
+		}
+	}()
 	// router := box.Outbound()
 	// abstractOutboundGroup, isLoaded := router.Outbound(groupTag)
 	// if !isLoaded {

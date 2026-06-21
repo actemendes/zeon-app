@@ -50,6 +50,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     companion object {
         private const val notificationId = 1
         private const val notificationChannel = "service"
+        private const val AUTO_BALANCER_TAG = "balance"
         var coreClient: CoreClient?=null
         val flags =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
@@ -158,7 +159,8 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     fun updateStatus(previous:SystemInfo,status: SystemInfo) {
         val uplink=status.uplink_total - previous.uplink_total
         val downlink=status.downlink_total - previous.downlink_total
-        val content = "${Libbox.formatBytes(uplink)}/s ↑\t${Libbox.formatBytes(downlink)}/s ↓ \n${status.current_outbound}"
+        val currentOutbound = presentOutbound(status.current_outbound)
+        val content = "${Libbox.formatBytes(uplink)}/s \u2191\t${Libbox.formatBytes(downlink)}/s \u2193 \n$currentOutbound"
         val title = "${status.current_profile}"
         Application.notificationManager.notify(
                 notificationId,
@@ -166,6 +168,28 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
         )
     }
 
+    private fun presentOutbound(outbound: String): String {
+        val normalized = outbound.trim()
+        val match = Regex("^$AUTO_BALANCER_TAG\\s*(?:->|>|→|•)\\s*(.+?)\\s*$", RegexOption.IGNORE_CASE)
+            .find(normalized)
+        if (match != null) {
+            val realOutbound = presentServerName(match.groupValues[1])
+            if (realOutbound.isNotBlank()) {
+                return "${service.getString(R.string.auto_selection)} • $realOutbound"
+            }
+            return service.getString(R.string.auto_selection)
+        }
+        if (Regex("^$AUTO_BALANCER_TAG(?:\\s|$).*", RegexOption.IGNORE_CASE).matches(normalized)) {
+            return service.getString(R.string.auto_selection)
+        }
+        return presentServerName(normalized)
+    }
+
+    private fun presentServerName(outbound: String): String {
+        return outbound
+            .substringBefore("§")
+            .trim()
+    }
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_SCREEN_ON -> {

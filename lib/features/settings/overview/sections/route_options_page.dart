@@ -93,12 +93,19 @@ class RouteOptionsPage extends HookConsumerWidget {
             },
           ),
           ChoicePreferenceWidget(
-            title: t.pages.settings.routing.balancerStrategy.title,
-            icon: Icons.balance_rounded,
             selected: ref.watch(ConfigOptions.balancerStrategy),
             preferences: ref.watch(ConfigOptions.balancerStrategy.notifier),
-            choices: BalancerStrategy.values,
+            choices: const [BalancerStrategy.roundRobin, BalancerStrategy.smartActiveAuto],
+            title: t.pages.settings.routing.balancerStrategy.title,
+            icon: Icons.auto_awesome_rounded,
             presentChoice: (value) => value.present(t),
+          ),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 72, end: 16, bottom: 8),
+            child: Text(
+              t.pages.settings.routing.balancerStrategy.description,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ),
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.routing.blockAds),

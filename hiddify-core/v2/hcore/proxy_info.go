@@ -8,8 +8,8 @@ import (
 	hcommon "github.com/hiddify/hiddify-core/v2/hcommon"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
+	"github.com/sagernet/sing-box/common/urltest"
 	G "github.com/sagernet/sing-box/protocol/group"
-	"github.com/sagernet/sing-box/protocol/group/balancer"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/service"
 	"google.golang.org/grpc"
@@ -23,7 +23,7 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 	// 	return nil
 	// }
 
-	out := &OutboundInfo{}
+	out := &OutboundInfo{UrlTestStatus: urltest.StatusNotTested}
 	// realTag := ""
 
 	out.Tag = detour.Tag()
@@ -38,11 +38,6 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 	if tag := monitoring.RealTag(detour); tag != "" {
 		dtag := TrimTagName(tag)
 		out.GroupSelectedTagDisplay = &dtag
-		if balancer, ok := detour.(*balancer.Balancer); ok {
-			if stg := balancer.Strategy(); stg != "lowest-delay" {
-				out.GroupSelectedTagDisplay = &stg
-			}
-		}
 	}
 	// realTag = adapter.OutboundTag(detour)
 
@@ -61,6 +56,26 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 		if url_test_history.IsFromCache {
 			out.UrlTestDelay = 0
 		}
+		out.Success = url_test_history.Success
+		out.ErrorType = url_test_history.ErrorType
+		out.ErrorText = url_test_history.ErrorText
+		out.UrlTestStatus = url_test_history.URLTestStatus
+		if out.UrlTestStatus == "" {
+			if url_test_history.Success && url_test_history.Delay > 0 && url_test_history.Delay < monitoring.TimeoutDelay {
+				out.UrlTestStatus = urltest.StatusSuccess
+			} else if !url_test_history.Time.IsZero() || url_test_history.ErrorType != "" {
+				out.UrlTestStatus = urltest.StatusFailed
+			} else {
+				out.UrlTestStatus = urltest.StatusNotTested
+			}
+		}
+		out.HealthScore = int32(url_test_history.HealthScore)
+		out.RuntimePenalty = int32(url_test_history.RuntimePenalty)
+		out.FreshnessPenalty = int32(url_test_history.FreshnessPenalty)
+		out.UdpProbeAvailable = url_test_history.UDPProbeAvailable
+		out.UdpLoss = url_test_history.UDPLoss
+		out.UdpJitterMs = int32(url_test_history.UDPJitterMs)
+		out.UdpPenalty = int32(url_test_history.UDPPenalty)
 		if url_test_history.IpInfo != nil {
 			out.Ipinfo = &IpInfo{
 				Ip:          url_test_history.IpInfo.IP,
@@ -137,10 +152,10 @@ func (h *HiddifyInstance) GetAllProxiesInfo(hismap map[string]*adapter.URLTestHi
 			pinfo := outbounds_converted[itemTag]
 			pinfo.IsSelected = itemTag == selectedTag
 			if onlyGroupitems && pinfo.GroupSelectedTagDisplay != nil && pinfo.TagDisplay != *pinfo.GroupSelectedTagDisplay {
-				pinfo.TagDisplay = pinfo.TagDisplay + " → " + *pinfo.GroupSelectedTagDisplay
+				pinfo.TagDisplay = pinfo.TagDisplay + " • " + *pinfo.GroupSelectedTagDisplay
 			}
 			group.Items = append(group.Items, pinfo)
-			pinfo.IsVisible = !strings.Contains(itemTag, "§hide§")
+			pinfo.IsVisible = !strings.Contains(itemTag, "§hide§") && !strings.Contains(itemTag, "В§hideВ§")
 
 		}
 		if len(group.Items) == 0 {
@@ -151,7 +166,7 @@ func (h *HiddifyInstance) GetAllProxiesInfo(hismap map[string]*adapter.URLTestHi
 
 		if onlyGroupitems && group.Tag == config.OutboundSelectTag {
 			if warp_info, ok := outbounds_converted[config.WARPConfigTag]; ok {
-				warp_info.TagDisplay = config.WARPConfigTag + " → " + outbounds_converted[group.Selected].TagDisplay
+				warp_info.TagDisplay = config.WARPConfigTag + " • " + outbounds_converted[group.Selected].TagDisplay
 				group.Selected = warp_info.Tag
 				group.Items = append([]*OutboundInfo{warp_info}, group.Items...)
 			}
@@ -164,7 +179,7 @@ func (h *HiddifyInstance) GetAllProxiesInfo(hismap map[string]*adapter.URLTestHi
 }
 
 func TrimTagName(tag string) string {
-	return strings.Trim(strings.Split(tag, "§")[0], " ")
+	return strings.Trim(strings.Split(strings.Split(tag, "§")[0], "В§")[0], " ")
 }
 
 func (s *CoreService) OutboundsInfo(req *hcommon.Empty, stream grpc.ServerStreamingServer[OutboundGroupList]) error {

@@ -20,12 +20,7 @@ class CustomAlertDialog extends HookConsumerWidget {
     final copyText = diagnosticText ?? (title == null ? message : "$title\n$message");
     return AlertDialog(
       title: Text(title ?? message),
-      content: const SingleChildScrollView(
-        child: SizedBox(
-          width: 468,
-          child: Text('Если ошибка повторяется часто - пожалуйста, скопируйте ошибку и напишите в поддержку.'),
-        ),
-      ),
+      content: SingleChildScrollView(child: SizedBox(width: 468, child: Text(message))),
       actions: [
         TextButton(
           onPressed: () async {

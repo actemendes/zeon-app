@@ -89,6 +89,7 @@ void main() {
     expect(json["profile-dns-strategy"], "prefer_ipv4");
     expect(json["enable-full-config"], false);
     expect(json["execute-config-as-is"], false);
+    expect(json.keys.where((key) => key.startsWith("smart_active_debug_")), isEmpty);
 
     final fullConfigJson = option.copyWith(executeConfigAsIs: true).toCoreJson();
     expect(fullConfigJson["enable-full-config"], true);

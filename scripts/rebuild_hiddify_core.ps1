@@ -11,6 +11,9 @@ param(
 
     [switch]$InstallWebDependencies,
 
+    # Adds the smart_active_debug Go build tag. Never use this for releases.
+    [switch]$SmartActiveDebug,
+
     [switch]$DryRun
 )
 
@@ -121,6 +124,7 @@ if (-not $wslRepoRoot) {
 $skipGoModDownloadValue = if ($SkipGoModDownload) { "1" } else { "0" }
 $skipGomobileInitValue = if ($SkipGomobileInit) { "1" } else { "0" }
 $installWebDependenciesValue = if ($InstallWebDependencies) { "1" } else { "0" }
+$smartActiveDebugValue = if ($SmartActiveDebug) { "1" } else { "0" }
 $selectedPlatforms = @($Platform | Select-Object -Unique)
 
 $bashScript = @'
@@ -130,11 +134,17 @@ repo_root="$1"
 skip_go_mod_download="$2"
 skip_gomobile_init="$3"
 install_web_dependencies="$4"
-shift 4
+smart_active_debug="$5"
+shift 5
 platforms=("$@")
 
 core_dir="$repo_root/hiddify-core"
 android_aar="$repo_root/android/app/libs/hiddify-core.aar"
+core_build_tags="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack"
+if [ "$smart_active_debug" = "1" ]; then
+  core_build_tags="$core_build_tags,smart_active_debug"
+  echo "Building Smart Active debug fault injection support."
+fi
 
 export PATH="/usr/local/go/bin:/usr/local/bin:$PATH"
 export GOPATH="${GOPATH:-$(go env GOPATH 2>/dev/null || true)}"
@@ -207,7 +217,7 @@ for platform in "${platforms[@]}"; do
           -androidapi=21 \
           -javapkg=com.hiddify.core \
           -libname=hiddify-core \
-          -tags=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack \
+          -tags="$core_build_tags" \
           -trimpath \
           -ldflags="-w -s -checklinkname=0 -buildid=" \
           -target=android \
@@ -229,7 +239,7 @@ for platform in "${platforms[@]}"; do
           cp -f "$core_dir/bin/$artifact" "$windows_backup_dir/$artifact"
         fi
       done
-      if ! make -C "$core_dir" windows-amd64; then
+      if ! make -C "$core_dir" TAGS="$core_build_tags" windows-amd64; then
         for artifact in hiddify-core.dll libcronet.dll HiddifyCli.exe; do
           if [ -f "$windows_backup_dir/$artifact" ]; then
             cp -f "$windows_backup_dir/$artifact" "$core_dir/bin/$artifact"
@@ -254,7 +264,7 @@ for platform in "${platforms[@]}"; do
       require_command git
 
       echo "Preparing Linux Cronet dependency..."
-      make -C "$core_dir" cronet-amd64
+      make -C "$core_dir" TAGS="$core_build_tags" cronet-amd64
 
       # hiddify-core/Makefile uses this directory as a temporary link location.
       if [ -d "$core_dir/lib" ]; then
@@ -266,7 +276,7 @@ for platform in "${platforms[@]}"; do
       fi
 
       echo "Building Linux core SO and CLI..."
-      make -C "$core_dir" linux-amd64
+      make -C "$core_dir" TAGS="$core_build_tags" linux-amd64
       ls -lh \
         "$core_dir/bin/lib/hiddify-core.so" \
         "$core_dir/bin/HiddifyCli"
@@ -289,7 +299,8 @@ $bashArguments = @(
     $wslRepoRoot,
     $skipGoModDownloadValue,
     $skipGomobileInitValue,
-    $installWebDependenciesValue
+    $installWebDependenciesValue,
+    $smartActiveDebugValue
 ) + $selectedPlatforms
 
 Write-Host "Repository in WSL: $wslRepoRoot"
@@ -301,7 +312,7 @@ try {
     if ($DryRun) {
         Write-Host ""
         Write-Host "Dry run: WSL build was not started."
-        Write-Host "Command: wsl.exe bash <temporary-build-script> $wslRepoRoot $skipGoModDownloadValue $skipGomobileInitValue $installWebDependenciesValue $($selectedPlatforms -join ' ')"
+        Write-Host "Command: wsl.exe bash <temporary-build-script> $wslRepoRoot $skipGoModDownloadValue $skipGomobileInitValue $installWebDependenciesValue $smartActiveDebugValue $($selectedPlatforms -join ' ')"
     }
     else {
         Invoke-Wsl -Arguments $bashArguments

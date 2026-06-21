@@ -1,16 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/features/proxy/active/ip_widget.dart';
 import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
+import 'package:hiddify/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:hiddify/gen/fonts.gen.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 
 class ProxyTile extends StatelessWidget with PresLogger {
-  const ProxyTile(this.proxy, {super.key, required this.selected, required this.onTap});
+  const ProxyTile(
+    this.proxy, {
+    super.key,
+    required this.selected,
+    required this.isActive,
+    this.countryCode,
+    required this.onTap,
+  });
 
   final OutboundInfo proxy;
   final bool selected;
+  final bool isActive;
+  final String? countryCode;
   final GestureTapCallback? onTap;
 
   @override
@@ -22,8 +32,11 @@ class ProxyTile extends StatelessWidget with PresLogger {
 
     final primaryColor = selected ? selectedTextColor : themeTextColor;
     final tileColor = selected ? theme.colorScheme.primaryContainer : Colors.transparent;
-    final hasDelay = proxy.urlTestDelay != 0;
-    final hasNoPing = proxy.urlTestDelay > 65000;
+    final pingText = formatOutboundPing(proxy);
+    final failedPing = proxyPingFailed(proxy);
+    final pingColor = failedPing
+        ? theme.colorScheme.error
+        : delayColor(context, proxy.hasUrlTestDelay() ? proxy.urlTestDelay : 0);
 
     return ListTile(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -38,7 +51,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
         child: Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            formatProxyDisplayName(proxy.tagDisplay),
+            formatOutboundTitle(proxy),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodyLarge?.copyWith(
@@ -54,34 +67,37 @@ class ProxyTile extends StatelessWidget with PresLogger {
         excludeFromSemantics: true,
         onLongPress: () {},
         child: IPCountryFlag(
-          countryCode: resolveProxyCountryCode(
-            tagDisplay: proxy.tagDisplay,
-            fallbackCountryCode: proxy.ipinfo.countryCode,
-          ),
+          countryCode:
+              countryCode ??
+              resolveProxyCountryCode(tagDisplay: proxy.tagDisplay, fallbackCountryCode: proxy.ipinfo.countryCode),
           size: 40,
         ),
       ),
-      trailing: hasDelay
-          ? SizedBox(
-              width: 44,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (hasDelay)
-                    Text(
-                      hasNoPing ? "\u00D7" : proxy.urlTestDelay.toString(),
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: delayColor(context, proxy.urlTestDelay),
-                        fontSize: hasNoPing ? 16 : null,
-                        height: hasNoPing ? 1 : null,
-                      ),
-                    ),
-                ],
+      trailing: SizedBox(
+        width: 96,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                pingText,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                textAlign: TextAlign.right,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: selected ? primaryColor : pingColor,
+                  fontSize: failedPing ? 16 : null,
+                  height: 1,
+                ),
               ),
-            )
-          : null,
+            ),
+            const SizedBox(width: 6),
+            QualityBars.fromOutbound(proxy, isActive: isActive),
+          ],
+        ),
+      ),
       onTap: onTap,
     );
   }

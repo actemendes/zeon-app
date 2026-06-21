@@ -386,8 +386,10 @@
           "other": "Other"
         },
         "balancerStrategy": {
-          "title": "Balancer strategy",
-          "roundRobin": "Round robin",
+          "title": "Auto-selection mode",
+          "description": "Round Robin uses the previous balancing behaviour and may change servers more often. Smart Active Auto keeps one active server and switches only after confirmed degradation or a clearly better candidate.",
+          "roundRobin": "Round Robin / Balancing",
+          "smartActiveAuto": "Smart Active Auto",
           "consistentHash": "Consistent hash",
           "stickySession": "Sticky session"
         },

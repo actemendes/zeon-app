@@ -1,0 +1,24 @@
+[Unit]
+Description=Zeon UDP probe endpoint
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/zeon/udp-probe.env
+ExecStart=/usr/local/bin/zeon-udp-probe server -listen ${ZEON_UDP_PROBE_LISTEN} -global-pps 2000 -global-burst 2000 -per-ip-pps 50 -per-ip-burst 100 -stats-interval 60s
+Restart=on-failure
+RestartSec=3
+User=zeon-udp-probe
+Group=zeon-udp-probe
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/tmp
+CapabilityBoundingSet=
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

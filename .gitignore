@@ -83,6 +83,7 @@ out/installers/
 /generated_stable*.json
 
 # Local diagnostics and scratch artifacts
+/.codex_tmp/
 /out/
 /tmp*
 /screen*.png

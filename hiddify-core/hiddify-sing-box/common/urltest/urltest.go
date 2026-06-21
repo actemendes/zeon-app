@@ -47,8 +47,12 @@ func (s *HistoryStorage) LoadURLTestHistory(tag string) *adapter.URLTestHistory 
 
 func (s *HistoryStorage) DeleteURLTestHistory(tag string) {
 	s.StoreURLTestHistory(tag, &adapter.URLTestHistory{
-		Delay: 65535,
-		Time:  time.Now(),
+		Delay:         65535,
+		Time:          time.Now(),
+		Success:       false,
+		ErrorType:     ErrorTypeUnknown,
+		URLTestStatus: StatusFailed,
+		HealthScore:   0,
 	})
 	// s.access.Lock()
 	// // delete(s.delayHistory, tag)
@@ -59,8 +63,7 @@ func (s *HistoryStorage) DeleteURLTestHistory(tag string) {
 func (s *HistoryStorage) StoreURLTestHistory(tag string, history *adapter.URLTestHistory) *adapter.URLTestHistory {
 	s.access.Lock()
 	if old, ok := s.delayHistory[tag]; ok && history != nil {
-		old.Delay = history.Delay
-		old.Time = history.Time
+		mergeURLTestHistory(old, history)
 		if history.IpInfo != nil {
 			old.IpInfo = history.IpInfo
 		}
@@ -71,6 +74,28 @@ func (s *HistoryStorage) StoreURLTestHistory(tag string, history *adapter.URLTes
 	s.access.Unlock()
 	s.notifyUpdated()
 	return history
+}
+
+func mergeURLTestHistory(old *adapter.URLTestHistory, history *adapter.URLTestHistory) {
+	old.Delay = history.Delay
+	old.Time = history.Time
+	old.IsFromCache = history.IsFromCache
+	old.Success = history.Success
+	old.ErrorType = history.ErrorType
+	old.ErrorText = history.ErrorText
+	old.URLTestStatus = history.URLTestStatus
+	old.HealthScore = history.HealthScore
+	old.RuntimePenalty = history.RuntimePenalty
+	old.RealUserPenalty = history.RealUserPenalty
+	old.FreshnessPenalty = history.FreshnessPenalty
+	old.VolatilityPenalty = history.VolatilityPenalty
+	old.StabilityPoints = history.StabilityPoints
+	old.DegradationPoints = history.DegradationPoints
+	old.PolicyPenalty = history.PolicyPenalty
+	old.UDPProbeAvailable = history.UDPProbeAvailable
+	old.UDPPenalty = history.UDPPenalty
+	old.UDPLoss = history.UDPLoss
+	old.UDPJitterMs = history.UDPJitterMs
 }
 
 func (s *HistoryStorage) AddOnlyIpToHistory(tag string, history *adapter.URLTestHistory) {
@@ -165,6 +190,10 @@ func URLTest(ctx context.Context, link string, detour N.Dialer) (t uint16, err e
 		return
 	}
 	resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+		err = fmt.Errorf("bad status: %s", resp.Status)
+		return
+	}
 
 	t = uint16(time.Since(start) / time.Millisecond)
 
@@ -180,6 +209,10 @@ func URLTest(ctx context.Context, link string, detour N.Dialer) (t uint16, err e
 			return
 		}
 		resp.Body.Close()
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+			err = fmt.Errorf("bad status: %s", resp.Status)
+			return
+		}
 		t = uint16(time.Since(second) / time.Millisecond) //to avid timeout in the second call
 	}
 	return

@@ -104,7 +104,16 @@ message OutboundInfo {
   string tag_display = 12;
   int64 upload = 15;
   int64 download = 16;
-  string detour = 17;
+  bool success = 17;
+  string error_type = 18;
+  string error_text = 19;
+  int32 health_score = 20;
+  int32 runtime_penalty = 21;
+  int32 freshness_penalty = 22;
+  bool udp_probe_available = 23;
+  double udp_loss = 24;
+  int32 udp_jitter_ms = 25;
+  int32 udp_penalty = 26;
 }
 
 message IpInfo {
@@ -229,7 +238,5 @@ message LogRequest {
 
 message StopRequest{
 }
-
-
 
 

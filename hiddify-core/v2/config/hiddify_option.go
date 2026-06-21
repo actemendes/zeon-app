@@ -22,6 +22,15 @@ type HiddifyOptions struct {
 	BlockAds                bool   `json:"block-ads,omitempty" overridable:"true"`
 	UseXrayCoreWhenPossible bool   `json:"use-xray-core-when-possible,omitempty" overridable:"true"`
 	BalancerStrategy        string `json:"balancer-strategy,omitempty" overridable:"true"`
+	// These fields are consumed only by a core built with -tags smart_active_debug.
+	// They are deliberately not exposed by the application UI.
+	SmartActiveDebugForceStatus      string `json:"smart_active_debug_force_status,omitempty"`
+	SmartActiveDebugForceError       string `json:"smart_active_debug_force_error,omitempty"`
+	SmartActiveDebugForceDegradation int    `json:"smart_active_debug_force_degradation,omitempty"`
+	SmartActiveDebugRuntimePenalty   int    `json:"smart_active_debug_runtime_penalty,omitempty"`
+	SmartActiveDebugRealUserPenalty  int    `json:"smart_active_debug_real_user_penalty,omitempty"`
+	SmartActiveDebugForceCandidate   string `json:"smart_active_debug_force_candidate,omitempty"`
+	SmartActiveDebugCandidateScore   int    `json:"smart_active_debug_candidate_score,omitempty"`
 	// GeoIPPath        string      `json:"geoip-path"`
 	// GeoSitePath      string      `json:"geosite-path"`
 	Rules     []Rule      `json:"rules,omitempty" overridable:"true"`
@@ -37,6 +46,15 @@ type HiddifyOptions struct {
 	ProfileDnsStrategy   string `json:"profile-dns-strategy,omitempty"`
 	NetworkTransportType string `json:"network-transport-type,omitempty"`
 	NetworkInterfaceMTU  int    `json:"network-interface-mtu,omitempty"`
+	UDPProbeEnabled      bool   `json:"udp-probe-enabled,omitempty"`
+	UDPProbeEndpoint     string `json:"udp-probe-endpoint,omitempty"`
+	UDPProbeSecret       string `json:"udp-probe-secret,omitempty"`
+	UDPProbeCount        int    `json:"udp-probe-count,omitempty"`
+	UDPProbeSize         int    `json:"udp-probe-size,omitempty"`
+	UDPProbeIntervalMs   int    `json:"udp-probe-interval-ms,omitempty"`
+	UDPProbeTimeoutMs    int    `json:"udp-probe-timeout-ms,omitempty"`
+	UDPProbeCooldownSec  int    `json:"udp-probe-cooldown-sec,omitempty"`
+	UDPProbeTopN         int    `json:"udp-probe-top-n,omitempty"`
 
 	DNSOptions
 	InboundOptions
@@ -149,16 +167,24 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 		},
 		LogLevel: "warn",
 		// LogFile:        "/dev/null",
-		LogFile:        "data/box.log",
-		Region:         "other",
-		EnableClashApi: true,
-		NetworkProfile: "stable_mobile",
-		NetworkMtuMode: "dynamic",
-		FragmentMode:   "default",
+		LogFile:          "data/box.log",
+		BalancerStrategy: "round-robin",
+		Region:           "other",
+		EnableClashApi:   true,
+		NetworkProfile:   "stable_mobile",
+		NetworkMtuMode:   "dynamic",
+		FragmentMode:     "default",
 		// Keep this for diagnostics/UI profiling only.
 		ProfileDnsStrategy:   "default",
 		NetworkTransportType: "unknown",
 		NetworkInterfaceMTU:  0,
+		UDPProbeEndpoint:     "udp-probe.zeon-vps.link:8443",
+		UDPProbeCount:        10,
+		UDPProbeSize:         160,
+		UDPProbeIntervalMs:   40,
+		UDPProbeTimeoutMs:    1000,
+		UDPProbeCooldownSec:  60,
+		UDPProbeTopN:         3,
 
 		ClashApiPort:   16756,
 		ClashApiSecret: "",
