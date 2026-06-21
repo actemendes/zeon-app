@@ -8,6 +8,26 @@ void main() {
   const validExtendedUrl = "https://example.com/configurations/user1/filename.yaml?test#b";
   const validSupportUrl = "https://example.com/support";
 
+  group("publicFallbackUrl", () {
+    test("maps canonical open links to the public TUN-accessible endpoint", () {
+      expect(
+        ProfileParser.publicFallbackUrl("https://130.49.151.173/open/8288649125"),
+        "https://zeon-vps.link/open/8288649125",
+      );
+    });
+
+    test("maps canonical subscription links to the public Netlify endpoint", () {
+      expect(
+        ProfileParser.publicFallbackUrl("https://130.49.151.173/subscription/3435bc25-d3db-4d2b-a6ed-84703bc97880"),
+        "https://ok24-server.com/.netlify/functions/subscription/3435bc25-d3db-4d2b-a6ed-84703bc97880",
+      );
+    });
+
+    test("does not rewrite unrelated profile links", () {
+      expect(ProfileParser.publicFallbackUrl(validBaseUrl), isNull);
+    });
+  });
+
   group("parse", () {
     test("Should use filename in url with no headers and fragment", () {
       final profile = ProfileParser.parse(

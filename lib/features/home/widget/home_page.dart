@@ -1,6 +1,7 @@
 import 'package:dartx/dartx.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
@@ -30,6 +31,21 @@ class HomePage extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     // final hasAnyProfile = ref.watch(hasAnyProfileProvider);
     final activeProfile = ref.watch(activeProfileProvider);
+    final isUpdatingProfile = switch (activeProfile.valueOrNull) {
+      RemoteProfileEntity(:final id) => ref.watch(updateProfileNotifierProvider(id)).isLoading,
+      _ => false,
+    };
+    final refreshAnimationController = useAnimationController(duration: const Duration(milliseconds: 900));
+    useEffect(() {
+      if (isUpdatingProfile) {
+        refreshAnimationController.repeat();
+      } else {
+        refreshAnimationController
+          ..stop()
+          ..reset();
+      }
+      return null;
+    }, [isUpdatingProfile, refreshAnimationController]);
     final breakpoint = Breakpoint(context);
     final subscriptionName = switch (activeProfile) {
       AsyncData(value: final profile?) when parseProfileName(profile.name).isNotBlank => parseProfileName(profile.name),
@@ -96,13 +112,24 @@ class HomePage extends HookConsumerWidget {
                         child: IconButton(
                           tooltip: 'Обновить подписку',
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints.tightFor(width: 22, height: 20),
-                          onPressed: () async {
-                            final active = await ref.read(activeProfileProvider.future);
-                            if (active is! RemoteProfileEntity) return;
-                            await ref.read(updateProfileNotifierProvider(active.id).notifier).updateProfile(active);
-                          },
-                          icon: Icon(FluentIcons.arrow_sync_24_regular, color: theme.colorScheme.onSurface),
+                          iconSize: 24,
+                          constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+                          onPressed: isUpdatingProfile
+                              ? null
+                              : () async {
+                                  final active = await ref.read(activeProfileProvider.future);
+                                  if (active is! RemoteProfileEntity) return;
+                                  await ref
+                                      .read(updateProfileNotifierProvider(active.id).notifier)
+                                      .updateProfile(active);
+                                },
+                          icon: RotationTransition(
+                            turns: refreshAnimationController,
+                            child: SizedBox.square(
+                              dimension: 24,
+                              child: Icon(FluentIcons.arrow_sync_24_regular, color: theme.colorScheme.onSurface),
+                            ),
+                          ),
                         ),
                       ),
                     ],

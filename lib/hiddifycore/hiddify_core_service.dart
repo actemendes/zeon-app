@@ -665,7 +665,7 @@ class HiddifyCoreService with InfraLogger {
     }
   }
 
-  TaskEither<String, Unit> stop() {
+  TaskEither<String, Unit> stop({bool force = false}) {
     return TaskEither(
       () => _enqueueLifecycle("stop", () async {
         if (_useMockCore) {
@@ -677,7 +677,7 @@ class HiddifyCoreService with InfraLogger {
           return right(unit);
         }
 
-        if (_lifecycleState == _CoreLifecycleState.stopped && currentState == const CoreStatus.stopped()) {
+        if (!force && _lifecycleState == _CoreLifecycleState.stopped && currentState == const CoreStatus.stopped()) {
           loggy.debug("stop ignored: already stopped");
           return right(unit);
         }

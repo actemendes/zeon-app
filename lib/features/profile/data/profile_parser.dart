@@ -52,6 +52,32 @@ class ProfileParser {
     'ok24-expires-at',
   ];
 
+  @visibleForTesting
+  static String? publicFallbackUrl(String url) {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || uri.host != "130.49.151.173") return null;
+    final segments = uri.pathSegments;
+    if (segments.length == 2 && segments.first == "open" && segments.last.isNotEmpty) {
+      return Uri(
+        scheme: "https",
+        host: "zeon-vps.link",
+        pathSegments: segments,
+        query: uri.hasQuery ? uri.query : null,
+        fragment: uri.hasFragment ? uri.fragment : null,
+      ).toString();
+    }
+    if (segments.length == 2 && segments.first == "subscription" && segments.last.isNotEmpty) {
+      return Uri(
+        scheme: "https",
+        host: "ok24-server.com",
+        pathSegments: [".netlify", "functions", "subscription", segments.last],
+        query: uri.hasQuery ? uri.query : null,
+        fragment: uri.hasFragment ? uri.fragment : null,
+      ).toString();
+    }
+    return null;
+  }
+
   final Ref _ref;
   final DioHttpClient _httpClient;
 
@@ -181,24 +207,33 @@ class ProfileParser {
     // if (url.startsWith("http://"))
     //   throw const ProfileFailure.invalidUrl('HTTP is not supported. Please use HTTPS for secure connection.');
 
-    final rs = await _httpClient
-        .download(
-          url.trim(),
-          tempFilePath,
-          cancelToken: cancelToken,
-          userAgent: _ref.read(ConfigOptions.useXrayCoreWhenPossible)
-              ? _httpClient.userAgent.replaceAll("HiddifyNext", "HiddifyNextX")
-              : null,
-          proxyOnly: proxyOnly,
-          directOnly: directOnly,
-          disableRetry: disableRetry,
-        )
-        .catchError((err) {
-          if (CancelToken.isCancel(err as DioException)) {
-            throw const ProfileFailure.cancelByUser('HTTP request for getting profile content canceled by user.');
-          }
-          throw err;
-        });
+    Future<Response> download(String targetUrl) => _httpClient.download(
+      targetUrl,
+      tempFilePath,
+      cancelToken: cancelToken,
+      userAgent: _ref.read(ConfigOptions.useXrayCoreWhenPossible)
+          ? _httpClient.userAgent.replaceAll("HiddifyNext", "HiddifyNextX")
+          : null,
+      proxyOnly: proxyOnly,
+      directOnly: directOnly,
+      disableRetry: disableRetry,
+    );
+
+    late final Response rs;
+    try {
+      try {
+        rs = await download(url.trim());
+      } on DioException catch (error) {
+        final fallbackUrl = proxyOnly && _isTransportFailure(error) ? publicFallbackUrl(url) : null;
+        if (fallbackUrl == null) rethrow;
+        rs = await download(fallbackUrl);
+      }
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) {
+        throw const ProfileFailure.cancelByUser('HTTP request for getting profile content canceled by user.');
+      }
+      rethrow;
+    }
     await expandRemoteLinesInParallel(
       tempFilePath: tempFilePath,
       httpClient: _httpClient,
@@ -226,6 +261,12 @@ class ProfileParser {
     }
     return responseHeaders;
   }, (err, st) => err is ProfileFailure ? err : ProfileFailure.unexpected(err, st));
+
+  static bool _isTransportFailure(DioException error) =>
+      error.type == DioExceptionType.connectionError ||
+      error.type == DioExceptionType.connectionTimeout ||
+      error.type == DioExceptionType.receiveTimeout ||
+      error.type == DioExceptionType.unknown && error.error is SocketException;
 
   static Map<String, String> _extractOk24MetaHeaders(String content) {
     try {

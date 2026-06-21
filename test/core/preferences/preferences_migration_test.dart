@@ -23,38 +23,35 @@ void main() {
     expect(prefs.getBool("execute-config-as-is"), true);
   });
 
-  test("fresh installations use round-robin balancer strategy", () async {
+  test("fresh installations use smart-active-auto balancer strategy", () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
 
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
-    expect(prefs.getString("balancer-strategy"), "round-robin");
+    expect(prefs.getString("balancer-strategy"), "smart-active-auto");
     expect(prefs.getBool("bypass-lan"), true);
   });
 
-  test("v11 replaces sticky sessions with round-robin", () async {
-    SharedPreferences.setMockInitialValues({
-      PreferencesMigration.versionKey: 10,
-      "balancer-strategy": "sticky-sessions",
-    });
+  test("existing installations migrate to smart-active-auto", () async {
+    SharedPreferences.setMockInitialValues({PreferencesMigration.versionKey: 11, "balancer-strategy": "round-robin"});
     final prefs = await SharedPreferences.getInstance();
 
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
-    expect(prefs.getString("balancer-strategy"), "round-robin");
+    expect(prefs.getString("balancer-strategy"), "smart-active-auto");
   });
 
-  test("v11 preserves an explicitly selected balancer strategy", () async {
+  test("v12 replaces legacy explicitly selected balancer strategies", () async {
     SharedPreferences.setMockInitialValues({
-      PreferencesMigration.versionKey: 10,
+      PreferencesMigration.versionKey: 11,
       "balancer-strategy": "consistent-hashing",
     });
     final prefs = await SharedPreferences.getInstance();
 
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
-    expect(prefs.getString("balancer-strategy"), "consistent-hashing");
+    expect(prefs.getString("balancer-strategy"), "smart-active-auto");
   });
 
   test("v11 enables LAN bypass", () async {

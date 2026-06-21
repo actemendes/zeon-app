@@ -9,8 +9,8 @@ import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/notifier/warp_option/warp_option_notifier.dart';
 import 'package:hiddify/hiddifycore/hiddify_core_service.dart';
-import 'package:hiddify/singbox/model/singbox_config_option.dart';
 import 'package:hiddify/singbox/model/core_status.dart';
+import 'package:hiddify/singbox/model/singbox_config_option.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:meta/meta.dart';
@@ -26,6 +26,9 @@ abstract interface class ConnectionRepository {
 }
 
 class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements ConnectionRepository {
+  static const _tunRecoveryRestartAttempts = 2;
+  static const _tunReleaseDelay = Duration(milliseconds: 500);
+
   ConnectionRepositoryImpl({
     required this.ref,
     required this.directories,
@@ -91,9 +94,40 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   @override
   TaskEither<ConnectionFailure, Unit> reconnect(ProfileEntity activeProfile, bool disableMemoryLimit) =>
       applyConfigOption(activeProfile).flatMap(
-        (_) => singbox
-            .restart(profilePathResolver.file(activeProfile.id).path, activeProfile.name, disableMemoryLimit)
-            .mapLeft(UnexpectedConnectionFailure.new),
+        (_) => TaskEither(() async {
+          final path = profilePathResolver.file(activeProfile.id).path;
+          Either<ConnectionFailure, Unit> result =
+              (await singbox.restart(path, activeProfile.name, disableMemoryLimit).run()).mapLeft(
+                UnexpectedConnectionFailure.new,
+              );
+
+          for (var attempt = 1; attempt <= _tunRecoveryRestartAttempts && result.isLeft(); attempt++) {
+            final failure = result.getLeft().toNullable();
+            if (failure == null || !isTunInterfacePermissionDenied(failure)) {
+              break;
+            }
+
+            loggy.warning(
+              "TUN interface was not released during reconnect; "
+              "performing full connection restart "
+              "[$attempt/$_tunRecoveryRestartAttempts]",
+            );
+
+            final stopResult = await singbox.stop(force: true).run();
+            stopResult.match(
+              (error) => loggy.warning(
+                "core stop reported an error during TUN recovery; "
+                "continuing because local cleanup has completed",
+                error,
+              ),
+              (_) {},
+            );
+            await Future<void>.delayed(_tunReleaseDelay);
+            result = await singbox.start(path, activeProfile.name, disableMemoryLimit).run();
+          }
+
+          return result;
+        }),
       );
 
   @visibleForTesting

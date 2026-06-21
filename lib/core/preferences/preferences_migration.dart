@@ -23,6 +23,7 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion9Migration(sharedPreferences),
       PreferencesVersion10Migration(sharedPreferences),
       PreferencesVersion11Migration(sharedPreferences),
+      PreferencesVersion12Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -346,6 +347,19 @@ class PreferencesVersion11Migration extends PreferencesMigrationStep with InfraL
     if (bypassLan == null || bypassLan == false) {
       loggy.debug("v11: changing bypass-lan from [$bypassLan] to [true]");
       await sharedPreferences.setBool("bypass-lan", true);
+    }
+  }
+}
+
+class PreferencesVersion12Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion12Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    final balancerStrategy = sharedPreferences.getString("balancer-strategy");
+    if (balancerStrategy != "smart-active-auto") {
+      loggy.debug("v12: changing balancer-strategy from [$balancerStrategy] to [smart-active-auto]");
+      await sharedPreferences.setString("balancer-strategy", "smart-active-auto");
     }
   }
 }

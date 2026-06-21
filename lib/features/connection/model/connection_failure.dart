@@ -5,6 +5,13 @@ import 'package:hiddify/features/settings/model/config_option_failure.dart';
 
 part 'connection_failure.freezed.dart';
 
+bool isTunInterfacePermissionDenied(Object error) {
+  final message = error.toString().toLowerCase();
+  return message.contains("manager start inbound/tun") &&
+      message.contains("configure tun interface") &&
+      message.contains("permission denied");
+}
+
 @freezed
 sealed class ConnectionFailure with _$ConnectionFailure, Failure {
   const ConnectionFailure._();
