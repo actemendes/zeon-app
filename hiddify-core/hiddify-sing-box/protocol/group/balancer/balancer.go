@@ -31,6 +31,7 @@ const (
 	StrategyConsistentHashing = "consistent-hashing"
 	StrategyStickySessions    = "sticky-sessions"
 	StrategyLowestDelay       = "lowest-delay"
+	StrategySmartActiveAuto   = "smart-active-auto"
 )
 
 type Balancer struct {
@@ -49,7 +50,8 @@ type Balancer struct {
 	options                      option.BalancerOutboundOptions
 	interruptExternalConnections bool
 
-	monitor *monitoring.OutboundMonitoring
+	monitor               *monitoring.OutboundMonitoring
+	smartActiveDebugFault smartActiveHistoryFault
 
 	availbleOutbounds []adapter.Outbound
 	close             chan struct{}
@@ -84,6 +86,7 @@ func (s *Balancer) Strategy() string {
 func (s *Balancer) Start() error {
 	s.monitor = monitoring.Get(s.ctx)
 	s.logger.Info("starting load balance, monitoring enabled: ", s.monitor != nil)
+	s.logger.Info("[AutoStrategy] selected=", s.options.Strategy)
 	outbounds := make([]adapter.Outbound, 0, len(s.tags))
 	for i, tag := range s.tags {
 		detour, loaded := s.outbound.Outbound(tag)
@@ -101,6 +104,9 @@ func (s *Balancer) Start() error {
 		s.strategyFn = NewStickySession(outbounds, s.options)
 	case StrategyLowestDelay:
 		s.strategyFn = NewLowestDelay(outbounds, s.options)
+	case StrategySmartActiveAuto:
+		s.strategyFn = NewSmartActive(outbounds, s.options)
+		s.smartActiveDebugFault = newSmartActiveDebugFault(s.options)
 	default:
 		return E.New("unknown load balance strategy: ", s.options.Strategy)
 	}
@@ -134,13 +140,71 @@ func (s *Balancer) worker() {
 				return
 			}
 			outbounds := s.monitor.OutboundsHistory(s.Tag())
-			if s.strategyFn.UpdateOutboundsInfo(outbounds) {
+			if s.smartActiveDebugFault != nil && s.smartActiveDebugFault.Apply(s.strategyFn.Now(), outbounds) {
+				s.logger.Warn("[SmartActiveDebugFault] applied to active=", s.strategyFn.Now())
+			}
+			changed := s.strategyFn.UpdateOutboundsInfo(outbounds)
+			if s.options.Strategy == StrategySmartActiveAuto {
+				s.logSmartActiveDecision(outbounds)
+			}
+			if changed {
 				s.logAutoDecision(outbounds)
 				s.interruptGroup.Interrupt(s.interruptExternalConnections)
 			}
 
 		}
 	}
+}
+
+func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHistory) {
+	strategy, ok := s.strategyFn.(*SmartActive)
+	if !ok {
+		return
+	}
+	decision := strategy.LastDecision()
+	recovered := strategy.LastRecoveries()
+	current := strategy.Now()
+	currentHistory := history[current]
+	decisionReason := decision.reason
+	if s.monitor != nil && s.monitor.RecentManualRefresh(s.Tag()) && decisionReason != "" {
+		decisionReason = "user_refresh_" + decisionReason
+	}
+	s.logger.Info("[SmartActiveState] current=", current, " status=", smartActiveState(currentHistory),
+		" score=", getTagHealthScore(current, history), " degradation=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.DegradationPoints }),
+		" runtime_penalty=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.RuntimePenalty }),
+		" real_user_penalty=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.RealUserPenalty }),
+		" stability=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.StabilityPoints }))
+	for _, tag := range s.tags {
+		historyItem := history[tag]
+		s.logger.Debug("[SmartActiveCandidate] tag=", tag, " score=", getTagHealthScore(tag, history),
+			" evidence=", historyValue(historyItem, func(h *adapter.URLTestHistory) int { return h.StabilityPoints }),
+			" volatility=", historyValue(historyItem, func(h *adapter.URLTestHistory) int { return h.VolatilityPenalty }),
+			" reason=", smartActiveState(historyItem))
+	}
+	s.logger.Info("[SmartActiveDecision] action=", decision.action, " reason=", decisionReason, " current=", current)
+	if decision.action == "switch" {
+		if decision.state == "CRITICAL" {
+			s.logger.Warn("[SmartActiveEmergency] from=", decision.from, " to=", decision.to, " error=", errorTypeOf(history[decision.from]))
+		}
+		s.logger.Warn("[SmartActiveSwitch] from=", decision.from, " to=", decision.to, " reason=", decisionReason)
+	}
+	for _, tag := range recovered {
+		s.logger.Info("[SmartActiveRecovery] tag=", tag, " restored=true score=", getTagHealthScore(tag, history), " clean_probes=2")
+	}
+}
+
+func historyValue(history *adapter.URLTestHistory, get func(*adapter.URLTestHistory) int) int {
+	if history == nil {
+		return 0
+	}
+	return get(history)
+}
+
+func errorTypeOf(history *adapter.URLTestHistory) string {
+	if history == nil {
+		return "unknown"
+	}
+	return history.ErrorType
 }
 
 // logAutoDecision records enough information to explain a strategy change
@@ -255,6 +319,10 @@ func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 func (s *Balancer) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	ctx = interrupt.ContextWithIsExternalConnection(ctx)
 	selected := s.strategyFn.Select(metadata, metadata.Network, true)
+	if selected == nil {
+		return
+	}
+	metadata.SetRealOutbound(selected.Tag())
 	conn = s.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx))
 	if outboundHandler, isHandler := selected.(adapter.ConnectionHandlerEx); isHandler {
 		outboundHandler.NewConnectionEx(ctx, conn, metadata, onClose)

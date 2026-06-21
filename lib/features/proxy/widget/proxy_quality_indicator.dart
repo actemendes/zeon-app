@@ -92,16 +92,72 @@ class QualityBars extends StatelessWidget {
   }
 }
 
-String formatOutboundPing(OutboundInfo outbound) {
-  if (proxyPingFailed(
-    delay: outbound.hasUrlTestDelay() ? outbound.urlTestDelay : null,
-    success: outbound.hasSuccess() ? outbound.success : null,
-  )) {
-    return '×';
+enum ProxyPingStatus { notTested, checking, success, failed }
+
+ProxyPingStatus outboundPingStatus(OutboundInfo outbound) {
+  switch (outbound.urlTestStatus) {
+    case 'not_tested':
+      return ProxyPingStatus.notTested;
+    case 'checking':
+      return ProxyPingStatus.checking;
+    case 'success':
+      return outbound.urlTestDelay > 0 && outbound.urlTestDelay < 65000
+          ? ProxyPingStatus.success
+          : ProxyPingStatus.failed;
+    case 'failed':
+      return ProxyPingStatus.failed;
   }
-  if (!outbound.hasUrlTestDelay() || outbound.urlTestDelay <= 0) return '–';
-  return '${outbound.urlTestDelay} ms';
+
+  // Compatibility with an older core which did not send url_test_status.
+  if (outbound.hasUrlTestDelay() && outbound.urlTestDelay > 0 && outbound.urlTestDelay < 65000) {
+    return ProxyPingStatus.success;
+  }
+  if (outbound.hasUrlTestTime() ||
+      (outbound.hasErrorType() && outbound.errorType.isNotEmpty && outbound.errorType != 'none') ||
+      (outbound.hasUrlTestDelay() && outbound.urlTestDelay >= 65000)) {
+    return ProxyPingStatus.failed;
+  }
+  return ProxyPingStatus.notTested;
 }
 
-bool proxyPingFailed({required int? delay, required bool? success}) =>
-    success == false || (delay != null && delay >= 65000);
+String formatOutboundPing(OutboundInfo outbound) => switch (outboundPingStatus(outbound)) {
+  ProxyPingStatus.notTested => '-',
+  ProxyPingStatus.checking => '...',
+  ProxyPingStatus.success => '${outbound.urlTestDelay} ms',
+  ProxyPingStatus.failed => '✕',
+};
+
+bool proxyPingFailed(OutboundInfo outbound) => outboundPingStatus(outbound) == ProxyPingStatus.failed;
+
+int compareOutboundsByPingQuality(OutboundInfo a, OutboundInfo b) {
+  final groupCompare = _compareGroupsFirst(a, b);
+  if (groupCompare != 0) return groupCompare;
+
+  final aStatus = outboundPingStatus(a);
+  final bStatus = outboundPingStatus(b);
+  final statusCompare = _pingStatusRank(aStatus).compareTo(_pingStatusRank(bStatus));
+  if (statusCompare != 0) return statusCompare;
+
+  if (aStatus == ProxyPingStatus.success && bStatus == ProxyPingStatus.success) {
+    final scoreCompare = b.healthScore.compareTo(a.healthScore);
+    if (scoreCompare != 0) return scoreCompare;
+
+    final delayCompare = a.urlTestDelay.compareTo(b.urlTestDelay);
+    if (delayCompare != 0) return delayCompare;
+  }
+
+  return a.tag.compareTo(b.tag);
+}
+
+int _compareGroupsFirst(OutboundInfo a, OutboundInfo b) {
+  if (a.isGroup && !b.isGroup) return -1;
+  if (!a.isGroup && b.isGroup) return 1;
+  return 0;
+}
+
+int _pingStatusRank(ProxyPingStatus status) => switch (status) {
+  ProxyPingStatus.success => 0,
+  ProxyPingStatus.checking => 1,
+  ProxyPingStatus.notTested => 2,
+  ProxyPingStatus.failed => 3,
+};

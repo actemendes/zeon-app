@@ -51,6 +51,7 @@ enum ServiceMode {
 @JsonEnum(valueField: 'key')
 enum BalancerStrategy {
   roundRobin("round-robin"),
+  smartActiveAuto("smart-active-auto"),
   consistentHash("consistent-hashing"),
   stickySession("sticky-sessions");
 
@@ -60,6 +61,7 @@ enum BalancerStrategy {
 
   String present(TranslationsEn t) => switch (this) {
     roundRobin => t.pages.settings.routing.balancerStrategy.roundRobin,
+    smartActiveAuto => t.pages.settings.routing.balancerStrategy.smartActiveAuto,
     consistentHash => t.pages.settings.routing.balancerStrategy.consistentHash,
     stickySession => t.pages.settings.routing.balancerStrategy.stickySession,
   };

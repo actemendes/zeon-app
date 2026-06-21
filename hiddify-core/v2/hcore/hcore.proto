@@ -114,6 +114,7 @@ message OutboundInfo {
   double udp_loss = 24;
   int32 udp_jitter_ms = 25;
   int32 udp_penalty = 26;
+  string url_test_status = 27;
 }
 
 message IpInfo {
@@ -238,5 +239,4 @@ message LogRequest {
 
 message StopRequest{
 }
-
 

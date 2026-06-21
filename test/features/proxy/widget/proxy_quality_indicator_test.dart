@@ -1,0 +1,35 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hiddify/features/proxy/widget/proxy_quality_indicator.dart';
+import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
+
+void main() {
+  test('formats every explicit URLTest status unambiguously', () {
+    expect(formatOutboundPing(OutboundInfo(urlTestStatus: 'not_tested')), '-');
+    expect(formatOutboundPing(OutboundInfo(urlTestStatus: 'checking')), '...');
+    expect(formatOutboundPing(OutboundInfo(urlTestStatus: 'success', urlTestDelay: 42)), '42 ms');
+    expect(formatOutboundPing(OutboundInfo(urlTestStatus: 'failed')), '✕');
+  });
+
+  test('success without a valid delay is displayed as failed', () {
+    expect(formatOutboundPing(OutboundInfo(urlTestStatus: 'success')), '✕');
+    expect(formatOutboundPing(OutboundInfo(urlTestStatus: 'success', urlTestDelay: 65535)), '✕');
+  });
+
+  test('supports results from older cores without explicit status', () {
+    expect(formatOutboundPing(OutboundInfo(urlTestDelay: 85)), '85 ms');
+    expect(formatOutboundPing(OutboundInfo(errorType: 'timeout')), '✕');
+    expect(formatOutboundPing(OutboundInfo()), '-');
+  });
+
+  test('sorts by quality: success, checking, not tested, failed', () {
+    final items = [
+      OutboundInfo(tag: 'failed', urlTestStatus: 'failed'),
+      OutboundInfo(tag: 'checking', urlTestStatus: 'checking'),
+      OutboundInfo(tag: 'not-tested', urlTestStatus: 'not_tested'),
+      OutboundInfo(tag: 'slow', urlTestStatus: 'success', urlTestDelay: 220, healthScore: 70),
+      OutboundInfo(tag: 'fast', urlTestStatus: 'success', urlTestDelay: 40, healthScore: 95),
+    ]..sort(compareOutboundsByPingQuality);
+
+    expect(items.map((e) => e.tag), ['fast', 'slow', 'checking', 'not-tested', 'failed']);
+  });
+}

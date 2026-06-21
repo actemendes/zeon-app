@@ -18,11 +18,13 @@ type LowestDelay struct {
 
 func NewLowestDelay(outbounds []adapter.Outbound, options option.BalancerOutboundOptions) *LowestDelay {
 	couts := convertOutbounds(outbounds)
+	initialTCP := firstPolicyPreferredOutbound(couts[N.NetworkTCP])
+	initialUDP := firstPolicyPreferredOutbound(couts[N.NetworkUDP])
 	return &LowestDelay{
 		outbounds: couts,
 		selectedOutbound: map[string]adapter.Outbound{
-			N.NetworkUDP: couts[N.NetworkUDP][0],
-			N.NetworkTCP: couts[N.NetworkTCP][0],
+			N.NetworkUDP: initialUDP,
+			N.NetworkTCP: initialTCP,
 		},
 	}
 }

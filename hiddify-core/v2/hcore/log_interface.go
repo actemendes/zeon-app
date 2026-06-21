@@ -1,6 +1,8 @@
 package hcore
 
 import (
+	"strings"
+
 	"github.com/hiddify/hiddify-core/v2/service_manager"
 	daemon "github.com/sagernet/sing-box/daemon"
 	"github.com/sagernet/sing-box/log"
@@ -30,11 +32,36 @@ func (h *LogInterface) SetSystemProxyEnabled(enabled bool) error {
 }
 
 func (h *LogInterface) WriteDebugMessage(message string) {
+	if isSmartActiveDiagnosticMessage(message) {
+		Log(LogLevel_WARNING, LogType_SERVICE, message)
+		return
+	}
 	h.WriteMessage(log.LevelDebug, message)
 }
 func (h *LogInterface) WriteMessage(level log.Level, message string) {
 	Log(convertLogLevel(level), LogType_SERVICE, message)
 }
+
+func isSmartActiveDiagnosticMessage(message string) bool {
+	for _, marker := range smartActiveDiagnosticMarkers {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+var smartActiveDiagnosticMarkers = []string{
+	"[RuntimeHealth]",
+	"[SmartActiveState]",
+	"[SmartActiveDecision]",
+	"[SmartActiveSwitch]",
+	"[SmartActiveEmergency]",
+	"[ManualRefresh]",
+	"[ManualRefreshTarget]",
+	"[AutoStrategy]",
+}
+
 func convertLogLevel(level log.Level) LogLevel {
 	switch level {
 	case log.LevelDebug:

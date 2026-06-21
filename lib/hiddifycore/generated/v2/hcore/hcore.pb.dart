@@ -767,6 +767,7 @@ class OutboundInfo extends $pb.GeneratedMessage {
     $core.double? udpLoss,
     $core.int? udpJitterMs,
     $core.int? udpPenalty,
+    $core.String? urlTestStatus,
   }) {
     final $result = create();
     if (tag != null) {
@@ -847,6 +848,9 @@ class OutboundInfo extends $pb.GeneratedMessage {
     if (udpPenalty != null) {
       $result.udpPenalty = udpPenalty;
     }
+    if (urlTestStatus != null) {
+      $result.urlTestStatus = urlTestStatus;
+    }
     return $result;
   }
   OutboundInfo._() : super();
@@ -883,6 +887,7 @@ class OutboundInfo extends $pb.GeneratedMessage {
     ..a<$core.double>(24, _omitFieldNames ? '' : 'udpLoss', $pb.PbFieldType.OD)
     ..a<$core.int>(25, _omitFieldNames ? '' : 'udpJitterMs', $pb.PbFieldType.O3)
     ..a<$core.int>(26, _omitFieldNames ? '' : 'udpPenalty', $pb.PbFieldType.O3)
+    ..aOS(27, _omitFieldNames ? '' : 'urlTestStatus')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('Using this can add significant overhead to your binary. '
@@ -1220,6 +1225,18 @@ class OutboundInfo extends $pb.GeneratedMessage {
   $core.bool hasUdpPenalty() => $_has(25);
   @$pb.TagNumber(26)
   void clearUdpPenalty() => clearField(26);
+
+  @$pb.TagNumber(27)
+  $core.String get urlTestStatus => $_getSZ(26);
+  @$pb.TagNumber(27)
+  set urlTestStatus($core.String v) {
+    $_setString(26, v);
+  }
+
+  @$pb.TagNumber(27)
+  $core.bool hasUrlTestStatus() => $_has(26);
+  @$pb.TagNumber(27)
+  void clearUrlTestStatus() => clearField(27);
 }
 
 class IpInfo extends $pb.GeneratedMessage {

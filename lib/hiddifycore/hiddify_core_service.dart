@@ -344,7 +344,11 @@ class HiddifyCoreService with InfraLogger {
       }
       try {
         final directories = ref.read(appDirectoriesProvider).requireValue;
-        final debug = ref.read(debugModeNotifierProvider);
+        // In Flutter debug builds we need the core platform log bridge enabled
+        // even when the user-facing debug setting is off. The hcore bridge still
+        // exposes only warning+ logs by default, with selected Smart Active
+        // diagnostics promoted explicitly on the Go side.
+        final debug = ref.read(debugModeNotifierProvider) || kDebugMode;
         final setupResponse = await core.setup(directories, debug, 3);
 
         if (setupResponse.isNotEmpty) {

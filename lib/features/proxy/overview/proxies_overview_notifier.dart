@@ -10,6 +10,7 @@ import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
 import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
 import 'package:hiddify/features/proxy/model/proxy_failure.dart';
+import 'package:hiddify/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:hiddify/features/stats/data/stats_data_providers.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/hiddifycore/init_signal.dart';
@@ -160,21 +161,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
         return a.tag.compareTo(b.tag);
       }),
       ProxiesSort.delay => proxies.items.sortedWith((a, b) {
-        if (a.isGroup && !b.isGroup) return -1;
-        if (!a.isGroup && b.isGroup) return 1;
-
-        final aScore = a.healthScore;
-        final bScore = b.healthScore;
-        if (aScore > 0 || bScore > 0) {
-          if (a.success != b.success) return a.success ? -1 : 1;
-          if (aScore != bScore) return bScore.compareTo(aScore);
-        }
-        final ai = a.urlTestDelay;
-        final bi = b.urlTestDelay;
-        if (ai == 0 && bi == 0) return -1;
-        if (ai == 0 && bi > 0) return 1;
-        if (ai > 0 && bi == 0) return -1;
-        return ai.compareTo(bi);
+        return compareOutboundsByPingQuality(a, b);
       }),
       ProxiesSort.unsorted => proxies.items,
       ProxiesSort.usage => proxies.items.sortedWith((a, b) {
@@ -202,22 +189,23 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
 
   void _resolveAutoDisplayName(OutboundInfo item, List<OutboundInfo> allItems, SystemInfo stats) {
     if (!isAutoSelectedOutbound(item)) return;
+    final realTag = item.hasGroupSelectedTag() ? item.groupSelectedTag.trim() : '';
+    final realItem =
+        findOutboundByTagOrDisplay(allItems, realTag) ??
+        findOutboundByTagOrDisplay(allItems, item.hasGroupSelectedTagDisplay() ? item.groupSelectedTagDisplay : null);
+    if (realItem != null) {
+      item.groupSelectedTag = realItem.tag;
+      item.groupSelectedTagDisplay = realItem.tagDisplay;
+      _logAutoDisplay(item, realItem);
+      return;
+    }
+
     final fromStats = extractRealOutboundTag(stats.currentOutbound);
     final statsItem = findOutboundByTagOrDisplay(allItems, fromStats);
     if (statsItem != null) {
       item.groupSelectedTag = statsItem.tag;
       item.groupSelectedTagDisplay = statsItem.tagDisplay;
       _logAutoDisplay(item, statsItem);
-      return;
-    }
-
-    final realTag = item.hasGroupSelectedTag() ? item.groupSelectedTag.trim() : '';
-    if (realTag.isEmpty) return;
-
-    final realItem = findOutboundByTagOrDisplay(allItems, realTag);
-    if (realItem != null) {
-      item.groupSelectedTagDisplay = realItem.tagDisplay;
-      _logAutoDisplay(item, realItem);
     }
   }
 

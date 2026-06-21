@@ -85,6 +85,7 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		err = E.Cause(err, "open connection to ", remoteString, dialerString)
 		N.CloseOnHandshakeFailure(conn, onClose, err)
 		m.logger.ErrorContext(ctx, err)
+		m.recordRuntimePenalty(ctx, err, false)
 		return
 	}
 	err = N.ReportConnHandshakeSuccess(conn, remoteConn)
@@ -93,8 +94,10 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		remoteConn.Close()
 		N.CloseOnHandshakeFailure(conn, onClose, err)
 		m.logger.ErrorContext(ctx, err)
+		m.recordRuntimePenalty(ctx, err, true)
 		return
 	}
+	m.recordRuntimeSuccess(ctx)
 	if metadata.TLSFragment || metadata.TLSRecordFragment {
 		remoteConn = tf.NewConn(remoteConn, ctx, metadata.TLSFragment, metadata.TLSRecordFragment, metadata.TLSFragmentFallbackDelay)
 	}
@@ -155,6 +158,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			err = E.Cause(err, "open packet connection to ", remoteString, dialerString)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
 			m.logger.ErrorContext(ctx, err)
+			m.recordRuntimePenalty(ctx, err, false)
 			return
 		}
 		remotePacketConn = bufio.NewUnbindPacketConn(remoteConn)
@@ -179,6 +183,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			err = E.Cause(err, "listen packet connection using ", dialerString)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
 			m.logger.ErrorContext(ctx, err)
+			m.recordRuntimePenalty(ctx, err, false)
 			return
 		}
 	}
@@ -187,6 +192,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 		conn.Close()
 		remotePacketConn.Close()
 		m.logger.ErrorContext(ctx, "report handshake success: ", err)
+		m.recordRuntimePenalty(ctx, err, true)
 		return
 	}
 	if destinationAddress.IsValid() {
@@ -306,7 +312,8 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 		break
 	}
 
-	_, err := bufio.CopyWithCounters(destinationWriter, sourceReader, source, readCounters, writeCounters, bufio.DefaultIncreaseBufferAfter, bufio.DefaultBatchSize)
+	bytes, err := bufio.CopyWithCounters(destinationWriter, sourceReader, source, readCounters, writeCounters, bufio.DefaultIncreaseBufferAfter, bufio.DefaultBatchSize)
+	m.recordRuntimeTraffic(ctx, bytes)
 	if err != nil {
 		common.Close(source, destination)
 	} else if duplexDst, isDuplex := destination.(N.WriteCloser); isDuplex {
@@ -397,6 +404,26 @@ func (m *ConnectionManager) recordRuntimePenalty(ctx context.Context, err error,
 	}
 	if monitor := healthmonitoring.Get(ctx); monitor != nil {
 		monitor.RecordRuntimeError(metadata.GetRealOutbound(), err)
+	}
+}
+
+func (m *ConnectionManager) recordRuntimeSuccess(ctx context.Context) {
+	metadata := adapter.ContextFrom(ctx)
+	if metadata == nil || metadata.GetRealOutbound() == "" {
+		return
+	}
+	if monitor := healthmonitoring.Get(ctx); monitor != nil {
+		monitor.RecordRuntimeSuccess(metadata.GetRealOutbound())
+	}
+}
+
+func (m *ConnectionManager) recordRuntimeTraffic(ctx context.Context, bytes int64) {
+	metadata := adapter.ContextFrom(ctx)
+	if metadata == nil || metadata.GetRealOutbound() == "" || bytes <= 0 {
+		return
+	}
+	if monitor := healthmonitoring.Get(ctx); monitor != nil {
+		monitor.RecordRuntimeTraffic(metadata.GetRealOutbound(), bytes)
 	}
 }
 

@@ -158,16 +158,19 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
 
   OutboundInfo? _realOutbound(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {
     final items = selector?.items ?? const <OutboundInfo>[];
+    final realTag = activeProxy.hasGroupSelectedTag() ? activeProxy.groupSelectedTag.trim() : '';
+    final fromGroupSelection =
+        findOutboundByTagOrDisplay(items, realTag) ??
+        findOutboundByTagOrDisplay(
+          items,
+          activeProxy.hasGroupSelectedTagDisplay() ? activeProxy.groupSelectedTagDisplay : null,
+        );
+    if (fromGroupSelection != null) return fromGroupSelection;
+
     final fromStats = extractRealOutboundTag(stats.currentOutbound);
     final fromStatsItem = findOutboundByTagOrDisplay(items, fromStats);
     if (fromStatsItem != null) return fromStatsItem;
 
-    final realTag = activeProxy.hasGroupSelectedTag() ? activeProxy.groupSelectedTag.trim() : '';
-    return findOutboundByTagOrDisplay(items, realTag) ??
-        findOutboundByTagOrDisplay(
-          items,
-          activeProxy.hasGroupSelectedTagDisplay() ? activeProxy.groupSelectedTagDisplay : null,
-        ) ??
-        findOutboundByTagOrDisplay(items, extractRealOutboundTag(activeProxy.tagDisplay));
+    return findOutboundByTagOrDisplay(items, extractRealOutboundTag(activeProxy.tagDisplay));
   }
 }

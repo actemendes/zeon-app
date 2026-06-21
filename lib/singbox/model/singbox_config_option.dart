@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:hiddify/core/model/optional_range.dart';
 import 'package:hiddify/core/utils/json_converters.dart';
@@ -75,7 +76,32 @@ class SingboxConfigOption with _$SingboxConfigOption {
     map["enable-full-config"] = executeConfigAsIs;
     map["execute-config-as-is"] = executeConfigAsIs;
     map["rules"] = rules.map((rule) => rule.toCoreJson()).toList();
+    if (kDebugMode) {
+      _addSmartActiveDebugDefines(map);
+    }
     return map;
+  }
+
+  static void _addSmartActiveDebugDefines(Map<String, dynamic> map) {
+    const stringDefines = <String, String>{
+      "smart_active_debug_force_status": String.fromEnvironment("SMART_ACTIVE_DEBUG_FORCE_STATUS"),
+      "smart_active_debug_force_error": String.fromEnvironment("SMART_ACTIVE_DEBUG_FORCE_ERROR"),
+      "smart_active_debug_force_candidate": String.fromEnvironment("SMART_ACTIVE_DEBUG_FORCE_CANDIDATE"),
+    };
+    for (final entry in stringDefines.entries) {
+      if (entry.value.isNotEmpty) map[entry.key] = entry.value;
+    }
+
+    const intDefines = <String, String>{
+      "smart_active_debug_force_degradation": String.fromEnvironment("SMART_ACTIVE_DEBUG_FORCE_DEGRADATION"),
+      "smart_active_debug_runtime_penalty": String.fromEnvironment("SMART_ACTIVE_DEBUG_RUNTIME_PENALTY"),
+      "smart_active_debug_real_user_penalty": String.fromEnvironment("SMART_ACTIVE_DEBUG_REAL_USER_PENALTY"),
+      "smart_active_debug_candidate_score": String.fromEnvironment("SMART_ACTIVE_DEBUG_CANDIDATE_SCORE"),
+    };
+    for (final entry in intDefines.entries) {
+      final value = int.tryParse(entry.value);
+      if (value != null && value > 0) map[entry.key] = value;
+    }
   }
 
   factory SingboxConfigOption.fromJson(Map<String, dynamic> json) => _$SingboxConfigOptionFromJson(json);

@@ -246,6 +246,7 @@ const OutboundInfo$json = {
     {'1': 'udp_loss', '3': 24, '4': 1, '5': 1, '10': 'udpLoss'},
     {'1': 'udp_jitter_ms', '3': 25, '4': 1, '5': 5, '10': 'udpJitterMs'},
     {'1': 'udp_penalty', '3': 26, '4': 1, '5': 5, '10': 'udpPenalty'},
+    {'1': 'url_test_status', '3': 27, '4': 1, '5': 9, '10': 'urlTestStatus'},
   ],
   '8': [
     {'1': '_ipinfo'},
@@ -272,8 +273,9 @@ final $typed_data.Uint8List outboundInfoDescriptor =
         'x0eRIrChFmcmVzaG5lc3NfcGVuYWx0eRgWIAEoBVIQZnJlc2huZXNzUGVuYWx0eRIuChN1ZHBf'
         'cHJvYmVfYXZhaWxhYmxlGBcgASgIUhF1ZHBQcm9iZUF2YWlsYWJsZRIZCgh1ZHBfbG9zcxgYIA'
         'EoAVIHdWRwTG9zcxIiCg11ZHBfaml0dGVyX21zGBkgASgFUgt1ZHBKaXR0ZXJNcxIfCgt1ZHBf'
-        'cGVuYWx0eRgaIAEoBVIKdWRwUGVuYWx0eUIJCgdfaXBpbmZvQhUKE19ncm91cF9zZWxlY3RlZF'
-        '90YWdCHQobX2dyb3VwX3NlbGVjdGVkX3RhZ19kaXNwbGF5');
+        'cGVuYWx0eRgaIAEoBVIKdWRwUGVuYWx0eRImCg91cmxfdGVzdF9zdGF0dXMYGyABKAlSDXVybF'
+        'Rlc3RTdGF0dXNCCQoHX2lwaW5mb0IVChNfZ3JvdXBfc2VsZWN0ZWRfdGFnQh0KG19ncm91cF9z'
+        'ZWxlY3RlZF90YWdfZGlzcGxheQ==');
 
 @$core.Deprecated('Use ipInfoDescriptor instead')
 const IpInfo$json = {

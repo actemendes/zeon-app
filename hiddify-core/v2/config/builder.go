@@ -285,12 +285,16 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 		},
 	}
 
+	balancerStrategy := opt.BalancerStrategy
+	if balancerStrategy == "" {
+		balancerStrategy = "round-robin"
+	}
 	balancer := option.Outbound{
 		Type: C.TypeBalancer,
 		Tag:  OutboundRoundRobinTag,
 		Options: &option.BalancerOutboundOptions{
 			Outbounds:            tags,
-			Strategy:             opt.BalancerStrategy,
+			Strategy:             balancerStrategy,
 			DelayAcceptableRatio: 2,
 			// URL:       opt.ConnectionTestUrl,
 			// URLs:      opt.ConnectionTestUrls,
@@ -298,7 +302,14 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			// IdleTimeout: badoption.Duration(opt.URLTestIdleTimeout.Duration()),
 			Tolerance: 1,
 			// IdleTimeout:               badoption.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
-			InterruptExistConnections: true,
+			InterruptExistConnections:        true,
+			SmartActiveDebugForceStatus:      opt.SmartActiveDebugForceStatus,
+			SmartActiveDebugForceError:       opt.SmartActiveDebugForceError,
+			SmartActiveDebugForceDegradation: opt.SmartActiveDebugForceDegradation,
+			SmartActiveDebugRuntimePenalty:   opt.SmartActiveDebugRuntimePenalty,
+			SmartActiveDebugRealUserPenalty:  opt.SmartActiveDebugRealUserPenalty,
+			SmartActiveDebugForceCandidate:   opt.SmartActiveDebugForceCandidate,
+			SmartActiveDebugCandidateScore:   opt.SmartActiveDebugCandidateScore,
 		},
 	}
 	defaultSelect := tags[0]

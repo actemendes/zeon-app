@@ -113,21 +113,28 @@ func getHealthScore(tag string, his *adapter.URLTestHistory) int {
 	if his == nil {
 		return 0
 	}
-	policyPenalty := his.PolicyPenalty
-	if policyPenalty == 0 {
-		countryCode := ""
-		if his.IpInfo != nil {
-			countryCode = his.IpInfo.CountryCode
-		}
-		policyPenalty = urltest.CalculatePolicyPenalty(tag, countryCode)
-	}
+	policyPenalty := getPolicyPenalty(tag, his)
 	if his.Delay > 0 && his.Delay < monitoring.TimeoutDelay && his.ErrorType == "" {
-		return urltest.CalculateHealthScoreWithPenalties(his.Delay, true, urltest.ErrorTypeNone, his.IsFromCache, his.Time, his.RuntimePenalty, his.UDPPenalty, policyPenalty)
+		return urltest.CalculateHealthScoreWithEvidence(his.Delay, true, urltest.ErrorTypeNone, his.IsFromCache, his.Time, his.RuntimePenalty, his.RealUserPenalty, his.VolatilityPenalty, his.UDPPenalty, policyPenalty)
 	}
 	if his.ErrorType == "" {
 		return 0
 	}
-	return urltest.CalculateHealthScoreWithPenalties(his.Delay, his.Success, his.ErrorType, his.IsFromCache, his.Time, his.RuntimePenalty, his.UDPPenalty, policyPenalty)
+	return urltest.CalculateHealthScoreWithEvidence(his.Delay, his.Success, his.ErrorType, his.IsFromCache, his.Time, his.RuntimePenalty, his.RealUserPenalty, his.VolatilityPenalty, his.UDPPenalty, policyPenalty)
+}
+
+func getPolicyPenalty(tag string, his *adapter.URLTestHistory) int {
+	if his == nil {
+		return urltest.CalculatePolicyPenalty(tag, "")
+	}
+	if his.PolicyPenalty > 0 {
+		return his.PolicyPenalty
+	}
+	countryCode := ""
+	if his.IpInfo != nil {
+		countryCode = his.IpInfo.CountryCode
+	}
+	return urltest.CalculatePolicyPenalty(tag, countryCode)
 }
 
 func getTagHealthScore(tag string, history map[string]*adapter.URLTestHistory) int {
@@ -251,7 +258,7 @@ func getMinDelay(outbounds map[string][]adapter.Outbound, history map[string]*ad
 				}
 				continue
 			}
-			if !useHealth && d <= minDelay {
+			if !useHealth && (minOut == nil || preferFallbackOutbound(out, minOut, history)) {
 				minDelay = d
 				minOut = out
 			}
@@ -260,7 +267,7 @@ func getMinDelay(outbounds map[string][]adapter.Outbound, history map[string]*ad
 			minDelay = monitoring.TimeoutDelay
 			for _, out := range outs {
 				d := getTagDelay(out.Tag(), history)
-				if d <= minDelay {
+				if minOut == nil || preferFallbackOutbound(out, minOut, history) {
 					minDelay = d
 					minOut = out
 				}

@@ -8,6 +8,7 @@ import (
 	hcommon "github.com/hiddify/hiddify-core/v2/hcommon"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
+	"github.com/sagernet/sing-box/common/urltest"
 	G "github.com/sagernet/sing-box/protocol/group"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/service"
@@ -22,7 +23,7 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 	// 	return nil
 	// }
 
-	out := &OutboundInfo{}
+	out := &OutboundInfo{UrlTestStatus: urltest.StatusNotTested}
 	// realTag := ""
 
 	out.Tag = detour.Tag()
@@ -58,6 +59,16 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 		out.Success = url_test_history.Success
 		out.ErrorType = url_test_history.ErrorType
 		out.ErrorText = url_test_history.ErrorText
+		out.UrlTestStatus = url_test_history.URLTestStatus
+		if out.UrlTestStatus == "" {
+			if url_test_history.Success && url_test_history.Delay > 0 && url_test_history.Delay < monitoring.TimeoutDelay {
+				out.UrlTestStatus = urltest.StatusSuccess
+			} else if !url_test_history.Time.IsZero() || url_test_history.ErrorType != "" {
+				out.UrlTestStatus = urltest.StatusFailed
+			} else {
+				out.UrlTestStatus = urltest.StatusNotTested
+			}
+		}
 		out.HealthScore = int32(url_test_history.HealthScore)
 		out.RuntimePenalty = int32(url_test_history.RuntimePenalty)
 		out.FreshnessPenalty = int32(url_test_history.FreshnessPenalty)

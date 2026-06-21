@@ -3,6 +3,7 @@ package urltest
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -24,6 +25,9 @@ func TestClassifyProbeError(t *testing.T) {
 		{name: "tls", err: errors.New("tls: handshake failure"), want: ErrorTypeTLSHandshakeFailed},
 		{name: "unsupported curve", err: errors.New("tls: CurvePreferences includes unsupported curve"), want: ErrorTypeUnsupportedCurve},
 		{name: "quic timeout", err: errors.New("quic open timeout"), want: ErrorTypeQUICTimeout},
+		{name: "bad status", err: errors.New("bad status: 503 Service Unavailable"), want: ErrorTypeBadStatus},
+		{name: "unknown", err: errors.New("unexpected transport failure"), want: ErrorTypeUnknown},
+		{name: "empty", err: errors.New(""), want: ErrorTypeUnknown},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -32,6 +36,45 @@ func TestClassifyProbeError(t *testing.T) {
 				t.Fatalf("ClassifyProbeError() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNewURLTestHistorySuccessAndSafeErrorText(t *testing.T) {
+	success := NewURLTestHistory(40, nil, 0)
+	if !success.Success || success.ErrorType != ErrorTypeNone || success.HealthScore < 90 {
+		t.Fatalf("unexpected successful history: %+v", success)
+	}
+
+	longText := strings.Repeat("x", maxErrorTextLength+100)
+	failure := NewURLTestHistory(40, errors.New(longText), 0)
+	if failure.Success || failure.ErrorType != ErrorTypeUnknown {
+		t.Fatalf("unexpected failed history: %+v", failure)
+	}
+	if len(failure.ErrorText) != maxErrorTextLength {
+		t.Fatalf("error text length=%d, want %d", len(failure.ErrorText), maxErrorTextLength)
+	}
+}
+
+func TestHealthScoreEvidenceScenarios(t *testing.T) {
+	now := time.Now()
+	lowDelay := CalculateHealthScoreWithEvidence(40, true, ErrorTypeNone, false, now, 0, 0, 0, 0, 0)
+	highDelay := CalculateHealthScoreWithEvidence(800, true, ErrorTypeNone, false, now, 0, 0, 0, 0, 0)
+	failed := CalculateHealthScoreWithEvidence(65535, false, ErrorTypeTimeout, false, now, 0, 0, 0, 0, 0)
+	runtime := CalculateHealthScoreWithEvidence(40, true, ErrorTypeNone, false, now, 20, 0, 0, 0, 0)
+	realUser := CalculateHealthScoreWithEvidence(40, true, ErrorTypeNone, false, now, 0, 25, 0, 0, 0)
+	volatile := CalculateHealthScoreWithEvidence(40, true, ErrorTypeNone, false, now, 0, 0, 20, 0, 0)
+	stale := CalculateHealthScoreWithEvidence(40, true, ErrorTypeNone, true, now.Add(-30*time.Minute), 0, 0, 0, 0, 0)
+
+	if lowDelay < 90 || lowDelay > 100 {
+		t.Fatalf("low-delay score=%d, want 90..100", lowDelay)
+	}
+	if !(highDelay > failed && highDelay < lowDelay) {
+		t.Fatalf("scores must order low=%d high=%d failed=%d", lowDelay, highDelay, failed)
+	}
+	for name, score := range map[string]int{"runtime": runtime, "real_user": realUser, "volatility": volatile, "stale": stale} {
+		if score >= lowDelay {
+			t.Fatalf("%s penalty did not lower score: %d >= %d", name, score, lowDelay)
+		}
 	}
 }
 
@@ -72,7 +115,9 @@ func TestRussianServerPolicyPenalty(t *testing.T) {
 		countryCode string
 		want        int
 	}{
-		{tag: "🇷🇺Россия16 | БЫСТРЫЙ", want: RussianServerPolicyPenalty},
+		{tag: "🇷🇺РОССИЯ16 | БЫСТРЫЙ", want: RussianServerPolicyPenalty},
+		{tag: "Россия Москва 1", want: RussianServerPolicyPenalty},
+		{tag: "Российский сервер", want: RussianServerPolicyPenalty},
 		{tag: "Russia Moscow 1", want: RussianServerPolicyPenalty},
 		{tag: "fast-node", countryCode: "RU", want: RussianServerPolicyPenalty},
 		{tag: "🇵🇱Польша8 | СВЯЗЬ", countryCode: "PL", want: 0},
@@ -88,13 +133,13 @@ func TestRussianPolicyPenaltyKeepsRussiaAsFallback(t *testing.T) {
 	now := time.Now()
 	russiaFast := CalculateHealthScoreWithPenalties(40, true, ErrorTypeNone, false, now, 0, 0, RussianServerPolicyPenalty)
 	foreignStable := CalculateHealthScoreWithPenalties(90, true, ErrorTypeNone, false, now, 0, 0, 0)
-	foreignBad := CalculateHealthScoreWithPenalties(260, true, ErrorTypeNone, false, now, 0, 0, 0)
+	foreignFailed := CalculateHealthScoreWithPenalties(65535, false, ErrorTypeTimeout, false, now, 0, 0, 0)
 
 	if russiaFast >= foreignStable {
 		t.Fatalf("Russian fast server score %d should be below stable foreign score %d", russiaFast, foreignStable)
 	}
-	if russiaFast <= foreignBad {
-		t.Fatalf("Russian server should remain a fallback: score %d should beat bad foreign score %d", russiaFast, foreignBad)
+	if russiaFast <= foreignFailed {
+		t.Fatalf("Russian server should remain a fallback: score %d should beat failed foreign score %d", russiaFast, foreignFailed)
 	}
 }
 

@@ -33,10 +33,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
     final primaryColor = selected ? selectedTextColor : themeTextColor;
     final tileColor = selected ? theme.colorScheme.primaryContainer : Colors.transparent;
     final pingText = formatOutboundPing(proxy);
-    final failedPing = proxyPingFailed(
-      delay: proxy.hasUrlTestDelay() ? proxy.urlTestDelay : null,
-      success: proxy.hasSuccess() ? proxy.success : null,
-    );
+    final failedPing = proxyPingFailed(proxy);
     final pingColor = failedPing
         ? theme.colorScheme.error
         : delayColor(context, proxy.hasUrlTestDelay() ? proxy.urlTestDelay : 0);

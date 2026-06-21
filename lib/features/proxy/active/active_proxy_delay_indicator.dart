@@ -20,10 +20,7 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
 
     final proxy = activeProxy.value!;
     final pingText = formatOutboundPing(proxy);
-    final failedPing = proxyPingFailed(
-      delay: proxy.hasUrlTestDelay() ? proxy.urlTestDelay : null,
-      success: proxy.hasSuccess() ? proxy.success : null,
-    );
+    final failedPing = proxyPingFailed(proxy);
 
     return Center(
       child: InkWell(

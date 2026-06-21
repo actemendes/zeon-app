@@ -12,6 +12,11 @@ import (
 )
 
 const (
+	StatusNotTested = "not_tested"
+	StatusChecking  = "checking"
+	StatusSuccess   = "success"
+	StatusFailed    = "failed"
+
 	ErrorTypeNone               = "none"
 	ErrorTypeTimeout            = "timeout"
 	ErrorTypeDeadline           = "deadline"
@@ -29,7 +34,7 @@ const (
 
 const maxErrorTextLength = 240
 
-const RussianServerPolicyPenalty = 15
+const RussianServerPolicyPenalty = 45
 
 func ClassifyProbeError(err error) (errorType string, errorText string) {
 	if err == nil {
@@ -86,6 +91,13 @@ func CalculateHealthScoreWithUDPPenalty(delay uint16, success bool, errorType st
 }
 
 func CalculateHealthScoreWithPenalties(delay uint16, success bool, errorType string, isFromCache bool, updatedAt time.Time, runtimePenalty int, udpPenalty int, policyPenalty int) int {
+	return CalculateHealthScoreWithEvidence(delay, success, errorType, isFromCache, updatedAt, runtimePenalty, 0, 0, udpPenalty, policyPenalty)
+}
+
+// CalculateHealthScoreWithEvidence is the score used by Smart Active Auto.
+// It deliberately only consumes transport health metadata; no destination,
+// payload, URL, or application content is inspected.
+func CalculateHealthScoreWithEvidence(delay uint16, success bool, errorType string, isFromCache bool, updatedAt time.Time, runtimePenalty int, realUserPenalty int, volatilityPenalty int, udpPenalty int, policyPenalty int) int {
 	score := delayScore(delay)
 	freshnessPenalty := CalculateFreshnessPenalty(isFromCache, updatedAt)
 	if runtimePenalty < 0 {
@@ -93,6 +105,18 @@ func CalculateHealthScoreWithPenalties(delay uint16, success bool, errorType str
 	}
 	if runtimePenalty > 25 {
 		runtimePenalty = 25
+	}
+	if realUserPenalty < 0 {
+		realUserPenalty = 0
+	}
+	if realUserPenalty > 30 {
+		realUserPenalty = 30
+	}
+	if volatilityPenalty < 0 {
+		volatilityPenalty = 0
+	}
+	if volatilityPenalty > 25 {
+		volatilityPenalty = 25
 	}
 	if udpPenalty < 0 {
 		udpPenalty = 0
@@ -103,14 +127,14 @@ func CalculateHealthScoreWithPenalties(delay uint16, success bool, errorType str
 	if policyPenalty < 0 {
 		policyPenalty = 0
 	}
-	if policyPenalty > 25 {
-		policyPenalty = 25
+	if policyPenalty > 50 {
+		policyPenalty = 50
 	}
 
 	if !success {
 		score = min(score, errorScoreCap(errorType))
 	}
-	score -= freshnessPenalty + runtimePenalty + udpPenalty + policyPenalty
+	score -= freshnessPenalty + runtimePenalty + realUserPenalty + volatilityPenalty + udpPenalty + policyPenalty
 	return clamp(score, 0, 100)
 }
 
@@ -178,19 +202,28 @@ func NewURLTestHistory(delay uint16, err error, runtimePenalty int) *adapter.URL
 		Success:          success,
 		ErrorType:        errorType,
 		ErrorText:        errorText,
+		URLTestStatus:    ResultStatus(success),
 		HealthScore:      CalculateHealthScore(delay, success, errorType, false, now, runtimePenalty),
 		RuntimePenalty:   runtimePenalty,
 		FreshnessPenalty: CalculateFreshnessPenalty(false, now),
 	}
 }
 
+func ResultStatus(success bool) string {
+	if success {
+		return StatusSuccess
+	}
+	return StatusFailed
+}
+
 func isRussianServer(tag string, countryCode string) bool {
 	if strings.EqualFold(strings.TrimSpace(countryCode), "RU") {
 		return true
 	}
-	lowerTag := strings.ToLower(tag)
+	lowerTag := strings.ToLower(strings.TrimSpace(tag))
 	return strings.Contains(lowerTag, "🇷🇺") ||
 		strings.Contains(lowerTag, "россия") ||
+		strings.Contains(lowerTag, "россий") ||
 		strings.Contains(lowerTag, "russia") ||
 		strings.Contains(lowerTag, "russian")
 }

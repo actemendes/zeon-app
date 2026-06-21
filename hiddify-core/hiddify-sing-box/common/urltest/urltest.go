@@ -47,11 +47,12 @@ func (s *HistoryStorage) LoadURLTestHistory(tag string) *adapter.URLTestHistory 
 
 func (s *HistoryStorage) DeleteURLTestHistory(tag string) {
 	s.StoreURLTestHistory(tag, &adapter.URLTestHistory{
-		Delay:       65535,
-		Time:        time.Now(),
-		Success:     false,
-		ErrorType:   ErrorTypeUnknown,
-		HealthScore: 0,
+		Delay:         65535,
+		Time:          time.Now(),
+		Success:       false,
+		ErrorType:     ErrorTypeUnknown,
+		URLTestStatus: StatusFailed,
+		HealthScore:   0,
 	})
 	// s.access.Lock()
 	// // delete(s.delayHistory, tag)
@@ -82,9 +83,14 @@ func mergeURLTestHistory(old *adapter.URLTestHistory, history *adapter.URLTestHi
 	old.Success = history.Success
 	old.ErrorType = history.ErrorType
 	old.ErrorText = history.ErrorText
+	old.URLTestStatus = history.URLTestStatus
 	old.HealthScore = history.HealthScore
 	old.RuntimePenalty = history.RuntimePenalty
+	old.RealUserPenalty = history.RealUserPenalty
 	old.FreshnessPenalty = history.FreshnessPenalty
+	old.VolatilityPenalty = history.VolatilityPenalty
+	old.StabilityPoints = history.StabilityPoints
+	old.DegradationPoints = history.DegradationPoints
 	old.PolicyPenalty = history.PolicyPenalty
 	old.UDPProbeAvailable = history.UDPProbeAvailable
 	old.UDPPenalty = history.UDPPenalty
@@ -184,6 +190,10 @@ func URLTest(ctx context.Context, link string, detour N.Dialer) (t uint16, err e
 		return
 	}
 	resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+		err = fmt.Errorf("bad status: %s", resp.Status)
+		return
+	}
 
 	t = uint16(time.Since(start) / time.Millisecond)
 
@@ -199,6 +209,10 @@ func URLTest(ctx context.Context, link string, detour N.Dialer) (t uint16, err e
 			return
 		}
 		resp.Body.Close()
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+			err = fmt.Errorf("bad status: %s", resp.Status)
+			return
+		}
 		t = uint16(time.Since(second) / time.Millisecond) //to avid timeout in the second call
 	}
 	return
