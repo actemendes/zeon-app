@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -107,6 +108,7 @@ func (s *Balancer) Start() error {
 	case StrategySmartActiveAuto:
 		s.strategyFn = NewSmartActive(outbounds, s.options)
 		s.smartActiveDebugFault = newSmartActiveDebugFault(s.options)
+		s.logger.Info("[SmartActiveLifecycle] event=vpn_start group=", s.Tag(), " fallback_active=", s.strategyFn.Now(), " candidates=", len(outbounds))
 	default:
 		return E.New("unknown load balance strategy: ", s.options.Strategy)
 	}
@@ -143,12 +145,29 @@ func (s *Balancer) worker() {
 			if s.smartActiveDebugFault != nil && s.smartActiveDebugFault.Apply(s.strategyFn.Now(), outbounds) {
 				s.logger.Warn("[SmartActiveDebugFault] applied to active=", s.strategyFn.Now())
 			}
-			changed := s.strategyFn.UpdateOutboundsInfo(outbounds)
+			manualRefresh := false
+			if s.options.Strategy == StrategySmartActiveAuto && s.monitor != nil {
+				manualRefresh = s.monitor.ConsumeRecentManualRefresh(s.Tag())
+				if manualRefresh {
+					s.logger.Info("[SmartActiveLifecycle] event=user_refresh group=", s.Tag())
+				}
+			}
+			changed := false
+			if manualRefresh {
+				if strategy, ok := s.strategyFn.(*SmartActive); ok {
+					changed = strategy.UpdateOutboundsInfoForManualRefresh(outbounds)
+				} else {
+					changed = s.strategyFn.UpdateOutboundsInfo(outbounds)
+				}
+			} else {
+				changed = s.strategyFn.UpdateOutboundsInfo(outbounds)
+			}
 			if s.options.Strategy == StrategySmartActiveAuto {
 				s.logSmartActiveDecision(outbounds)
 			}
 			if changed {
 				s.logAutoDecision(outbounds)
+				s.logger.Warn("[ActiveServerChanged] group=", s.Tag(), " active=", s.strategyFn.Now())
 				s.interruptGroup.Interrupt(s.interruptExternalConnections)
 			}
 
@@ -166,22 +185,27 @@ func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHis
 	current := strategy.Now()
 	currentHistory := history[current]
 	decisionReason := decision.reason
-	if s.monitor != nil && s.monitor.RecentManualRefresh(s.Tag()) && decisionReason != "" {
+	if decision.mode == "user_refresh" && decisionReason != "" && !strings.HasPrefix(decisionReason, "user_refresh_") {
 		decisionReason = "user_refresh_" + decisionReason
 	}
-	s.logger.Info("[SmartActiveState] current=", current, " status=", smartActiveState(currentHistory),
+	s.logger.Info("[SmartActiveState] current=", current, " status=", smartActiveState(currentHistory), " mode=", decision.mode,
 		" score=", getTagHealthScore(current, history), " degradation=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.DegradationPoints }),
 		" runtime_penalty=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.RuntimePenalty }),
 		" real_user_penalty=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.RealUserPenalty }),
 		" stability=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.StabilityPoints }))
-	for _, tag := range s.tags {
+	s.logger.Info("[SmartActiveDecision] action=", decision.action, " reason=", decisionReason, " from=", decision.from, " to=", decision.to, " current=", current, " mode=", decision.mode)
+	for rank, tag := range s.topSmartActiveCandidates(history, 5) {
 		historyItem := history[tag]
-		s.logger.Debug("[SmartActiveCandidate] tag=", tag, " score=", getTagHealthScore(tag, history),
-			" evidence=", historyValue(historyItem, func(h *adapter.URLTestHistory) int { return h.StabilityPoints }),
+		s.logger.Info("[SmartActiveRanking] rank=", rank+1, " tag=", tag, " score=", getTagHealthScore(tag, history),
+			" delay=", getTagDelay(tag, history), " success=", getTagSuccess(tag, history),
+			" fresh=", historyItem != nil && !historyItem.IsFromCache,
+			" status=", smartActiveState(historyItem),
+			" degradation=", historyValue(historyItem, func(h *adapter.URLTestHistory) int { return h.DegradationPoints }),
+			" runtime_penalty=", historyValue(historyItem, func(h *adapter.URLTestHistory) int { return h.RuntimePenalty }),
+			" real_user_penalty=", historyValue(historyItem, func(h *adapter.URLTestHistory) int { return h.RealUserPenalty }),
 			" volatility=", historyValue(historyItem, func(h *adapter.URLTestHistory) int { return h.VolatilityPenalty }),
-			" reason=", smartActiveState(historyItem))
+			" selected=", tag == current)
 	}
-	s.logger.Info("[SmartActiveDecision] action=", decision.action, " reason=", decisionReason, " current=", current)
 	if decision.action == "switch" {
 		if decision.state == "CRITICAL" {
 			s.logger.Warn("[SmartActiveEmergency] from=", decision.from, " to=", decision.to, " error=", errorTypeOf(history[decision.from]))
@@ -191,6 +215,26 @@ func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHis
 	for _, tag := range recovered {
 		s.logger.Info("[SmartActiveRecovery] tag=", tag, " restored=true score=", getTagHealthScore(tag, history), " clean_probes=2")
 	}
+}
+
+func (s *Balancer) topSmartActiveCandidates(history map[string]*adapter.URLTestHistory, limit int) []string {
+	tags := append([]string(nil), s.tags...)
+	sort.SliceStable(tags, func(i, j int) bool {
+		left, right := tags[i], tags[j]
+		leftSuccess, rightSuccess := getTagSuccess(left, history), getTagSuccess(right, history)
+		if leftSuccess != rightSuccess {
+			return leftSuccess
+		}
+		leftScore, rightScore := getTagHealthScore(left, history), getTagHealthScore(right, history)
+		if leftScore != rightScore {
+			return leftScore > rightScore
+		}
+		return getTagDelay(left, history) < getTagDelay(right, history)
+	})
+	if limit > 0 && len(tags) > limit {
+		return tags[:limit]
+	}
+	return tags
 }
 
 func historyValue(history *adapter.URLTestHistory, get func(*adapter.URLTestHistory) int) int {

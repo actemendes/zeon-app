@@ -17,6 +17,7 @@ type SmartActive struct {
 
 	mu        sync.Mutex
 	active    adapter.Outbound
+	bootstrap bool
 	evidence  map[string]*smartEvidence
 	decision  smartDecision
 	recovered []string
@@ -35,18 +36,19 @@ type smartDecision struct {
 	from   string
 	to     string
 	state  string
+	mode   string
 }
 
 var _ Strategy = (*SmartActive)(nil)
 
 func NewSmartActive(outbounds []adapter.Outbound, _ option.BalancerOutboundOptions) *SmartActive {
-	strategy := &SmartActive{outbounds: outbounds, evidence: make(map[string]*smartEvidence)}
+	strategy := &SmartActive{outbounds: outbounds, bootstrap: true, evidence: make(map[string]*smartEvidence)}
 	// Before the first monitoring cycle there is no evidence. Keep the legacy
 	// fallback available so a cold start can still connect, but prefer a
 	// non-policy-penalized outbound when the profile starts with RU servers.
 	if len(outbounds) > 0 {
 		strategy.active = firstPolicyPreferredOutbound(outbounds)
-		strategy.decision = smartDecision{action: "fallback", reason: "cold_start_no_health", to: strategy.active.Tag(), state: "SUSPECT"}
+		strategy.decision = smartDecision{action: "fallback", reason: "cold_start_no_health", to: strategy.active.Tag(), state: "SUSPECT", mode: "vpn_start"}
 	}
 	return strategy
 }
@@ -67,6 +69,14 @@ func (s *SmartActive) Select(_ adapter.InboundContext, _ string, _ bool) adapter
 }
 
 func (s *SmartActive) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
+	return s.updateOutboundsInfo(history, "")
+}
+
+func (s *SmartActive) UpdateOutboundsInfoForManualRefresh(history map[string]*adapter.URLTestHistory) bool {
+	return s.updateOutboundsInfo(history, "user_refresh")
+}
+
+func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHistory, mode string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -83,25 +93,57 @@ func (s *SmartActive) UpdateOutboundsInfo(history map[string]*adapter.URLTestHis
 				from = current.Tag()
 			}
 			s.active = fallback
-			s.decision = smartDecision{action: "fallback", reason: "health_unavailable_delay_fallback", from: from, to: fallback.Tag(), state: "SUSPECT"}
+			s.decision = smartDecision{action: "fallback", reason: "health_unavailable_delay_fallback", from: from, to: fallback.Tag(), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
 			return true
 		}
 		if current != nil {
-			s.decision = smartDecision{action: "keep", reason: "health_unavailable_delay_fallback", from: current.Tag(), state: "SUSPECT"}
+			s.decision = smartDecision{action: "keep", reason: "health_unavailable_delay_fallback", from: current.Tag(), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
 		}
 		return false
 	}
+
+	forcedMode := mode
+	if forcedMode == "" && s.bootstrap && hasFreshUsableHealth(history) {
+		forcedMode = "vpn_start"
+	}
+	if forcedMode != "" {
+		candidate := s.bestFreshCandidate(history)
+		if candidate != nil {
+			if current == nil {
+				s.active = candidate
+				s.bootstrap = false
+				s.decision = smartDecision{action: "switch", reason: forcedMode + "_initial_fresh_candidate", to: candidate.Tag(), state: "GOOD", mode: forcedMode}
+				return true
+			}
+			if forcedMode == "user_refresh" {
+				return s.applyUserRefreshDecision(current, candidate, history)
+			}
+			if s.shouldForceSwitch(current.Tag(), candidate.Tag(), history, forcedMode) {
+				s.switchTo(current, candidate, forcedMode+"_fresh_best_candidate", smartActiveState(history[current.Tag()]))
+				s.decision.mode = forcedMode
+				s.bootstrap = false
+				return true
+			}
+			s.bootstrap = false
+			s.decision = smartDecision{action: "keep", reason: forcedMode + "_current_best_or_close", from: current.Tag(), to: candidate.Tag(), state: smartActiveState(history[current.Tag()]), mode: forcedMode}
+			return false
+		}
+	}
+	if s.bootstrap && hasFreshUsableHealth(history) {
+		s.bootstrap = false
+	}
+
 	if current == nil {
 		candidate := s.bestCandidate(history, true)
 		if candidate == nil {
 			candidate = s.delayFallback(history)
 		}
 		if candidate == nil {
-			s.decision = smartDecision{action: "fallback", reason: "no_outbound"}
+			s.decision = smartDecision{action: "fallback", reason: "no_outbound", mode: decisionMode(mode, s.bootstrap)}
 			return false
 		}
 		s.active = candidate
-		s.decision = smartDecision{action: "switch", reason: "initial_healthy_candidate", to: candidate.Tag(), state: "GOOD"}
+		s.decision = smartDecision{action: "switch", reason: "initial_healthy_candidate", to: candidate.Tag(), state: "GOOD", mode: decisionMode(mode, s.bootstrap)}
 		return true
 	}
 
@@ -116,15 +158,16 @@ func (s *SmartActive) UpdateOutboundsInfo(history map[string]*adapter.URLTestHis
 				reason = "runtime_errors_current_critical"
 			}
 			s.switchTo(current, candidate, reason, state)
+			s.decision.mode = decisionMode(mode, s.bootstrap)
 			return true
 		}
 		fallback := s.delayFallback(history)
 		if fallback != nil && fallback.Tag() != current.Tag() {
 			s.active = fallback
-			s.decision = smartDecision{action: "fallback", reason: "critical_delay_fallback", from: current.Tag(), to: fallback.Tag(), state: state}
+			s.decision = smartDecision{action: "fallback", reason: "critical_delay_fallback", from: current.Tag(), to: fallback.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
 			return true
 		}
-		s.decision = smartDecision{action: "fallback", reason: "critical_without_healthy_candidate", from: current.Tag(), state: state}
+		s.decision = smartDecision{action: "fallback", reason: "critical_without_healthy_candidate", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
 		return false
 	}
 	if state == "BAD" {
@@ -134,9 +177,10 @@ func (s *SmartActive) UpdateOutboundsInfo(history map[string]*adapter.URLTestHis
 				reason = "runtime_errors_current_bad"
 			}
 			s.switchTo(current, candidate, reason, state)
+			s.decision.mode = decisionMode(mode, s.bootstrap)
 			return true
 		}
-		s.decision = smartDecision{action: "keep", reason: "bad_without_confirmed_candidate", from: current.Tag(), state: state}
+		s.decision = smartDecision{action: "keep", reason: "bad_without_confirmed_candidate", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
 		return false
 	}
 	if state == "DEGRADED" {
@@ -146,27 +190,30 @@ func (s *SmartActive) UpdateOutboundsInfo(history map[string]*adapter.URLTestHis
 				reason = "runtime_errors_current_degraded"
 			}
 			s.switchTo(current, candidate, reason, state)
+			s.decision.mode = decisionMode(mode, s.bootstrap)
 			return true
 		}
-		s.decision = smartDecision{action: "keep", reason: "degraded_collecting_evidence", from: current.Tag(), state: state}
+		s.decision = smartDecision{action: "keep", reason: "degraded_collecting_evidence", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
 		return false
 	}
 	if state == "SUSPECT" {
 		if candidate != nil && candidate.Tag() != current.Tag() && s.betterEnough(current.Tag(), candidate.Tag(), history, 14) {
 			s.switchTo(current, candidate, "suspect_stably_better_candidate", state)
+			s.decision.mode = decisionMode(mode, s.bootstrap)
 			return true
 		}
-		s.decision = smartDecision{action: "keep", reason: "suspect_collecting_evidence", from: current.Tag(), state: state}
+		s.decision = smartDecision{action: "keep", reason: "suspect_collecting_evidence", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
 		return false
 	}
 	if candidate != nil && candidate.Tag() != current.Tag() && s.policyPreferredCandidate(current.Tag(), candidate.Tag(), history) {
 		s.switchTo(current, candidate, "policy_preferred_foreign_candidate", state)
+		s.decision.mode = decisionMode(mode, s.bootstrap)
 		return true
 	}
 	// A healthy active is sticky by design. Score alone is not a reason to move
 	// live traffic; a switch requires health degradation, a confirmed error, or
 	// a policy-preferred healthy candidate.
-	s.decision = smartDecision{action: "keep", reason: "active_good", from: current.Tag(), state: state}
+	s.decision = smartDecision{action: "keep", reason: "active_good", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
 	return false
 }
 
@@ -253,6 +300,65 @@ func (s *SmartActive) bestCandidate(history map[string]*adapter.URLTestHistory, 
 	return nil
 }
 
+func (s *SmartActive) bestFreshCandidate(history map[string]*adapter.URLTestHistory) adapter.Outbound {
+	candidates := append([]adapter.Outbound(nil), s.outbounds...)
+	sort.SliceStable(candidates, func(i, j int) bool {
+		left, right := history[candidates[i].Tag()], history[candidates[j].Tag()]
+		leftScore, rightScore := getHealthScore(candidates[i].Tag(), left), getHealthScore(candidates[j].Tag(), right)
+		if leftScore != rightScore {
+			return leftScore > rightScore
+		}
+		return getModifiedDelay(left) < getModifiedDelay(right)
+	})
+	for _, candidate := range candidates {
+		tag := candidate.Tag()
+		h := history[tag]
+		if h == nil || h.IsFromCache || !h.Success || h.ErrorType != "" && h.ErrorType != urltest.ErrorTypeNone {
+			continue
+		}
+		if getHealthScore(tag, h) < 35 || smartActiveState(h) == "BAD" || smartActiveState(h) == "CRITICAL" {
+			continue
+		}
+		return candidate
+	}
+	return nil
+}
+
+func (s *SmartActive) applyUserRefreshDecision(current, candidate adapter.Outbound, history map[string]*adapter.URLTestHistory) bool {
+	s.bootstrap = false
+	currentTag := current.Tag()
+	candidateTag := candidate.Tag()
+	currentHistory := history[currentTag]
+	candidateHistory := history[candidateTag]
+	currentState := smartActiveState(currentHistory)
+
+	if currentTag == candidateTag {
+		s.decision = smartDecision{action: "keep", reason: "user_refresh_current_is_rank1", from: currentTag, to: candidateTag, state: currentState, mode: "user_refresh"}
+		return false
+	}
+	if !isFreshSuccessfulCandidate(candidateTag, candidateHistory) {
+		s.decision = smartDecision{action: "keep", reason: "user_refresh_candidate_not_fresh_success", from: currentTag, to: candidateTag, state: currentState, mode: "user_refresh"}
+		return false
+	}
+	if currentHistory == nil || !currentHistory.Success || currentHistory.IsFromCache || currentState == "BAD" || currentState == "CRITICAL" {
+		s.switchTo(current, candidate, "user_refresh_best_fresh_candidate", currentState)
+		s.decision.mode = "user_refresh"
+		return true
+	}
+	if userRefreshCandidatePenalized(candidateHistory) {
+		s.decision = smartDecision{action: "keep", reason: "user_refresh_candidate_penalized", from: currentTag, to: candidateTag, state: currentState, mode: "user_refresh"}
+		return false
+	}
+	if userRefreshMinimalTie(currentTag, candidateTag, history) {
+		s.decision = smartDecision{action: "keep", reason: "user_refresh_candidate_tie_minimal_delta", from: currentTag, to: candidateTag, state: currentState, mode: "user_refresh"}
+		return false
+	}
+
+	s.switchTo(current, candidate, "user_refresh_best_fresh_candidate", currentState)
+	s.decision.mode = "user_refresh"
+	return true
+}
+
 func (s *SmartActive) delayFallback(history map[string]*adapter.URLTestHistory) adapter.Outbound {
 	var selected adapter.Outbound
 	for _, outbound := range s.outbounds {
@@ -325,6 +431,73 @@ func (s *SmartActive) policyPreferredCandidate(currentTag, candidateTag string, 
 		return false
 	}
 	return s.betterEnough(currentTag, candidateTag, history, 4)
+}
+
+func isFreshSuccessfulCandidate(tag string, h *adapter.URLTestHistory) bool {
+	if h == nil || h.IsFromCache || !h.Success || h.ErrorType != "" && h.ErrorType != urltest.ErrorTypeNone {
+		return false
+	}
+	if getHealthScore(tag, h) < 35 {
+		return false
+	}
+	state := smartActiveState(h)
+	return state != "BAD" && state != "CRITICAL"
+}
+
+func userRefreshCandidatePenalized(h *adapter.URLTestHistory) bool {
+	return h != nil && (h.RuntimePenalty > 0 || h.RealUserPenalty > 0 || h.DegradationPoints > 0 || h.VolatilityPenalty > 0 || h.UDPPenalty > 0)
+}
+
+func userRefreshMinimalTie(currentTag, candidateTag string, history map[string]*adapter.URLTestHistory) bool {
+	current, candidate := history[currentTag], history[candidateTag]
+	if current == nil || candidate == nil || !current.Success || !candidate.Success {
+		return false
+	}
+	if getHealthScore(currentTag, current) != getHealthScore(candidateTag, candidate) {
+		return false
+	}
+	currentDelay := getModifiedDelay(current)
+	candidateDelay := getModifiedDelay(candidate)
+	if currentDelay > candidateDelay {
+		return currentDelay-candidateDelay <= 10
+	}
+	return candidateDelay-currentDelay <= 10
+}
+
+func (s *SmartActive) shouldForceSwitch(currentTag, candidateTag string, history map[string]*adapter.URLTestHistory, mode string) bool {
+	if currentTag == "" || candidateTag == "" || currentTag == candidateTag {
+		return false
+	}
+	current, candidate := history[currentTag], history[candidateTag]
+	if candidate == nil || !candidate.Success {
+		return false
+	}
+	if current == nil || !current.Success || current.IsFromCache {
+		return true
+	}
+	state := smartActiveState(current)
+	if state == "BAD" || state == "CRITICAL" {
+		return true
+	}
+	candidateScore := getHealthScore(candidateTag, candidate)
+	currentScore := getHealthScore(currentTag, current)
+	if candidateScore >= currentScore+5 {
+		return true
+	}
+	if candidateScore >= currentScore && getModifiedDelay(current) > getModifiedDelay(candidate)+50 {
+		return true
+	}
+	return mode == "vpn_start" && candidateScore > currentScore
+}
+
+func decisionMode(requested string, bootstrap bool) string {
+	if requested != "" {
+		return requested
+	}
+	if bootstrap {
+		return "vpn_start"
+	}
+	return "background"
 }
 
 func smartActiveState(h *adapter.URLTestHistory) string {

@@ -154,12 +154,15 @@ class BoxService(
     private fun rePingServers() {
         serviceScope.launch {
             try {
+                Log.i(TAG, "[ManualRefresh] user_refresh_requested source=notification group=$OUTBOUND_SELECTOR_TAG")
                 val coreClient = GrpcClientProvider.grpcClient.create(CoreClient::class)
                 val currentOutbound = coreClient.GetSystemInfo().executeBlocking(Empty()).current_outbound
+                Log.i(TAG, "[ManualRefresh] current_outbound_before=$currentOutbound")
 
                 // "balance" is the automatic balancer selected by the core. A
                 // manual server selection is reported as its server tag instead.
                 if (!currentOutbound.startsWith(AUTO_BALANCER_TAG)) {
+                    Log.i(TAG, "[ManualRefresh] restoring_auto_balancer selector=$OUTBOUND_SELECTOR_TAG outbound=$AUTO_BALANCER_TAG")
                     coreClient.SelectOutbound().executeBlocking(
                         SelectOutboundRequest(
                             group_tag = OUTBOUND_SELECTOR_TAG,
@@ -171,6 +174,7 @@ class BoxService(
                 // Testing the selector recursively schedules tests for all of
                 // its children, including the automatic balancer's servers.
                 coreClient.UrlTest().executeBlocking(UrlTestRequest(tag = OUTBOUND_SELECTOR_TAG))
+                Log.i(TAG, "[ManualRefresh] user_refresh_submitted group=$OUTBOUND_SELECTOR_TAG")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to re-ping servers", e)
             }

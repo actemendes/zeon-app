@@ -258,6 +258,26 @@ func TestManualRefreshTargetsExpandNestedGroups(t *testing.T) {
 	}
 }
 
+func TestManualRefreshMarksNestedBalancerGroupForReselect(t *testing.T) {
+	monitor := &OutboundMonitoring{
+		outbounds: map[string]*outboundState{
+			"leaf-a": {groupTags: []string{"", "balance", "select"}},
+			"leaf-b": {groupTags: []string{"", "balance", "select"}},
+		},
+	}
+
+	groups := monitor.markManualRefreshForTargets("select", []string{"leaf-a", "leaf-b"}, time.Now())
+	if len(groups) != 2 || groups[0] != "balance" || groups[1] != "select" {
+		t.Fatalf("groups=%v, want balance and select", groups)
+	}
+	if !monitor.ConsumeRecentManualRefresh("balance") {
+		t.Fatal("nested balance group did not receive manual refresh marker")
+	}
+	if monitor.ConsumeRecentManualRefresh("balance") {
+		t.Fatal("manual refresh marker should be consumed once")
+	}
+}
+
 func TestManualRefreshReportCountsCompletedTargets(t *testing.T) {
 	report := manualRefreshReport{total: 4}
 	report.record(testOutcome{

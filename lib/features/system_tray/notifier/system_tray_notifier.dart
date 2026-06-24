@@ -20,18 +20,33 @@ part 'system_tray_notifier.g.dart';
 
 @Riverpod(keepAlive: true)
 class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogger {
-  bool listenerAdded = false;
+  static const _tooltipRefreshInterval = Duration(seconds: 10);
+
+  bool _listenerAdded = false;
+  String? _lastIconPath;
+  String? _lastMenuSignature;
+  String? _lastTooltip;
+  String? _lastTooltipStatusKey;
+  DateTime? _lastTooltipUpdatedAt;
+  _TraySnapshot? _pendingSnapshot;
+  Future<void> _trayUpdateQueue = Future.value();
+  bool _trayUpdateDraining = false;
+
   @override
   Future<void> build() async {
     assert(PlatformUtils.isDesktop);
-    if (!listenerAdded) {
+    if (!_listenerAdded) {
       trayManager.addListener(this);
-      listenerAdded = true;
+      _listenerAdded = true;
+      ref.onDispose(() {
+        trayManager.removeListener(this);
+        _listenerAdded = false;
+      });
     }
-    await _initializeTray();
+    await _queueTrayUpdate(await _buildTraySnapshot());
   }
 
-  Future<void> _initializeTray() async {
+  Future<_TraySnapshot> _buildTraySnapshot() async {
     final t = await ref.watch(translationsProvider.future);
     final urlTestDelay = await ref
         .watch(activeProxyNotifierProvider.future)
@@ -49,24 +64,87 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
         .then((connection) => _modifyConnectionStatus(connection, urlTestDelay));
     final serviceMode = ref.watch(ConfigOptions.serviceMode);
 
-    await trayManager.setIcon(_trayIconPath(connection), isTemplate: PlatformUtils.isMacOS);
-    if (!PlatformUtils.isLinux) await trayManager.setToolTip(_trayTooltip(connection, urlTestDelay, t));
-    await trayManager.setContextMenu(_trayMenu(connection, serviceMode, t));
+    final connectionLabel = _connectionMenuLabel(connection, t);
+    final serviceModeLabels = ServiceMode.values.map((e) => '${e.name}:${e.present(t)}').join('|');
+    final menuSignature = [
+      PlatformUtils.isLinux,
+      connectionLabel,
+      connection.isSwitching,
+      serviceMode.name,
+      t.common.dashboard,
+      t.pages.settings.inbound.serviceMode,
+      serviceModeLabels,
+      t.common.quit,
+    ].join('||');
+
+    return _TraySnapshot(
+      iconPath: _trayIconPath(connection),
+      tooltip: _trayTooltip(connection, urlTestDelay, t),
+      tooltipStatusKey: connectionLabel,
+      menu: _trayMenu(connection, serviceMode, t),
+      menuSignature: menuSignature,
+    );
+  }
+
+  Future<void> _queueTrayUpdate(_TraySnapshot snapshot) {
+    _pendingSnapshot = snapshot;
+    if (_trayUpdateDraining) return _trayUpdateQueue;
+
+    _trayUpdateDraining = true;
+    return _trayUpdateQueue = _trayUpdateQueue
+        .catchError((Object e, StackTrace st) {
+          loggy.warning('previous tray update failed', e, st);
+        })
+        .then((_) => _drainTrayUpdates())
+        .whenComplete(() {
+          _trayUpdateDraining = false;
+        });
+  }
+
+  Future<void> _drainTrayUpdates() async {
+    while (_pendingSnapshot != null) {
+      final snapshot = _pendingSnapshot!;
+      _pendingSnapshot = null;
+      await _applyTraySnapshot(snapshot);
+    }
+  }
+
+  Future<void> _applyTraySnapshot(_TraySnapshot snapshot) async {
+    try {
+      if (_lastIconPath != snapshot.iconPath) {
+        await trayManager.setIcon(snapshot.iconPath, isTemplate: PlatformUtils.isMacOS);
+        _lastIconPath = snapshot.iconPath;
+      }
+
+      if (!PlatformUtils.isLinux && _shouldUpdateTooltip(snapshot)) {
+        await trayManager.setToolTip(snapshot.tooltip);
+        _lastTooltip = snapshot.tooltip;
+        _lastTooltipStatusKey = snapshot.tooltipStatusKey;
+        _lastTooltipUpdatedAt = DateTime.now();
+      }
+
+      if (_lastMenuSignature != snapshot.menuSignature) {
+        await trayManager.setContextMenu(snapshot.menu);
+        _lastMenuSignature = snapshot.menuSignature;
+      }
+    } catch (e, st) {
+      loggy.warning('failed to update system tray', e, st);
+    }
+  }
+
+  bool _shouldUpdateTooltip(_TraySnapshot snapshot) {
+    if (_lastTooltip == null) return true;
+    if (_lastTooltipStatusKey != snapshot.tooltipStatusKey) return true;
+    if (_lastTooltip == snapshot.tooltip) return false;
+
+    final lastUpdate = _lastTooltipUpdatedAt;
+    return lastUpdate == null || DateTime.now().difference(lastUpdate) >= _tooltipRefreshInterval;
   }
 
   Menu _trayMenu(ConnectionStatus connection, ServiceMode serviceMode, Translations t) => Menu(
     items: [
       if (PlatformUtils.isLinux) ...[MenuItem(key: 'dashboard', label: t.common.dashboard), MenuItem.separator()],
-      MenuItem(
-        key: 'connection',
-        label: switch (connection) {
-          Disconnected() => t.connection.connect,
-          Connecting() => t.connection.connecting,
-          Connected() => t.connection.disconnect,
-          Disconnecting() => t.connection.disconnecting,
-        },
-        disabled: connection.isSwitching,
-      ),
+      MenuItem(key: 'connection', label: _connectionMenuLabel(connection, t), disabled: connection.isSwitching),
       MenuItem.submenu(
         label: t.pages.settings.inbound.serviceMode,
         icon: Assets.images.trayIconIco,
@@ -82,6 +160,13 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
       MenuItem(key: 'quit', label: t.common.quit),
     ],
   );
+
+  String _connectionMenuLabel(ConnectionStatus connection, Translations t) => switch (connection) {
+    Disconnected() => t.connection.connect,
+    Connecting() => t.connection.connecting,
+    Connected() => t.connection.disconnect,
+    Disconnecting() => t.connection.disconnecting,
+  };
 
   String _trayIconPath(ConnectionStatus status) {
     final isDarkMode = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
@@ -155,6 +240,22 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
   Future<void> onTrayIconRightMouseDown() async {
     await trayManager.popUpContextMenu();
   }
+}
+
+class _TraySnapshot {
+  const _TraySnapshot({
+    required this.iconPath,
+    required this.tooltip,
+    required this.tooltipStatusKey,
+    required this.menu,
+    required this.menuSignature,
+  });
+
+  final String iconPath;
+  final String tooltip;
+  final String tooltipStatusKey;
+  final Menu menu;
+  final String menuSignature;
 }
 
 // @Riverpod(keepAlive: true)

@@ -32,10 +32,12 @@ func (*smartActiveTestOutbound) ListenPacket(context.Context, M.Socksaddr) (net.
 }
 
 func newSmartActiveForTest() *SmartActive {
-	return NewSmartActive([]adapter.Outbound{
+	strategy := NewSmartActive([]adapter.Outbound{
 		newSmartActiveTestOutbound("active"),
 		newSmartActiveTestOutbound("candidate"),
 	}, option.BalancerOutboundOptions{})
+	strategy.bootstrap = false
+	return strategy
 }
 
 func TestSmartActiveColdStartPrefersForeignOutbound(t *testing.T) {
@@ -137,6 +139,95 @@ func TestSmartActiveGoodDoesNotSwitchOnScoreAlone(t *testing.T) {
 	requireDecision(t, strategy, "keep", "active")
 	if decision := strategy.LastDecision(); decision.reason != "active_good" {
 		t.Fatalf("unexpected decision: %+v", decision)
+	}
+}
+
+func TestSmartActiveStartupReevaluatesFreshBestCandidate(t *testing.T) {
+	strategy := NewSmartActive([]adapter.Outbound{
+		newSmartActiveTestOutbound("active"),
+		newSmartActiveTestOutbound("candidate"),
+	}, option.BalancerOutboundOptions{})
+	active := healthyHistory(250)
+	active.IsFromCache = true
+	candidate := healthyHistory(80)
+	if !strategy.UpdateOutboundsInfo(histories(active, candidate)) {
+		t.Fatal("expected startup fresh candidate to replace cached fallback active")
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+	if decision := strategy.LastDecision(); decision.mode != "vpn_start" || decision.reason != "vpn_start_fresh_best_candidate" {
+		t.Fatalf("unexpected startup decision: %+v", decision)
+	}
+}
+
+func TestSmartActiveManualRefreshSwitchesFromGoodToFreshBetterCandidate(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := healthyHistory(250)
+	candidate := healthyHistory(80)
+	if !strategy.UpdateOutboundsInfoForManualRefresh(histories(active, candidate)) {
+		t.Fatal("expected user refresh to switch to fresh better candidate")
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+	if decision := strategy.LastDecision(); decision.mode != "user_refresh" || decision.reason != "user_refresh_best_fresh_candidate" {
+		t.Fatalf("unexpected manual refresh decision: %+v", decision)
+	}
+}
+
+func TestSmartActiveManualRefreshSwitchesToRankOneFreshCandidateWithEqualScore(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := healthyHistory(76)
+	candidate := healthyHistory(52)
+	if getHealthScore("active", active) != getHealthScore("candidate", candidate) {
+		t.Fatalf("fixture must have equal scores: active=%d candidate=%d", getHealthScore("active", active), getHealthScore("candidate", candidate))
+	}
+	if !strategy.UpdateOutboundsInfoForManualRefresh(histories(active, candidate)) {
+		t.Fatal("expected user refresh to switch to the best fresh candidate when delay delta is meaningful")
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+	if decision := strategy.LastDecision(); decision.mode != "user_refresh" || decision.reason != "user_refresh_best_fresh_candidate" {
+		t.Fatalf("unexpected manual refresh decision: %+v", decision)
+	}
+}
+
+func TestSmartActiveManualRefreshKeepsCurrentOnMinimalEqualScoreDelta(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := healthyHistory(56)
+	candidate := healthyHistory(52)
+	if strategy.UpdateOutboundsInfoForManualRefresh(histories(active, candidate)) {
+		t.Fatal("did not expect user refresh to switch for a minimal equal-score delay delta")
+	}
+	requireDecision(t, strategy, "keep", "active")
+	if decision := strategy.LastDecision(); decision.mode != "user_refresh" || decision.reason != "user_refresh_candidate_tie_minimal_delta" {
+		t.Fatalf("unexpected manual refresh decision: %+v", decision)
+	}
+}
+
+func TestSmartActiveManualRefreshKeepsCurrentWhenRankOneCandidatePenalized(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := healthyHistory(250)
+	candidate := healthyHistory(52)
+	candidate.RuntimePenalty = 2
+	if getHealthScore("candidate", candidate) <= getHealthScore("active", active) {
+		t.Fatalf("fixture candidate must still rank above current: active=%d candidate=%d", getHealthScore("active", active), getHealthScore("candidate", candidate))
+	}
+	if strategy.UpdateOutboundsInfoForManualRefresh(histories(active, candidate)) {
+		t.Fatal("did not expect user refresh to switch to a penalized rank-one candidate while current is healthy")
+	}
+	requireDecision(t, strategy, "keep", "active")
+	if decision := strategy.LastDecision(); decision.mode != "user_refresh" || decision.reason != "user_refresh_candidate_penalized" {
+		t.Fatalf("unexpected manual refresh decision: %+v", decision)
+	}
+}
+
+func TestSmartActiveManualRefreshKeepsCurrentWhenStillBest(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := healthyHistory(80)
+	candidate := healthyHistory(250)
+	if strategy.UpdateOutboundsInfoForManualRefresh(histories(active, candidate)) {
+		t.Fatal("did not expect user refresh to leave the best active server")
+	}
+	requireDecision(t, strategy, "keep", "active")
+	if decision := strategy.LastDecision(); decision.mode != "user_refresh" || decision.reason != "user_refresh_current_is_rank1" {
+		t.Fatalf("unexpected manual refresh decision: %+v", decision)
 	}
 }
 

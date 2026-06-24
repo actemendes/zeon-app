@@ -159,13 +159,38 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     fun updateStatus(previous:SystemInfo,status: SystemInfo) {
         val uplink=status.uplink_total - previous.uplink_total
         val downlink=status.downlink_total - previous.downlink_total
-        val currentOutbound = presentOutbound(status.current_outbound)
+        val currentOutbound = presentOutboundForNotification(status.current_outbound)
         val content = "${Libbox.formatBytes(uplink)}/s \u2191\t${Libbox.formatBytes(downlink)}/s \u2193 \n$currentOutbound"
         val title = "${status.current_profile}"
+        Log.i("NotificationUpdate", "profile=$title rawOutbound=${status.current_outbound} displayedOutbound=$currentOutbound")
         Application.notificationManager.notify(
                 notificationId,
                 notificationBuilder.setContentTitle(title).setContentText(content).build()
         )
+    }
+
+    private fun presentOutboundForNotification(outbound: String): String {
+        val normalized = outbound.trim()
+        val match = Regex("^$AUTO_BALANCER_TAG\\s*(?:->|>|\\u2192|\\u2022|в†’|вЂў)\\s*(.+?)\\s*$", RegexOption.IGNORE_CASE)
+            .find(normalized)
+        if (match != null) {
+            val realOutbound = presentServerNameForNotification(match.groupValues[1])
+            if (realOutbound.isNotBlank()) {
+                return "${service.getString(R.string.auto_selection)} \u2022 $realOutbound"
+            }
+            return service.getString(R.string.auto_selection)
+        }
+        if (Regex("^$AUTO_BALANCER_TAG(?:\\s|$).*", RegexOption.IGNORE_CASE).matches(normalized)) {
+            return service.getString(R.string.auto_selection)
+        }
+        return presentServerNameForNotification(normalized)
+    }
+
+    private fun presentServerNameForNotification(outbound: String): String {
+        return outbound
+            .substringBefore("\u00A7")
+            .substringBefore("В§")
+            .trim()
     }
 
     private fun presentOutbound(outbound: String): String {

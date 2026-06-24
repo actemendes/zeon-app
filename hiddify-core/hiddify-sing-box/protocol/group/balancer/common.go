@@ -109,6 +109,15 @@ func hasUsableHealth(history map[string]*adapter.URLTestHistory) bool {
 	return false
 }
 
+func hasFreshUsableHealth(history map[string]*adapter.URLTestHistory) bool {
+	for tag, his := range history {
+		if his != nil && !his.IsFromCache && his.Success && getHealthScore(tag, his) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func getHealthScore(tag string, his *adapter.URLTestHistory) int {
 	if his == nil {
 		return 0

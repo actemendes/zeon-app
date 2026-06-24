@@ -434,8 +434,9 @@ func (m *OutboundMonitoring) TestNowAndWait(outboundTag string, timeout time.Dur
 		" per_target_timeout=", m.manualRefreshTargetTimeout(), " timeout=", timeout)
 
 	report, err := m.runManualRefreshStage(outboundTag, cycleID, tags, timeout)
-	m.markManualRefresh(outboundTag, time.Now())
-	m.emitGroupEvent([]string{outboundTag})
+	refreshedGroups := m.markManualRefreshForTargets(outboundTag, tags, time.Now())
+	m.logger.Info("[ManualRefresh] reselect_ready tag=", outboundTag, " groups=", strings.Join(refreshedGroups, ","))
+	m.emitGroupEvent(refreshedGroups)
 	if report.logged {
 		if report.timeout && report.completed() > 0 {
 			return nil
@@ -739,6 +740,33 @@ func (m *OutboundMonitoring) markManualRefresh(groupTag string, at time.Time) {
 	m.manualRefreshAccess.Unlock()
 }
 
+func (m *OutboundMonitoring) markManualRefreshForTargets(requestedTag string, tags []string, at time.Time) []string {
+	groups := make(map[string]struct{})
+	if requestedTag != "" {
+		groups[requestedTag] = struct{}{}
+	}
+	for _, tag := range tags {
+		state := m.getState(tag)
+		if state == nil {
+			continue
+		}
+		state.mu.Lock()
+		for _, groupTag := range state.groupTags {
+			if groupTag != "" {
+				groups[groupTag] = struct{}{}
+			}
+		}
+		state.mu.Unlock()
+	}
+	result := make([]string, 0, len(groups))
+	for groupTag := range groups {
+		m.markManualRefresh(groupTag, at)
+		result = append(result, groupTag)
+	}
+	sort.Strings(result)
+	return result
+}
+
 func (m *OutboundMonitoring) RecentManualRefresh(groupTag string) bool {
 	m.manualRefreshAccess.Lock()
 	defer m.manualRefreshAccess.Unlock()
@@ -747,6 +775,20 @@ func (m *OutboundMonitoring) RecentManualRefresh(groupTag string) bool {
 	}
 	at := m.manualRefreshAt[groupTag]
 	return !at.IsZero() && time.Since(at) <= 30*time.Second
+}
+
+func (m *OutboundMonitoring) ConsumeRecentManualRefresh(groupTag string) bool {
+	m.manualRefreshAccess.Lock()
+	defer m.manualRefreshAccess.Unlock()
+	if m.manualRefreshAt == nil {
+		return false
+	}
+	at := m.manualRefreshAt[groupTag]
+	if at.IsZero() || time.Since(at) > 30*time.Second {
+		return false
+	}
+	delete(m.manualRefreshAt, groupTag)
+	return true
 }
 
 func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
@@ -854,9 +896,11 @@ func (m *OutboundMonitoring) RecordRuntimeError(outboundTag string, err error) {
 	}
 
 	m.logger.Warn("[RuntimeHealth] tag=", outboundTag, " error_type=", errorType, " penalty=", penalty,
-		" degradation=", degradationPoints, " real_user_penalty=", realUserPenalty, " burst_score=", burstScore)
+		" degradation=", degradationPoints, " real_user_penalty=", realUserPenalty, " burst_score=", burstScore,
+		" score=", getRuntimeHistoryScore(state))
 	m.logger.Warn("[RealUserHealth] tag=", outboundTag, " bytes=unavailable error=", errorType,
-		" runtime_penalty=", penalty, " real_user_penalty=", realUserPenalty, " text=", errorText)
+		" runtime_penalty=", penalty, " real_user_penalty=", realUserPenalty, " degradation=", degradationPoints,
+		" score=", getRuntimeHistoryScore(state), " text=", errorText)
 }
 
 // RecordRuntimeSuccess is intentionally fed only by successful transport
@@ -887,7 +931,7 @@ func (m *OutboundMonitoring) RecordRuntimeSuccess(outboundTag string) {
 	}
 	m.history.StoreURLTestHistory(outboundTag, &history)
 	m.emitGroupEvent(groupTags)
-	m.logger.Debug("[RealUserHealth] tag=", outboundTag, " successful_connection=true bytes=unavailable penalty=", history.RealUserPenalty)
+	m.logger.Debug("[RealUserHealth] tag=", outboundTag, " successful_connection=true bytes=unavailable penalty=", history.RealUserPenalty, " degradation=", history.DegradationPoints, " score=", history.HealthScore)
 }
 
 // RecordRuntimeTraffic receives aggregate byte counts from the tunnel copy
@@ -911,12 +955,21 @@ func (m *OutboundMonitoring) RecordRuntimeTraffic(outboundTag string, bytes int6
 	groupTags := append([]string(nil), state.groupTags...)
 	state.mu.Unlock()
 	if previousRealUserPenalty == history.RealUserPenalty && previousDegradation == history.DegradationPoints {
-		m.logger.Debug("[RealUserHealth] tag=", outboundTag, " bytes=", bytes, " errors=0 penalty=", history.RealUserPenalty)
+		m.logger.Debug("[RealUserHealth] tag=", outboundTag, " bytes=", bytes, " errors=0 penalty=", history.RealUserPenalty, " degradation=", history.DegradationPoints, " score=", history.HealthScore)
 		return
 	}
 	m.history.StoreURLTestHistory(outboundTag, &history)
 	m.emitGroupEvent(groupTags)
-	m.logger.Debug("[RealUserHealth] tag=", outboundTag, " bytes=", bytes, " errors=0 penalty=", history.RealUserPenalty)
+	m.logger.Debug("[RealUserHealth] tag=", outboundTag, " bytes=", bytes, " errors=0 penalty=", history.RealUserPenalty, " degradation=", history.DegradationPoints, " score=", history.HealthScore)
+}
+
+func getRuntimeHistoryScore(state *outboundState) int {
+	if state == nil {
+		return 0
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	return state.history.HealthScore
 }
 
 func (m *OutboundMonitoring) configureUDPProbe(options option.MonitoringOptions) {

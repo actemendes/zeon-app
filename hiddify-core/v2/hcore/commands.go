@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/hiddify/hiddify-core/v2/config"
@@ -18,6 +19,11 @@ import (
 	"github.com/sagernet/sing/common/memory"
 	"google.golang.org/grpc"
 )
+
+var activeServerLogState struct {
+	sync.Mutex
+	currentOutbound string
+}
 
 func (h *HiddifyInstance) readStatus(prev *SystemInfo) *SystemInfo {
 	var message SystemInfo
@@ -38,6 +44,7 @@ func (h *HiddifyInstance) readStatus(prev *SystemInfo) *SystemInfo {
 		}
 		if box := h.Box(); box != nil {
 			current := ""
+			groupActive := ""
 			if currentOutBound, ok := box.Outbound().Outbound(config.OutboundSelectTag); ok {
 				if selectOutBound, ok := currentOutBound.(*group.Selector); ok {
 					current = selectOutBound.Now()
@@ -48,10 +55,14 @@ func (h *HiddifyInstance) readStatus(prev *SystemInfo) *SystemInfo {
 			if currentOutBound, ok := box.Outbound().Outbound(current); ok {
 				if g, ok := currentOutBound.(adapter.OutboundGroup); ok {
 					if now := g.Now(); now != "" {
-						message.CurrentOutbound = fmt.Sprint(message.CurrentOutbound, " • ", TrimTagName(now))
+						groupActive = now
 					}
 				}
 			}
+			if groupActive != "" {
+				message.CurrentOutbound = fmt.Sprint(TrimTagName(current), " -> ", TrimTagName(groupActive))
+			}
+			logActiveServerForUI(message.CurrentOutbound, current, groupActive)
 			// }
 		}
 
@@ -67,6 +78,16 @@ func (h *HiddifyInstance) readStatus(prev *SystemInfo) *SystemInfo {
 	}
 
 	return &message
+}
+
+func logActiveServerForUI(currentOutbound string, selector string, groupActive string) {
+	activeServerLogState.Lock()
+	defer activeServerLogState.Unlock()
+	if currentOutbound == "" || currentOutbound == activeServerLogState.currentOutbound {
+		return
+	}
+	activeServerLogState.currentOutbound = currentOutbound
+	Log(LogLevel_INFO, LogType_CORE, "[ActiveServerChanged] ui_current_outbound=", currentOutbound, " selector=", selector, " group_active=", groupActive)
 }
 
 func (s *CoreService) GetSystemInfo(ctx context.Context, req *hcommon.Empty) (*SystemInfo, error) {

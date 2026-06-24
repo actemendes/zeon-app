@@ -53,10 +53,14 @@ func isSmartActiveDiagnosticMessage(message string) bool {
 
 var smartActiveDiagnosticMarkers = []string{
 	"[RuntimeHealth]",
+	"[RealUserHealth]",
+	"[SmartActiveLifecycle]",
 	"[SmartActiveState]",
+	"[SmartActiveRanking]",
 	"[SmartActiveDecision]",
 	"[SmartActiveSwitch]",
 	"[SmartActiveEmergency]",
+	"[ActiveServerChanged]",
 	"[ManualRefresh]",
 	"[ManualRefreshTarget]",
 	"[AutoStrategy]",

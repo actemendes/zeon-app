@@ -9,7 +9,7 @@ param(
     [string]$Artifacts = "both",
 
     [switch]$SkipPubGet,
-
+ 
     [switch]$SkipCodeGeneration
 )
 

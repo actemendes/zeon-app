@@ -92,6 +92,45 @@ function Get-BuildConfigName {
     }
 }
 
+function Resolve-FlutterPackageRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$WorkingRoot,
+        [Parameter(Mandatory = $true)][string]$PackageName
+    )
+
+    $pluginLink = Join-Path $WorkingRoot "windows\flutter\ephemeral\.plugin_symlinks\$PackageName"
+    if (Test-Path -LiteralPath $pluginLink) {
+        $pluginItem = Get-Item -LiteralPath $pluginLink
+        if (-not $pluginItem.Target) {
+            throw "Plugin symlink target is empty: $pluginLink"
+        }
+
+        $pluginTarget = $pluginItem.Target
+        if ($pluginTarget -is [Array]) {
+            $pluginTarget = $pluginTarget[0]
+        }
+        return $pluginTarget
+    }
+
+    $packageConfigPath = Join-Path $WorkingRoot ".dart_tool\package_config.json"
+    if (-not (Test-Path -LiteralPath $packageConfigPath)) {
+        throw "Package config not found: $packageConfigPath. Run 'flutter pub get' first."
+    }
+
+    $packageConfig = Get-Content -LiteralPath $packageConfigPath -Raw | ConvertFrom-Json
+    $package = $packageConfig.packages | Where-Object { $_.name -eq $PackageName } | Select-Object -First 1
+    if (-not $package) {
+        throw "Package $PackageName was not found in $packageConfigPath."
+    }
+
+    $rootUri = [string]$package.rootUri
+    if ($rootUri.StartsWith("file:")) {
+        return ([Uri]$rootUri).LocalPath
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $packageConfigPath) $rootUri))
+}
+
 function Patch-FlutterSecureStorageWindowsPlugin {
     param([Parameter(Mandatory = $true)][string]$WorkingRoot)
 
@@ -304,6 +343,71 @@ std::string WideToUtf8(LPCWSTR value) {
     Write-Host "Patched local notifications plugin: $cppPath"
 }
 
+function Patch-TrayManagerWindowsPlugin {
+    param([Parameter(Mandatory = $true)][string]$WorkingRoot)
+
+    $pluginTarget = Resolve-FlutterPackageRoot -WorkingRoot $WorkingRoot -PackageName "tray_manager"
+    $cppPath = Join-Path $pluginTarget "windows\tray_manager_plugin.cpp"
+    if (-not (Test-Path -LiteralPath $cppPath)) {
+        throw "tray_manager Windows source file not found: $cppPath"
+    }
+
+    $content = Get-Content -LiteralPath $cppPath -Raw
+    if ($content -match "DestroyMenuTree" -and $content -match "HICON previousIcon") {
+        Write-Host "tray_manager Windows resource patch is already applied."
+        return
+    }
+
+    $updated = $content
+    $updated = $updated.Replace("  NOTIFYICONDATA nid;", "  NOTIFYICONDATA nid{};")
+    $updated = $updated.Replace("  NOTIFYICONIDENTIFIER niif;", "  NOTIFYICONIDENTIFIER niif{};")
+
+    if ($updated -notmatch "DestroyMenuTree") {
+        $updated = [regex]::Replace(
+            $updated,
+            "(?s)(const flutter::EncodableValue\* ValueOrNull.*?\n}\r?\n)",
+            "`$1`r`nvoid DestroyMenuTree(HMENU menu) {`r`n  int count = GetMenuItemCount(menu);`r`n  for (int i = count - 1; i >= 0; i--) {`r`n    MENUITEMINFO item_info{};`r`n    item_info.cbSize = sizeof(MENUITEMINFO);`r`n    item_info.fMask = MIIM_SUBMENU;`r`n    if (GetMenuItemInfo(menu, i, TRUE, &item_info) && item_info.hSubMenu != nullptr) {`r`n      DestroyMenuTree(item_info.hSubMenu);`r`n      DestroyMenu(item_info.hSubMenu);`r`n    }`r`n  }`r`n}`r`n"
+        )
+    }
+
+    $updated = [regex]::Replace(
+        $updated,
+        "  int count = GetMenuItemCount\(menu\);\r?\n  for \(int i = 0; i < count; i\+\+\) \{\r?\n    // always remove at 0 because they shift every time\r?\n    RemoveMenu\(menu, 0, MF_BYPOSITION\);\r?\n  \}",
+        "  DestroyMenuTree(menu);`r`n  int count = GetMenuItemCount(menu);`r`n  for (int i = count - 1; i >= 0; i--) {`r`n    RemoveMenu(menu, i, MF_BYPOSITION);`r`n  }"
+    )
+
+    $updated = [regex]::Replace(
+        $updated,
+        "TrayManagerPlugin::~TrayManagerPlugin\(\) \{\r?\n  registrar->UnregisterTopLevelWindowProcDelegate\(window_proc_id\);\r?\n\}",
+        "TrayManagerPlugin::~TrayManagerPlugin() {`r`n  registrar->UnregisterTopLevelWindowProcDelegate(window_proc_id);`r`n  DestroyMenuTree(hMenu);`r`n  DestroyMenu(hMenu);`r`n}"
+    )
+
+    $updated = [regex]::Replace(
+        $updated,
+        "if \(tray_icon_setted\) \{\r?\n      Shell_NotifyIcon\(NIM_DELETE, &nid\);\r?\n      DestroyIcon\(nid\.hIcon\);\r?\n    \}",
+        "if (tray_icon_setted) {`r`n      Shell_NotifyIcon(NIM_DELETE, &nid);`r`n    }`r`n    if (nid.hIcon != nullptr) {`r`n      DestroyIcon(nid.hIcon);`r`n      nid.hIcon = nullptr;`r`n    }"
+    )
+
+    $updated = [regex]::Replace(
+        $updated,
+        "void TrayManagerPlugin::Destroy\(\r?\n    const flutter::MethodCall<flutter::EncodableValue>& method_call,\r?\n    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result\) \{\r?\n  Shell_NotifyIcon\(NIM_DELETE, &nid\);\r?\n  DestroyIcon\(nid\.hIcon\);\r?\n  tray_icon_setted = false;",
+        "void TrayManagerPlugin::Destroy(`r`n    const flutter::MethodCall<flutter::EncodableValue>& method_call,`r`n    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {`r`n  if (tray_icon_setted) {`r`n    Shell_NotifyIcon(NIM_DELETE, &nid);`r`n  }`r`n  if (nid.hIcon != nullptr) {`r`n    DestroyIcon(nid.hIcon);`r`n    nid.hIcon = nullptr;`r`n  }`r`n  tray_icon_setted = false;"
+    )
+
+    $updated = [regex]::Replace(
+        $updated,
+        "  nid\.hIcon = static_cast<HICON>\(\r?\n      LoadImage\(nullptr, \(LPCWSTR\)\(converter\.from_bytes\(iconPath\)\.c_str\(\)\),\r?\n                IMAGE_ICON, GetSystemMetrics\(SM_CXSMICON\),\r?\n                GetSystemMetrics\(SM_CYSMICON\), LR_LOADFROMFILE\)\);\r?\n\r?\n  _ApplyIcon\(\);",
+        "  HICON previousIcon = nid.hIcon;`r`n  nid.hIcon = static_cast<HICON>(`r`n      LoadImage(nullptr, (LPCWSTR)(converter.from_bytes(iconPath).c_str()),`r`n                IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),`r`n                GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE));`r`n`r`n  _ApplyIcon();`r`n`r`n  if (previousIcon != nullptr && previousIcon != nid.hIcon) {`r`n    DestroyIcon(previousIcon);`r`n  }"
+    )
+
+    if ($updated -eq $content -or $updated -notmatch "DestroyMenuTree" -or $updated -notmatch "HICON previousIcon") {
+        throw "tray_manager Windows resource patch did not apply cleanly: $cppPath"
+    }
+
+    Set-Content -LiteralPath $cppPath -Value $updated -NoNewline
+    Write-Host "Patched tray_manager Windows resource cleanup: $cppPath"
+}
+
 function Resolve-BuiltExePath {
     param(
         [Parameter(Mandatory = $true)][string]$WorkingRoot,
@@ -375,6 +479,7 @@ try {
             Patch-FlutterSecureStorageWindowsPlugin -WorkingRoot $workingRoot
         }
         Patch-FlutterLocalNotificationsWindowsPlugin -WorkingRoot $workingRoot
+        Patch-TrayManagerWindowsPlugin -WorkingRoot $workingRoot
 
         $buildArgs = @("build", "windows", "--$BuildMode", "--target", $BuildTarget)
         Write-Host "Build target: $BuildTarget"
@@ -400,6 +505,7 @@ try {
                     Patch-FlutterSecureStorageWindowsPlugin -WorkingRoot $workingRoot
                 }
                 Patch-FlutterLocalNotificationsWindowsPlugin -WorkingRoot $workingRoot
+                Patch-TrayManagerWindowsPlugin -WorkingRoot $workingRoot
 
                 Write-Host ("Retrying: flutter " + ($buildArgs -join " "))
                 & flutter @buildArgs
