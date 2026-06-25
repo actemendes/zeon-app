@@ -74,12 +74,10 @@ class NotificationPollingService with InfraLogger {
     } on DioException catch (e, st) {
       _registerFailure();
       loggy.warning('notification sync failed [trigger=$trigger type=${e.type.name}]', e, st);
-      if (force) rethrow;
       return null;
     } catch (e, st) {
       _registerFailure();
       loggy.warning('notification sync failed [trigger=$trigger]', e, st);
-      if (force) rethrow;
       return null;
     }
   }

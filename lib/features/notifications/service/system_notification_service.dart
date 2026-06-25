@@ -39,6 +39,8 @@ class SystemNotificationServiceImpl implements SystemNotificationService {
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('ic_stat_logo'),
+        iOS: DarwinInitializationSettings(),
+        macOS: DarwinInitializationSettings(),
         windows: WindowsInitializationSettings(
           appName: 'ZEON',
           appUserModelId: windowsAppUserModelId,
@@ -62,6 +64,14 @@ class SystemNotificationServiceImpl implements SystemNotificationService {
     final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     if (android != null) {
       return android.requestNotificationsPermission();
+    }
+    final ios = _plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+    if (ios != null) {
+      return ios.requestPermissions(alert: true, badge: true, sound: true);
+    }
+    final macos = _plugin.resolvePlatformSpecificImplementation<MacOSFlutterLocalNotificationsPlugin>();
+    if (macos != null) {
+      return macos.requestPermissions(alert: true, badge: true, sound: true);
     }
     return null;
   }
@@ -193,6 +203,8 @@ NotificationDetails notificationDetailsFor(NotificationEntity notification) {
       styleInformation: BigTextStyleInformation(_trimForDisplay(notification.body, 4000)),
       category: AndroidNotificationCategory.event,
     ),
+    iOS: const DarwinNotificationDetails(),
+    macOS: const DarwinNotificationDetails(),
     windows: WindowsNotificationDetails(
       subtitle: notification.category.wireName,
       duration: notification.priority == NotificationPriority.low
