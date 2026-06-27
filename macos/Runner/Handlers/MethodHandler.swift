@@ -1,0 +1,118 @@
+import Combine
+import FlutterMacOS
+import Foundation
+import HiddifyCore
+
+public class MethodHandler: NSObject, FlutterPlugin {
+  private var channel: FlutterMethodChannel?
+
+  public static let name = "\(Bundle.main.serviceIdentifier)/method"
+
+  public static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(name: Self.name, binaryMessenger: registrar.messenger)
+    let instance = MethodHandler()
+    registrar.addMethodCallDelegate(instance, channel: channel)
+    instance.channel = channel
+  }
+
+  public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    @Sendable func mainResult(_ res: Any?) async {
+      await MainActor.run {
+        result(res)
+      }
+    }
+
+    switch call.method {
+    case "setup":
+      Task {
+        guard
+          let args = call.arguments as? [String: Any?],
+          let baseDir = args["baseDir"] as? String,
+          let workingDir = args["workingDir"] as? String,
+          let tempDir = args["tempDir"] as? String,
+          let mode = args["mode"] as? Int,
+          let grpcPort = args["grpcPort"] as? Int
+        else {
+          await mainResult(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+          return
+        }
+
+        VPNConfig.shared.baseDir = baseDir
+        VPNConfig.shared.workingDir = workingDir
+        VPNConfig.shared.tempDir = tempDir
+
+        try? FileManager.default.createDirectory(atPath: baseDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(atPath: workingDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(atPath: tempDir, withIntermediateDirectories: true)
+
+        let opts = MobileSetupOptions()
+        opts.basePath = baseDir
+        opts.workingDir = workingDir
+        opts.tempDir = tempDir
+        opts.listen = "127.0.0.1:\(grpcPort)"
+        opts.secret = ""
+        opts.debug = false
+        opts.mode = mode
+        opts.fixAndroidStack = false
+
+        var error: NSError?
+        MobileSetup(opts, nil, &error)
+        if let error {
+          await mainResult(FlutterError(code: String(error.code), message: error.localizedDescription, details: nil))
+          return
+        }
+
+        do {
+          try await VPNManager.shared.setup()
+          await mainResult(true)
+        } catch {
+          await mainResult(FlutterError(code: "SETUP", message: error.localizedDescription, details: nil))
+        }
+      }
+    case "start":
+      Task {
+        guard
+          let args = call.arguments as? [String: Any?],
+          let path = args["path"] as? String,
+          let name = args["name"] as? String,
+          let grpcPort = args["grpcPort"] as? Int
+        else {
+          await mainResult(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+          return
+        }
+
+        VPNConfig.shared.activeConfigPath = path
+        VPNConfig.shared.activeProfileName = name
+        VPNConfig.shared.grpcServiceModePort = grpcPort
+
+        do {
+          try await VPNManager.shared.connect(
+            with: path,
+            grpcServiceModePort: grpcPort,
+            disableMemoryLimit: VPNConfig.shared.disableMemoryLimit
+          )
+          await mainResult(true)
+        } catch {
+          await mainResult(FlutterError(code: "SETUP_CONNECTION", message: error.localizedDescription, details: nil))
+        }
+      }
+    case "stop":
+      VPNManager.shared.disconnect()
+      result(true)
+    case "reset":
+      VPNManager.shared.reset()
+      result(true)
+    case "change_hiddify_options":
+      guard let options = call.arguments as? String else {
+        result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+        return
+      }
+      VPNConfig.shared.configOptions = options
+      result(true)
+    case "get_grpc_server_public_key", "add_grpc_client_public_key":
+      result("")
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+}

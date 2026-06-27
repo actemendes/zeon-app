@@ -22,7 +22,7 @@ class AppDirectories extends _$AppDirectories with InfraLogger {
     if (kIsWeb) {
       return (baseDir: Directory("."), workingDir: Directory("."), tempDir: Directory("."));
     }
-    if (PlatformUtils.isIOS) {
+    if (PlatformUtils.isIOS || PlatformUtils.isMacOS) {
       final paths = await _methodChannel.invokeMethod<Map>("get_paths");
       loggy.debug("paths: $paths");
       dirs = (
@@ -39,7 +39,7 @@ class AppDirectories extends _$AppDirectories with InfraLogger {
       final baseDir = await getApplicationSupportDirectory();
       final workingDir = Platform.isAndroid ? await _getAndroidWorkingDirectory() : baseDir;
       final tempDir = await getTemporaryDirectory();
-      dirs = (baseDir: baseDir, workingDir: workingDir!, tempDir: tempDir);
+      dirs = (baseDir: baseDir, workingDir: workingDir, tempDir: tempDir);
     }
 
     if (!dirs.baseDir.existsSync()) {

@@ -30,6 +30,11 @@ class MainFlutterWindow: NSWindow {
     }
     //
     RegisterGeneratedPlugins(registry: flutterViewController)
+    MethodHandler.register(with: flutterViewController.registrar(forPlugin: MethodHandler.name))
+    PlatformMethodHandler.register(with: flutterViewController.registrar(forPlugin: PlatformMethodHandler.name))
+    FileMethodHandler.register(with: flutterViewController.registrar(forPlugin: FileMethodHandler.name))
+    StatusEventHandler.register(with: flutterViewController.registrar(forPlugin: StatusEventHandler.name))
+    AlertsEventHandler.register(with: flutterViewController.registrar(forPlugin: AlertsEventHandler.name))
 
     super.awakeFromNib()
   }

@@ -14,6 +14,7 @@ class InboundOptionsPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final serviceMode = ref.watch(ConfigOptions.serviceMode);
+    final serviceModeChoices = ServiceMode.choices;
     final isTunMode = serviceMode == ServiceMode.tun;
 
     return Scaffold(
@@ -21,14 +22,15 @@ class InboundOptionsPage extends HookConsumerWidget {
       appBar: AppBar(title: Text(t.pages.settings.inbound.title.toUpperCase())),
       body: ListView(
         children: [
-          ChoicePreferenceWidget(
-            selected: serviceMode,
-            preferences: ref.watch(ConfigOptions.serviceMode.notifier),
-            choices: ServiceMode.choices,
-            title: t.pages.settings.inbound.serviceMode,
-            icon: Icons.tune_rounded,
-            presentChoice: (value) => value.present(t),
-          ),
+          if (serviceModeChoices.length > 1)
+            ChoicePreferenceWidget(
+              selected: serviceMode,
+              preferences: ref.watch(ConfigOptions.serviceMode.notifier),
+              choices: serviceModeChoices,
+              title: t.pages.settings.inbound.serviceMode,
+              icon: Icons.tune_rounded,
+              presentChoice: (value) => value.present(t),
+            ),
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.inbound.strictRoute),
             secondary: const Icon(Icons.merge_rounded),
@@ -39,15 +41,16 @@ class InboundOptionsPage extends HookConsumerWidget {
                   }
                 : null,
           ),
-          ChoicePreferenceWidget(
-            selected: ref.watch(ConfigOptions.tunImplementation),
-            preferences: ref.watch(ConfigOptions.tunImplementation.notifier),
-            choices: TunImplementation.values,
-            title: t.pages.settings.inbound.tunImplementation,
-            icon: Icons.trip_origin_rounded,
-            presentChoice: (value) => value.present(t),
-            enabled: isTunMode,
-          ),
+          if (!PlatformUtils.isApple)
+            ChoicePreferenceWidget(
+              selected: ref.watch(ConfigOptions.tunImplementation),
+              preferences: ref.watch(ConfigOptions.tunImplementation.notifier),
+              choices: TunImplementation.values,
+              title: t.pages.settings.inbound.tunImplementation,
+              icon: Icons.trip_origin_rounded,
+              presentChoice: (value) => value.present(t),
+              enabled: isTunMode,
+            ),
           if (PlatformUtils.isLinux)
             ValuePreferenceWidget(
               value: ref.watch(ConfigOptions.tproxyPort),

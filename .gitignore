@@ -55,6 +55,7 @@ android/local (2).properties
 /out/apple/
 /ios/AppleSigning.xcconfig
 /ios/ExportOptions.local.plist
+/macos/Runner/Configs/AppleSigning.xcconfig
 
 /assets/core/*
 !/assets/core/.gitkeep

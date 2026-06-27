@@ -25,6 +25,8 @@ abstract class PlatformUtils {
 
   static bool get isIOS => _debugPlatform == "ios" || (!kIsWeb && Platform.isIOS);
 
+  static bool get isApple => isIOS || isMacOS;
+
   static bool get isAndroid => _debugPlatform == "android" || (!kIsWeb && Platform.isAndroid);
 
   static String get operatingSystem => _debugPlatform ?? (kIsWeb ? "web" : Platform.operatingSystem);

@@ -8,7 +8,19 @@
 PRODUCT_NAME = Hiddify
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = app.hiddify.com
+MACOS_BUNDLE_IDENTIFIER = app.zeon.macos
+MACOS_DEVELOPMENT_TEAM =
+MACOS_SERVICE_IDENTIFIER = com.hiddify.app
+
+// Keep developer credentials outside git. Copy AppleSigning.xcconfig.example
+// to AppleSigning.xcconfig and fill it in before creating signed macOS builds.
+#include? "AppleSigning.xcconfig"
+
+PRODUCT_BUNDLE_IDENTIFIER = $(MACOS_BUNDLE_IDENTIFIER)
+DEVELOPMENT_TEAM = $(MACOS_DEVELOPMENT_TEAM)
+BASE_BUNDLE_IDENTIFIER = $(MACOS_BUNDLE_IDENTIFIER)
+SERVICE_IDENTIFIER = $(MACOS_SERVICE_IDENTIFIER)
+OTHER_LDFLAGS = $(inherited) -lresolv
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2023 hiddify.com. All rights reserved.

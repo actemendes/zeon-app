@@ -22,7 +22,7 @@ abstract class ConfigOptions {
   static final serviceMode = PreferencesNotifier.create<ServiceMode, String>(
     "service-mode",
     ServiceMode.defaultMode,
-    mapFrom: (value) => ServiceMode.choices.firstWhere((e) => e.key == value),
+    mapFrom: (value) => ServiceMode.choices.firstWhere((e) => e.key == value, orElse: () => ServiceMode.defaultMode),
     mapTo: (value) => value.key,
   );
 
@@ -134,8 +134,8 @@ abstract class ConfigOptions {
   static final tunImplementation = PreferencesNotifier.create<TunImplementation, String>(
     "tun-implementation",
     TunImplementation.gvisor,
-    mapFrom: TunImplementation.values.byName,
-    mapTo: (value) => value.name,
+    mapFrom: (value) => PlatformUtils.isApple ? TunImplementation.gvisor : TunImplementation.values.byName(value),
+    mapTo: (value) => PlatformUtils.isApple ? TunImplementation.gvisor.name : value.name,
   );
 
   static final mtu = PreferencesNotifier.create<int, int>("mtu", 1500);
@@ -406,7 +406,7 @@ abstract class ConfigOptions {
       tproxyPort: ref.watch(tproxyPort),
       directPort: ref.watch(directPort),
       redirectPort: ref.watch(redirectPort),
-      tunImplementation: ref.watch(tunImplementation),
+      tunImplementation: PlatformUtils.isApple ? TunImplementation.gvisor : ref.watch(tunImplementation),
       mtu: ref.watch(mtu),
       strictRoute: ref.watch(strictRoute),
       networkProfile: ref.watch(networkProfile),

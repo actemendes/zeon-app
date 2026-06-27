@@ -21,15 +21,34 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		0A989E7EC06ADCB54116DDE5 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DB9486FBC002A85E242199C0 /* Cocoa.framework */; };
+		0CFFBE09E97B911FC680F87F /* ExtensionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DFE05E9308769F3E98D8D7E /* ExtensionProvider.swift */; };
+		11DE2ABE671C4303B610A742 /* Extension+RunBlocking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B82E9B99BFEF5FDF01278F6 /* Extension+RunBlocking.swift */; };
+		23480C3C525FB346437AF099 /* PlatformMethodHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B770A9676F2DF34E1E3353 /* PlatformMethodHandler.swift */; };
+		254EDBC9ABDE3A85BB2A8445 /* MethodHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2681A3BF7C8A42FA3FFCD87 /* MethodHandler.swift */; };
 		27D5969F2A92B6AB00E2BE2B /* hiddify-core.dylib in Bundle Framework */ = {isa = PBXBuildFile; fileRef = 27D5969E2A92B6AB00E2BE2B /* hiddify-core.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		310A25A940853576605D9366 /* Stored.swift in Sources */ = {isa = PBXBuildFile; fileRef = C41B6A4AB8127C3E4C4D115B /* Stored.swift */; };
 		331C80D8294CF71000263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C80D7294CF71000263BE5 /* RunnerTests.swift */; };
 		335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */; };
 		33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC10F02044A3C60003C045 /* AppDelegate.swift */; };
 		33CC10F32044A3C60003C045 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F22044A3C60003C045 /* Assets.xcassets */; };
 		33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F42044A3C60003C045 /* MainMenu.xib */; };
 		33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11122044BFA00003C045 /* MainFlutterWindow.swift */; };
+		3A860673F564ED6633D6AFC1 /* VPNManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2519CD83B23AB23A0F7133A1 /* VPNManager.swift */; };
+		3B6A91C1F5264BCB7CFB0B82 /* FileMethodHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5925AAA245F4CC13C8020DD7 /* FileMethodHandler.swift */; };
 		414949DC2CCE3D370069D5BA /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = 414949DB2CCE3D370069D5BA /* LaunchAtLogin */; };
+		5F29ADF2D31C7C16559F656F /* FilePath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A7C51D3DD7086F391DA8597 /* FilePath.swift */; };
+		673D895E6299DAD1A9F11D50 /* StatusEventHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C0A83D7291FCD6FB5184D58 /* StatusEventHandler.swift */; };
+		72CD47B70A2993EA676BEF54 /* HiddifyCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 81741A9F33E10A267F36E47C /* HiddifyCore.xcframework */; };
+		A31B5AEAB9BEBDB86AA3AB69 /* ExtensionPlatformInterface.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB4A8EC08ABD9DAEB8BCB3A3 /* ExtensionPlatformInterface.swift */; };
+		AC6C955BEA7E4F5329559833 /* HiddifyPacketTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E5A9ECD487F73C5CC51896D9 /* HiddifyPacketTunnel.appex */; };
+		B5FDA09A07BA0BDEBD9655A9 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D25ECBFC0D25523A256E552 /* PacketTunnelProvider.swift */; };
+		BB64CF55F9CADDD48E89AD14 /* VPNConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 160B61B8F9E3467A1DB12618 /* VPNConfig.swift */; };
+		C0EF6BFE8BBE3CB287EFF916 /* FilePath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A7C51D3DD7086F391DA8597 /* FilePath.swift */; };
 		C2CEC907B854CCA50E3CB29E /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7774D5331C4F7054E7047DF2 /* Pods_RunnerTests.framework */; };
+		EA54F850E4B30AC29CFE279A /* Bundle+Properties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FB34434CA3FE5A4C4FF4AD /* Bundle+Properties.swift */; };
+		ED072EDA2AEFE002C1C33217 /* AlertsEventHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 668BC226EC130B6ECB5E48E4 /* AlertsEventHandler.swift */; };
+		F1CDB1C7C73509C55DFAF3D8 /* HiddifyCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 81741A9F33E10A267F36E47C /* HiddifyCore.xcframework */; };
 		FEE8413B259D2FDED8BE933A /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1A1027315C9B3E3F83410A09 /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
 
@@ -48,6 +67,13 @@
 			remoteGlobalIDString = 33CC111A2044C6BA0003C045;
 			remoteInfo = FLX;
 		};
+		972585169CBA3F7B034B6572 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 33CC10E52044A3C60003C045 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ED911678317C5F95097D7474;
+			remoteInfo = HiddifyPacketTunnel;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -62,12 +88,26 @@
 			name = "Bundle Framework";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DB0085918F8EF70416A55709 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AC6C955BEA7E4F5329559833 /* HiddifyPacketTunnel.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		160B61B8F9E3467A1DB12618 /* VPNConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VPNConfig.swift; sourceTree = "<group>"; };
 		1A1027315C9B3E3F83410A09 /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		1C05D6984C93FE0E5C9038D0 /* Pods-RunnerTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.release.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.release.xcconfig"; sourceTree = "<group>"; };
+		2519CD83B23AB23A0F7133A1 /* VPNManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VPNManager.swift; sourceTree = "<group>"; };
 		27D5969E2A92B6AB00E2BE2B /* hiddify-core.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = "hiddify-core.dylib"; path = "../hiddify-core/bin/hiddify-core.dylib"; sourceTree = "<group>"; };
+		2B82E9B99BFEF5FDF01278F6 /* Extension+RunBlocking.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "Extension+RunBlocking.swift"; sourceTree = "<group>"; };
 		331C80D5294CF71000263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		331C80D7294CF71000263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		333000ED22D3DE5D00554162 /* Warnings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Warnings.xcconfig; sourceTree = "<group>"; };
@@ -86,15 +126,40 @@
 		33E5194F232828860026EE4D /* AppInfo.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = AppInfo.xcconfig; sourceTree = "<group>"; };
 		3E235443DDCB73D48BD2341C /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		49CD96905E177C4420930499 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
+		49FB34434CA3FE5A4C4FF4AD /* Bundle+Properties.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "Bundle+Properties.swift"; sourceTree = "<group>"; };
+		5925AAA245F4CC13C8020DD7 /* FileMethodHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FileMethodHandler.swift; sourceTree = "<group>"; };
+		668BC226EC130B6ECB5E48E4 /* AlertsEventHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AlertsEventHandler.swift; sourceTree = "<group>"; };
+		6D25ECBFC0D25523A256E552 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
+		6DFE05E9308769F3E98D8D7E /* ExtensionProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExtensionProvider.swift; sourceTree = "<group>"; };
 		7774D5331C4F7054E7047DF2 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		784F8FF88289CBEC60B5B37C /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		7C0B4F177A93E89661E9B0CB /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
+		81741A9F33E10A267F36E47C /* HiddifyCore.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; name = HiddifyCore.xcframework; path = "../hiddify-core/bin/HiddifyCore.xcframework"; sourceTree = "<group>"; };
+		8A7C51D3DD7086F391DA8597 /* FilePath.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FilePath.swift; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		9C0A83D7291FCD6FB5184D58 /* StatusEventHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StatusEventHandler.swift; sourceTree = "<group>"; };
+		B9B770A9676F2DF34E1E3353 /* PlatformMethodHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlatformMethodHandler.swift; sourceTree = "<group>"; };
+		C41B6A4AB8127C3E4C4D115B /* Stored.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Stored.swift; sourceTree = "<group>"; };
+		D1B9161DF852047733B96403 /* HiddifyPacketTunnel.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = HiddifyPacketTunnel.entitlements; sourceTree = "<group>"; };
 		D96FD811DCD14FAF8EC1F071 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
+		DB9486FBC002A85E242199C0 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DBFB795F5E72237D66B9D391 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
+		E5A9ECD487F73C5CC51896D9 /* HiddifyPacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HiddifyPacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		EB4A8EC08ABD9DAEB8BCB3A3 /* ExtensionPlatformInterface.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExtensionPlatformInterface.swift; sourceTree = "<group>"; };
+		F2681A3BF7C8A42FA3FFCD87 /* MethodHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MethodHandler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		069004CFB3D753F70893BEBE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0A989E7EC06ADCB54116DDE5 /* Cocoa.framework in Frameworks */,
+				F1CDB1C7C73509C55DFAF3D8 /* HiddifyCore.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		331C80D2294CF70F00263BE5 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -109,6 +174,7 @@
 			files = (
 				414949DC2CCE3D370069D5BA /* LaunchAtLogin in Frameworks */,
 				FEE8413B259D2FDED8BE933A /* Pods_Runner.framework in Frameworks */,
+				72CD47B70A2993EA676BEF54 /* HiddifyCore.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,6 +223,8 @@
 				33CC10EE2044A3C60003C045 /* Products */,
 				D73912EC22F37F3D000D13A0 /* Frameworks */,
 				0B357514C188DFB6739B421A /* Pods */,
+				CABA522F9E883C0F6E27B6A4 /* Shared */,
+				929BEB636F4F46922E52D3AA /* HiddifyPacketTunnel */,
 			);
 			sourceTree = "<group>";
 		};
@@ -165,6 +233,7 @@
 			children = (
 				33CC10ED2044A3C60003C045 /* Hiddify.app */,
 				331C80D5294CF71000263BE5 /* RunnerTests.xctest */,
+				E5A9ECD487F73C5CC51896D9 /* HiddifyPacketTunnel.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -200,8 +269,82 @@
 				33E51914231749380026EE4D /* Release.entitlements */,
 				33CC11242044D66E0003C045 /* Resources */,
 				33BA886A226E78AF003329D5 /* Configs */,
+				9B0D24C279A7526E000719F6 /* Handlers */,
+				5BF73A811AF97734BB890518 /* VPN */,
+				720BFFF7B551815BC177D9FD /* Extensions */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		34BDFEA837589CBD3AF972E7 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				DB9486FBC002A85E242199C0 /* Cocoa.framework */,
+			);
+			name = "OS X";
+			sourceTree = "<group>";
+		};
+		5BF73A811AF97734BB890518 /* VPN */ = {
+			isa = PBXGroup;
+			children = (
+				92E38AF2F974E5DB8D9508B7 /* Helpers */,
+				2519CD83B23AB23A0F7133A1 /* VPNManager.swift */,
+				160B61B8F9E3467A1DB12618 /* VPNConfig.swift */,
+			);
+			name = VPN;
+			path = VPN;
+			sourceTree = "<group>";
+		};
+		720BFFF7B551815BC177D9FD /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				49FB34434CA3FE5A4C4FF4AD /* Bundle+Properties.swift */,
+			);
+			name = Extensions;
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+		929BEB636F4F46922E52D3AA /* HiddifyPacketTunnel */ = {
+			isa = PBXGroup;
+			children = (
+				DCAA2BC955133952C1A7F21E /* SingBox */,
+				6D25ECBFC0D25523A256E552 /* PacketTunnelProvider.swift */,
+				784F8FF88289CBEC60B5B37C /* Info.plist */,
+				D1B9161DF852047733B96403 /* HiddifyPacketTunnel.entitlements */,
+			);
+			name = HiddifyPacketTunnel;
+			path = HiddifyPacketTunnel;
+			sourceTree = "<group>";
+		};
+		92E38AF2F974E5DB8D9508B7 /* Helpers */ = {
+			isa = PBXGroup;
+			children = (
+				C41B6A4AB8127C3E4C4D115B /* Stored.swift */,
+			);
+			name = Helpers;
+			path = Helpers;
+			sourceTree = "<group>";
+		};
+		9B0D24C279A7526E000719F6 /* Handlers */ = {
+			isa = PBXGroup;
+			children = (
+				F2681A3BF7C8A42FA3FFCD87 /* MethodHandler.swift */,
+				9C0A83D7291FCD6FB5184D58 /* StatusEventHandler.swift */,
+				668BC226EC130B6ECB5E48E4 /* AlertsEventHandler.swift */,
+				B9B770A9676F2DF34E1E3353 /* PlatformMethodHandler.swift */,
+				5925AAA245F4CC13C8020DD7 /* FileMethodHandler.swift */,
+			);
+			name = Handlers;
+			path = Handlers;
+			sourceTree = "<group>";
+		};
+		CABA522F9E883C0F6E27B6A4 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				8A7C51D3DD7086F391DA8597 /* FilePath.swift */,
+			);
+			name = Shared;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 		D73912EC22F37F3D000D13A0 /* Frameworks */ = {
@@ -209,8 +352,21 @@
 			children = (
 				1A1027315C9B3E3F83410A09 /* Pods_Runner.framework */,
 				7774D5331C4F7054E7047DF2 /* Pods_RunnerTests.framework */,
+				34BDFEA837589CBD3AF972E7 /* OS X */,
+				81741A9F33E10A267F36E47C /* HiddifyCore.xcframework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		DCAA2BC955133952C1A7F21E /* SingBox */ = {
+			isa = PBXGroup;
+			children = (
+				2B82E9B99BFEF5FDF01278F6 /* Extension+RunBlocking.swift */,
+				EB4A8EC08ABD9DAEB8BCB3A3 /* ExtensionPlatformInterface.swift */,
+				6DFE05E9308769F3E98D8D7E /* ExtensionProvider.swift */,
+			);
+			name = SingBox;
+			path = SingBox;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -247,11 +403,13 @@
 				3399D490228B24CF009A79C7 /* ShellScript */,
 				DDB714AFDEF721265C0C3AF7 /* [CP] Embed Pods Frameworks */,
 				414949D92CCE3C2C0069D5BA /* ShellScript */,
+				DB0085918F8EF70416A55709 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				33CC11202044C79F0003C045 /* PBXTargetDependency */,
+				BB1B65CBE20B9F33C9CAD880 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -260,6 +418,23 @@
 			productName = Runner;
 			productReference = 33CC10ED2044A3C60003C045 /* Hiddify.app */;
 			productType = "com.apple.product-type.application";
+		};
+		ED911678317C5F95097D7474 /* HiddifyPacketTunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0FBD9A4DA3545CEF49E7DBCF /* Build configuration list for PBXNativeTarget "HiddifyPacketTunnel" */;
+			buildPhases = (
+				3833EB2C1F413F0AA5508BC1 /* Sources */,
+				069004CFB3D753F70893BEBE /* Frameworks */,
+				7D9A3FDC30573FF8B67C9CC6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HiddifyPacketTunnel;
+			productName = HiddifyPacketTunnel;
+			productReference = E5A9ECD487F73C5CC51896D9 /* HiddifyPacketTunnel.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -310,6 +485,7 @@
 				33CC10EC2044A3C60003C045 /* Runner */,
 				331C80D4294CF70F00263BE5 /* RunnerTests */,
 				33CC111A2044C6BA0003C045 /* Flutter Assemble */,
+				ED911678317C5F95097D7474 /* HiddifyPacketTunnel */,
 			);
 		};
 /* End PBXProject section */
@@ -328,6 +504,13 @@
 			files = (
 				33CC10F32044A3C60003C045 /* Assets.xcassets in Resources */,
 				33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7D9A3FDC30573FF8B67C9CC6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -469,6 +652,28 @@
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
+				C0EF6BFE8BBE3CB287EFF916 /* FilePath.swift in Sources */,
+				EA54F850E4B30AC29CFE279A /* Bundle+Properties.swift in Sources */,
+				254EDBC9ABDE3A85BB2A8445 /* MethodHandler.swift in Sources */,
+				673D895E6299DAD1A9F11D50 /* StatusEventHandler.swift in Sources */,
+				ED072EDA2AEFE002C1C33217 /* AlertsEventHandler.swift in Sources */,
+				23480C3C525FB346437AF099 /* PlatformMethodHandler.swift in Sources */,
+				3B6A91C1F5264BCB7CFB0B82 /* FileMethodHandler.swift in Sources */,
+				3A860673F564ED6633D6AFC1 /* VPNManager.swift in Sources */,
+				BB64CF55F9CADDD48E89AD14 /* VPNConfig.swift in Sources */,
+				310A25A940853576605D9366 /* Stored.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3833EB2C1F413F0AA5508BC1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5F29ADF2D31C7C16559F656F /* FilePath.swift in Sources */,
+				B5FDA09A07BA0BDEBD9655A9 /* PacketTunnelProvider.swift in Sources */,
+				11DE2ABE671C4303B610A742 /* Extension+RunBlocking.swift in Sources */,
+				A31B5AEAB9BEBDB86AA3AB69 /* ExtensionPlatformInterface.swift in Sources */,
+				0CFFBE09E97B911FC680F87F /* ExtensionProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -485,6 +690,12 @@
 			target = 33CC111A2044C6BA0003C045 /* Flutter Assemble */;
 			targetProxy = 33CC111F2044C79F0003C045 /* PBXContainerItemProxy */;
 		};
+		BB1B65CBE20B9F33C9CAD880 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = HiddifyPacketTunnel;
+			target = ED911678317C5F95097D7474 /* HiddifyPacketTunnel */;
+			targetProxy = 972585169CBA3F7B034B6572 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
@@ -500,6 +711,31 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		11EF55653E5AFCD503EE1201 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = HiddifyPacketTunnel/HiddifyPacketTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "$(MACOS_DEVELOPMENT_TEAM)";
+				INFOPLIST_FILE = HiddifyPacketTunnel/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MACOS_BUNDLE_IDENTIFIER).HiddifyPacketTunnel";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
 		331C80DB294CF71000263BE5 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7C0B4F177A93E89661E9B0CB /* Pods-RunnerTests.debug.xcconfig */;
@@ -571,7 +807,7 @@
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -646,7 +882,7 @@
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -699,7 +935,7 @@
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -778,9 +1014,69 @@
 			};
 			name = Release;
 		};
+		5A113F1525ED54EA79B5D80B /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = HiddifyPacketTunnel/HiddifyPacketTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "$(MACOS_DEVELOPMENT_TEAM)";
+				INFOPLIST_FILE = HiddifyPacketTunnel/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MACOS_BUNDLE_IDENTIFIER).HiddifyPacketTunnel";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		D23AF4FAE0449E521724905F /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 33E5194F232828860026EE4D /* AppInfo.xcconfig */;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = HiddifyPacketTunnel/HiddifyPacketTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "$(MACOS_DEVELOPMENT_TEAM)";
+				INFOPLIST_FILE = HiddifyPacketTunnel/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MACOS_BUNDLE_IDENTIFIER).HiddifyPacketTunnel";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0FBD9A4DA3545CEF49E7DBCF /* Build configuration list for PBXNativeTarget "HiddifyPacketTunnel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A113F1525ED54EA79B5D80B /* Release */,
+				11EF55653E5AFCD503EE1201 /* Debug */,
+				D23AF4FAE0449E521724905F /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		331C80DE294CF71000263BE5 /* Build configuration list for PBXNativeTarget "RunnerTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

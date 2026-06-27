@@ -24,6 +24,7 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion10Migration(sharedPreferences),
       PreferencesVersion11Migration(sharedPreferences),
       PreferencesVersion12Migration(sharedPreferences),
+      PreferencesVersion13Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -57,12 +58,14 @@ class PreferencesVersion1Migration extends PreferencesMigrationStep with InfraLo
   @override
   Future<void> migrate() async {
     if (sharedPreferences.getString("service-mode") case final String serviceMode) {
-      final newMode = switch (serviceMode) {
-        "proxy" || "system-proxy" || "vpn" => serviceMode,
-        "systemProxy" => "system-proxy",
-        "tun" => "vpn",
-        _ => PlatformUtils.isDesktop ? "system-proxy" : "vpn",
-      };
+      final newMode = PlatformUtils.isApple
+          ? "vpn"
+          : switch (serviceMode) {
+              "proxy" || "system-proxy" || "vpn" => serviceMode,
+              "systemProxy" => "system-proxy",
+              "tun" => "vpn",
+              _ => PlatformUtils.isDesktop ? "system-proxy" : "vpn",
+            };
       loggy.debug("changing service-mode from [$serviceMode] to [$newMode]");
       await sharedPreferences.setString("service-mode", newMode);
     }
@@ -360,6 +363,27 @@ class PreferencesVersion12Migration extends PreferencesMigrationStep with InfraL
     if (balancerStrategy != "smart-active-auto") {
       loggy.debug("v12: changing balancer-strategy from [$balancerStrategy] to [smart-active-auto]");
       await sharedPreferences.setString("balancer-strategy", "smart-active-auto");
+    }
+  }
+}
+
+class PreferencesVersion13Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion13Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    if (!PlatformUtils.isApple) return;
+
+    final serviceMode = sharedPreferences.getString("service-mode");
+    if (serviceMode != "vpn") {
+      loggy.debug("v13: changing Apple service-mode from [$serviceMode] to [vpn]");
+      await sharedPreferences.setString("service-mode", "vpn");
+    }
+
+    final tunImplementation = sharedPreferences.getString("tun-implementation");
+    if (tunImplementation != "gvisor") {
+      loggy.debug("v13: changing Apple tun-implementation from [$tunImplementation] to [gvisor]");
+      await sharedPreferences.setString("tun-implementation", "gvisor");
     }
   }
 }

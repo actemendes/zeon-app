@@ -178,7 +178,8 @@ class HiddifyCoreService with InfraLogger {
     _mockGroupsController.add(_cloneGroups(latest));
   }
 
-  List<OutboundGroup> _cloneGroups(List<OutboundGroup> groups) => groups.map((group) => group.clone()).toList();
+  List<OutboundGroup> _cloneGroups(List<OutboundGroup> groups) =>
+      groups.map((group) => OutboundGroup()..mergeFromMessage(group)).toList();
 
   void _emitMockGroups({bool deferred = false}) {
     if (!_useMockCore) return;
@@ -450,6 +451,9 @@ class HiddifyCoreService with InfraLogger {
     }
     if (_debugTunImplementation.isNotEmpty) {
       map["tun-implementation"] = _debugTunImplementation;
+    }
+    if (PlatformUtils.isApple) {
+      map["tun-implementation"] = TunImplementation.gvisor.name;
     }
     if (_debugUdpProbeEnabled) {
       if (_debugUdpProbeSecret.isEmpty) {

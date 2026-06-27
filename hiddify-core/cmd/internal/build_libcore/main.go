@@ -10,7 +10,6 @@ import (
 	"github.com/hiddify/hiddify-core/cmd/internal/build_shared"
 	_ "github.com/sagernet/gomobile"
 	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing/common/rw"
 )
 
 var target string
@@ -47,7 +46,7 @@ const libName = "hiddify-core"
 func init() {
 	sharedFlags = append(sharedFlags, "-trimpath")
 	sharedFlags = append(sharedFlags, "-ldflags", "-s -w")
-	sharedTags = append(sharedTags, "with_gvisor", "with_quic", "with_wireguard", "with_ech", "with_utls", "with_clash_api", "with_grpc")
+	sharedTags = append(sharedTags, "with_gvisor", "with_quic", "with_wireguard", "with_utls", "with_clash_api", "with_grpc")
 	iosTags = append(iosTags, "with_dhcp", "with_low_memory", "with_conntrack")
 }
 
@@ -192,8 +191,8 @@ func buildIOS() {
 	args := []string{
 		"bind",
 		"-v",
-		"-libname=box",
-		"-target", "ios,iossimulator,tvos,tvossimulator,macos",
+		"-libname=hiddify-core",
+		"-target", "ios,iossimulator,macos",
 	}
 
 	args = append(args, sharedFlags...)
@@ -201,8 +200,8 @@ func buildIOS() {
 	args = append(args, "-tags")
 	args = append(args, strings.Join(tags, ","))
 
-	output := filepath.Join("bin", "Libhcore.xcframework")
-	args = append(args, "-o", output, "github.com/sagernet/sing-box/experimental/libbox", "./mobile")
+	output := filepath.Join("bin", "HiddifyCore.xcframework")
+	args = append(args, "-o", output, "github.com/sagernet/sing-box/experimental/libbox", "./platform/mobile")
 
 	command := exec.Command(build_shared.GoBinPath+"/gomobile", args...)
 	command.Stdout = os.Stdout
@@ -213,5 +212,4 @@ func buildIOS() {
 		log.Fatal(err)
 	}
 
-	rw.CopyFile("Info.plist", filepath.Join(output, "Info.plist"))
 }

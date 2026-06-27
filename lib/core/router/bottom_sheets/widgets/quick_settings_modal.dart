@@ -11,31 +11,33 @@ class QuickSettingsModal extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    final serviceModeChoices = ServiceMode.choices;
 
     return SafeArea(
       child: SingleChildScrollView(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16).copyWith(top: 16),
-              child: SegmentedButton(
-                showSelectedIcon: false,
-                segments: ServiceMode.choices
-                    .map(
-                      (e) => ButtonSegment(
-                        value: e,
-                        label: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Text(e.presentShort(t), textAlign: TextAlign.center),
+            if (serviceModeChoices.length > 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16).copyWith(top: 16),
+                child: SegmentedButton(
+                  showSelectedIcon: false,
+                  segments: serviceModeChoices
+                      .map(
+                        (e) => ButtonSegment(
+                          value: e,
+                          label: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text(e.presentShort(t), textAlign: TextAlign.center),
+                          ),
+                          // tooltip: e.isExperimental ? t.settings.experimental : null,
                         ),
-                        // tooltip: e.isExperimental ? t.settings.experimental : null,
-                      ),
-                    )
-                    .toList(),
-                selected: {ref.watch(ConfigOptions.serviceMode)},
-                onSelectionChanged: (newSet) => ref.read(ConfigOptions.serviceMode.notifier).update(newSet.first),
+                      )
+                      .toList(),
+                  selected: {ref.watch(ConfigOptions.serviceMode)},
+                  onSelectionChanged: (newSet) => ref.read(ConfigOptions.serviceMode.notifier).update(newSet.first),
+                ),
               ),
-            ),
             // ListTile(
 
             //   leading: const Icon(Icons.content_cut_rounded),

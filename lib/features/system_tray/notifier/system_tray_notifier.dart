@@ -63,9 +63,10 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
         })
         .then((connection) => _modifyConnectionStatus(connection, urlTestDelay));
     final serviceMode = ref.watch(ConfigOptions.serviceMode);
+    final serviceModeChoices = ServiceMode.choices;
 
     final connectionLabel = _connectionMenuLabel(connection, t);
-    final serviceModeLabels = ServiceMode.values.map((e) => '${e.name}:${e.present(t)}').join('|');
+    final serviceModeLabels = serviceModeChoices.map((e) => '${e.name}:${e.present(t)}').join('|');
     final menuSignature = [
       PlatformUtils.isLinux,
       connectionLabel,
@@ -81,7 +82,7 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
       iconPath: _trayIconPath(connection),
       tooltip: _trayTooltip(connection, urlTestDelay, t),
       tooltipStatusKey: connectionLabel,
-      menu: _trayMenu(connection, serviceMode, t),
+      menu: _trayMenu(connection, serviceMode, serviceModeChoices, t),
       menuSignature: menuSignature,
     );
   }
@@ -141,21 +142,27 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
     return lastUpdate == null || DateTime.now().difference(lastUpdate) >= _tooltipRefreshInterval;
   }
 
-  Menu _trayMenu(ConnectionStatus connection, ServiceMode serviceMode, Translations t) => Menu(
+  Menu _trayMenu(
+    ConnectionStatus connection,
+    ServiceMode serviceMode,
+    List<ServiceMode> serviceModeChoices,
+    Translations t,
+  ) => Menu(
     items: [
       if (PlatformUtils.isLinux) ...[MenuItem(key: 'dashboard', label: t.common.dashboard), MenuItem.separator()],
       MenuItem(key: 'connection', label: _connectionMenuLabel(connection, t), disabled: connection.isSwitching),
-      MenuItem.submenu(
-        label: t.pages.settings.inbound.serviceMode,
-        icon: Assets.images.trayIconIco,
-        submenu: Menu(
-          items: [
-            ...ServiceMode.values.map(
-              (e) => MenuItem.checkbox(checked: e == serviceMode, key: e.name, label: e.present(t)),
-            ),
-          ],
+      if (serviceModeChoices.length > 1)
+        MenuItem.submenu(
+          label: t.pages.settings.inbound.serviceMode,
+          icon: Assets.images.trayIconIco,
+          submenu: Menu(
+            items: [
+              ...serviceModeChoices.map(
+                (e) => MenuItem.checkbox(checked: e == serviceMode, key: e.name, label: e.present(t)),
+              ),
+            ],
+          ),
         ),
-      ),
       MenuItem.separator(),
       MenuItem(key: 'quit', label: t.common.quit),
     ],
@@ -220,7 +227,14 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
     } else if (menuItem.key == 'quit') {
       await ref.read(windowNotifierProvider.notifier).exit();
     } else {
-      final newMode = ServiceMode.values.byName(menuItem.key!);
+      ServiceMode? newMode;
+      for (final mode in ServiceMode.choices) {
+        if (mode.name == menuItem.key) {
+          newMode = mode;
+          break;
+        }
+      }
+      if (newMode == null) return;
       loggy.debug("switching service mode: [$newMode]");
       await ref.read(ConfigOptions.serviceMode.notifier).update(newMode);
     }
