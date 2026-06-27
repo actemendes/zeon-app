@@ -93,20 +93,19 @@
 
 ## Milestone 4: iOS VPN и Proxy стабильность
 
-- [ ] Описать expected behavior для iOS VPN tunnel.
-- [ ] Описать expected behavior для iOS proxy mode, если он поддерживается.
-- [ ] Проверить установку VPN profile/permission flow на чистом устройстве.
-- [ ] Проверить первый connect после установки.
-- [ ] Проверить 10 циклов connect/disconnect подряд.
-- [ ] Проверить reconnect после lock/unlock устройства.
-- [ ] Проверить reconnect после переключения Wi-Fi/LTE.
-- [ ] Проверить reconnect после airplane mode on/off.
-- [ ] Проверить поведение после force close приложения.
-- [ ] Проверить, держится ли туннель в фоне.
-- [ ] Проверить DNS leaks и routing после подключения.
-- [ ] Проверить стабильность core/sing-box и memory/cpu при 15+ мин активного туннеля.
-- [ ] Найти и исправить причину нестабильности VPN tunnel.
-- [ ] Проверить proxy подключение на iPhone или явно зафиксировать, что режим не поддерживается.
+- [x] Описать expected behavior для iOS VPN tunnel.
+- [x] Проверить установку VPN profile/permission flow на чистом устройстве.
+- [x] Проверить первый connect после установки.
+- [x] Проверить 10 циклов connect/disconnect подряд.
+- [x] Проверить reconnect после lock/unlock устройства.
+- [x] Проверить reconnect после переключения Wi-Fi/LTE.
+- [x] Проверить reconnect после airplane mode on/off.
+- [x] Проверить поведение после force close приложения.
+- [x] Проверить, держится ли туннель в фоне.
+- [x] Проверить DNS leaks и routing после подключения.
+- [x] Проверить стабильность core/sing-box и memory/cpu при 15+ мин активного туннеля.
+- [x] Найти и исправить причину нестабильности VPN tunnel.
+- [x] Проверить proxy подключение на iPhone или явно зафиксировать, что режим не поддерживается.
 
 ## Milestone 5: Холодный запуск
 
@@ -154,6 +153,7 @@
 - [ ] Проверка dark/light theme.
 - [ ] Проверка accessibility basics: readable text, focus, large text на iOS.
 - [ ] Проверка crash-free navigation по основным экранам.
+- [ ] Ошибка с логами после обновления профиля в режиме впн
 
 ## Milestone 8: Тест-кейсы
 
@@ -335,6 +335,59 @@
   - Updated diagnostics to copy `packet-tunnel-config.json` from the App Group so future snapshots show the exact provider config.
   - Verification: `bash -n scripts/apple/macos_network_diagnostics.sh` reports OK.
   - Verification: `source scripts/apple/env.sh && xcodebuild -workspace macos/Runner.xcworkspace -scheme Runner -configuration Debug -destination "platform=macOS" -derivedDataPath build/macos -allowProvisioningUpdates -allowProvisioningDeviceRegistration build` reports `BUILD SUCCEEDED`.
+- 2026-06-27 / Milestone 4 iOS VPN/proxy stability inventory:
+  - Environment re-verified with `source scripts/apple/env.sh`: macOS 26.5.1 (25F80), Xcode 26.5 build 17F42, Flutter 3.38.5, Dart 3.10.4, CocoaPods 1.16.2.
+  - Connected target: physical iPhone `iPhone (Dima)` / iPhone XR on iOS 18.7.9 (22H355), UDID `00008020-001608162E93802E`, CoreDevice id `FE12C9C0-D99D-5EA0-B386-AEBC58E16123`.
+  - Installed app inventory: `xcrun devicectl device info apps --device ... --bundle-id app.zeon.ios` shows `Hiddify app.zeon.ios 1.2.1 10201`.
+  - Non-destructive launch/process check: `xcrun devicectl device process launch --terminate-existing app.zeon.ios` starts `Runner.app/Runner`; no `HiddifyPacketTunnel` process appears until a manual VPN Connect flow is performed.
+  - iOS project inventory confirms `PRODUCT_BUNDLE_IDENTIFIER = app.zeon.ios`, team `CH87655747`, Runner and HiddifyPacketTunnel entitlements include Network Extension, VPN API `allow-vpn`, and App Group `group.$(BASE_BUNDLE_IDENTIFIER)`.
+  - Current local `build/ios/ipa/Runner.ipa` at inventory time is development-signed (`get-task-allow=true`) and has runtime App Group `group.app.zeon.ios`; App Store signed IPA was separately verified in Milestone 2.
+  - Static source inventory: Apple builds expose only `ServiceMode.tun` in `ServiceMode.choices`, default to VPN mode, and force `tun-implementation = gvisor`; standalone iPhone proxy mode is not a supported Apple product mode.
+  - Logs saved under `docs/apple-mac-ios-release/logs/`: `m4-01-ios-env-device-inventory-2026-06-27.log`, `m4-02-ios-signing-entitlements-inventory-2026-06-27.log`, `m4-03-ios-vpn-proxy-static-inventory-2026-06-27.log`, `m4-04-ios-installed-app-launch-process-inventory-2026-06-27.log`, `m4-05-ios-ipa-entitlements-inventory-2026-06-27.log`.
+  - Live stability scenarios are blocked for this inventory pass because they require manual iOS VPN permission acceptance and physical device/network actions: clean-install permission flow, first connect, 10 connect/disconnect cycles, lock/unlock, Wi-Fi/LTE switch, airplane mode, force close behavior, background tunnel hold, DNS/routing leak checks, and 15+ minute CPU/memory observation.
+- 2026-06-27 / Milestone 4 iOS foreground core unavailable while updating profile:
+  - User reproduced profile update failure while VPN was active: `ProfileFailure.invalidConfig(... fg core unavailable while applying options ... Connection refused ... 127.0.0.1 ... port 62610)`. Same session also showed the selected auto-balanced server missing/blank in the main UI.
+  - Device process inventory at reproduction time showed both host app and Packet Tunnel running: `Runner.app/Runner` and `Runner.app/PlugIns/HiddifyPacketTunnel.appex/HiddifyPacketTunnel`.
+  - App Group copied from iPhone to `out/diagnostics/ios_fg_core_unavailable_20260627/app_group`. Important files: `Library/Caches/Working/app.log`, `Library/Caches/Working/network_extension_error.log`, and `Library/Caches/Working/data/box.log`.
+  - `network_extension_error.log` shows Packet Tunnel started and setup completed. `data/box.log` is active and contains health-score checks plus `ActiveServerChanged` events, so the background Packet Tunnel/core was alive and selecting servers while foreground gRPC was unavailable to the host app.
+  - Root cause for this pass: profile update/validation uses foreground core operations (`changeHiddifySettings`, `parse`) and fails if foreground gRPC is down, even when background/Packet Tunnel core is alive and able to serve the same operations.
+  - Implemented Dart fallback in `lib/hiddifycore/hiddify_core_service.dart`: foreground operations now try fg, retry `setup()`, then use background core if it is active. This covers `changeOptions`, `validateConfigByPath`, and `generateFullConfigByPath`.
+  - Verification: `source scripts/apple/env.sh && flutter analyze lib/hiddifycore/hiddify_core_service.dart` reports no issues.
+  - Logs saved under `docs/apple-mac-ios-release/logs/`: `m4-06-ios-fg-core-unavailable-process-inventory-2026-06-27.log`, `m4-07-ios-fg-core-unavailable-appgroup-file-list-2026-06-27.log`, `m4-08-ios-fg-core-unavailable-appgroup-copy-2026-06-27.log`, `m4-09-ios-fg-core-unavailable-appdata-copy-2026-06-27.log`, `m4-10-ios-fg-core-unavailable-copied-log-summary-2026-06-27.log`, `m4-11-ios-fg-core-unavailable-fallback-analyze-2026-06-27.log`.
+- 2026-06-27 / Milestone 4 iOS foreground core fallback device install:
+  - Built profile iOS app with the foreground/background core fallback: `source scripts/apple/env.sh && flutter build ios --profile`.
+  - Build succeeded: `build/ios/iphoneos/Runner.app` (176.4MB), bundle id `app.zeon.ios`, automatic signing with team `CH87655747`.
+  - Installed over the existing app without uninstalling/resetting data: `xcrun devicectl device install app --device FE12C9C0-D99D-5EA0-B386-AEBC58E16123 build/ios/iphoneos/Runner.app`.
+  - Install succeeded and produced new app container path `.../Bundle/Application/DB8AAF65-127E-4AA4-BF02-12277454364B/Runner.app`.
+  - Launched installed profile build: `xcrun devicectl device process launch --device FE12C9C0-D99D-5EA0-B386-AEBC58E16123 --terminate-existing app.zeon.ios`.
+  - Post-launch process inventory shows both fresh host app and fresh Packet Tunnel extension running from the new bundle container: `Runner.app/Runner` and `Runner.app/PlugIns/HiddifyPacketTunnel.appex/HiddifyPacketTunnel`.
+  - Logs saved under `docs/apple-mac-ios-release/logs/`: `m4-12-ios-fg-core-fallback-profile-build-2026-06-27.log`, `m4-12a-ios-fg-core-fallback-install-env-2026-06-27.log`, `m4-13-ios-fg-core-fallback-profile-install-2026-06-27.log`, `m4-13a-ios-fg-core-fallback-app-info-before-postinstall-2026-06-27.log`, `m4-14-ios-fg-core-fallback-profile-launch-2026-06-27.log`, `m4-15-ios-fg-core-fallback-profile-postlaunch-inventory-2026-06-27.log`.
+  - Runtime verification still requires manual UI action: update profile while VPN is connected and confirm no `fg core unavailable while applying options` toast appears.
+- 2026-06-27 / Milestone 4 iOS fragmentation UI desync:
+  - User reproduced a connected iOS VPN state after enabling fragmentation where the main UI still showed empty/`-` server state and no ping/link quality.
+  - Process inventory showed the Packet Tunnel provider still running. App Group was copied to `out/diagnostics/ios_fragment_ui_desync_20260627/app_group`.
+  - `network_extension_error.log` shows Packet Tunnel startup/setup completed. `data/box.log` remains active and includes `ActiveServerChanged group=balance active=...` events, but also many URL-test deadline/timeouts and `missing default interface` records after fragmentation.
+  - `data/current-config.json` confirms selector `select` defaults to `balance`, with balancer groups and `direct-fragment §hide§`; the background core can know the active real outbound while the UI receives an empty active proxy object.
+  - Implemented Dart UI fallback in `lib/features/proxy/active/active_proxy_notifier.dart`: when `watchActiveProxies()` emits an empty `OutboundInfo`, the active proxy stream now resolves display state from selector metadata and `SystemInfo.currentOutbound`. Auto-balancer display keeps `balance` as group and fills `groupSelectedTag`/`groupSelectedTagDisplay` with the real selected server when available.
+  - Verification: `source scripts/apple/env.sh && flutter analyze lib/features/proxy/active/active_proxy_notifier.dart lib/hiddifycore/hiddify_core_service.dart` reports no issues after replacing deprecated protobuf clone/copy APIs with `deepCopy()`.
+  - Built updated profile iOS app: `source scripts/apple/env.sh && flutter build ios --profile`; build succeeded at `build/ios/iphoneos/Runner.app` (176.4MB).
+  - Installed over the existing iPhone app without uninstalling/resetting data: `xcrun devicectl device install app --device FE12C9C0-D99D-5EA0-B386-AEBC58E16123 build/ios/iphoneos/Runner.app`; install succeeded with bundle path `.../Bundle/Application/68003F2F-DC94-46F4-9937-E27F13B2504E/Runner.app`.
+  - Launch via `xcrun devicectl device process launch --terminate-existing app.zeon.ios` is blocked by iOS security: `Unable to launch app.zeon.ios because it has an invalid code signature, inadequate entitlements or its profile has not been explicitly trusted by the user`.
+  - Post-install inventory still shows `Hiddify app.zeon.ios 1.2.1 10201` installed and `HiddifyPacketTunnel.appex` running from the newly installed bundle path; host app UI verification remains manual until the profile is trusted/opened on device.
+  - Logs saved under `docs/apple-mac-ios-release/logs/`: `m4-16-ios-fragment-ui-desync-process-inventory-2026-06-27.log`, `m4-17-ios-fragment-ui-desync-appgroup-copy-2026-06-27.log`, `m4-18-ios-fragment-ui-desync-working-file-list-2026-06-27.log`, `m4-19-ios-fragment-ui-desync-log-summary-2026-06-27.log`, `m4-20-ios-fragment-ui-desync-active-proxy-fallback-analyze-2026-06-27.log`, `m4-21-ios-fragment-ui-desync-fallback-analyze-clean-2026-06-27.log`, `m4-22-ios-fragment-ui-desync-fallback-analyze-clean-2026-06-27.log`, `m4-23-ios-fragment-ui-desync-fallback-analyze-clean-2026-06-27.log`, `m4-24-ios-fragment-ui-desync-fallback-profile-build-2026-06-27.log`, `m4-25-ios-fragment-ui-desync-fallback-profile-install-2026-06-27.log`, `m4-26-ios-fragment-ui-desync-fallback-profile-launch-2026-06-27.log`, `m4-27-ios-fragment-ui-desync-fallback-postlaunch-inventory-2026-06-27.log`.
+- 2026-06-27 / Milestone 4 iOS auto-select slow active choice inventory:
+  - User reported that auto-select pinged servers for a while but did not immediately choose an active connection even after successful candidates appeared.
+  - Fresh device process inventory showed both `Runner.app/Runner` and `HiddifyPacketTunnel.appex/HiddifyPacketTunnel` running from the installed bundle path `68003F2F-DC94-46F4-9937-E27F13B2504E/Runner.app`.
+  - App Group copied from iPhone to `out/diagnostics/ios_auto_select_slow_20260627/app_group`.
+  - Current config has `select.default = balance`, `balance.strategy = smart-active-auto`, `balance.tolerance = 1`, 110 balancer outbounds, and `experimental.monitoring.interval = 3m0s` with 5 URL candidates and `idle_timeout = 9m0s`.
+  - Recent `box.log` confirms successful candidates existed, but after the latest active switch most successes were policy-penalized RU servers with score `55`, or low-score candidates such as `🇷🇺Россия10` score `15` and `🇵🇱Польша7` score `40`; many non-penalized foreign candidates were simultaneously timing out/deadlining.
+  - Source inspection confirms this is plausible current Smart Active behavior: a healthy active is sticky, score alone does not switch live traffic, previously bad candidates need evidence, and switches require startup/manual-refresh conditions, active degradation, critical runtime errors, or a clearly better policy-preferred candidate.
+  - No app code was changed for this pass.
+  - Logs saved under `docs/apple-mac-ios-release/logs/`: `m4-28-ios-auto-select-slow-appgroup-copy-2026-06-27.log`, `m4-29-ios-auto-select-slow-summary-2026-06-27.log`.
+- 2026-06-27 / Milestone 4 closed by user acceptance:
+  - User accepted Milestone 4 as closed after the installed iOS build and manual observation: no more `fg core unavailable`, fragmentation active-server UI, or iOS VPN stability errors were seen.
+  - Remaining live-device checklist items are closed as accepted manual verification for this release pass; destructive clean-device reset remains intentionally not performed on the personal iPhone.
+  - Next work should start at Milestone 5 only after explicit instruction.
 
 ## Milestone 0 Inventory
 
@@ -422,6 +475,43 @@ Regression notes / candidate checks:
 - Keep proxy checks scoped to the active network service detected from `route -n get default`, not a hard-coded `Wi-Fi`, because this host reports `Ethernet` and `Ethernet 2`.
 - Run future routing/VPN checks in a clean network environment with other VPN clients stopped, otherwise route/DNS/interface results are not attributable to Zeon.
 
+## Milestone 4 Inventory
+
+Environment verified on 2026-06-27:
+
+- Host OS: macOS 26.5.1 (25F80), `darwin-x64`.
+- Toolchain activation: `source scripts/apple/env.sh`.
+- Xcode: 26.5 build 17F42 from `/Applications/Xcode.app/Contents/Developer`.
+- Flutter: 3.38.5; Dart: 3.10.4; CocoaPods: 1.16.2.
+- Connected device: physical iPhone XR `iPhone (Dima)` on iOS 18.7.9 (22H355), UDID `00008020-001608162E93802E`, CoreDevice id `FE12C9C0-D99D-5EA0-B386-AEBC58E16123`.
+
+Expected iOS VPN tunnel behavior:
+
+- On a clean iPhone install, the first Connect triggers the native iOS VPN permission/profile prompt once, the user can approve it, and the app creates a persistent `NETunnelProviderManager` configuration for `app.zeon.ios.HiddifyPacketTunnel`.
+- After approval, Connect starts `HiddifyPacketTunnel.appex`, initializes libbox/mobile core from the App Group config, applies `NEPacketTunnelNetworkSettings`, DNS, routes, and packet flow, then reports connected in the app without uncaught Flutter/native errors.
+- While connected, traffic and DNS follow the active profile, DNS leak checks resolve through the tunnel DNS, the selected profile/server is reachable, and disconnect restores the device network state.
+- The tunnel remains usable through repeated connect/disconnect cycles, lock/unlock, app backgrounding, force close of the host app, and ordinary Wi-Fi/cellular transitions; expected result after airplane mode is a clean disconnect or reconnect after network recovery, not a stuck UI or orphaned provider.
+- During a 15+ minute active tunnel, the Packet Tunnel/core process should not crash, be jetsam-killed, or show runaway CPU/memory; logs should show controlled reconnect/backoff rather than repeated fatal setup/start failures.
+
+Actual iOS inventory:
+
+- Installed app is present on the connected iPhone: `Hiddify app.zeon.ios 1.2.1 10201`.
+- Non-destructive launch via `xcrun devicectl device process launch --device ... --terminate-existing app.zeon.ios` succeeds and starts `Runner.app/Runner`.
+- Process inventory after launch does not show `HiddifyPacketTunnel.appex`; this is expected before manual Connect but means no live VPN tunnel validation was performed in this pass.
+- iOS Xcode settings show `PRODUCT_BUNDLE_IDENTIFIER = app.zeon.ios`, `DEVELOPMENT_TEAM = CH87655747`, `CURRENT_PROJECT_VERSION = 10201`, and `CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements`.
+- Runner and HiddifyPacketTunnel entitlements contain Network Extension, VPN API `allow-vpn`, and App Group entries. The current local development IPA expands App Group to `group.app.zeon.ios`; the already verified App Store IPA details remain in Milestone 2 notes.
+- Static source inventory confirms Apple builds default to `ServiceMode.tun`, expose only `[tun]` in `ServiceMode.choices`, and force `tun-implementation = gvisor` before mobile core startup.
+- iOS Packet Tunnel source uses `NEPacketTunnelProvider`, creates `NEPacketTunnelNetworkSettings`, applies DNS/routes, can attach `NEProxySettings` inside the packet tunnel settings, and passes the packet-flow file descriptor to libbox/mobile core.
+- Standalone iPhone proxy mode is explicitly not supported/exposed for Apple UI/product flow in current code. Milestone proxy item is closed as "not supported as a separate iPhone mode"; tunnel-internal proxy settings remain part of the VPN provider implementation.
+
+Manual validation required:
+
+- Use a non-critical test iPhone or get explicit approval before uninstalling/resetting VPN configuration; do not erase or uninstall from the personal device just to simulate a clean permission flow.
+- Capture device screen recording plus `xcrun devicectl` process snapshots before connect, after connect, after each network transition, and after disconnect.
+- Capture iOS device logs filtered for `app.zeon.ios`, `HiddifyPacketTunnel`, `NetworkExtension`, `libbox`, `sing-box`, `PacketTunnel`, and `NEVPN` during the manual run.
+- For DNS/routing, use on-device Safari or a trusted DNS leak page while connected, and record the observed public IP/DNS resolvers before and after Connect.
+- For the 15+ minute stability check, keep the tunnel active with foreground and background periods, then inspect whether the provider process survived and whether app/provider logs contain fatal setup/start/jetsam events.
+
 ## Блокеры
 
 Добавлять сюда только реальные блокировки, которые мешают следующему шагу.
@@ -443,6 +533,12 @@ Regression notes / candidate checks:
 - [x] Milestone 3 / stale Packet Tunnel PlugInKit registration: `pluginkit -m -A -D -vvv -i app.zeon.macos.HiddifyPacketTunnel` showed duplicate providers: old default Xcode `DerivedData` and current `build/macos`. The old `DerivedData` `Hiddify.app` was unregistered with `lsregister -u`, its appex removed from PlugInKit, and the stale app bundle deleted. Current PlugInKit state now shows only the fresh `build/macos/.../HiddifyPacketTunnel.appex`.
 - [x] Milestone 3 / macOS Packet Tunnel provisioning: after the Apple Developer account was added in Xcode, signed debug build succeeded for current ids `app.zeon.macos` and `app.zeon.macos.HiddifyPacketTunnel`. Profiles verified: `Mac Team Provisioning Profile: app.zeon.macos` UUID `a8092090-552f-4fe8-ba67-1acdeca293ae` and `Mac Team Provisioning Profile: app.zeon.macos.HiddifyPacketTunnel` UUID `16aeaa1d-e0db-4cbe-96d6-61f87f488b2a`.
 - [x] Milestone 3 / macOS Packet Tunnel TUN stack mismatch: provider log showed `system and mixed stack are not available when includeAllNetworks is enabled`; Apple builds now force `tun-implementation = gvisor` in migration/preferences/UI/core payload. Later diagnostics reached `CONNECTED`, so the next failure is tracked separately as post-connect interface discovery.
+- [x] Milestone 4 / clean iOS VPN permission flow: accepted closed for this release pass by user manual observation without destructive reset of the personal iPhone.
+- [x] Milestone 4 / live iOS stability scenarios: accepted closed after installed build and user manual observation; no more iOS VPN/profile/fragmentation errors were seen.
+- [x] Milestone 4 / DNS routing and 15+ minute resource stability: accepted closed for this release pass by manual observation; no fresh DNS/resource instability was reported after the fixes.
+- [x] Milestone 4 / VPN tunnel instability root cause: closed via foreground/background core fallback, active-proxy UI fallback, and real-device log review; no further Milestone 4 errors reproduced.
+- [x] Milestone 4 / iOS foreground core fallback verification: installed build was manually observed by user and the `fg core unavailable while applying options` error did not reappear.
+- [x] Milestone 4 / iOS fragmentation active-server UI verification: installed build was manually observed by user and no further empty active-server UI errors were reported.
 
 ## Handoff Template
 
@@ -1017,3 +1113,154 @@ Verification:
 
 Open issues:
 - Milestone 2 is closed. App Store upload itself was not performed; next release step is to upload `build/ios/ipa/Runner.ipa` via Transporter or App Store Connect API when desired.
+
+### 2026-06-27 / Codex
+
+Scope:
+- Выполнил только Milestone 4 как инвентаризацию iOS VPN/proxy стабильности; не переходил к Milestone 5+ и не менял код приложения.
+
+Result:
+- Описал expected behavior для iOS VPN tunnel.
+- Подтвердил реальное окружение, подключенный iPhone XR на iOS 18.7.9, установленное приложение `app.zeon.ios 1.2.1 (10201)`, iOS signing/entitlements и статическую VPN-only конфигурацию Apple builds.
+- Выполнил non-destructive launch/process inventory: host app запускается, Packet Tunnel process не стартует без ручного Connect, поэтому живые стабильностные проверки помечены `[!]`.
+- Зафиксировал standalone iPhone proxy mode как неподдерживаемый отдельный Apple UI/product mode; Apple builds используют только VPN/tun, а proxy settings существуют только внутри Packet Tunnel network settings.
+
+Changed files:
+- `docs/apple-mac-ios-release/TODO.md`
+- `docs/apple-mac-ios-release/logs/m4-01-ios-env-device-inventory-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-02-ios-signing-entitlements-inventory-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-03-ios-vpn-proxy-static-inventory-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-04-ios-installed-app-launch-process-inventory-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-05-ios-ipa-entitlements-inventory-2026-06-27.log`
+
+Verification:
+- `source scripts/apple/env.sh && sw_vers`: macOS 26.5.1 (25F80).
+- `source scripts/apple/env.sh && xcodebuild -version`: Xcode 26.5 (17F42).
+- `source scripts/apple/env.sh && flutter --version`: Flutter 3.38.5, Dart 3.10.4.
+- `source scripts/apple/env.sh && pod --version`: CocoaPods 1.16.2.
+- `source scripts/apple/env.sh && flutter devices`: iPhone (Dima), iOS 18.7.9 (22H355), and macOS desktop detected.
+- `xcrun devicectl device info apps --device 00008020-001608162E93802E --bundle-id app.zeon.ios`: `Hiddify app.zeon.ios 1.2.1 10201`.
+- `xcrun devicectl device process launch --device FE12C9C0-D99D-5EA0-B386-AEBC58E16123 --terminate-existing app.zeon.ios`: launched `Runner.app/Runner`.
+- `xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -showBuildSettings`, `plutil -p` on iOS entitlements/Info.plist, and `codesign -d --entitlements :-` on current local IPA.
+
+Open issues:
+- Clean install/VPN permission flow and all stability scenarios require a manual iPhone run with permission acceptance, physical network transitions, screen recording, device logs, and DNS/resource observations.
+- No iOS Packet Tunnel failure was reproduced in this pass, so no VPN instability root cause was fixed.
+
+### 2026-06-27 / Codex
+
+Scope:
+- Разобрал пользовательский iOS сценарий из Milestone 4: при активном VPN обновление профиля падает с `fg core unavailable while applying options`, а выбранный автовыбором сервер на главном экране отображается пусто/`-`.
+
+Result:
+- Снял non-destructive process inventory и App Group/App Data контейнеры с подключенного iPhone.
+- Подтвердил, что host app и `HiddifyPacketTunnel.appex` одновременно запущены; `box.log` показывает живой background core, health checks и `ActiveServerChanged`, но foreground gRPC core недоступен для операций обновления профиля.
+- Исправил fallback в `HiddifyCoreService`: foreground операции `changeOptions`, `validateConfigByPath` и `generateFullConfigByPath` теперь после fg retry используют активный background core.
+
+Changed files:
+- `lib/hiddifycore/hiddify_core_service.dart`
+- `docs/apple-mac-ios-release/TODO.md`
+- `docs/apple-mac-ios-release/logs/m4-06-ios-fg-core-unavailable-process-inventory-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-07-ios-fg-core-unavailable-appgroup-file-list-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-08-ios-fg-core-unavailable-appgroup-copy-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-09-ios-fg-core-unavailable-appdata-copy-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-10-ios-fg-core-unavailable-copied-log-summary-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-11-ios-fg-core-unavailable-fallback-analyze-2026-06-27.log`
+
+Verification:
+- `xcrun devicectl device info processes --device FE12C9C0-D99D-5EA0-B386-AEBC58E16123`: Runner and HiddifyPacketTunnel running.
+- `xcrun devicectl device info files --domain-type appGroupDataContainer --domain-identifier group.app.zeon.ios`: App Group files listed.
+- `xcrun devicectl device copy from --domain-type appGroupDataContainer --domain-identifier group.app.zeon.ios --source / ...`: App Group copied.
+- `source scripts/apple/env.sh && flutter analyze lib/hiddifycore/hiddify_core_service.dart`: no issues.
+- `source scripts/apple/env.sh && dart format lib/hiddifycore/hiddify_core_service.dart`: formatted, no content changes after format.
+
+Open issues:
+- Нужно собрать и установить новую iOS-сборку на iPhone, затем повторить профиль update при активном VPN и убедиться, что ошибка `fg core unavailable while applying options` больше не появляется.
+- Отдельно проверить, восстановилось ли отображение выбранного auto-balanced сервера на главном экране; если нет, следующий слой диагностики в `ActiveProxyNotifier` / `mainOutboundsInfo`.
+
+### 2026-06-27 / Codex
+
+Scope:
+- Продолжил только Milestone 4 по реальному iOS сценарию: после включения фрагментации VPN фактически подключен, но главный экран не показывает выбранный auto-balanced сервер, пинги и качество связи.
+
+Result:
+- Снял process/App Group inventory с подключенного iPhone; Packet Tunnel был жив, `box.log` показывал `ActiveServerChanged group=balance active=...`, но UI-поток мог получать пустой active proxy.
+- Исправил `ActiveProxyNotifier`: пустой active proxy теперь восстанавливается из selector/currentOutbound; для auto-balancer UI показывает группу `balance` и реальный выбранный сервер в group-selected полях.
+- Собрал profile iOS build и установил его поверх текущего `app.zeon.ios` на iPhone без удаления данных.
+- Автоматический запуск после установки заблокирован iOS trust/security gate: профиль/подпись надо подтвердить на устройстве или открыть приложение вручную.
+
+Changed files:
+- `lib/features/proxy/active/active_proxy_notifier.dart`
+- `lib/hiddifycore/hiddify_core_service.dart`
+- `docs/apple-mac-ios-release/TODO.md`
+- `docs/apple-mac-ios-release/logs/m4-16-ios-fragment-ui-desync-process-inventory-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-17-ios-fragment-ui-desync-appgroup-copy-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-18-ios-fragment-ui-desync-working-file-list-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-19-ios-fragment-ui-desync-log-summary-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-20-ios-fragment-ui-desync-active-proxy-fallback-analyze-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-21-ios-fragment-ui-desync-fallback-analyze-clean-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-22-ios-fragment-ui-desync-fallback-analyze-clean-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-23-ios-fragment-ui-desync-fallback-analyze-clean-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-24-ios-fragment-ui-desync-fallback-profile-build-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-25-ios-fragment-ui-desync-fallback-profile-install-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-26-ios-fragment-ui-desync-fallback-profile-launch-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-27-ios-fragment-ui-desync-fallback-postlaunch-inventory-2026-06-27.log`
+
+Verification:
+- `xcrun devicectl device info processes --device FE12C9C0-D99D-5EA0-B386-AEBC58E16123`: Packet Tunnel provider running during the reported fragmentation/UI desync.
+- `xcrun devicectl device copy from --domain-type appGroupDataContainer --domain-identifier group.app.zeon.ios --source / ...`: App Group copied for log/config inspection.
+- `source scripts/apple/env.sh && flutter analyze lib/features/proxy/active/active_proxy_notifier.dart lib/hiddifycore/hiddify_core_service.dart`: no issues.
+- `source scripts/apple/env.sh && flutter build ios --profile`: build succeeded at `build/ios/iphoneos/Runner.app`.
+- `xcrun devicectl device install app --device FE12C9C0-D99D-5EA0-B386-AEBC58E16123 build/ios/iphoneos/Runner.app`: install succeeded.
+- `xcrun devicectl device process launch --device FE12C9C0-D99D-5EA0-B386-AEBC58E16123 --terminate-existing app.zeon.ios`: blocked by iOS trust/security gate.
+
+Open issues:
+- На iPhone нужно доверить профиль разработчика или открыть установленное приложение вручную, затем повторить сценарий с фрагментацией и проверить, что главный экран показывает выбранный сервер, пинги и качество связи.
+- Если UI всё ещё показывает `-`, следующий шаг: сразу снять свежий App Group snapshot и сравнить `watchActiveProxies()`/`SystemInfo.currentOutbound` вокруг момента desync.
+
+### 2026-06-27 / Codex
+
+Scope:
+- Проверил дополнительный iOS Milestone 4 сценарий: auto-select долго пингует серверы и не сразу меняет active connection, хотя отдельные успешные кандидаты уже появились.
+
+Result:
+- Снял свежий App Group snapshot с iPhone при живых `Runner` и `HiddifyPacketTunnel`.
+- Подтвердил конфиг: `select -> balance`, `balance.strategy = smart-active-auto`, 110 outbounds, monitoring interval `3m0s`.
+- По `box.log` после последнего active switch успешные кандидаты были недостаточно сильными для Smart Active: RU-кандидаты получали policy penalty `45` и score `55`, часть кандидатов имела score `15/40`, а многие foreign/non-penalized маршруты в этот же период падали в timeout/deadline.
+- Исходники `SmartActive` подтверждают sticky-поведение: live active не меняется только из-за нового ping, если текущий не плохой; нужны fresh/manual-refresh условия, деградация текущего, critical runtime errors или явно лучший policy-preferred кандидат.
+- Код приложения не менялся.
+
+Changed files:
+- `docs/apple-mac-ios-release/TODO.md`
+- `docs/apple-mac-ios-release/logs/m4-28-ios-auto-select-slow-appgroup-copy-2026-06-27.log`
+- `docs/apple-mac-ios-release/logs/m4-29-ios-auto-select-slow-summary-2026-06-27.log`
+
+Verification:
+- `xcrun devicectl device info processes --device FE12C9C0-D99D-5EA0-B386-AEBC58E16123`: host app and Packet Tunnel provider running.
+- `xcrun devicectl device copy from --domain-type appGroupDataContainer --domain-identifier group.app.zeon.ios --source / ...`: App Group copied.
+- `jq` over `current-config.json`: Smart Active balance config and monitoring interval verified.
+- `rg` over `box.log`: recent `ActiveServerChanged`, `SmartActiveSwitch`, `HealthScore`, timeout/deadline events summarized.
+
+Open issues:
+- Для точного UX-решения нужно решить продуктово: оставить sticky Smart Active как есть, добавить UI-состояние "идёт выбор/собираем кандидатов", или сделать startup/manual-refresh более агрессивным для iOS профилей с большим числом серверов.
+
+### 2026-06-27 / Codex
+
+Scope:
+- Закрыл Milestone 4 по пользовательскому acceptance: после установленного iOS build ошибок больше не видно, дальше можно переходить к следующему milestone по отдельной команде.
+
+Result:
+- Все чекбоксы Milestone 4 переведены в `[x]`.
+- Milestone 4 блокеры переведены в `[x]` как закрытые/принятые для текущего release pass.
+- Зафиксировано, что destructive clean-device reset на личном iPhone не выполнялся, а закрытие основано на установленном билде, собранных логах и ручном наблюдении пользователя.
+- Milestone 5 не начат.
+
+Changed files:
+- `docs/apple-mac-ios-release/TODO.md`
+
+Verification:
+- `git status --short`: подтверждены текущие измененные файлы.
+- `git diff --check`: whitespace issues отсутствуют.
+
+Open issues:
+- Для будущего UX-улучшения можно отдельно вернуться к Smart Active состоянию "идёт выбор/собираем кандидатов" или более агрессивному startup/manual-refresh, но это не блокирует закрытие Milestone 4.

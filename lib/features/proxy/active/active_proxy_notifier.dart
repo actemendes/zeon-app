@@ -15,6 +15,7 @@ import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/hiddifycore/init_signal.dart';
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:hiddify/utils/utils.dart';
+import 'package:protobuf/protobuf.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -109,10 +110,11 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
       selectorStream,
       statsStream,
       (activeProxy, selector, stats) {
+        final resolvedProxy = _resolveDisplayProxy(activeProxy, selector, stats);
         if (_isAutoBalancerSelected(selector)) {
-          return _asAutoBalancer(activeProxy, selector, stats);
+          return _asAutoBalancer(resolvedProxy, selector, stats);
         }
-        return activeProxy;
+        return resolvedProxy;
       },
     );
   }
@@ -141,19 +143,44 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
 
   bool _isAutoBalancerTag(String tag) => tag.trim().toLowerCase() == _autoBalancerTag;
 
+  OutboundInfo _resolveDisplayProxy(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {
+    if (!_isEmptyOutbound(activeProxy)) return activeProxy;
+
+    final fallback = _realOutbound(activeProxy, selector, stats);
+    if (fallback != null) return fallback;
+
+    final currentOutbound = extractRealOutboundTag(stats.currentOutbound) ?? stats.currentOutbound.trim();
+    if (currentOutbound.isEmpty) return activeProxy;
+
+    return OutboundInfo(
+      tag: currentOutbound,
+      tagDisplay: currentOutbound,
+      type: 'proxy',
+      isSelected: true,
+      isVisible: true,
+    );
+  }
+
+  bool _isEmptyOutbound(OutboundInfo outbound) {
+    return outbound.tag.trim().isEmpty &&
+        outbound.tagDisplay.trim().isEmpty &&
+        (!outbound.hasGroupSelectedTag() || outbound.groupSelectedTag.trim().isEmpty) &&
+        (!outbound.hasGroupSelectedTagDisplay() || outbound.groupSelectedTagDisplay.trim().isEmpty);
+  }
+
   OutboundInfo _asAutoBalancer(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {
     final realOutbound = _realOutbound(activeProxy, selector, stats);
-    return activeProxy.copyWith((info) {
-      info.tag = _autoBalancerTag;
-      info.type = "balancer";
-      info.tagDisplay = _autoBalancerTag;
-      if (realOutbound != null) {
-        info.groupSelectedTag = realOutbound.tag;
-        info.groupSelectedTagDisplay = realOutbound.tagDisplay;
-      }
-      info.isSelected = true;
-      info.isGroup = true;
-    });
+    final info = activeProxy.deepCopy()
+      ..tag = _autoBalancerTag
+      ..type = "balancer"
+      ..tagDisplay = _autoBalancerTag
+      ..isSelected = true
+      ..isGroup = true;
+    if (realOutbound != null) {
+      info.groupSelectedTag = realOutbound.tag;
+      info.groupSelectedTagDisplay = realOutbound.tagDisplay;
+    }
+    return info;
   }
 
   OutboundInfo? _realOutbound(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {

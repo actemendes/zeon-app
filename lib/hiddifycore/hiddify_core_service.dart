@@ -307,7 +307,8 @@ class HiddifyCoreService with InfraLogger {
       Object? lastError;
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-          final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
+          final client = await _clientForForegroundOperation("validate config");
+          final response = await client.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
           if (response.responseCode == ResponseCode.OK) {
             return right(unit);
           }
@@ -329,7 +330,8 @@ class HiddifyCoreService with InfraLogger {
       if (_useMockCore) {
         return right("{}");
       }
-      final response = await core.fgClient.parse(ParseRequest(configPath: path, debug: false));
+      final client = await _clientForForegroundOperation("generate full config");
+      final response = await client.parse(ParseRequest(configPath: path, debug: false));
       if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
       return right(response.content);
     });
@@ -398,7 +400,8 @@ class HiddifyCoreService with InfraLogger {
       const maxAttempts = 3;
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-          final res = await core.fgClient.changeHiddifySettings(request);
+          final client = await _clientForForegroundOperation("change options");
+          final res = await client.changeHiddifySettings(request);
           if (res.messageType != MessageType.EMPTY) {
             return left("${res.messageType} ${res.message}");
           }
@@ -426,6 +429,38 @@ class HiddifyCoreService with InfraLogger {
       }
       return left("failed to apply options");
     });
+  }
+
+  Future<CoreClient> _clientForForegroundOperation(String operation) async {
+    try {
+      if (await core.isActiveFg()) {
+        return core.fgClient;
+      }
+    } catch (e) {
+      loggy.debug("$operation: failed checking foreground core", e);
+    }
+
+    try {
+      await setup().run();
+      if (await core.isActiveFg()) {
+        return core.fgClient;
+      }
+    } catch (e) {
+      loggy.debug("$operation: foreground setup retry failed", e);
+    }
+
+    if (core.isInitialized() && !core.isSingleChannel()) {
+      try {
+        if (await core.isActiveBg()) {
+          loggy.warning("$operation: foreground core unavailable, using background core");
+          return core.bgClient;
+        }
+      } catch (e) {
+        loggy.debug("$operation: failed checking background core", e);
+      }
+    }
+
+    return core.fgClient;
   }
 
   Future<Map<String, dynamic>> _buildCoreOptionsPayload(SingboxConfigOption options) async {

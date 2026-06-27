@@ -10,7 +10,6 @@ import 'package:hiddify/core/ui/ui_names.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_notifier.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_state.dart';
 import 'package:hiddify/features/settings/notifier/config_option/config_option_notifier.dart';
-import 'package:hiddify/features/settings/notifier/reset_tunnel/reset_tunnel_notifier.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -168,20 +167,11 @@ class SettingsPage extends HookConsumerWidget {
             icon: Icons.content_cut_rounded,
             namedLocation: context.namedLocation('tlsTricks'),
           ),
-          SettingsSection(
-            title: t.pages.settings.inbound.title,
-            icon: Icons.input_rounded,
-            namedLocation: context.namedLocation('inboundOptions'),
-          ),
-          if (PlatformUtils.isIOS)
-            Material(
-              child: ListTile(
-                title: Text(t.pages.settings.resetTunnel),
-                leading: const Icon(Icons.autorenew_rounded),
-                onTap: () async {
-                  await ref.read(resetTunnelNotifierProvider.notifier).run();
-                },
-              ),
+          if (!PlatformUtils.isApple)
+            SettingsSection(
+              title: t.pages.settings.inbound.title,
+              icon: Icons.input_rounded,
+              namedLocation: context.namedLocation('inboundOptions'),
             ),
           if (Breakpoint(context).isMobile()) ...[
             SettingsSection(
@@ -190,7 +180,7 @@ class SettingsPage extends HookConsumerWidget {
               namedLocation: context.namedLocation('about'),
             ),
           ],
-          if (appInfo.release.allowCustomUpdateChecker)
+          if (appInfo.release.allowCustomUpdateChecker && !PlatformUtils.isIOS)
             Material(
               child: ListTile(
                 leading: const Icon(Icons.system_update_alt_rounded),
