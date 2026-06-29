@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:hiddify/core/http_client/dio_http_client.dart';
-import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
-import 'package:hiddify/features/notifications/data/notification_device_auth.dart';
-import 'package:hiddify/features/notifications/model/notification_entity.dart';
-import 'package:hiddify/features/notifications/model/notification_receipt.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
+import 'package:zeon/core/http_client/dio_http_client.dart';
+import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/notifications/data/notification_device_auth.dart';
+import 'package:zeon/features/notifications/model/notification_entity.dart';
+import 'package:zeon/features/notifications/model/notification_receipt.dart';
+import 'package:zeon/utils/custom_loggers.dart';
 
 abstract interface class NotificationRemoteDataSource {
   Future<NotificationFetchResult> fetch({

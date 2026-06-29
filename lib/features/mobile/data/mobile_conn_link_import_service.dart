@@ -1,18 +1,18 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
-import 'package:hiddify/core/db/db.dart';
-import 'package:hiddify/core/http_client/dio_http_client.dart';
-import 'package:hiddify/core/http_client/http_client_provider.dart';
-import 'package:hiddify/core/preferences/preferences_provider.dart';
-import 'package:hiddify/features/profile/data/profile_data_providers.dart';
-import 'package:hiddify/features/profile/data/profile_data_source.dart';
-import 'package:hiddify/features/profile/data/profile_name_parser.dart';
-import 'package:hiddify/features/profile/data/profile_repository.dart';
-import 'package:hiddify/features/profile/model/profile_entity.dart';
-import 'package:hiddify/features/profile/model/profile_sort_enum.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
-import 'package:hiddify/utils/link_parsers.dart';
+import 'package:zeon/core/db/db.dart';
+import 'package:zeon/core/http_client/dio_http_client.dart';
+import 'package:zeon/core/http_client/http_client_provider.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/profile/data/profile_data_providers.dart';
+import 'package:zeon/features/profile/data/profile_data_source.dart';
+import 'package:zeon/features/profile/data/profile_name_parser.dart';
+import 'package:zeon/features/profile/data/profile_repository.dart';
+import 'package:zeon/features/profile/model/profile_entity.dart';
+import 'package:zeon/features/profile/model/profile_sort_enum.dart';
+import 'package:zeon/utils/custom_loggers.dart';
+import 'package:zeon/utils/link_parsers.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -651,7 +651,7 @@ class MobileConnLinkImportService with InfraLogger {
     try {
       final uri = Uri.parse(link);
       final q = Map<String, String>.from(uri.queryParameters);
-      q.putIfAbsent("platform", () => "hiddify");
+      q.putIfAbsent("platform", () => "zeon");
       return uri.replace(queryParameters: q).toString();
     } catch (_) {
       return link;

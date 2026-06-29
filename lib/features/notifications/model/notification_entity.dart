@@ -1,5 +1,5 @@
-import 'package:hiddify/features/notifications/model/notification_category.dart';
-import 'package:hiddify/features/notifications/model/notification_priority.dart';
+import 'package:zeon/features/notifications/model/notification_category.dart';
+import 'package:zeon/features/notifications/model/notification_priority.dart';
 
 class NotificationEntity {
   const NotificationEntity({

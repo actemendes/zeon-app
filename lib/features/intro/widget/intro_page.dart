@@ -5,17 +5,17 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/constants.dart';
-import 'package:hiddify/core/model/region.dart';
-import 'package:hiddify/core/notification/in_app_notification_controller.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
-import 'package:hiddify/core/ui/ui_names.dart';
-import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
-import 'package:hiddify/features/mobile/data/mobile_device_rebind_service.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/model/constants.dart';
+import 'package:zeon/core/model/region.dart';
+import 'package:zeon/core/notification/in_app_notification_controller.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
+import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/mobile/data/mobile_device_rebind_service.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class IntroPage extends HookConsumerWidget with PresLogger {

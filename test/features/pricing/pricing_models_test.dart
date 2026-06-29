@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hiddify/features/pricing/model/pricing_models.dart';
+import 'package:zeon/features/pricing/model/pricing_models.dart';
 
 void main() {
   test('parses four base plans in server order', () {

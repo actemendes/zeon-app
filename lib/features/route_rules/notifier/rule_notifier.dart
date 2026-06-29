@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/features/route_rules/notifier/rules_notifier.dart';
-import 'package:hiddify/hiddifycore/generated/v2/config/route_rule.pb.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/features/route_rules/notifier/rules_notifier.dart';
+import 'package:zeon/zeoncore/generated/v2/config/route_rule.pb.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:protobuf/protobuf.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';

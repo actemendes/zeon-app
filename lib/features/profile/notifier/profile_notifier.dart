@@ -3,23 +3,23 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:hiddify/core/haptic/haptic_service.dart';
-import 'package:hiddify/core/http_client/http_client_provider.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/failures.dart';
-import 'package:hiddify/core/notification/in_app_notification_controller.dart';
-import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
-import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
-import 'package:hiddify/features/mobile/data/mobile_bootstrap_import_service.dart';
-import 'package:hiddify/features/profile/add/model/free_profiles_model.dart';
-import 'package:hiddify/features/profile/data/profile_data_providers.dart';
-import 'package:hiddify/features/profile/data/profile_repository.dart';
-import 'package:hiddify/features/profile/model/profile_entity.dart';
-import 'package:hiddify/features/profile/model/profile_failure.dart';
-import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/utils/riverpod_utils.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/haptic/haptic_service.dart';
+import 'package:zeon/core/http_client/http_client_provider.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/model/failures.dart';
+import 'package:zeon/core/notification/in_app_notification_controller.dart';
+import 'package:zeon/core/router/dialog/dialog_notifier.dart';
+import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
+import 'package:zeon/features/profile/add/model/free_profiles_model.dart';
+import 'package:zeon/features/profile/data/profile_data_providers.dart';
+import 'package:zeon/features/profile/data/profile_repository.dart';
+import 'package:zeon/features/profile/model/profile_entity.dart';
+import 'package:zeon/features/profile/model/profile_failure.dart';
+import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/utils/riverpod_utils.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -215,7 +215,7 @@ class FreeProfilesNotifier extends _$FreeProfilesNotifier {
   Future<List<FreeProfile>> build() async {
     final httpClient = ref.watch(httpClientProvider);
     final res = await httpClient.get(
-      'https://raw.githubusercontent.com/hiddify/hiddify-app/refs/heads/main/test.configs/free_configs',
+      'https://raw.githubusercontent.com/zeon/zeon-app/refs/heads/main/test.configs/free_configs',
     );
     if (res.statusCode == 200) {
       return FreeProfilesModel.fromJson(jsonDecode(res.data.toString()) as Map<String, dynamic>).profiles;

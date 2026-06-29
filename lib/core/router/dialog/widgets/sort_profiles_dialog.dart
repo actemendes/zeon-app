@@ -1,9 +1,9 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/constants.dart';
-import 'package:hiddify/features/profile/model/profile_sort_enum.dart';
-import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/model/constants.dart';
+import 'package:zeon/features/profile/model/profile_sort_enum.dart';
+import 'package:zeon/features/profile/overview/profiles_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class SortProfilesDialog extends HookConsumerWidget {

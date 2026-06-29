@@ -2,12 +2,12 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gap/gap.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
-import 'package:hiddify/features/profile/data/profile_name_parser.dart';
-import 'package:hiddify/features/profile/model/profile_entity.dart';
-import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/router/dialog/dialog_notifier.dart';
+import 'package:zeon/features/profile/data/profile_name_parser.dart';
+import 'package:zeon/features/profile/model/profile_entity.dart';
+import 'package:zeon/features/profile/notifier/profile_notifier.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -17,7 +17,7 @@ class ProfileTileMain extends HookConsumerWidget {
   final ProfileEntity profile;
   final bool isMain;
   static const verifiedDomains = [
-    'hiddify.com',
+    'zeon.com',
     // 't.me',
     // 'telegram.me',
     // 'instagram.com',
@@ -25,11 +25,11 @@ class ProfileTileMain extends HookConsumerWidget {
     // 'facebook.com',
   ];
   static const verifiedLinks = [
-    'https://t.me/hiddify',
-    'https://t.me/hiddify_board',
-    'https://instagram.com/hiddify_com',
-    'https://x.com/hiddify_com',
-    'https://facebook.com/hiddify',
+    'https://t.me/zeon',
+    'https://t.me/zeon_board',
+    'https://instagram.com/zeon_com',
+    'https://x.com/zeon_com',
+    'https://facebook.com/zeon',
   ];
   Future<void> _launchUrlWithCheck(BuildContext context, WidgetRef ref, String url) async {
     final uri = Uri.parse(url);
@@ -186,7 +186,7 @@ class ProfileTileMain extends HookConsumerWidget {
     if (host.endsWith('facebook.com')) {
       return FontAwesomeIcons.facebook;
     }
-    if (host.endsWith('hiddify.com')) {
+    if (host.endsWith('zeon.com')) {
       // return IconData();
     }
     return icon ?? FluentIcons.link_24_regular;
@@ -208,7 +208,7 @@ class ProfileTileMain extends HookConsumerWidget {
     if (host.endsWith('facebook.com')) {
       return uri.pathSegments.lastWhere((e) => e.isNotEmpty, orElse: () => '');
     }
-    if (host.endsWith('hiddify.com')) {
+    if (host.endsWith('zeon.com')) {
       return "ZEON";
     }
     return uri.host;

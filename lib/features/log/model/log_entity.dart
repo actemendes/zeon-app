@@ -1,5 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
-import 'package:hiddify/features/log/model/log_level.dart';
+import 'package:zeon/features/log/model/log_level.dart';
 
 part 'log_entity.freezed.dart';
 

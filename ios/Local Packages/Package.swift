@@ -4,23 +4,23 @@
 import PackageDescription
 
 let package = Package(
-     name: "Hiddify Packages",
+     name: "ZEON Packages",
      platforms: [
         // Minimum platform version
          .iOS(.v13)
      ],
      products: [
          .library(
-             name: "HiddifyCore",
-             targets: ["HiddifyCore"]),
+             name: "ZEONCore",
+             targets: ["ZEONCore"]),
      ],
      dependencies: [
          // No dependencies
      ],
      targets: [
         .binaryTarget(
-            name: "HiddifyCore",
-            path: "../Frameworks/HiddifyCore.xcframework"
+            name: "ZEONCore",
+            path: "../Frameworks/ZEONCore.xcframework"
         )
      ]
  )

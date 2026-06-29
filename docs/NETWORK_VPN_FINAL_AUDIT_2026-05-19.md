@@ -1,4 +1,4 @@
-﻿# Финальный сводный отчет по аудиту сети/VPN (2026-05-19)
+# Финальный сводный отчет по аудиту сети/VPN (2026-05-19)
 
 ## Контекст и цель
 Проведен полный аудит проблем с ошибками вида:
@@ -18,7 +18,7 @@
 - UI dump/screenshot
 - `ip route`
 - `logcat` с фильтрацией по сетевым ошибкам
-- конфиги и логи из `Android/data/com.zeon.hiddify/files`
+- конфиги и логи из `Android/data/com.zeon.zeon/files`
 4. Выполнены проверки RU-сервисов (`yandex`, `wildberries`, `ozon`) на активном VPN.
 5. Выполнены измерения latency и стабильности в циклах reconnect.
 
@@ -26,7 +26,7 @@
 
 ### 1) Состояние подключения VPN
 VPN поднимается корректно:
-- фиксируется `Established by com.zeon.hiddify on tun0`
+- фиксируется `Established by com.zeon.zeon on tun0`
 - в маршрутах появляется `tun0`
 - в UI зафиксирован статус `Подключено`
 
@@ -40,7 +40,7 @@ VPN поднимается корректно:
 - `use of closed network connection`: `0`
 - `network is unreachable (IPv6)`: `0`
 
-`UNAVAILABLE` встречался, но источник был не Hiddify core, а сторонний процесс (`Cello`/offline transport).
+`UNAVAILABLE` встречался, но источник был не ZEON core, а сторонний процесс (`Cello`/offline transport).
 
 Вывод: на текущем билде/устройстве явной регрессии по вашей группе ошибок не выявлено.
 

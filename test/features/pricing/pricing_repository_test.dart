@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hiddify/features/pricing/data/pricing_repository.dart';
-import 'package:hiddify/features/pricing/model/pricing_models.dart';
+import 'package:zeon/features/pricing/data/pricing_repository.dart';
+import 'package:zeon/features/pricing/model/pricing_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

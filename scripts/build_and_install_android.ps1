@@ -279,7 +279,7 @@ try {
     }
     Write-Host "Installed package: $effectivePackageId"
 
-    $legacyPackageIds = @("app.hiddify.com")
+    $legacyPackageIds = @("app.zeonvpn.com")
     foreach ($legacyPackageId in $legacyPackageIds) {
         if ($legacyPackageId -ne $effectivePackageId) {
             $legacyPackagePath = Get-InstalledPackagePath -DeviceId $resolvedDeviceId -PackageId $legacyPackageId

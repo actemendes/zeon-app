@@ -2,20 +2,20 @@ import 'dart:async';
 
 import 'package:dartx/dartx.dart';
 
-import 'package:hiddify/core/haptic/haptic_service.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/preferences/preferences_provider.dart';
-import 'package:hiddify/core/utils/preferences_utils.dart';
-import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
-import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
-import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
-import 'package:hiddify/features/proxy/model/proxy_failure.dart';
-import 'package:hiddify/features/proxy/widget/proxy_quality_indicator.dart';
-import 'package:hiddify/features/stats/data/stats_data_providers.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
-import 'package:hiddify/hiddifycore/init_signal.dart';
-import 'package:hiddify/utils/riverpod_utils.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/haptic/haptic_service.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/core/utils/preferences_utils.dart';
+import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/features/proxy/data/proxy_data_providers.dart';
+import 'package:zeon/features/proxy/model/proxy_display_name.dart';
+import 'package:zeon/features/proxy/model/proxy_failure.dart';
+import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
+import 'package:zeon/features/stats/data/stats_data_providers.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/zeoncore/init_signal.dart';
+import 'package:zeon/utils/riverpod_utils.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:rxdart/rxdart.dart';
 

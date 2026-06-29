@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/router/dialog/widgets/custom_alert_dialog.dart';
-import 'package:hiddify/core/router/go_router/go_router_notifier.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/router/dialog/widgets/custom_alert_dialog.dart';
+import 'package:zeon/core/router/go_router/go_router_notifier.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:toastification/toastification.dart';

@@ -3,11 +3,6 @@ import 'package:flutter/services.dart';
 
 abstract class Constants {
   static const appName = "ZEON";
-  static const githubUrl = "https://github.com/actemendes/zeon-app";
-  static const hiddifySourceCodeUrl = "https://github.com/hiddify/hiddify-next";
-  static const openSourceLicensesUrl =
-      "https://github.com/hiddify/hiddify-app?tab=License-1-ov-file#hiddify-extended-gnu-general-public-license-v3";
-  static const licenseUrl = openSourceLicensesUrl;
   static const githubReleasesApiUrl = "https://api.github.com/repos/actemendes/zeon-app/releases";
   static const githubLatestReleaseUrl = "https://github.com/actemendes/zeon-app/releases/latest";
   static const privacyPolicyUrl =
@@ -57,13 +52,7 @@ abstract class ProfileTileConst {
 abstract class IntroConst {
   static const maxwidth = 620;
   static const termsAndConditionsKey = 'terms-and-conditions';
-  static const githubKey = 'github';
-  static const licenseKey = 'license';
-  static const url = <String, String>{
-    IntroConst.termsAndConditionsKey: Constants.termsAndConditionsUrl,
-    IntroConst.githubKey: Constants.githubUrl,
-    IntroConst.licenseKey: Constants.licenseUrl,
-  };
+  static const url = <String, String>{IntroConst.termsAndConditionsKey: Constants.termsAndConditionsUrl};
 }
 
 abstract class WarpConst {

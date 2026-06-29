@@ -9,7 +9,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Hiddify</string>
+	<string>ZEON</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -30,7 +30,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>zeon</string>
-				<string>hiddify</string>
+				<string>zeon</string>
 				<string>v2ray</string>
 				<string>v2rayn</string>
 				<string>v2rayng</string>
@@ -41,7 +41,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.hiddify.ios</string>
+			<string>com.zeon.ios</string>
 		</dict>
 	</array>
 	<key>FlutterDeepLinkingEnabled</key>

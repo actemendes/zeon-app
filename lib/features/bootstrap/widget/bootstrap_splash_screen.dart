@@ -3,8 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:hiddify/core/theme/app_color_tokens.dart';
-import 'package:hiddify/core/theme/app_theme_mode.dart';
+import 'package:zeon/core/theme/app_color_tokens.dart';
+import 'package:zeon/core/theme/app_theme_mode.dart';
 
 class BootstrapSplashScreen extends StatefulWidget {
   const BootstrapSplashScreen({super.key, required this.themeMode});

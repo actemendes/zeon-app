@@ -1,8 +1,8 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:hiddify/core/model/optional_range.dart";
-import "package:hiddify/features/log/model/log_level.dart";
-import "package:hiddify/singbox/model/singbox_config_enum.dart";
-import "package:hiddify/singbox/model/singbox_config_option.dart";
+import "package:zeon/core/model/optional_range.dart";
+import "package:zeon/features/log/model/log_level.dart";
+import "package:zeon/singbox/model/singbox_config_enum.dart";
+import "package:zeon/singbox/model/singbox_config_option.dart";
 
 void main() {
   test("toCoreJson includes network profile and diagnostic fields", () {

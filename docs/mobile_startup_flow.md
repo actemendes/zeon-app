@@ -1,6 +1,6 @@
 # Mobile startup and account import flow
 
-Живой документ по бизнес-цепочке мобильного приложения `com.zeon.hiddify`.
+Живой документ по бизнес-цепочке мобильного приложения `com.zeon.zeon`.
 
 Цель: фиксировать общие термины, пользовательские сценарии, внутренние алгоритмы и бэкенд-вызовы. После изменений в запуске, Intro, импорте профиля, привязке аккаунта или хранении managed-профиля этот файл нужно обновлять в той же правке.
 
@@ -112,7 +112,7 @@ flowchart TD
 7. В `standard`-режиме:
    - candidates: `primary`, затем `fallback` (если включен);
    - validate-проход: `default -> resolved/default -> directOnly -> resolved/directOnly`;
-   - для каждого candidate также вариант с `platform=hiddify`.
+   - для каждого candidate также вариант с `platform=zeon`.
 8. Только в `standard`-режиме, если validate-проход неуспешен, запускается второй no-validate-проход (`validateConfigOnImport: false`) в том же порядке.
 9. При провале primary и наличии fallback логируется предупреждение о переключении на fallback (на практике open-host fallback также канонизируется в primary).
 10. Заменять предыдущий managed-профиль на активный импортированный профиль.
@@ -128,7 +128,7 @@ flowchart TD
 
 1. Нормализовать open-ввод в `primary = api_link/open/$openId`; fallback добавить только при `mobile_enable_public_open_fallback=true`.
 2. Если вызов идет в `fast`-режиме, использовать только `primary` и короткий набор попыток (`default -> directOnly -> no-validate -> directOnly/no-validate`) без network retry.
-3. Если вызов идет в `standard`-режиме, пройти `primary` (и fallback при наличии) по validate-пайплайну (`default -> resolved/default -> directOnly -> resolved/directOnly`), включая вариант `platform=hiddify`; для open-host fallback-кандидат перед сетевым вызовом также переписывается в primary.
+3. Если вызов идет в `standard`-режиме, пройти `primary` (и fallback при наличии) по validate-пайплайну (`default -> resolved/default -> directOnly -> resolved/directOnly`), включая вариант `platform=zeon`; для open-host fallback-кандидат перед сетевым вызовом также переписывается в primary.
 4. Если `standard` validate-пайплайн неуспешен, запустить no-validate-проход в том же порядке.
 5. При сохранении `mobile_auto_import_user_id` приоритет источников такой:
    - сначала явный `userId` из аргумента `importConnectionLink(...)`;

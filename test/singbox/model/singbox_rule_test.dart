@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hiddify/singbox/model/singbox_rule.dart';
+import 'package:zeon/singbox/model/singbox_rule.dart';
 
 void main() {
   group("SingboxRule.toCoreJson", () {

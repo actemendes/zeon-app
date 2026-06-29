@@ -1,7 +1,7 @@
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:hiddify/utils/platform_utils.dart';
+import 'package:zeon/utils/platform_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -14,7 +14,7 @@ class StableDeviceIdService {
 
   static const _prefKeyDeviceId = "mobile_auto_import_device_id";
   static const _secureKeyDeviceId = "stable_device_id_v1";
-  static const _platformChannel = MethodChannel("com.hiddify.app/platform");
+  static const _platformChannel = MethodChannel("com.zeon.app/platform");
 
   final SharedPreferences _preferences;
   final FlutterSecureStorage _secureStorage;

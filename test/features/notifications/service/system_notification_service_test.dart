@@ -1,9 +1,9 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hiddify/features/notifications/model/notification_category.dart';
-import 'package:hiddify/features/notifications/model/notification_entity.dart';
-import 'package:hiddify/features/notifications/model/notification_priority.dart';
-import 'package:hiddify/features/notifications/service/system_notification_service.dart';
+import 'package:zeon/features/notifications/model/notification_category.dart';
+import 'package:zeon/features/notifications/model/notification_entity.dart';
+import 'package:zeon/features/notifications/model/notification_priority.dart';
+import 'package:zeon/features/notifications/service/system_notification_service.dart';
 
 void main() {
   test('maps Android notification channels by category', () {

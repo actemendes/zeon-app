@@ -1,16 +1,16 @@
 import 'package:dartx/dartx.dart';
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/haptic/haptic_service.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
-import 'package:hiddify/core/ui/ui_names.dart';
-import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
-import 'package:hiddify/features/common/general_pref_tiles.dart';
-import 'package:hiddify/features/notifications/data/notification_data_providers.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/features/settings/widget/preference_tile.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/haptic/haptic_service.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/router/dialog/dialog_notifier.dart';
+import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/features/auto_start/notifier/auto_start_notifier.dart';
+import 'package:zeon/features/common/general_pref_tiles.dart';
+import 'package:zeon/features/notifications/data/notification_data_providers.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/features/settings/widget/preference_tile.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:humanizer/humanizer.dart';
 

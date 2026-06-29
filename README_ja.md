@@ -1,6 +1,6 @@
 # ZEON App
 
-ZEON App は、ZEON チームが開発および保守しているクロスプラットフォームのプロキシクライアントです。私たちは独自の製品、リリース、統合、サポート、ユーザー体験を開発し、Hiddify を ZEON プロジェクトの技術的な基盤の一つとして利用しています。
+ZEON App は、ZEON チームが開発および保守しているクロスプラットフォームのプロキシクライアントです。私たちは独自の製品、リリース、統合、サポート、ユーザー体験を開発し、ZEON を ZEON プロジェクトの技術的な基盤の一つとして利用しています。
 
 このアプリは、デスクトップとモバイル環境でプロファイル、サブスクリプション、複数のプロトコルを扱いやすくするために作られています。
 
@@ -51,9 +51,9 @@ ZEON App は私たちの開発チームが保守しています。プロジェ�
 
 ## 謝辞
 
-ZEON App は Hiddify を基盤として構築されました。Hiddify の貢献者に感謝します。また、このプロジェクトを支える open-source エコシステムにも感謝します:
+ZEON App は ZEON を基盤として構築されました。ZEON の貢献者に感謝します。また、このプロジェクトを支える open-source エコシステムにも感謝します:
 
-- [Hiddify](https://github.com/hiddify/hiddify-app)
+- [ZEON](https://github.com/zeon/zeon-app)
 - [Sing-box](https://github.com/SagerNet/sing-box)
 - [Sing-box for Android](https://github.com/SagerNet/sing-box-for-android)
 - [Sing-box for Apple](https://github.com/SagerNet/sing-box-for-apple)

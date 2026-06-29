@@ -342,7 +342,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 CloseApplications=force
-CloseApplicationsFilter=${exeName},Hiddify.exe
+CloseApplicationsFilter=${exeName},ZEON.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -353,7 +353,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "launchAtStartup"; Description: "Start ${displayName} when Windows starts"; GroupDescription: "{cm:AdditionalIcons}"; Flags: ${startupFlags}
 
 [InstallDelete]
-Type: files; Name: "{userstartup}\Hiddify.lnk"
+Type: files; Name: "{userstartup}\ZEON.lnk"
 
 [Files]
 Source: "${releaseDirForIss}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

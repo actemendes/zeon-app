@@ -4,7 +4,7 @@
 
 ### New Features and Improvements
 
-- Changed App name to **Hiddify**
+- Changed App name to **ZEON**
 - Changed App icon
 - Added Mux (**Experimental**)
 - Added Cloudflare WARP (**Experimental**)
@@ -17,16 +17,16 @@
 - Redesigned navigation flow, separating config options
 - Added haptic feedback
 - Added detailed subscription info in profile edit page
-- Added Chinese Taiwan language. [PR#410](https://github.com/hiddify/hiddify-next/pull/410) by [junlin03](https://github.com/junlin03) and [PR#491](https://github.com/hiddify/hiddify-next/pull/491) by [kouhe3](https://github.com/kouhe3)
-- Added Japanese Readme. [PR#371](https://github.com/hiddify/hiddify-next/pull/371) by [Ikko Eltociear Ashimine](https://github.com/eltociear)
+- Added Chinese Taiwan language. [PR#410](https://github.com/zeon/zeon-next/pull/410) by [junlin03](https://github.com/junlin03) and [PR#491](https://github.com/zeon/zeon-next/pull/491) by [kouhe3](https://github.com/kouhe3)
+- Added Japanese Readme. [PR#371](https://github.com/zeon/zeon-next/pull/371) by [Ikko Eltociear Ashimine](https://github.com/eltociear)
 
 ### Bug Fixes
 
 - Fixed TLS Tricks bugs
-- Fixed logs on iOS. [PR#414](https://github.com/hiddify/hiddify-next/pull/414) by [Amir Mohammadi](https://github.com/amirsaam) and [PR#416](https://github.com/hiddify/hiddify-next/pull/416) by [Ebrahim Tahernejad](https://github.com/EbrahimTahernejad)
+- Fixed logs on iOS. [PR#414](https://github.com/zeon/zeon-next/pull/414) by [Amir Mohammadi](https://github.com/amirsaam) and [PR#416](https://github.com/zeon/zeon-next/pull/416) by [Ebrahim Tahernejad](https://github.com/EbrahimTahernejad)
 - Fixed Android service mode
 - Fixed UI inconsistencies
-- Fixed Readme download URL. [PR#482](https://github.com/hiddify/hiddify-next/pull/482) by [Ali Afsharzadeh](https://github.com/guoard)
+- Fixed Readme download URL. [PR#482](https://github.com/zeon/zeon-next/pull/482) by [Ali Afsharzadeh](https://github.com/guoard)
 
 ## [0.14.1.dev] - 2024-1-19
 
@@ -35,7 +35,7 @@
 - Redesigned profile options on mobile
 - Improved configuration parser
 - Added export config json in iOS
-- Added iOS URL scheme. [PR#343](https://github.com/hiddify/hiddify-next/pull/343) by [Amir Mohammadi](https://github.com/amirsaam)
+- Added iOS URL scheme. [PR#343](https://github.com/zeon/zeon-next/pull/343) by [Amir Mohammadi](https://github.com/amirsaam)
 - Added option to reset VPN profile on iOS
 
 ### Bug Fixes
@@ -44,7 +44,7 @@
 - Fixed connection status on iOS app relaunch
 - Fixed iOS connection stats
 - Fixed infinite subscription traffic
-- Fixed infinite subscription expiry. [PR#334](https://github.com/hiddify/hiddify-next/pull/334) by [Pavel Volkov](https://github.com/pvolkov)
+- Fixed infinite subscription expiry. [PR#334](https://github.com/zeon/zeon-next/pull/334) by [Pavel Volkov](https://github.com/pvolkov)
 
 ## [0.14.0.dev] - 2024-1-14
 
@@ -53,7 +53,7 @@
 - Published initial iOS beta version on TestFlight
   - Thanks to contributions from [GFWFighter](https://github.com/GFWFighter) and [Amir Mohammadi](https://github.com/amirsaam)
   - iOS version is still in heavy development phase and there are known bugs
-- Added Spanish language. [PR#314](https://github.com/hiddify/hiddify-next/pull/314) by [AvatarStark](https://github.com/AvatarStark)
+- Added Spanish language. [PR#314](https://github.com/zeon/zeon-next/pull/314) by [AvatarStark](https://github.com/AvatarStark)
 - Changed Routing Assets page layout, separating assets by type
 - Improved descriptions for some of the options in settings page
 
@@ -72,7 +72,7 @@
 ### New Features and Improvements
 
 - Updated sing-box to version 1.7.8
-- Improved TLS Fragmentation. [PR#12](https://github.com/hiddify/hiddify-sing-box/pull/12) by [Kyōchikutō | キョウチクトウ](https://github.com/kyochikuto)
+- Improved TLS Fragmentation. [PR#12](https://github.com/zeon/zeon-sing-box/pull/12) by [Kyōchikutō | キョウチクトウ](https://github.com/kyochikuto)
 - Improved v2ray config parser
 - Added cancel button on new profile modal
 - Changed default Connection Test URL
@@ -94,7 +94,7 @@
 ### Bug Fixes
 
 - Fixed profile auto update service
-- Fixed localization mistakes in Chinese. [PR#288](https://github.com/hiddify/hiddify-next/pull/288) by [wldjdjsks](https://github.com/huajizhige)
+- Fixed localization mistakes in Chinese. [PR#288](https://github.com/zeon/zeon-next/pull/288) by [wldjdjsks](https://github.com/huajizhige)
 
 ## [0.13.3.dev] - 2024-1-2
 
@@ -108,7 +108,7 @@
 ### Bug Fixes
 
 - Fixed profile edit bug where you were unable to change existing profile's URL
-- Fixed localization mistakes in Chinese. [PR#287](https://github.com/hiddify/hiddify-next/pull/287) by [Wu Jiahao](https://github.com/wujiahao15)
+- Fixed localization mistakes in Chinese. [PR#287](https://github.com/zeon/zeon-next/pull/287) by [Wu Jiahao](https://github.com/wujiahao15)
 
 ## [0.13.2.dev] - 2023-12-31
 
@@ -155,7 +155,7 @@
 
 ### Bug Fixes
 
-- Fixed modal bug where config options were unmodifiable. [PR#267](https://github.com/hiddify/hiddify-next/pull/267) by [在7楼](https://github.com/RayWangQvQ)
+- Fixed modal bug where config options were unmodifiable. [PR#267](https://github.com/zeon/zeon-next/pull/267) by [在7楼](https://github.com/RayWangQvQ)
 - Fixed windows portable release
 
 ## [0.12.2] - 2023-12-23
@@ -203,7 +203,7 @@
 - Fixed incorrect casing of locale names
 - Updated sing-box to version 1.7.0
 - Fixed Chinese typography bug (thanks to [betaxab](https://github.com/betaxab))
-- Fixed localization mistakes in Russian. [PR#189](https://github.com/hiddify/hiddify-next/pull/189) by [jomertix](https://github.com/jomertix)
+- Fixed localization mistakes in Russian. [PR#189](https://github.com/zeon/zeon-next/pull/189) by [jomertix](https://github.com/jomertix)
 
 ## [0.11.1] - 2023-11-19
 
@@ -231,8 +231,8 @@
 - Added Geo Asset Settings
   - Update geo assets and use recommended providers
 - Added **winget** Release
-  - Now you're able to install and update Hiddify on Windows using [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/).
-- Added Turkish Translations. [PR#173](https://github.com/hiddify/hiddify-next/pull/173) by [Hasan Karlı](https://github.com/hasankarli)
+  - Now you're able to install and update ZEON on Windows using [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/).
+- Added Turkish Translations. [PR#173](https://github.com/zeon/zeon-next/pull/173) by [Hasan Karlı](https://github.com/hasankarli)
 - Changed in-app Toasts
 - Updated Core Sing-box Version to 1.7.0
 - Improved Network Reliability While Adding/Updating Subscriptions
@@ -243,15 +243,15 @@
 - Removed **execute config as is** option which caused crashes and confusion for users.
 - Fixed android service revoke and restart.
 - Fixed github release update checker.
-- Fixed translator script. [PR#108](https://github.com/hiddify/hiddify-next/pull/108) by [Hirad Rasoolinejad](https://github.com/Hiiirad)
-- Fixed localization mistakes in Chinese. [PR#113](https://github.com/hiddify/hiddify-next/pull/113) and [PR#123](https://github.com/hiddify/hiddify-next/pull/123) by [Nyar233](https://github.com/Nyar233)
-- Fixed localization mistakes in Chinese Readme. [PR#137](https://github.com/hiddify/hiddify-next/pull/137) by [wldjdjsks](https://github.com/huajizhige)
-- Fixed localization mistakes in Chinese. [PR#138](https://github.com/hiddify/hiddify-next/pull/138) and [PR#165](https://github.com/hiddify/hiddify-next/pull/165) by [wldjdjsks](https://github.com/huajizhige)
-- Fixed localization mistakes in Russian. [PR#155](https://github.com/hiddify/hiddify-next/pull/155), [PR#162](https://github.com/hiddify/hiddify-next/pull/162) and [PR#169](https://github.com/hiddify/hiddify-next/pull/169) by [solokot](https://github.com/solokot)
-- Fixed linux build libs command. [PR#161](https://github.com/hiddify/hiddify-next/pull/161) by [Aloxaf](https://github.com/Aloxaf)
-- Fixed localization mistakes in Russian. [PR#164](https://github.com/hiddify/hiddify-next/pull/164) and [PR#168](https://github.com/hiddify/hiddify-next/pull/168) by [jomertix](https://github.com/jomertix)
-- Fixed localization mistakes in Chinese. [PR#179](https://github.com/hiddify/hiddify-next/pull/179) by [betaxab](https://github.com/betaxab)
-- Fixed localization mistakes in Chinese Readme. [PR#172](https://github.com/hiddify/hiddify-next/pull/172) by [Locas](https://github.com/Locas56227)
+- Fixed translator script. [PR#108](https://github.com/zeon/zeon-next/pull/108) by [Hirad Rasoolinejad](https://github.com/Hiiirad)
+- Fixed localization mistakes in Chinese. [PR#113](https://github.com/zeon/zeon-next/pull/113) and [PR#123](https://github.com/zeon/zeon-next/pull/123) by [Nyar233](https://github.com/Nyar233)
+- Fixed localization mistakes in Chinese Readme. [PR#137](https://github.com/zeon/zeon-next/pull/137) by [wldjdjsks](https://github.com/huajizhige)
+- Fixed localization mistakes in Chinese. [PR#138](https://github.com/zeon/zeon-next/pull/138) and [PR#165](https://github.com/zeon/zeon-next/pull/165) by [wldjdjsks](https://github.com/huajizhige)
+- Fixed localization mistakes in Russian. [PR#155](https://github.com/zeon/zeon-next/pull/155), [PR#162](https://github.com/zeon/zeon-next/pull/162) and [PR#169](https://github.com/zeon/zeon-next/pull/169) by [solokot](https://github.com/solokot)
+- Fixed linux build libs command. [PR#161](https://github.com/zeon/zeon-next/pull/161) by [Aloxaf](https://github.com/Aloxaf)
+- Fixed localization mistakes in Russian. [PR#164](https://github.com/zeon/zeon-next/pull/164) and [PR#168](https://github.com/zeon/zeon-next/pull/168) by [jomertix](https://github.com/jomertix)
+- Fixed localization mistakes in Chinese. [PR#179](https://github.com/zeon/zeon-next/pull/179) by [betaxab](https://github.com/betaxab)
+- Fixed localization mistakes in Chinese Readme. [PR#172](https://github.com/zeon/zeon-next/pull/172) by [Locas](https://github.com/Locas56227)
 
 ## [0.10.0] - 2023-10-27
 
@@ -267,7 +267,7 @@
 - Memory limit option
   - Limit sing-box core memory usage.
 - Revamped theme preferences settings
-- Added initial iOS implementation. [PR#98](https://github.com/hiddify/hiddify-next/pull/98) by [GFWFighter](https://github.com/GFWFighter)
+- Added initial iOS implementation. [PR#98](https://github.com/zeon/zeon-next/pull/98) by [GFWFighter](https://github.com/GFWFighter)
 - Added Russian region
 - Added Terms and Conditions and Privacy policy to about page
 
@@ -275,23 +275,23 @@
 
 - Removed reconnection on auto profile updates
 - Fixed filtering logs by level
-- Fixed localization mistakes in Russian. [PR#95](https://github.com/hiddify/hiddify-next/pull/95) by [solokot](https://github.com/solokot)
-- Fixed localization mistakes in Russian. [PR#74](https://github.com/hiddify/hiddify-next/pull/74) by [Elshad Guseynov](https://github.com/lifeindarkside)
+- Fixed localization mistakes in Russian. [PR#95](https://github.com/zeon/zeon-next/pull/95) by [solokot](https://github.com/solokot)
+- Fixed localization mistakes in Russian. [PR#74](https://github.com/zeon/zeon-next/pull/74) by [Elshad Guseynov](https://github.com/lifeindarkside)
 
-[0.16.0.dev]: https://github.com/hiddify/hiddify-next/releases/tag/v0.16.0.dev
-[0.14.1.dev]: https://github.com/hiddify/hiddify-next/releases/tag/v0.14.1.dev
-[0.14.0.dev]: https://github.com/hiddify/hiddify-next/releases/tag/v0.14.0.dev
-[0.13.6]: https://github.com/hiddify/hiddify-next/releases/tag/v0.13.6
-[0.13.5.dev]: https://github.com/hiddify/hiddify-next/releases/tag/v0.13.5.dev
-[0.13.4.dev]: https://github.com/hiddify/hiddify-next/releases/tag/v0.13.4.dev
-[0.13.3.dev]: https://github.com/hiddify/hiddify-next/releases/tag/v0.13.3.dev
-[0.13.2.dev]: https://github.com/hiddify/hiddify-next/releases/tag/v0.13.2.dev
-[0.13.1.dev]: https://github.com/hiddify/hiddify-next/releases/tag/v0.13.1.dev
-[0.13.0.dev]: https://github.com/hiddify/hiddify-next/releases/tag/v0.13.0.dev
-[0.12.3]: https://github.com/hiddify/hiddify-next/releases/tag/v0.12.3
-[0.12.2]: https://github.com/hiddify/hiddify-next/releases/tag/v0.12.2
-[0.12.1]: https://github.com/hiddify/hiddify-next/releases/tag/v0.12.1
-[0.12.0]: https://github.com/hiddify/hiddify-next/releases/tag/v0.12.0
-[0.11.1]: https://github.com/hiddify/hiddify-next/releases/tag/v0.11.1
-[0.11.0]: https://github.com/hiddify/hiddify-next/releases/tag/v0.11.0
-[0.10.0]: https://github.com/hiddify/hiddify-next/releases/tag/v0.10.0
+[0.16.0.dev]: https://github.com/zeon/zeon-next/releases/tag/v0.16.0.dev
+[0.14.1.dev]: https://github.com/zeon/zeon-next/releases/tag/v0.14.1.dev
+[0.14.0.dev]: https://github.com/zeon/zeon-next/releases/tag/v0.14.0.dev
+[0.13.6]: https://github.com/zeon/zeon-next/releases/tag/v0.13.6
+[0.13.5.dev]: https://github.com/zeon/zeon-next/releases/tag/v0.13.5.dev
+[0.13.4.dev]: https://github.com/zeon/zeon-next/releases/tag/v0.13.4.dev
+[0.13.3.dev]: https://github.com/zeon/zeon-next/releases/tag/v0.13.3.dev
+[0.13.2.dev]: https://github.com/zeon/zeon-next/releases/tag/v0.13.2.dev
+[0.13.1.dev]: https://github.com/zeon/zeon-next/releases/tag/v0.13.1.dev
+[0.13.0.dev]: https://github.com/zeon/zeon-next/releases/tag/v0.13.0.dev
+[0.12.3]: https://github.com/zeon/zeon-next/releases/tag/v0.12.3
+[0.12.2]: https://github.com/zeon/zeon-next/releases/tag/v0.12.2
+[0.12.1]: https://github.com/zeon/zeon-next/releases/tag/v0.12.1
+[0.12.0]: https://github.com/zeon/zeon-next/releases/tag/v0.12.0
+[0.11.1]: https://github.com/zeon/zeon-next/releases/tag/v0.11.1
+[0.11.0]: https://github.com/zeon/zeon-next/releases/tag/v0.11.0
+[0.10.0]: https://github.com/zeon/zeon-next/releases/tag/v0.10.0

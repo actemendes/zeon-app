@@ -99,10 +99,10 @@ class VPNManager: ObservableObject {
             }
             let newManager = NETunnelProviderManager()
             let `protocol` = NETunnelProviderProtocol()
-            `protocol`.providerBundleIdentifier = Bundle.main.baseBundleIdentifier + ".HiddifyPacketTunnel"
+            `protocol`.providerBundleIdentifier = Bundle.main.baseBundleIdentifier + ".ZeonPacketTunnel"
             `protocol`.serverAddress = "localhost"
             newManager.protocolConfiguration = `protocol`
-            newManager.localizedDescription = "Hiddify"
+            newManager.localizedDescription = "ZEON"
             try await newManager.saveToPreferences()
             try await newManager.loadFromPreferences()
             self.manager = newManager

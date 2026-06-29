@@ -8,7 +8,7 @@ There is no UI control for it.
 Build a debug device core with:
 
 ```powershell
-.\scripts\rebuild_hiddify_core.ps1 -Platform android -SmartActiveDebug
+.\scripts\rebuild_zeon_core.ps1 -Platform android -SmartActiveDebug
 ```
 
 The Flutter debug build can inject the same hidden options with Dart defines,
@@ -26,7 +26,7 @@ Other define names are `SMART_ACTIVE_DEBUG_FORCE_DEGRADATION`,
 `SMART_ACTIVE_DEBUG_CANDIDATE_SCORE`. The Dart bridge runs only when
 `kDebugMode` is true and is not shown in settings.
 
-Add these temporary fields to the Hiddify options config while
+Add these temporary fields to the ZEON options config while
 `balancer-strategy` is `smart-active-auto`:
 
 ```json

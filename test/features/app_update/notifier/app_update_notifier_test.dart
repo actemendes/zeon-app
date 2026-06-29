@@ -2,16 +2,16 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:hiddify/core/app_info/app_info_provider.dart';
-import 'package:hiddify/core/model/app_info_entity.dart';
-import 'package:hiddify/core/model/environment.dart';
-import 'package:hiddify/core/preferences/preferences_provider.dart';
-import 'package:hiddify/features/app_update/data/app_update_data_providers.dart';
-import 'package:hiddify/features/app_update/data/app_update_repository.dart';
-import 'package:hiddify/features/app_update/model/app_update_failure.dart';
-import 'package:hiddify/features/app_update/model/remote_version_entity.dart';
-import 'package:hiddify/features/app_update/notifier/app_update_notifier.dart';
-import 'package:hiddify/features/app_update/notifier/app_update_state.dart';
+import 'package:zeon/core/app_info/app_info_provider.dart';
+import 'package:zeon/core/model/app_info_entity.dart';
+import 'package:zeon/core/model/environment.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/app_update/data/app_update_data_providers.dart';
+import 'package:zeon/features/app_update/data/app_update_repository.dart';
+import 'package:zeon/features/app_update/model/app_update_failure.dart';
+import 'package:zeon/features/app_update/model/remote_version_entity.dart';
+import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
+import 'package:zeon/features/app_update/notifier/app_update_state.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

@@ -123,9 +123,9 @@ generate_kotlin_protos:
 		--exclude='*' \
 		hiddify-core/v2 hiddify-core/extension ./android/app/src/main/protos/
 	# # Find .proto files and update package declarations
-	# find "./android/app/src/main/java/com/hiddify/hiddify/protos" -type f -name "*.java" | while read -r proto_file; do \
+	# find "./android/app/src/main/java/com/zeon/zeon/protos" -type f -name "*.java" | while read -r proto_file; do \
 	#     if grep -q "^package " "$$proto_file"; then \
-	#         $(SED) 's/^package \([\w\.]*\)/package com.hiddify.hiddify.protos.\1/g' "$$proto_file"; \
+	#         $(SED) 's/^package \([\w\.]*\)/package com.zeon.zeon.protos.\1/g' "$$proto_file"; \
 	#     fi \
 	# done
 
@@ -133,8 +133,8 @@ generate_go_protoc:
 	make -C hiddify-core -f Makefile protos
 	echo "SED: $(SED)"
 generate_dart_protoc:
-	mkdir -p lib/hiddifycore/generated
-	protoc --dart_out=grpc:lib/hiddifycore/generated --proto_path=hiddify-core/  $(shell find hiddify-core/v2 hiddify-core/extension -name "*.proto") 	google/protobuf/timestamp.proto ; \
+	mkdir -p lib/zeoncore/generated
+	protoc --dart_out=grpc:lib/zeoncore/generated --proto_path=hiddify-core/  $(shell find hiddify-core/v2 hiddify-core/extension -name "*.proto") 	google/protobuf/timestamp.proto ; \
 
 .PHONY: protos
 protos: generate_go_protoc generate_kotlin_protos generate_dart_protoc
@@ -314,11 +314,11 @@ windows-zip-release:
 	$(YELLOW)Post-processing Windows portable$(DONE); \
 	cd "$$ZIP_DIR"; \
 	$(BLUE)Extracting and Repacking...$(DONE); \
-	mkdir -p Hiddify; \
-	unzip -q "$$ZIP_FILE" -d Hiddify/; \
+	mkdir -p ZEON; \
+	unzip -q "$$ZIP_FILE" -d ZEON/; \
 	rm "$$ZIP_FILE"; \
-	tar -a -cf "$$FILE_NAME.zip" Hiddify; \
-	rm -rf Hiddify; \
+	tar -a -cf "$$FILE_NAME.zip" ZEON; \
+	rm -rf ZEON; \
 	$(GREEN)Successful$(DONE)
 
 windows-exe-release:
@@ -397,33 +397,33 @@ linux-appimage-release:
 	cp ../../linux/packaging/appimage/AppRun squashfs-root/AppRun; \
 	$(BLUE)Granting permissions$(DONE); \
 	chmod +x squashfs-root/AppRun; \
-	$(BLUE)Adding StartupWMClass to hiddify.desktop$(DONE); \
-	sed -i '/^\[Desktop Entry\]/a StartupWMClass=app.hiddify.com' "squashfs-root/hiddify.desktop"; \
+	$(BLUE)Adding StartupWMClass to zeon.desktop$(DONE); \
+	sed -i '/^\[Desktop Entry\]/a StartupWMClass=app.zeonvpn.com' "squashfs-root/zeon.desktop"; \
 	$(BLUE)Removing old AppImage$(DONE); \
 	rm *.AppImage; \
 	$(BLUE)Deleting bundled libstdc++ to fix Arch Linux compatibility...$(DONE); \
 	find squashfs-root/usr/lib -name "libstdc++.so.6" -delete; \
 	$(BLUE)Rebuilding AppImage$(DONE); \
-	ARCH=x86_64 appimagetool --no-appstream squashfs-root Hiddify.AppImage > /dev/null; \
+	ARCH=x86_64 appimagetool --no-appstream squashfs-root ZEON.AppImage > /dev/null; \
 	$(BLUE)Cleaning up squashfs$(DONE); \
 	rm -rf squashfs-root; \
 	$(YELLOW)Creating Portable Package$(DONE); \
-	PKG_DIR_NAME="hiddify-linux-appimage"; \
+	PKG_DIR_NAME="zeon-linux-appimage"; \
 	$(BLUE)Creating dir: $$PKG_DIR_NAME$(DONE); \
 	mkdir -p "$$PKG_DIR_NAME"; \
-	$(BLUE)Moving Hiddify.AppImage$(DONE); \
-	cp -p "Hiddify.AppImage" "$$PKG_DIR_NAME/Hiddify.AppImage"; \
+	$(BLUE)Moving ZEON.AppImage$(DONE); \
+	cp -p "ZEON.AppImage" "$$PKG_DIR_NAME/ZEON.AppImage"; \
 	$(BLUE)Creating Portable Home directory$(DONE); \
-	mkdir -p "$$PKG_DIR_NAME/Hiddify.AppImage.home"; \
+	mkdir -p "$$PKG_DIR_NAME/ZEON.AppImage.home"; \
 	$(BLUE)Compressing to .tar.gz$(DONE); \
 	tar -czf "$$PKG_DIR_NAME.tar.gz" -C . "$$PKG_DIR_NAME"; \
 	$(BLUE)Removing intermediate directory$(DONE); \
 	rm -rf "$$PKG_DIR_NAME"; \
 	$(GREEN)Successful$(DONE)
 
-DOCKER_IMAGE_NAME := hiddify-linux-builder
-DOCKER_FLUTTER_VOL := hiddify-flutter-sdk-cache
-DOCKER_PUB_VOL := hiddify-pub-cache
+DOCKER_IMAGE_NAME := zeon-linux-builder
+DOCKER_FLUTTER_VOL := zeon-flutter-sdk-cache
+DOCKER_PUB_VOL := zeon-pub-cache
 
 ifeq ($(OS),Windows_NT)
     FIX_OWNERSHIP := echo \"Windows detected: Skipping chown\"
@@ -516,7 +516,7 @@ macos-libs:
 
 ios-libs: #not tested
 	mkdir -p $(IOS_OUT)
-	rm -rf $(IOS_OUT)/HiddifyCore.xcframework
+	rm -rf $(IOS_OUT)/ZEONCore.xcframework
 	curl -L $(CORE_URL)/$(CORE_NAME)-ios.tar.gz | tar xz -C "$(IOS_OUT)"
 
 get-geo-assets:
@@ -541,9 +541,9 @@ build-macos-libs:
 	make -C hiddify-core -f Makefile macos
 
 build-ios-libs: 
-	rm -rf $(IOS_OUT)/HiddifyCore.xcframework 
+	rm -rf $(IOS_OUT)/ZEONCore.xcframework
 	make -C hiddify-core -f Makefile ios  
-	mv $(BINDIR)/HiddifyCore.xcframework $(IOS_OUT)/HiddifyCore.xcframework
+	mv $(BINDIR)/ZEONCore.xcframework $(IOS_OUT)/ZEONCore.xcframework
 
 release: # Create a new tag for release.
 	@CORE_VERSION=$(core.version) bash -c ".github/change_version.sh "

@@ -2,19 +2,19 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:hiddify/core/db/db.dart';
+import 'package:zeon/core/db/db.dart';
 
-import 'package:hiddify/core/utils/exception_handler.dart';
-import 'package:hiddify/features/profile/data/profile_data_mapper.dart';
-import 'package:hiddify/features/profile/data/profile_data_source.dart';
-import 'package:hiddify/features/profile/data/profile_parser.dart';
-import 'package:hiddify/features/profile/data/profile_path_resolver.dart';
-import 'package:hiddify/features/profile/model/profile_entity.dart';
-import 'package:hiddify/features/profile/model/profile_failure.dart';
-import 'package:hiddify/features/profile/model/profile_sort_enum.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/hiddifycore/hiddify_core_service.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
+import 'package:zeon/core/utils/exception_handler.dart';
+import 'package:zeon/features/profile/data/profile_data_mapper.dart';
+import 'package:zeon/features/profile/data/profile_data_source.dart';
+import 'package:zeon/features/profile/data/profile_parser.dart';
+import 'package:zeon/features/profile/data/profile_path_resolver.dart';
+import 'package:zeon/features/profile/model/profile_entity.dart';
+import 'package:zeon/features/profile/model/profile_failure.dart';
+import 'package:zeon/features/profile/model/profile_sort_enum.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/zeoncore/zeon_core_service.dart';
+import 'package:zeon/utils/custom_loggers.dart';
 import 'package:uuid/uuid.dart';
 
 abstract interface class ProfileRepository {
@@ -48,7 +48,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
   ProfileRepositoryImpl({
     required ProfileDataSource profileDataSource,
     required ProfilePathResolver profilePathResolver,
-    required HiddifyCoreService singbox,
+    required ZeonCoreService singbox,
     required ConfigOptionRepository configOptionRepository,
     required ProfileParser profileParser,
   }) : _profileParser = profileParser,
@@ -59,7 +59,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
 
   final ProfileDataSource _profileDataSource;
   final ProfilePathResolver _profilePathResolver;
-  final HiddifyCoreService _singbox;
+  final ZeonCoreService _singbox;
   final ConfigOptionRepository _configOptionRepo;
   final ProfileParser _profileParser;
 

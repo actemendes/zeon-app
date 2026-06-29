@@ -642,7 +642,7 @@ def _write_windows_linux_sources(master: Image.Image, startup_light: Image.Image
         WINDOWS_ICO_SIZES,
     )
     _save_ico(
-        ROOT / "assets/images/source/hiddify.ico",
+        ROOT / "assets/images/source/zeon.ico",
         windows_icon,
         WINDOWS_ICO_SIZES,
     )

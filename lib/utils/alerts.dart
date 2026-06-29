@@ -1,7 +1,7 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/router/dialog/widgets/custom_alert_dialog.dart';
-import 'package:hiddify/core/router/go_router/go_router_notifier.dart';
+import 'package:zeon/core/router/dialog/widgets/custom_alert_dialog.dart';
+import 'package:zeon/core/router/go_router/go_router_notifier.dart';
 import 'package:toastification/toastification.dart';
 
 enum AlertType {

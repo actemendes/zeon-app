@@ -4,10 +4,10 @@ project(runner LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "hiddify")
+set(BINARY_NAME "zeon")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
-set(APPLICATION_ID "app.hiddify.com")
+set(APPLICATION_ID "app.zeonvpn.com")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -112,8 +112,9 @@ install(FILES "../hiddify-core/bin/lib/hiddify-core.so" DESTINATION "${INSTALL_B
   COMPONENT Runtime)
 
 install(
-  FILES "../hiddify-core/bin/HiddifyCli" 
+  FILES "../hiddify-core/bin/HiddifyCli"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  RENAME ZeonCli
   PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ WORLD_EXECUTE WORLD_READ
   COMPONENT Runtime
 )

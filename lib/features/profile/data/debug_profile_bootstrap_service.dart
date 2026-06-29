@@ -1,13 +1,13 @@
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
-import 'package:hiddify/core/db/db.dart';
-import 'package:hiddify/core/model/environment.dart';
-import 'package:hiddify/features/profile/data/profile_data_mapper.dart';
-import 'package:hiddify/features/profile/data/profile_data_source.dart';
-import 'package:hiddify/features/profile/data/profile_name_parser.dart';
-import 'package:hiddify/features/profile/data/profile_repository.dart';
-import 'package:hiddify/features/profile/model/profile_entity.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
+import 'package:zeon/core/db/db.dart';
+import 'package:zeon/core/model/environment.dart';
+import 'package:zeon/features/profile/data/profile_data_mapper.dart';
+import 'package:zeon/features/profile/data/profile_data_source.dart';
+import 'package:zeon/features/profile/data/profile_name_parser.dart';
+import 'package:zeon/features/profile/data/profile_repository.dart';
+import 'package:zeon/features/profile/model/profile_entity.dart';
+import 'package:zeon/utils/custom_loggers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 

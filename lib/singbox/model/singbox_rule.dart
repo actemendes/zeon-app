@@ -20,7 +20,7 @@ class SingboxRule with _$SingboxRule {
 
   factory SingboxRule.fromJson(Map<String, dynamic> json) => _$SingboxRuleFromJson(json);
 
-  /// Serializes rule in the shape expected by hiddify-core `config.Rule`.
+  /// Serializes rule in the shape expected by zeon-core `config.Rule`.
   Map<String, dynamic> toCoreJson() {
     final map = <String, dynamic>{
       // Route builder skips rules with enabled=false by default.

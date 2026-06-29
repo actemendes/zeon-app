@@ -2,20 +2,20 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
-import 'package:hiddify/core/db/db.dart';
-import 'package:hiddify/core/preferences/preferences_provider.dart';
-import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
-import 'package:hiddify/features/profile/data/profile_data_providers.dart';
-import 'package:hiddify/features/profile/data/profile_data_source.dart';
-import 'package:hiddify/features/profile/data/profile_parser.dart';
-import 'package:hiddify/features/profile/data/profile_path_resolver.dart';
-import 'package:hiddify/features/profile/model/profile_entity.dart';
-import 'package:hiddify/features/settings/data/config_option_data_providers.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/hiddifycore/hiddify_core_service.dart';
-import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
-import 'package:hiddify/utils/platform_utils.dart';
+import 'package:zeon/core/db/db.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/profile/data/profile_data_providers.dart';
+import 'package:zeon/features/profile/data/profile_data_source.dart';
+import 'package:zeon/features/profile/data/profile_parser.dart';
+import 'package:zeon/features/profile/data/profile_path_resolver.dart';
+import 'package:zeon/features/profile/model/profile_entity.dart';
+import 'package:zeon/features/settings/data/config_option_data_providers.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/zeoncore/zeon_core_service.dart';
+import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
+import 'package:zeon/utils/custom_loggers.dart';
+import 'package:zeon/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -25,7 +25,7 @@ final mobileEmbeddedBootstrapProfileServiceProvider = Provider<MobileEmbeddedBoo
     profilePathResolver: ref.read(profilePathResolverProvider),
     profileParser: ref.read(profileParserProvider),
     configOptionRepository: ref.read(configOptionRepositoryProvider),
-    singbox: ref.read(hiddifyCoreServiceProvider),
+    singbox: ref.read(zeonCoreServiceProvider),
     preferences: ref.read(sharedPreferencesProvider).requireValue,
   );
 });
@@ -36,7 +36,7 @@ class MobileEmbeddedBootstrapProfileService with InfraLogger {
     required ProfilePathResolver profilePathResolver,
     required ProfileParser profileParser,
     required ConfigOptionRepository configOptionRepository,
-    required HiddifyCoreService singbox,
+    required ZeonCoreService singbox,
     required SharedPreferences preferences,
   }) : _profileDataSource = profileDataSource,
        _profilePathResolver = profilePathResolver,
@@ -66,7 +66,7 @@ class MobileEmbeddedBootstrapProfileService with InfraLogger {
   final ProfilePathResolver _profilePathResolver;
   final ProfileParser _profileParser;
   final ConfigOptionRepository _configOptionRepository;
-  final HiddifyCoreService _singbox;
+  final ZeonCoreService _singbox;
   final SharedPreferences _preferences;
 
   Future<bool> ensureActiveProfile() async {

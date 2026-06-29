@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ZEON AppStream Metadata
+  Place this file at: linux/packaging/myappid.appdata.xml
+-->
+<component type="desktop-application">
+  <id>app.zeonvpn.com</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>ZEON</name>
+  <summary>Modern Proxy and VPN Manager for Linux</summary>
+
+  <developer_name>ZEON</developer_name>
+  <update_contact>linux@zeonvpn.com</update_contact>
+
+  <description>
+    <p>
+      ZEON is an advanced proxy and VPN client built for privacy and control. 
+      It supports multiple backend protocols including V2Ray, Xray, Clash, and Sing-box, 
+      providing flexibility and performance for all kinds of network configurations.
+    </p>
+    <p>
+      Designed with simplicity in mind, ZEON helps users connect securely and 
+      manage complex proxy configurations through a clean graphical interface.
+    </p>
+  </description>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://zeonvpn.com/assets/zeon-next-mobile.svg</image>
+      <caption>Main Interface of ZEON</caption>
+    </screenshot>
+  </screenshots>
+
+  <launchable type="desktop-id">zeon.desktop</launchable>
+
+  <icon type="stock">zeon</icon>
+
+  <categories>
+    <category>Network</category>
+  </categories>
+
+  <keywords>
+    <keyword>ZEON</keyword>
+    <keyword>Proxy</keyword>
+    <keyword>VPN</keyword>
+    <keyword>V2Ray</keyword>
+    <keyword>Nekoray</keyword>
+    <keyword>Xray</keyword>
+    <keyword>Psiphon</keyword>
+    <keyword>OpenVPN</keyword>
+  </keywords>
+
+  <mime-types>
+    <mime-type>x-scheme-handler/zeon</mime-type>
+    <mime-type>x-scheme-handler/v2ray</mime-type>
+    <mime-type>x-scheme-handler/v2rayn</mime-type>
+    <mime-type>x-scheme-handler/v2rayng</mime-type>
+    <mime-type>x-scheme-handler/clash</mime-type>
+    <mime-type>x-scheme-handler/clashmeta</mime-type>
+    <mime-type>x-scheme-handler/sing-box</mime-type>
+  </mime-types>
+
+  <url type="homepage">https://zeonvpn.com</url>
+  <url type="bugtracker">https://github.com/zeon/zeon-app/issues</url>
+  <url type="help">https://docs.zeonvpn.com</url>
+
+  <provides>
+    <binary>zeon</binary>
+  </provides>
+
+  <releases>
+    <release version="1.0.0" date="2025-10-25">
+      <description>
+        <p>Initial Linux release of ZEON with multi-protocol support and modern UI.</p>
+      </description>
+    </release>
+  </releases>
+
+  <translation type="gettext">zeon</translation>
+
+  <custom>
+    <value key="PackageName">zeon</value>
+    <value key="Priority">optional</value>
+    <value key="Section">x11</value>
+    <value key="InstalledSize">6604</value>
+    <value key="Essential">false</value>
+  </custom>
+</component>

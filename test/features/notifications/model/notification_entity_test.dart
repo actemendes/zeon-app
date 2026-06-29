@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hiddify/features/notifications/model/notification_category.dart';
-import 'package:hiddify/features/notifications/model/notification_entity.dart';
-import 'package:hiddify/features/notifications/model/notification_priority.dart';
+import 'package:zeon/features/notifications/model/notification_category.dart';
+import 'package:zeon/features/notifications/model/notification_entity.dart';
+import 'package:zeon/features/notifications/model/notification_priority.dart';
 
 void main() {
   group('NotificationPage.parse', () {

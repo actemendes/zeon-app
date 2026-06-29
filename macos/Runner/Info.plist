@@ -35,7 +35,7 @@
 			<string></string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>hiddify</string>
+				<string>zeon</string>
 				<string>v2ray</string>
 				<string>v2rayn</string>
 				<string>v2rayng</string>

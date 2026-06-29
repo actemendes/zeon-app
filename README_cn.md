@@ -1,6 +1,6 @@
 # ZEON App
 
-ZEON App 是由 ZEON 团队开发和维护的跨平台代理客户端。我们负责自己的产品、版本发布、集成、支持流程和用户体验，同时将 Hiddify 作为 ZEON 项目的技术基础之一。
+ZEON App 是由 ZEON 团队开发和维护的跨平台代理客户端。我们负责自己的产品、版本发布、集成、支持流程和用户体验，同时将 ZEON 作为 ZEON 项目的技术基础之一。
 
 该应用面向移动端和桌面端，适合管理代理配置、订阅和多种协议。
 
@@ -51,9 +51,9 @@ ZEON App 由我们的开发团队维护。项目包含 Flutter 应用代码，�
 
 ## 致谢
 
-ZEON App 基于 Hiddify 的基础构建，我们感谢 Hiddify 贡献者的工作。我们也感谢项目所依赖的开源生态:
+ZEON App 基于 ZEON 的基础构建，我们感谢 ZEON 贡献者的工作。我们也感谢项目所依赖的开源生态:
 
-- [Hiddify](https://github.com/hiddify/hiddify-app)
+- [ZEON](https://github.com/zeon/zeon-app)
 - [Sing-box](https://github.com/SagerNet/sing-box)
 - [Sing-box for Android](https://github.com/SagerNet/sing-box-for-android)
 - [Sing-box for Apple](https://github.com/SagerNet/sing-box-for-apple)

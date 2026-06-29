@@ -10,16 +10,16 @@
             "program": "./hiddify-core/cmd/main",
             // "args": ["build","-c","a.txt","-d","b.txt","--full-config"] ,
             // "args": ["temp"] ,
-            // "args":["profile","https://raw.githubusercontent.com/hiddify/hiddify-next/refs/heads/main/test.configs/warp"],
+            // "args":["profile","https://raw.githubusercontent.com/zeon/zeon-next/refs/heads/main/test.configs/warp"],
             "args": [
                 "run",
                 "-c",
-                "https://raw.githubusercontent.com/hiddify/hiddify-next/refs/heads/main/test.configs/warp"
+                "https://raw.githubusercontent.com/zeon/zeon-next/refs/heads/main/test.configs/warp"
             ],
             "buildFlags": "-tags with_clash_api,with_gvisor,with_quic,with_wireguard,with_grpc,with_ech,with_utls,with_reality_server"
         },
         {
-            "name": "Hiddify Dev",
+            "name": "ZEON Dev",
             "request": "launch",
             "type": "dart",
             "flutterMode": "debug",
@@ -27,7 +27,7 @@
             // "args": ["-d","192.168.1.35:36463"]
         },
         {
-            "name": "Hiddify UI (Chrome + Auto DevTools)",
+            "name": "ZEON UI (Chrome + Auto DevTools)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "debug",
@@ -47,7 +47,7 @@
             ]
         },
         {
-            "name": "Hiddify UI (Edge Fallback)",
+            "name": "ZEON UI (Edge Fallback)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "debug",
@@ -63,7 +63,7 @@
             ]
         },
         {
-            "name": "Hiddify Dev Windows Portable",
+            "name": "ZEON Dev Windows Portable",
             "request": "launch",
             "type": "dart",
             "flutterMode": "debug",
@@ -74,21 +74,21 @@
             ]
         },
         {
-            "name": "Hiddify Dev Release",
+            "name": "ZEON Dev Release",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release",
             "program": "lib/main.dart",
         },
         {
-            "name": "Hiddify Dev Profile",
+            "name": "ZEON Dev Profile",
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile",
             "program": "lib/main.dart",
         },
         {
-            "name": "Hiddify Prod",
+            "name": "ZEON Prod",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release",
@@ -101,7 +101,7 @@
             "program": "lib/main.dart",
             "args": [
                 "--app-id",
-                "app.hiddify.com"
+                "app.zeonvpn.com"
             ],
             "deviceId": "mac-designed-for-ipad",
         }

@@ -2,13 +2,13 @@ import 'dart:math';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/failures.dart';
-import 'package:hiddify/core/ui/ui_names.dart';
-import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
-import 'package:hiddify/features/proxy/overview/proxies_overview_notifier.dart';
-import 'package:hiddify/features/proxy/widget/proxy_tile.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/model/failures.dart';
+import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/features/proxy/model/proxy_display_name.dart';
+import 'package:zeon/features/proxy/overview/proxies_overview_notifier.dart';
+import 'package:zeon/features/proxy/widget/proxy_tile.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {

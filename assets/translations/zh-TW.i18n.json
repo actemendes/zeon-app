@@ -1,4 +1,4 @@
-﻿{
+{
   "common": {
     "appTitle": "ZEON",
     "start": "開始",
@@ -94,7 +94,7 @@
     "ctaSubtitle": "並贈送高級會員",
     "alreadyHaveAccount": "我已經有帳號",
     "termsAndPolicyCaution(rich)": "繼續即表示您同意 ${tap(@:pages.about.termsAndConditions)}",
-    "info(rich)": "由 ZEON 以 ❤️ 製作 - ${tap_source(開源)} (${tap_license(授權)})"
+    "info": "由 ZEON 以 ❤️ 製作"
   },
   "pages": {
     "home": {
@@ -220,7 +220,6 @@
       "notAvailableMsg": "已是最新版本",
       "checkForUpdate": "檢查更新",
       "openWorkingDir": "開啟工作目錄",
-      "sourceCode": "原始碼",
       "telegramChannel": "Telegram 頻道",
       "termsAndConditions": "條款與條件",
       "privacyPolicy": "隱私權政策"
@@ -607,7 +606,7 @@
       "msg": "讓我們從新增一個包含您 VPN 連線詳細資訊的設定檔開始。\n\n還沒有 VPN 伺服器？別擔心，按照下面的教學，您可以快速免費地設定一個。",
       "helpBtn": {
         "label": "告訴我如何操作",
-        "url": "https://hiddify.com/manager/"
+        "url": "https://zeonvpn.com/manager/"
       }
     },
     "unknownDomainsWarning": {
@@ -686,4 +685,3 @@
     }
   }
 }
-

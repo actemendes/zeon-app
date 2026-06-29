@@ -5,7 +5,7 @@ msix_version: 1.2.0.10200
 logo_path: windows\runner\resources\app_icon.ico
 capabilities: internetClient, internetClientServer, privateNetworkClientServer
 languages: ar, en-us, es-es, fa-ir, fr-fr, id-id, pt-br, ru-ru, tr-tr, zh-cn, zh-tw
-protocol_activation: zeon, hiddify, v2ray, v2rayn, v2rayng, clash, clashmeta, sing-box
+protocol_activation: zeon, v2ray, v2rayn, v2rayng, clash, clashmeta, sing-box
 execution_alias: zeon
 certificate_path: windows\sign.pfx
 certificate_password:

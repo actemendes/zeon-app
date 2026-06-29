@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
+import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 
 void main() {
   test("formats balancer as auto selection", () {

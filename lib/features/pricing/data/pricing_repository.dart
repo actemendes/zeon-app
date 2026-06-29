@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:hiddify/core/http_client/dio_http_client.dart';
-import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
-import 'package:hiddify/features/pricing/model/pricing_models.dart';
+import 'package:zeon/core/http_client/dio_http_client.dart';
+import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/pricing/model/pricing_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract interface class PricingRemoteDataSource {

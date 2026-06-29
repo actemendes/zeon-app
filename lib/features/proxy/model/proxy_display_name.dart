@@ -1,4 +1,4 @@
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 const String autoSelectionDisplayName = 'Автовыбор';
 const String autoSelectionSeparator = '•';

@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:hiddify/core/theme/app_color_tokens.dart';
-import 'package:hiddify/core/theme/app_theme_mode.dart';
-import 'package:hiddify/core/theme/theme_extensions.dart';
+import 'package:zeon/core/theme/app_color_tokens.dart';
+import 'package:zeon/core/theme/app_theme_mode.dart';
+import 'package:zeon/core/theme/theme_extensions.dart';
 
 const Color _lightBackground = AppColorTokens.lightBackground;
 const Color _lightSurfaceAlt = AppColorTokens.lightSurfaceAlt;

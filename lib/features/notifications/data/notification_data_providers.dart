@@ -1,19 +1,19 @@
-import 'package:hiddify/core/app_info/app_info_provider.dart';
-import 'package:hiddify/core/db/provider/db_providers.dart';
-import 'package:hiddify/core/http_client/http_client_provider.dart';
-import 'package:hiddify/core/localization/locale_preferences.dart';
-import 'package:hiddify/core/notification/in_app_notification_controller.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/core/preferences/preferences_provider.dart';
-import 'package:hiddify/features/notifications/data/notification_api_data_source.dart';
-import 'package:hiddify/features/notifications/data/notification_device_auth.dart';
-import 'package:hiddify/features/notifications/data/notification_local_data_source.dart';
-import 'package:hiddify/features/notifications/data/notification_repository.dart';
-import 'package:hiddify/features/notifications/service/notification_action_handler.dart';
-import 'package:hiddify/features/notifications/service/notification_polling_service.dart';
-import 'package:hiddify/features/notifications/service/notification_receipt_queue.dart';
-import 'package:hiddify/features/notifications/service/system_notification_service.dart';
-import 'package:hiddify/utils/platform_utils.dart';
+import 'package:zeon/core/app_info/app_info_provider.dart';
+import 'package:zeon/core/db/provider/db_providers.dart';
+import 'package:zeon/core/http_client/http_client_provider.dart';
+import 'package:zeon/core/localization/locale_preferences.dart';
+import 'package:zeon/core/notification/in_app_notification_controller.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/notifications/data/notification_api_data_source.dart';
+import 'package:zeon/features/notifications/data/notification_device_auth.dart';
+import 'package:zeon/features/notifications/data/notification_local_data_source.dart';
+import 'package:zeon/features/notifications/data/notification_repository.dart';
+import 'package:zeon/features/notifications/service/notification_action_handler.dart';
+import 'package:zeon/features/notifications/service/notification_polling_service.dart';
+import 'package:zeon/features/notifications/service/notification_receipt_queue.dart';
+import 'package:zeon/features/notifications/service/system_notification_service.dart';
+import 'package:zeon/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 final notificationLocalDataSourceProvider = Provider<NotificationLocalDataSource>((ref) {

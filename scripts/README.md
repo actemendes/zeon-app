@@ -7,7 +7,7 @@
 1. Пересобрать Android core после изменений в `hiddify-core`:
 
    ```powershell
-   .\scripts\rebuild_hiddify_core.ps1 -Platform android
+   .\scripts\rebuild_zeon_core.ps1 -Platform android
    ```
 
 2. Собрать готовые APK для распространения:
@@ -25,7 +25,7 @@
 4. Пересобрать Windows core после изменений в `hiddify-core`:
 
    ```powershell
-   .\scripts\rebuild_hiddify_core.ps1 -Platform windows
+   .\scripts\rebuild_zeon_core.ps1 -Platform windows
    ```
 
 5. Собрать готовый Windows EXE-установщик:
@@ -56,32 +56,32 @@ Windows EXE из шага `5` копируется в `out/installers/win`.
 
 ## Пересборка core
 
-`rebuild_hiddify_core.ps1` запускает Linux-инструменты через WSL и собирает локальные
+`rebuild_zeon_core.ps1` запускает Linux-инструменты через WSL и собирает локальные
 нативные библиотеки из исходников `hiddify-core`, включая необходимые Go-зависимости.
 
 Доступные платформы:
 
 ```powershell
-.\scripts\rebuild_hiddify_core.ps1 -Platform android
-.\scripts\rebuild_hiddify_core.ps1 -Platform windows
-.\scripts\rebuild_hiddify_core.ps1 -Platform linux
-.\scripts\rebuild_hiddify_core.ps1 -Platform android,windows,linux
+.\scripts\rebuild_zeon_core.ps1 -Platform android
+.\scripts\rebuild_zeon_core.ps1 -Platform windows
+.\scripts\rebuild_zeon_core.ps1 -Platform linux
+.\scripts\rebuild_zeon_core.ps1 -Platform android,windows,linux
 ```
 
 Полезные параметры:
 
 ```powershell
 # Проверить выбранный маршрут без запуска тяжелой сборки
-.\scripts\rebuild_hiddify_core.ps1 -Platform android -DryRun
+.\scripts\rebuild_zeon_core.ps1 -Platform android -DryRun
 
 # Ускорить повторную Android-сборку после уже выполненного gomobile init
-.\scripts\rebuild_hiddify_core.ps1 -Platform android -SkipGomobileInit
+.\scripts\rebuild_zeon_core.ps1 -Platform android -SkipGomobileInit
 
 # Указать конкретный WSL-дистрибутив
-.\scripts\rebuild_hiddify_core.ps1 -Platform android -WslDistribution Ubuntu-22.04
+.\scripts\rebuild_zeon_core.ps1 -Platform android -WslDistribution Ubuntu-22.04
 
 # Установить npm-зависимости web-части расширений core, если она изменялась
-.\scripts\rebuild_hiddify_core.ps1 -Platform android -InstallWebDependencies
+.\scripts\rebuild_zeon_core.ps1 -Platform android -InstallWebDependencies
 ```
 
 ## Требования

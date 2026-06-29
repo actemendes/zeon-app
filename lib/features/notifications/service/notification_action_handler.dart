@@ -1,4 +1,4 @@
-import 'package:hiddify/utils/custom_loggers.dart';
+import 'package:zeon/utils/custom_loggers.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class NotificationActionHandler with InfraLogger {

@@ -19,7 +19,7 @@ PrivilegesRequired={{PRIVILEGES_REQUIRED}}
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 CloseApplications=force
-CloseApplicationsFilter={{EXECUTABLE_NAME}},Hiddify.exe
+CloseApplicationsFilter={{EXECUTABLE_NAME}},ZEON.exe
 
 [Languages]
 {% for locale in LOCALES %}
@@ -54,7 +54,7 @@ CloseApplicationsFilter={{EXECUTABLE_NAME}},Hiddify.exe
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: {% if CREATE_DESKTOP_ICON != true %}unchecked{% else %}checkedonce{% endif %}
 Name: "launchAtStartup"; Description: "{cm:AutoStartProgram,{{DISPLAY_NAME}}}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: {% if LAUNCH_AT_STARTUP != true %}unchecked{% else %}checkedonce{% endif %}
 [InstallDelete]
-Type: files; Name: "{userstartup}\Hiddify.lnk"
+Type: files; Name: "{userstartup}\ZEON.lnk"
 [Files]
 Source: "{{SOURCE_DIR}}\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
@@ -72,7 +72,7 @@ var
   ResultCode: Integer;
 begin
   Exec('taskkill', '/F /IM ZEON.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
-  Exec('net', 'stop "HiddifyTunnelService"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
-  Exec('sc.exe', 'delete "HiddifyTunnelService"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+  Exec('net', 'stop "ZeonTunnelService"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+  Exec('sc.exe', 'delete "ZeonTunnelService"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
   Result := True;
 end;

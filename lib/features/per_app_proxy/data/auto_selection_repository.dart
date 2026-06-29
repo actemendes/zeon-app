@@ -1,11 +1,11 @@
 import 'package:dio/dio.dart';
-import 'package:hiddify/core/http_client/dio_http_client.dart';
-import 'package:hiddify/core/http_client/http_client_provider.dart';
-import 'package:hiddify/core/model/region.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/http_client/dio_http_client.dart';
+import 'package:zeon/core/http_client/http_client_provider.dart';
+import 'package:zeon/core/model/region.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 enum AutoSelectionResult {
@@ -27,7 +27,7 @@ abstract interface class AutoSelectionRepository {
 class AutoSelectionRepositoryImpl with AppLogger implements AutoSelectionRepository {
   AutoSelectionRepositoryImpl({required Ref ref}) : _ref = ref;
   final Ref _ref;
-  static const _baseUrl = 'https://raw.githubusercontent.com/hiddify/Android-GFW-Apps/refs/heads/master/';
+  static const _baseUrl = 'https://raw.githubusercontent.com/zeon/Android-GFW-Apps/refs/heads/master/';
 
   @override
   Future<(Set<String>?, AutoSelectionResult)> getByAppProxyMode({AppProxyMode? mode, Region? region}) async =>
