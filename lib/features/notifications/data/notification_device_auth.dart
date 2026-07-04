@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:hiddify/core/http_client/dio_http_client.dart';
-import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
-import 'package:hiddify/features/mobile/data/stable_device_id_service.dart';
+import 'package:zeon/core/http_client/dio_http_client.dart';
+import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/mobile/data/stable_device_id_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationDeviceAuth {

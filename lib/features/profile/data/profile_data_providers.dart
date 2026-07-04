@@ -1,14 +1,16 @@
-import 'package:hiddify/core/db/provider/db_providers.dart';
-import 'package:hiddify/core/directories/directories_provider.dart';
-import 'package:hiddify/core/http_client/http_client_provider.dart';
-import 'package:hiddify/features/profile/data/profile_data_source.dart';
-import 'package:hiddify/features/profile/data/profile_parser.dart';
-import 'package:hiddify/features/profile/data/profile_path_resolver.dart';
-import 'package:hiddify/features/profile/data/profile_repository.dart';
-import 'package:hiddify/features/settings/data/config_option_data_providers.dart';
-import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:zeon/core/db/provider/db_providers.dart';
+import 'package:zeon/core/directories/directories_provider.dart';
+import 'package:zeon/core/http_client/http_client_provider.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/profile/data/profile_config_store.dart';
+import 'package:zeon/features/profile/data/profile_data_source.dart';
+import 'package:zeon/features/profile/data/profile_parser.dart';
+import 'package:zeon/features/profile/data/profile_path_resolver.dart';
+import 'package:zeon/features/profile/data/profile_repository.dart';
+import 'package:zeon/features/settings/data/config_option_data_providers.dart';
+import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
 part 'profile_data_providers.g.dart';
 
@@ -17,9 +19,10 @@ Future<ProfileRepository> profileRepository(Ref ref) async {
   final repo = ProfileRepositoryImpl(
     profileDataSource: ref.watch(profileDataSourceProvider),
     profilePathResolver: ref.watch(profilePathResolverProvider),
-    singbox: ref.watch(hiddifyCoreServiceProvider),
+    singbox: ref.watch(zeonCoreServiceProvider),
     configOptionRepository: ref.watch(configOptionRepositoryProvider),
     profileParser: ref.watch(profileParserProvider),
+    profileConfigStore: ref.watch(profileConfigStoreProvider),
   );
   await repo.init().getOrElse((l) => throw l).run();
   return repo;
@@ -32,7 +35,16 @@ ProfileDataSource profileDataSource(Ref ref) {
 
 @Riverpod(keepAlive: true)
 ProfilePathResolver profilePathResolver(Ref ref) {
-  return ProfilePathResolver(ref.watch(appDirectoriesProvider).requireValue.workingDir);
+  final directories = ref.watch(appDirectoriesProvider).requireValue;
+  return ProfilePathResolver(directories.workingDir, directories.tempDir);
+}
+
+@Riverpod(keepAlive: true)
+ProfileConfigStore profileConfigStore(Ref ref) {
+  return ProfileConfigStore(
+    pathResolver: ref.watch(profilePathResolverProvider),
+    preferences: ref.watch(sharedPreferencesProvider).requireValue,
+  );
 }
 
 @Riverpod(keepAlive: true)

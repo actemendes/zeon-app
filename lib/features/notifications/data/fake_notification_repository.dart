@@ -1,8 +1,8 @@
-import 'package:hiddify/features/notifications/data/notification_repository.dart';
-import 'package:hiddify/features/notifications/model/notification_category.dart';
-import 'package:hiddify/features/notifications/model/notification_entity.dart';
-import 'package:hiddify/features/notifications/model/notification_priority.dart';
-import 'package:hiddify/features/notifications/service/system_notification_service.dart';
+import 'package:zeon/features/notifications/data/notification_repository.dart';
+import 'package:zeon/features/notifications/model/notification_category.dart';
+import 'package:zeon/features/notifications/model/notification_entity.dart';
+import 'package:zeon/features/notifications/model/notification_priority.dart';
+import 'package:zeon/features/notifications/service/system_notification_service.dart';
 
 class FakeNotificationRepository implements NotificationRepository {
   FakeNotificationRepository({SystemNotificationService? systemNotificationService})

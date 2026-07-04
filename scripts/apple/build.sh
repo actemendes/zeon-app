@@ -60,7 +60,7 @@ build_macos_app() {
   flutter build macos "${BUILD_ARGS[@]}"
   mkdir -p "${OUT_DIR}"
   rm -rf "${OUT_DIR}/ZEON.app"
-  cp -R build/macos/Build/Products/Release/Hiddify.app "${OUT_DIR}/ZEON.app"
+  cp -R build/macos/Build/Products/Release/ZEON.app "${OUT_DIR}/ZEON.app"
   codesign --force --deep --sign - "${OUT_DIR}/ZEON.app"
   codesign --verify --deep --strict --verbose=2 "${OUT_DIR}/ZEON.app"
   echo "${OUT_DIR}/ZEON.app"

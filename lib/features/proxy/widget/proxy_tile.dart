@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:hiddify/features/proxy/active/ip_widget.dart';
-import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
-import 'package:hiddify/features/proxy/widget/proxy_quality_indicator.dart';
-import 'package:hiddify/gen/fonts.gen.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
-import 'package:hiddify/utils/platform_utils.dart';
+import 'package:zeon/features/proxy/active/ip_widget.dart';
+import 'package:zeon/features/proxy/model/proxy_display_name.dart';
+import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
+import 'package:zeon/gen/fonts.gen.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/utils/custom_loggers.dart';
+import 'package:zeon/utils/platform_utils.dart';
 
 class ProxyTile extends StatelessWidget with PresLogger {
   const ProxyTile(

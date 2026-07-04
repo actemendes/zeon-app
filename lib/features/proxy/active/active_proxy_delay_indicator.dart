@@ -1,9 +1,9 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
-import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
-import 'package:hiddify/features/proxy/widget/proxy_quality_indicator.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
+import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
+import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
+import 'package:zeon/utils/custom_loggers.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {

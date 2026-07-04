@@ -2,9 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:hiddify/core/theme/app_theme.dart';
-import 'package:hiddify/core/theme/app_theme_mode.dart';
-import 'package:hiddify/widgetbook/widgetbook.directories.g.dart';
+import 'package:zeon/core/theme/app_theme.dart';
+import 'package:zeon/core/theme/app_theme_mode.dart';
+import 'package:zeon/widgetbook/widgetbook.directories.g.dart';
 import 'package:widgetbook/widgetbook.dart';
 import 'package:widgetbook_annotation/widgetbook_annotation.dart' as widgetbook;
 

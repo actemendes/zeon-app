@@ -46,7 +46,7 @@ class VPNManager: ObservableObject {
   }
 
   private func loadVPNPreference() async throws {
-    let providerBundleIdentifier = Bundle.main.baseBundleIdentifier + ".HiddifyPacketTunnel"
+    let providerBundleIdentifier = Bundle.main.baseBundleIdentifier + ".ZeonPacketTunnel"
     let managers = try await NETunnelProviderManager.loadAllFromPreferences()
     let matchingManagers = managers.filter {
       ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == providerBundleIdentifier

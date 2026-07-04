@@ -1,20 +1,20 @@
 // ignore_for_file: depend_on_referenced_packages
 
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/app_info/app_info_provider.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/app_info_entity.dart';
-import 'package:hiddify/core/model/environment.dart';
-import 'package:hiddify/core/preferences/preferences_provider.dart';
-import 'package:hiddify/features/connection/model/connection_status.dart';
-import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
-import 'package:hiddify/features/home/widget/home_page.dart';
-import 'package:hiddify/features/profile/model/profile_entity.dart';
-import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
-import 'package:hiddify/features/settings/notifier/config_option/config_option_notifier.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
-import 'package:hiddify/widgetbook/widgetbook_context.dart';
+import 'package:zeon/core/app_info/app_info_provider.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/model/app_info_entity.dart';
+import 'package:zeon/core/model/environment.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/connection/model/connection_status.dart';
+import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/features/home/widget/home_page.dart';
+import 'package:zeon/features/profile/model/profile_entity.dart';
+import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
+import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
+import 'package:zeon/features/settings/notifier/config_option/config_option_notifier.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/widgetbook/widgetbook_context.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:widgetbook_annotation/widgetbook_annotation.dart' as widgetbook;
 
@@ -63,7 +63,7 @@ class _MockAppInfoNotifier extends AppInfo {
   @override
   Future<AppInfoEntity> build() async {
     return const AppInfoEntity(
-      name: 'Hiddify',
+      name: 'ZEON',
       version: '4.1.2',
       buildNumber: '40102',
       release: Release.general,

@@ -1,8 +1,8 @@
 # Contributing
 
-Every contribution to HiddifyApp is welcome, whether it is reporting a bug, submitting a fix, proposing new features, or just asking a question. To make contributing to HiddifyApp as easy as possible, you will find more details for the development flow in this documentation. [Basic tutorial on how to contribute to HiddifyApp](https://hiddify.com/app/How-to-contribute-to-this-project/)
+Every contribution to ZEONApp is welcome, whether it is reporting a bug, submitting a fix, proposing new features, or just asking a question. To make contributing to ZEONApp as easy as possible, you will find more details for the development flow in this documentation. [Basic tutorial on how to contribute to ZEONApp](https://zeonvpn.com/app/How-to-contribute-to-this-project/)
 
-Please note, we have a [Code of Conduct](https://github.com/hiddify/hiddify-app/blob/main/CODE_OF_CONDUCT.md), please follow it in all your interactions with the project.
+Please note, we have a [Code of Conduct](https://github.com/zeon/zeon-app/blob/main/CODE_OF_CONDUCT.md), please follow it in all your interactions with the project.
 
 - [Feedback, Issues and Questions](#feedback-issues-and-questions)
 - [Adding new Features](#adding-new-features)
@@ -18,21 +18,21 @@ Please note, we have a [Code of Conduct](https://github.com/hiddify/hiddify-app/
 
 If you encounter any issue, or you have an idea to improve, please:
 
-- Search through [existing open and closed GitHub Issues](https://github.com/hiddify/hiddify-app/issues) for the answer first. If you find a relevant topic, please comment on the issue.
-- If none of the issues are relevant, please add a new [issue](https://github.com/hiddify/hiddify-app/issues/new/choose) following the templates and provide as much relevant information as possible.
+- Search through [existing open and closed GitHub Issues](https://github.com/zeon/zeon-app/issues) for the answer first. If you find a relevant topic, please comment on the issue.
+- If none of the issues are relevant, please add a new [issue](https://github.com/zeon/zeon-app/issues/new/choose) following the templates and provide as much relevant information as possible.
 
 ## Adding new Features
 
-When contributing a complex change to the Hiddify repository, please discuss the change you wish to make within a GitHub issue with the owners of this repository before making the change.
+When contributing a complex change to the ZEON repository, please discuss the change you wish to make within a GitHub issue with the owners of this repository before making the change.
 
 
 ## Development
 
 ### Adding Feature / Fix bug in Core:
-Please follow our [Go Core Development repository](https://github.com/hiddify/hiddify-next-core/main/CONTRIBUTING.m).
+Please follow our [Go Core Development repository](https://github.com/zeon/zeon-next-core/main/CONTRIBUTING.m).
 
 ### Working with the Flutter Code
-Hiddify uses [Flutter](https://flutter.dev), make sure that you have the correct version installed before starting development. You can use the following commands to check your installed version:
+ZEON uses [Flutter](https://flutter.dev), make sure that you have the correct version installed before starting development. You can use the following commands to check your installed version:
 
 ```shell
 $ flutter --version
@@ -50,7 +50,7 @@ We recommend using [Visual Studio Code](https://docs.flutter.dev/development/too
 #### Setting up the Environment
 
 We have extensive use of code generation in the form of [freezed](https://github.com/rrousselGit/freezed), [riverpod](https://github.com/rrousselGit/riverpod), etc. So it's generate these before running the code. Execute the following make commands in order:
-Assuming you have not built the `hiddify-core` and want to use [existing releases](https://github.com/hiddify/hiddify-next-core/releases), you should run the following command (based on your target platform):
+Assuming you have not built the `hiddify-core` and want to use [existing releases](https://github.com/zeon/zeon-next-core/releases), you should run the following command (based on your target platform):
 
 
 - `make windows-prepare`
@@ -93,7 +93,7 @@ flutter run --device-id=35492ae2
 
 ## Release
 
-We use [flutter_distributor](https://github.com/leanflutter/flutter_distributor) for packaging. [GitHub action](https://github.com/hiddify/hiddify-app/blob/main/.github/workflows/build.yml) is triggered on every release tag and will create a new GitHub release.
+We use [flutter_distributor](https://github.com/leanflutter/flutter_distributor) for packaging. [GitHub action](https://github.com/zeon/zeon-app/blob/main/.github/workflows/build.yml) is triggered on every release tag and will create a new GitHub release.
 After setting up the environment, use the following make commands to build the release version:
 
 - `make windows-release`
@@ -113,10 +113,10 @@ We need your collaboration in order to develop this project. If you have experie
 <div align=center>
 </br>
 
-[![Email](https://img.shields.io/badge/Email-contribute@hiddify.com-005FF9?style=flat-square&logo=mail.ru)](mailto:contribute@hiddify.com)
-[![Telegram Channel](https://img.shields.io/endpoint?label=Channel&style=flat-square&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fhiddify&color=blue)](https://telegram.dog/hiddify)
-[![Telegram Group](https://img.shields.io/endpoint?color=neon&label=Support%20Group&style=flat-square&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fhiddify_board)](https://telegram.dog/hiddify_board)
-[![Youtube](https://img.shields.io/youtube/channel/views/UCxrmeMvVryNfB4XL35lXQNg?label=Youtube&style=flat-square&logo=youtube)](https://www.youtube.com/@hiddify)
-[![Twitter](https://img.shields.io/twitter/follow/hiddify_com?color=%231DA1F2&logo=twitter&logoColor=1DA1F2&style=flat-square)](https://twitter.com/intent/follow?screen_name=hiddify_com)
+[![Email](https://img.shields.io/badge/Email-contribute@zeonvpn.com-005FF9?style=flat-square&logo=mail.ru)](mailto:contribute@zeonvpn.com)
+[![Telegram Channel](https://img.shields.io/endpoint?label=Channel&style=flat-square&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fzeon&color=blue)](https://telegram.dog/zeon)
+[![Telegram Group](https://img.shields.io/endpoint?color=neon&label=Support%20Group&style=flat-square&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fzeon_board)](https://telegram.dog/zeon_board)
+[![Youtube](https://img.shields.io/youtube/channel/views/UCxrmeMvVryNfB4XL35lXQNg?label=Youtube&style=flat-square&logo=youtube)](https://www.youtube.com/@zeon)
+[![Twitter](https://img.shields.io/twitter/follow/zeon_com?color=%231DA1F2&logo=twitter&logoColor=1DA1F2&style=flat-square)](https://twitter.com/intent/follow?screen_name=zeon_com)
 
 </div>

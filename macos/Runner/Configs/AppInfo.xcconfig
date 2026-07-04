@@ -5,12 +5,12 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = Hiddify
+PRODUCT_NAME = ZEON
 
 // The application's bundle identifier
 MACOS_BUNDLE_IDENTIFIER = app.zeon.macos
 MACOS_DEVELOPMENT_TEAM =
-MACOS_SERVICE_IDENTIFIER = com.hiddify.app
+MACOS_SERVICE_IDENTIFIER = com.zeon.app
 
 // Keep developer credentials outside git. Copy AppleSigning.xcconfig.example
 // to AppleSigning.xcconfig and fill it in before creating signed macOS builds.
@@ -23,4 +23,4 @@ SERVICE_IDENTIFIER = $(MACOS_SERVICE_IDENTIFIER)
 OTHER_LDFLAGS = $(inherited) -lresolv
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2023 hiddify.com. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2023 zeon.com. All rights reserved.

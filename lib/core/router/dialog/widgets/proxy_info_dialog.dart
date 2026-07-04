@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
-import 'package:hiddify/features/proxy/widget/proxy_quality_indicator.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/features/proxy/model/proxy_display_name.dart';
+import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ProxyInfoDialog extends HookConsumerWidget {

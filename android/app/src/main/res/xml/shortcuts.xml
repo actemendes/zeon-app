@@ -7,7 +7,7 @@
         android:shortcutShortLabel="@string/quick_toggle">
         <intent
             android:action="android.intent.action.MAIN"
-            android:targetClass="com.hiddify.hiddify.ShortcutActivity"
-            android:targetPackage="com.zeon.app" />
+            android:targetClass="com.zeon.zeon.ShortcutActivity"
+            android:targetPackage="com.zeon.hiddify" />
     </shortcut>
 </shortcuts>

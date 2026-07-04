@@ -49,7 +49,7 @@ powershell -ExecutionPolicy Bypass -File scripts/diagnostics/capture_mobile_flow
 Auto force-stop + relaunch the app at capture start:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/diagnostics/capture_mobile_flow_log.ps1 -Serial <device-serial> -DurationSec 180 -LaunchPackage com.zeon.hiddify
+powershell -ExecutionPolicy Bypass -File scripts/diagnostics/capture_mobile_flow_log.ps1 -Serial <device-serial> -DurationSec 180 -LaunchPackage com.zeon.zeon
 ```
 
 The script automatically runs parser:

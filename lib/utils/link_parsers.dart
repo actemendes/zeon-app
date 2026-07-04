@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:hiddify/utils/validators.dart';
+import 'package:zeon/utils/validators.dart';
 
 typedef ProfileLink = ({String url, String name});
 
@@ -23,7 +23,7 @@ abstract class LinkParser {
       query: uri.query,
       fragment: name ?? uri.fragment,
     );
-    // return 'hiddify://import/$modifiedUri';
+    // return 'zeon://import/$modifiedUri';
     return '$modifiedUri';
   }
 
@@ -53,7 +53,7 @@ abstract class LinkParser {
   }
 
   // protocols schemas
-  static const protocols = ['zeon', 'hiddify', 'v2ray', 'v2rayn', 'v2rayng', 'clash', 'clashmeta', 'sing-box'];
+  static const protocols = ['zeon', 'zeon', 'v2ray', 'v2rayn', 'v2rayng', 'clash', 'clashmeta', 'sing-box'];
 
   static ProfileLink? parse(String link) {
     return simple(link) ?? deep(link);
@@ -70,7 +70,7 @@ abstract class LinkParser {
     if (uri == null || !uri.hasScheme || !uri.hasAuthority) return null;
     final queryParams = uri.queryParameters;
     switch (uri.scheme) {
-      case 'zeon' || 'hiddify':
+      case 'zeon' || 'zeon':
         if (queryParams.containsKey('url')) {
           return (url: queryParams['url']!, name: queryParams['name'] ?? '');
         } else {

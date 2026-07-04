@@ -1,7 +1,7 @@
-# Android deep links для `com.zeon.hiddify`
+# Android deep links для `com.zeon.zeon`
 
 Документ фиксирует текущее поведение Android-приложения ZEON с package id
-`com.zeon.hiddify`.
+`com.zeon.zeon`.
 
 Важно различать:
 
@@ -18,7 +18,7 @@
 | Схема | Android открывает приложение |
 | --- | --- |
 | `zeon://` | да |
-| `hiddify://` | да |
+| `zeon://` | да |
 | `v2ray://` | да |
 | `v2rayn://` | да |
 | `v2rayng://` | да |
@@ -64,7 +64,7 @@ zeon://payment-result?sid=pay_123456
 Для обратной совместимости принимается legacy-вариант:
 
 ```text
-hiddify://payment-result?sid=<payment_session_id>
+zeon://payment-result?sid=<payment_session_id>
 ```
 
 Парсер также технически допускает `payment-result` первым сегментом пути,
@@ -84,7 +84,7 @@ hiddify://payment-result?sid=<payment_session_id>
 | Схема | Рекомендуемый payload |
 | --- | --- |
 | `zeon://` | query-параметр `url` |
-| `hiddify://` | query-параметр `url` |
+| `zeon://` | query-параметр `url` |
 | `v2ray://` | query-параметр `url` |
 | `v2rayn://` | query-параметр `url` |
 | `v2rayng://` | query-параметр `url` |
@@ -96,16 +96,16 @@ hiddify://payment-result?sid=<payment_session_id>
 
 ```text
 zeon://import?url=https%3A%2F%2Fexample.com%2Fsubscription
-hiddify://import?url=https%3A%2F%2Fexample.com%2Fsubscription&name=Office
+zeon://import?url=https%3A%2F%2Fexample.com%2Fsubscription&name=Office
 clash://install-config?url=https%3A%2F%2Fexample.com%2Fsubscription
 sing-box://import-remote-profile?url=https%3A%2F%2Fexample.com%2Fsubscription
 ```
 
-Для `zeon://` и `hiddify://` есть дополнительный legacy-формат, в котором URL
+Для `zeon://` и `zeon://` есть дополнительный legacy-формат, в котором URL
 лежит в path:
 
 ```text
-hiddify://import/https://example.com/subscription#Office
+zeon://import/https://example.com/subscription#Office
 ```
 
 Для новых интеграций следует использовать query-параметр `url` с
@@ -155,7 +155,7 @@ https://zeon-vps.link/open/649669380
 ```powershell
 adb shell am start -a android.intent.action.VIEW `
   -d "zeon://payment-result?sid=test-session" `
-  com.zeon.hiddify
+  com.zeon.zeon
 ```
 
 Проверка того, что Android передает зарегистрированную legacy-схему приложению:
@@ -163,7 +163,7 @@ adb shell am start -a android.intent.action.VIEW `
 ```powershell
 adb shell am start -a android.intent.action.VIEW `
   -d "clash://install-config?url=https%3A%2F%2Fexample.com%2Fsubscription" `
-  com.zeon.hiddify
+  com.zeon.zeon
 ```
 
 Вторая команда проверяет доставку URI в приложение, но не автоматический импорт

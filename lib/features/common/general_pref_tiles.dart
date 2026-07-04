@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/localization/locale_extensions.dart';
-import 'package:hiddify/core/localization/locale_preferences.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
-import 'package:hiddify/core/theme/app_theme_mode.dart';
-import 'package:hiddify/core/theme/theme_preferences.dart';
+import 'package:zeon/core/localization/locale_extensions.dart';
+import 'package:zeon/core/localization/locale_preferences.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/router/dialog/dialog_notifier.dart';
+import 'package:zeon/core/theme/app_theme_mode.dart';
+import 'package:zeon/core/theme/theme_preferences.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class LocalePrefTile extends ConsumerWidget {

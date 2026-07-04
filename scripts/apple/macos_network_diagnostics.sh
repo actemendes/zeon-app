@@ -8,8 +8,8 @@ cd "${PROJECT_ROOT}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 OUT_ROOT="${OUT_ROOT:-${PROJECT_ROOT}/out/diagnostics}"
 OUT_DIR="${OUT_DIR:-${OUT_ROOT}/macos_network_${TIMESTAMP}}"
-APP_PATH="${APP_PATH:-${PROJECT_ROOT}/build/macos/Build/Products/Debug/Hiddify.app}"
-EXTENSION_PATH="${EXTENSION_PATH:-${APP_PATH}/Contents/PlugIns/HiddifyPacketTunnel.appex}"
+APP_PATH="${APP_PATH:-${PROJECT_ROOT}/build/macos/Build/Products/Debug/ZEON.app}"
+EXTENSION_PATH="${EXTENSION_PATH:-${APP_PATH}/Contents/PlugIns/ZeonPacketTunnel.appex}"
 APP_GROUP_ID="${APP_GROUP_ID:-}"
 TEST_URL="${TEST_URL:-https://example.com}"
 PROXY_HOST="${PROXY_HOST:-127.0.0.1}"
@@ -27,7 +27,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/apple/macos_network_diagnostics.sh [options]
 
-One-command macOS VPN/proxy diagnostics for Zeon/Hiddify.
+One-command macOS VPN/proxy diagnostics for Zeon.
 
 Options:
   --no-core-build     Do not build hiddify-core/bin/HiddifyCore.xcframework if missing.
@@ -159,8 +159,8 @@ stop_zeon_processes() {
   {
     echo "# stop_zeon_processes"
     date
-    pkill -f 'HiddifyPacketTunnel\.appex/Contents/MacOS/HiddifyPacketTunnel' 2>/dev/null || true
-    pkill -x Hiddify 2>/dev/null || true
+    pkill -f 'ZeonPacketTunnel\.appex/Contents/MacOS/ZeonPacketTunnel' 2>/dev/null || true
+    pkill -x ZEON 2>/dev/null || true
     sleep 2
     ps aux | filter_lines '[H]iddify|[P]acketTunnel' || true
   } >"${OUT_DIR}/logs/stop_zeon_processes.log" 2>&1
@@ -192,11 +192,11 @@ cleanup_stale_registered_apps() {
         stale_count=$((stale_count + 1))
         echo "Removing stale registered app: ${app}"
         "${LSREGISTER}" -u "${app}" 2>/dev/null || true
-        if [[ -d "${app}/Contents/PlugIns/HiddifyPacketTunnel.appex" ]]; then
-          pluginkit -r "${app}/Contents/PlugIns/HiddifyPacketTunnel.appex" 2>/dev/null || true
+        if [[ -d "${app}/Contents/PlugIns/ZeonPacketTunnel.appex" ]]; then
+          pluginkit -r "${app}/Contents/PlugIns/ZeonPacketTunnel.appex" 2>/dev/null || true
         fi
         rm -rf "${app}"
-      done < <(find "${HOME}/Library/Developer/Xcode/DerivedData" -path '*/Build/Products/*/Hiddify.app' -type d -print 2>/dev/null)
+      done < <(find "${HOME}/Library/Developer/Xcode/DerivedData" -path '*/Build/Products/*/ZEON.app' -type d -print 2>/dev/null)
     fi
     echo "stale_removed=${stale_count}"
   } >"${OUT_DIR}/logs/cleanup_stale_registered_apps.log" 2>&1
@@ -215,7 +215,7 @@ register_current_app_bundle() {
       pluginkit -a "${EXTENSION_PATH}" 2>&1 || true
     fi
     echo "REGISTERED_PLUGINS"
-    pluginkit -m -A -D -vvv -i app.zeon.macos.HiddifyPacketTunnel 2>&1 || true
+    pluginkit -m -A -D -vvv -i app.zeon.macos.ZeonPacketTunnel 2>&1 || true
   } >"${OUT_DIR}/logs/register_current_app_bundle.log" 2>&1
 }
 
@@ -332,7 +332,7 @@ capture_snapshot() {
     plutil -p /Library/Preferences/com.apple.networkextension.plist 2>/dev/null | sed -n '1,220p' || true
     echo
     echo "## listeners"
-    lsof -nP -iTCP -sTCP:LISTEN | filter_lines "Hiddify|hiddify|sing|core|:${PROXY_PORT}|:12334|:12336|:12337|:789|:2080|:1080|:8080|:9090|:9091"
+    lsof -nP -iTCP -sTCP:LISTEN | filter_lines "ZEON|hiddify-core|sing|core|:${PROXY_PORT}|:12334|:12336|:12337|:789|:2080|:1080|:8080|:9090|:9091"
     echo
     echo "## proxy settings"
     if [[ -n "${service:-}" ]]; then
@@ -353,7 +353,7 @@ capture_snapshot() {
 copy_runtime_logs() {
   local stage="$1"
   local dest="${OUT_DIR}/runtime-${stage}"
-  local support="${HOME}/Library/Application Support/app.hiddify.com"
+  local support="${HOME}/Library/Application Support/app.zeon.macos"
   local group="${HOME}/Library/Group Containers/${APP_GROUP_ID}"
   mkdir -p "${dest}"
   [[ -f "${support}/app.log" ]] && cp "${support}/app.log" "${dest}/app.log"
@@ -377,7 +377,7 @@ copy_runtime_logs() {
 
 write_summary() {
   local happ_status="not detected"
-  local hiddify_status="not detected"
+  local zeon_status="not detected"
   local proxy_status="not listening"
   local appex_status="missing"
   local ne_config_status="unknown"
@@ -390,8 +390,8 @@ write_summary() {
   fi
   local commands
   commands="$(ps ax -o command= 2>/dev/null || true)"
-  if [[ "${commands}" == *"Hiddify.app/Contents/MacOS/Hiddify"* || "${commands}" == *"/Hiddify" ]]; then
-    hiddify_status="running"
+  if [[ "${commands}" == *"ZEON.app/Contents/MacOS/ZEON"* || "${commands}" == *"/ZEON" ]]; then
+    zeon_status="running"
   fi
   if lsof -nP -iTCP:"${PROXY_PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
     proxy_status="listening"
@@ -399,7 +399,7 @@ write_summary() {
   if [[ -d "${EXTENSION_PATH}" ]]; then
     appex_status="present"
   fi
-  if scutil --nc list 2>/dev/null | grep -Eqi 'Hiddify|Zeon|app\.hiddify|PacketTunnel'; then
+  if scutil --nc list 2>/dev/null | grep -Eqi 'Zeon|app\.zeon|PacketTunnel'; then
     ne_config_status="detected"
   else
     ne_config_status="not detected"
@@ -408,7 +408,7 @@ write_summary() {
   runtime_provider_path="$(
     ps ax -o command= 2>/dev/null |
       awk '
-        match($0, /\/.*HiddifyPacketTunnel\.appex\/Contents\/MacOS\/HiddifyPacketTunnel/) {
+        match($0, /\/.*ZeonPacketTunnel\.appex\/Contents\/MacOS\/ZeonPacketTunnel/) {
           print substr($0, RSTART, RLENGTH)
           exit
         }
@@ -417,7 +417,7 @@ write_summary() {
   if [[ -z "${runtime_provider_path}" && -f "${OUT_DIR}/snapshots/after_connect.txt" ]]; then
     runtime_provider_path="$(
       awk '
-        match($0, /\/.*HiddifyPacketTunnel\.appex\/Contents\/MacOS\/HiddifyPacketTunnel/) {
+        match($0, /\/.*ZeonPacketTunnel\.appex\/Contents\/MacOS\/ZeonPacketTunnel/) {
           print substr($0, RSTART, RLENGTH)
           exit
         }
@@ -425,7 +425,7 @@ write_summary() {
     )"
   fi
   if [[ -n "${runtime_provider_path}" ]]; then
-    if [[ "${runtime_provider_path}" == "${EXTENSION_PATH}/Contents/MacOS/HiddifyPacketTunnel" ]]; then
+    if [[ "${runtime_provider_path}" == "${EXTENSION_PATH}/Contents/MacOS/ZeonPacketTunnel" ]]; then
       runtime_provider_status="fresh (${runtime_provider_path})"
     else
       runtime_provider_status="stale-or-different (${runtime_provider_path})"
@@ -440,7 +440,7 @@ write_summary() {
 - Output directory: \`${OUT_DIR}\`
 - Active network service: \`${service:-unknown}\`
 - Happ/other VPN marker: \`${happ_status}\`
-- Hiddify app process: \`${hiddify_status}\`
+- ZEON app process: \`${zeon_status}\`
 - Packet Tunnel appex: \`${appex_status}\`
 - Packet Tunnel runtime path: \`${runtime_provider_status}\`
 - Network Configuration entry: \`${ne_config_status}\`
@@ -478,7 +478,7 @@ stop_zeon_processes
 cleanup_stale_registered_apps
 
 run_shell environment 'sw_vers; echo XCODE; xcodebuild -version; echo XCODE_SELECT; xcode-select -p; echo FLUTTER; flutter --version; echo DART; dart --version; echo POD; pod --version; echo DEVICES; flutter devices'
-run_shell project_inventory 'xcodebuild -list -project macos/Runner.xcodeproj; echo BUILD_SETTINGS; xcodebuild -showBuildSettings -project macos/Runner.xcodeproj -scheme Runner | grep -E "PRODUCT_BUNDLE_IDENTIFIER|DEVELOPMENT_TEAM|CODE_SIGN_ENTITLEMENTS|BASE_BUNDLE_IDENTIFIER|SERVICE_IDENTIFIER" || true; echo DEBUG_ENTITLEMENTS; plutil -p macos/Runner/DebugProfile.entitlements; echo RELEASE_ENTITLEMENTS; plutil -p macos/Runner/Release.entitlements; echo PACKET_TUNNEL_ENTITLEMENTS; plutil -p macos/HiddifyPacketTunnel/HiddifyPacketTunnel.entitlements 2>/dev/null || true; echo PACKET_TUNNEL_INFO; plutil -p macos/HiddifyPacketTunnel/Info.plist 2>/dev/null || true; echo MACOS_NE_REFS; if command -v rg >/dev/null 2>&1; then rg -n "NetworkExtension|SystemExtension|PacketTunnel|Provider|com.apple.developer.networking.networkextension|com.apple.security.application-groups|HiddifyPacketTunnel" macos ios/Base.xcconfig macos/Runner.xcodeproj/project.pbxproj || true; else grep -REn "NetworkExtension|SystemExtension|PacketTunnel|Provider|com.apple.developer.networking.networkextension|com.apple.security.application-groups|HiddifyPacketTunnel" macos ios/Base.xcconfig macos/Runner.xcodeproj/project.pbxproj || true; fi'
+run_shell project_inventory 'xcodebuild -list -project macos/Runner.xcodeproj; echo BUILD_SETTINGS; xcodebuild -showBuildSettings -project macos/Runner.xcodeproj -scheme Runner | grep -E "PRODUCT_BUNDLE_IDENTIFIER|DEVELOPMENT_TEAM|CODE_SIGN_ENTITLEMENTS|BASE_BUNDLE_IDENTIFIER|SERVICE_IDENTIFIER" || true; echo DEBUG_ENTITLEMENTS; plutil -p macos/Runner/DebugProfile.entitlements; echo RELEASE_ENTITLEMENTS; plutil -p macos/Runner/Release.entitlements; echo PACKET_TUNNEL_ENTITLEMENTS; plutil -p macos/ZeonPacketTunnel/ZeonPacketTunnel.entitlements 2>/dev/null || true; echo PACKET_TUNNEL_INFO; plutil -p macos/ZeonPacketTunnel/Info.plist 2>/dev/null || true; echo MACOS_NE_REFS; if command -v rg >/dev/null 2>&1; then rg -n "NetworkExtension|SystemExtension|PacketTunnel|Provider|com.apple.developer.networking.networkextension|com.apple.security.application-groups|ZeonPacketTunnel" macos ios/Base.xcconfig macos/Runner.xcodeproj/project.pbxproj || true; else grep -REn "NetworkExtension|SystemExtension|PacketTunnel|Provider|com.apple.developer.networking.networkextension|com.apple.security.application-groups|ZeonPacketTunnel" macos ios/Base.xcconfig macos/Runner.xcodeproj/project.pbxproj || true; fi'
 
   if [[ "${BUILD_CORE}" -eq 1 && ! -d "${PROJECT_ROOT}/hiddify-core/bin/HiddifyCore.xcframework" ]]; then
   run_shell build_hiddify_core_xcframework 'cd hiddify-core && go run ./cmd/internal/build_libcore -target ios'
@@ -494,7 +494,7 @@ fi
 register_current_app_bundle
 
 if [[ -d "${APP_PATH}" ]]; then
-  run_shell app_bundle_layout "find '${APP_PATH}' -maxdepth 6 \\( -name '*.appex' -o -name 'HiddifyCore*' -o -name 'hiddify-core*' \\) -print; echo APP_INFO; plutil -p '${APP_PATH}/Contents/Info.plist' | grep -E 'CFBundleIdentifier|BASE_BUNDLE_IDENTIFIER|SERVICE_IDENTIFIER' || true; echo EXTENSION_INFO; plutil -p '${EXTENSION_PATH}/Contents/Info.plist' 2>/dev/null | grep -E 'CFBundleIdentifier|NSExtension|BASE_BUNDLE_IDENTIFIER|Principal' || true; echo EXTENSION_CODE_MARKERS; strings '${EXTENSION_PATH}/Contents/MacOS/HiddifyPacketTunnel.debug.dylib' 2>/dev/null | grep -E 'packet-tunnel-config|prepared config|default_interface|auto_detect_interface|PrimaryInterface|platform interfaces|no physical default' || true"
+  run_shell app_bundle_layout "find '${APP_PATH}' -maxdepth 6 \\( -name '*.appex' -o -name 'HiddifyCore*' -o -name 'hiddify-core*' \\) -print; echo APP_INFO; plutil -p '${APP_PATH}/Contents/Info.plist' | grep -E 'CFBundleIdentifier|BASE_BUNDLE_IDENTIFIER|SERVICE_IDENTIFIER' || true; echo EXTENSION_INFO; plutil -p '${EXTENSION_PATH}/Contents/Info.plist' 2>/dev/null | grep -E 'CFBundleIdentifier|NSExtension|BASE_BUNDLE_IDENTIFIER|Principal' || true; echo EXTENSION_CODE_MARKERS; strings '${EXTENSION_PATH}/Contents/MacOS/ZeonPacketTunnel.debug.dylib' 2>/dev/null | grep -E 'packet-tunnel-config|prepared config|default_interface|auto_detect_interface|PrimaryInterface|platform interfaces|no physical default' || true"
   run_shell host_entitlements "codesign -d --entitlements :- '${APP_PATH}' 2>/dev/null || true; echo VERIFY; codesign --verify --deep --strict --verbose=2 '${APP_PATH}' || true"
   if [[ -d "${EXTENSION_PATH}" ]]; then
     run_shell packet_tunnel_entitlements "codesign -d --entitlements :- '${EXTENSION_PATH}' 2>/dev/null || true; echo VERIFY_EXTENSION; codesign --verify --strict --verbose=2 '${EXTENSION_PATH}' || true"
@@ -525,8 +525,8 @@ capture_snapshot after_launch
 copy_runtime_logs after_launch
 
 if [[ "${OPEN_APP}" -eq 1 && "${APP_LAUNCHED}" -ne 1 ]]; then
-  run_shell crash_reports "find '${HOME}/Library/Logs/DiagnosticReports' -maxdepth 1 -type f \\( -name 'Hiddify*.crash' -o -name 'Hiddify*.ips' -o -name 'HiddifyPacketTunnel*.crash' -o -name 'HiddifyPacketTunnel*.ips' \\) -print0 2>/dev/null | xargs -0 ls -lt 2>/dev/null | head -20; latest=\$(find '${HOME}/Library/Logs/DiagnosticReports' -maxdepth 1 -type f \\( -name 'Hiddify*.crash' -o -name 'Hiddify*.ips' \\) -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1); if [[ -n \"\${latest:-}\" ]]; then echo LATEST_CRASH=\"\${latest}\"; sed -n '1,220p' \"\${latest}\"; fi"
-  run_shell launch_failure_console "/usr/bin/log show --last 10m --style compact --predicate 'process CONTAINS[c] \"Hiddify\" OR eventMessage CONTAINS[c] \"Hiddify\" OR eventMessage CONTAINS[c] \"Code Signature\" OR eventMessage CONTAINS[c] \"restricted entitlements\" OR eventMessage CONTAINS[c] \"Taskgated\" OR eventMessage CONTAINS[c] \"No profiles\" OR eventMessage CONTAINS[c] \"No Accounts\"' | tail -500"
+  run_shell crash_reports "find '${HOME}/Library/Logs/DiagnosticReports' -maxdepth 1 -type f \\( -name 'ZEON*.crash' -o -name 'ZEON*.ips' -o -name 'ZeonPacketTunnel*.crash' -o -name 'ZeonPacketTunnel*.ips' \\) -print0 2>/dev/null | xargs -0 ls -lt 2>/dev/null | head -20; latest=\$(find '${HOME}/Library/Logs/DiagnosticReports' -maxdepth 1 -type f \\( -name 'ZEON*.crash' -o -name 'ZEON*.ips' \\) -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1); if [[ -n \"\${latest:-}\" ]]; then echo LATEST_CRASH=\"\${latest}\"; sed -n '1,220p' \"\${latest}\"; fi"
+  run_shell launch_failure_console "/usr/bin/log show --last 10m --style compact --predicate 'process CONTAINS[c] \"ZEON\" OR eventMessage CONTAINS[c] \"ZEON\" OR eventMessage CONTAINS[c] \"Code Signature\" OR eventMessage CONTAINS[c] \"restricted entitlements\" OR eventMessage CONTAINS[c] \"Taskgated\" OR eventMessage CONTAINS[c] \"No profiles\" OR eventMessage CONTAINS[c] \"No Accounts\"' | tail -500"
   write_summary
   echo
   echo "App did not launch; diagnostics stopped before manual Connect."
@@ -555,8 +555,8 @@ else
   copy_runtime_logs after_disconnect
 fi
 
-run_shell console_recent '/usr/bin/log show --last 30m --style compact --predicate '\''process CONTAINS[c] "Hiddify" OR process CONTAINS[c] "hiddify" OR process CONTAINS[c] "PacketTunnel" OR eventMessage CONTAINS[c] "Hiddify" OR eventMessage CONTAINS[c] "hiddify-core" OR eventMessage CONTAINS[c] "sing-box" OR eventMessage CONTAINS[c] "NetworkExtension" OR eventMessage CONTAINS[c] "PacketTunnel" OR eventMessage CONTAINS[c] "NETunnelProvider" OR eventMessage CONTAINS[c] "NEPacketTunnel"'\'' | tail -900'
-run_shell packet_tunnel_recent '/usr/bin/log show --last 30m --style compact --predicate '\''process CONTAINS[c] "HiddifyPacketTunnel" OR eventMessage CONTAINS[c] "HiddifyPacketTunnel" OR eventMessage CONTAINS[c] "PacketTunnelProvider" OR eventMessage CONTAINS[c] "network_extension_error" OR eventMessage CONTAINS[c] "NEPacketTunnel" OR eventMessage CONTAINS[c] "NETunnelProvider"'\'' | tail -900'
+run_shell console_recent '/usr/bin/log show --last 30m --style compact --predicate '\''process CONTAINS[c] "ZEON" OR process CONTAINS[c] "hiddify" OR process CONTAINS[c] "PacketTunnel" OR eventMessage CONTAINS[c] "ZEON" OR eventMessage CONTAINS[c] "hiddify-core" OR eventMessage CONTAINS[c] "sing-box" OR eventMessage CONTAINS[c] "NetworkExtension" OR eventMessage CONTAINS[c] "PacketTunnel" OR eventMessage CONTAINS[c] "NETunnelProvider" OR eventMessage CONTAINS[c] "NEPacketTunnel"'\'' | tail -900'
+run_shell packet_tunnel_recent '/usr/bin/log show --last 30m --style compact --predicate '\''process CONTAINS[c] "ZeonPacketTunnel" OR eventMessage CONTAINS[c] "ZeonPacketTunnel" OR eventMessage CONTAINS[c] "PacketTunnelProvider" OR eventMessage CONTAINS[c] "network_extension_error" OR eventMessage CONTAINS[c] "NEPacketTunnel" OR eventMessage CONTAINS[c] "NETunnelProvider"'\'' | tail -900'
 run_shell app_group_inventory "echo APP_GROUP=${APP_GROUP_ID}; find '${HOME}/Library/Group Containers/${APP_GROUP_ID}' -maxdepth 8 -print 2>/dev/null | sed -n '1,300p' || true; echo ERROR_LOGS; find '${HOME}/Library/Group Containers/${APP_GROUP_ID}' -maxdepth 8 -name 'network_extension_error.log' -print -exec tail -200 {} \\; 2>/dev/null || true"
 
 write_summary

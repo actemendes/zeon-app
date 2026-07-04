@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/optional_range.dart';
-import 'package:hiddify/core/ui/ui_names.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/features/settings/notifier/warp_option/warp_option_notifier.dart';
-import 'package:hiddify/features/settings/widget/preference_tile.dart';
-import 'package:hiddify/singbox/model/singbox_config_enum.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/model/optional_range.dart';
+import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/features/settings/notifier/warp_option/warp_option_notifier.dart';
+import 'package:zeon/features/settings/widget/preference_tile.dart';
+import 'package:zeon/singbox/model/singbox_config_enum.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class WarpOptionsPage extends HookConsumerWidget {

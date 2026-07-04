@@ -5,19 +5,19 @@ import 'dart:io';
 import 'package:dartx/dartx_io.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/region.dart';
-import 'package:hiddify/core/notification/in_app_notification_controller.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
-import 'package:hiddify/features/per_app_proxy/data/auto_selection_repository.dart';
-import 'package:hiddify/features/per_app_proxy/data/auto_selection_repository_provider.dart';
-import 'package:hiddify/features/per_app_proxy/data/selected_data_provider.dart';
-import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_backup.dart';
-import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
-import 'package:hiddify/features/per_app_proxy/model/pkg_flag.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/model/region.dart';
+import 'package:zeon/core/notification/in_app_notification_controller.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/router/dialog/dialog_notifier.dart';
+import 'package:zeon/features/per_app_proxy/data/auto_selection_repository.dart';
+import 'package:zeon/features/per_app_proxy/data/auto_selection_repository_provider.dart';
+import 'package:zeon/features/per_app_proxy/data/selected_data_provider.dart';
+import 'package:zeon/features/per_app_proxy/model/per_app_proxy_backup.dart';
+import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
+import 'package:zeon/features/per_app_proxy/model/pkg_flag.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:installed_apps/index.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -201,7 +201,7 @@ class PerAppProxy extends _$PerAppProxy with AppLogger {
         '  ',
       ).convert({'addedPkgs': userSelected.toList(), 'removedPkgs': forceDeselected.toList()});
       body = '```\n$body\n```';
-      UriUtils.tryLaunch(Uri.parse('https://github.com/hiddify/Android-GFW-Apps/issues/new?title=$title&body=$body'));
+      UriUtils.tryLaunch(Uri.parse('https://github.com/zeon/Android-GFW-Apps/issues/new?title=$title&body=$body'));
       return true;
     } else {
       ref

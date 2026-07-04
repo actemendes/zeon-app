@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hiddify/features/notifications/service/notification_action_handler.dart';
+import 'package:zeon/features/notifications/service/notification_action_handler.dart';
 
 void main() {
   group('NotificationActionHandler', () {

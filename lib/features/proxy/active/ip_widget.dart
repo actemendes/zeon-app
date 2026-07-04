@@ -1,12 +1,12 @@
 import 'package:circle_flags/circle_flags.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/haptic/haptic_service.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/ui/ui_names.dart';
-import 'package:hiddify/core/utils/ip_utils.dart';
-import 'package:hiddify/gen/fonts.gen.dart';
-import 'package:hiddify/utils/riverpod_utils.dart';
+import 'package:zeon/core/haptic/haptic_service.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/core/utils/ip_utils.dart';
+import 'package:zeon/gen/fonts.gen.dart';
+import 'package:zeon/utils/riverpod_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 final _showIp = StateProvider.autoDispose((ref) {

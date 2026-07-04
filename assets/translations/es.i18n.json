@@ -1,4 +1,4 @@
-﻿{
+{
   "common": {
     "appTitle": "ZEON",
     "start": "Comenzar",
@@ -94,7 +94,7 @@
     "ctaSubtitle": "y premium de regalo",
     "alreadyHaveAccount": "Ya tengo una cuenta",
     "termsAndPolicyCaution(rich)": "Al continuar, aceptas los ${tap(@:pages.about.termsAndConditions)}",
-    "info(rich)": "Hecho con ❤️ por ZEON - ${tap_source(Código Abierto)} (${tap_license(Licencia)})"
+    "info": "Hecho con ❤️ por ZEON"
   },
   "pages": {
     "home": {
@@ -220,7 +220,6 @@
       "notAvailableMsg": "Ya estás usando la última versión",
       "checkForUpdate": "Buscar actualizaciones",
       "openWorkingDir": "Abrir directorio de trabajo",
-      "sourceCode": "Código fuente",
       "telegramChannel": "Canal de Telegram",
       "termsAndConditions": "Términos y condiciones",
       "privacyPolicy": "Política de privacidad"
@@ -607,7 +606,7 @@
       "msg": "Para empezar, añade un perfil de conexión que incluya los detalles de tu conexión VPN.\n\n¿Aún no tienes un servidor VPN? No te preocupes, sigue el tutorial a continuación para configurar uno rápidamente y de forma gratuita.",
       "helpBtn": {
         "label": "Muéstrame cómo",
-        "url": "https://hiddify.com/manager/"
+        "url": "https://zeonvpn.com/manager/"
       }
     },
     "unknownDomainsWarning": {
@@ -686,4 +685,3 @@
     }
   }
 }
-

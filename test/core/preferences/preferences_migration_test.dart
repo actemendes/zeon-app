@@ -1,5 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:hiddify/core/preferences/preferences_migration.dart";
+import "package:zeon/core/preferences/preferences_migration.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
 void main() {

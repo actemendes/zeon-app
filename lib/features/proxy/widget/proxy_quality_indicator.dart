@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 /// A compact, presentation-only health indicator for an outbound.
 ///

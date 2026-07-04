@@ -1,4 +1,4 @@
-﻿{
+{
   "common": {
     "appTitle": "ZEON",
     "start": "Mulai",
@@ -94,7 +94,7 @@
     "ctaSubtitle": "dan premium sebagai hadiah",
     "alreadyHaveAccount": "Saya sudah punya akun",
     "termsAndPolicyCaution(rich)": "Dengan melanjutkan, Anda menyetujui ${tap(@:pages.about.termsAndConditions)}",
-    "info(rich)": "Dibuat dengan ❤️ oleh ZEON - ${tap_source(Sumber Terbuka)} (${tap_license(Lisensi)})"
+    "info": "Dibuat dengan ❤️ oleh ZEON"
   },
   "pages": {
     "home": {
@@ -220,7 +220,6 @@
       "notAvailableMsg": "Anda sudah menggunakan versi terbaru",
       "checkForUpdate": "Periksa pembaruan",
       "openWorkingDir": "Buka direktori kerja",
-      "sourceCode": "Kode sumber",
       "telegramChannel": "Saluran Telegram",
       "termsAndConditions": "Syarat dan Ketentuan",
       "privacyPolicy": "Kebijakan Privasi"
@@ -607,7 +606,7 @@
       "msg": "Mari kita mulai dengan menambahkan profil koneksi yang berisi detail koneksi VPN Anda.\n\nBelum punya server VPN? Jangan khawatir, ikuti tutorial di bawah ini untuk mengaturnya dengan cepat dan gratis.",
       "helpBtn": {
         "label": "Tunjukkan caranya",
-        "url": "https://hiddify.com/manager/"
+        "url": "https://zeonvpn.com/manager/"
       }
     },
     "unknownDomainsWarning": {
@@ -686,4 +685,3 @@
     }
   }
 }
-

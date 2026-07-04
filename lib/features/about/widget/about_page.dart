@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
-import 'package:hiddify/core/app_info/app_info_provider.dart';
-import 'package:hiddify/core/directories/directories_provider.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/constants.dart';
-import 'package:hiddify/core/ui/ui_names.dart';
-import 'package:hiddify/core/widget/adaptive_icon.dart';
-import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/app_info/app_info_provider.dart';
+import 'package:zeon/core/directories/directories_provider.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/model/constants.dart';
+import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/core/widget/adaptive_icon.dart';
+import 'package:zeon/utils/utils.dart';
 
 class AboutPage extends HookConsumerWidget {
   const AboutPage({super.key});
@@ -83,27 +83,6 @@ class AboutPage extends HookConsumerWidget {
             delegate: SliverChildListDelegate([
               ...conditionalTiles,
               if (conditionalTiles.isNotEmpty) const Divider(),
-              ListTile(
-                title: Text('${t.pages.about.sourceCode} ZEON'),
-                trailing: const Icon(FluentIcons.open_24_regular),
-                onTap: () async {
-                  await UriUtils.tryLaunch(Uri.parse(Constants.githubUrl));
-                },
-              ),
-              ListTile(
-                title: Text('${t.pages.about.sourceCode} Hiddify'),
-                trailing: const Icon(FluentIcons.open_24_regular),
-                onTap: () async {
-                  await UriUtils.tryLaunch(Uri.parse(Constants.hiddifySourceCodeUrl));
-                },
-              ),
-              ListTile(
-                title: const Text('Open Source Licenses'),
-                trailing: const Icon(FluentIcons.open_24_regular),
-                onTap: () async {
-                  await UriUtils.tryLaunch(Uri.parse(Constants.openSourceLicensesUrl));
-                },
-              ),
               ListTile(
                 title: Text(t.pages.about.termsAndConditions),
                 trailing: const Icon(FluentIcons.open_24_regular),

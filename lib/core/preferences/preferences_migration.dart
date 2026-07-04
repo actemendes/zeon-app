@@ -1,4 +1,4 @@
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PreferencesMigration with InfraLogger {
@@ -214,43 +214,43 @@ class PreferencesVersion6Migration extends PreferencesMigrationStep with InfraLo
 
     final tunImplementation = sharedPreferences.getString("tun-implementation");
     if (tunImplementation != "gvisor") {
-      loggy.debug("hiddify baseline migration: changing tun-implementation from [$tunImplementation] to [gvisor]");
+      loggy.debug("zeon baseline migration: changing tun-implementation from [$tunImplementation] to [gvisor]");
       await sharedPreferences.setString("tun-implementation", "gvisor");
     }
 
     final mtu = sharedPreferences.getInt("mtu");
     if (mtu == null || mtu != 1500) {
-      loggy.debug("hiddify baseline migration: changing mtu from [$mtu] to [1500]");
+      loggy.debug("zeon baseline migration: changing mtu from [$mtu] to [1500]");
       await sharedPreferences.setInt("mtu", 1500);
     }
 
     final strictRoute = sharedPreferences.getBool("strict-route");
     if (strictRoute == null || strictRoute == false) {
-      loggy.debug("hiddify baseline migration: changing strict-route from [$strictRoute] to [true]");
+      loggy.debug("zeon baseline migration: changing strict-route from [$strictRoute] to [true]");
       await sharedPreferences.setBool("strict-route", true);
     }
 
     final bypassLan = sharedPreferences.getBool("bypass-lan");
     if (bypassLan == null || bypassLan == true) {
-      loggy.debug("hiddify baseline migration: changing bypass-lan from [$bypassLan] to [false]");
+      loggy.debug("zeon baseline migration: changing bypass-lan from [$bypassLan] to [false]");
       await sharedPreferences.setBool("bypass-lan", false);
     }
 
     final remoteDns = sharedPreferences.getString("remote-dns-address");
     if (remoteDns == null || remoteDns == "udp://1.1.1.1") {
-      loggy.debug("hiddify baseline migration: changing remote-dns-address from [$remoteDns] to [tcp://8.8.8.8]");
+      loggy.debug("zeon baseline migration: changing remote-dns-address from [$remoteDns] to [tcp://8.8.8.8]");
       await sharedPreferences.setString("remote-dns-address", "tcp://8.8.8.8");
     }
 
     final balancerStrategy = sharedPreferences.getString("balancer-strategy");
     if (balancerStrategy == null || balancerStrategy == "sticky-sessions") {
-      loggy.debug("hiddify baseline migration: changing balancer-strategy from [$balancerStrategy] to [round-robin]");
+      loggy.debug("zeon baseline migration: changing balancer-strategy from [$balancerStrategy] to [round-robin]");
       await sharedPreferences.setString("balancer-strategy", "round-robin");
     }
 
     final fragmentPackets = sharedPreferences.getString("fragment-packets");
     if (fragmentPackets == null || fragmentPackets == "tlshello") {
-      loggy.debug("hiddify baseline migration: changing fragment-packets from [$fragmentPackets] to [1-5]");
+      loggy.debug("zeon baseline migration: changing fragment-packets from [$fragmentPackets] to [1-5]");
       await sharedPreferences.setString("fragment-packets", "1-5");
     }
   }

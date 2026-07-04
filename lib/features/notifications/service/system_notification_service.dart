@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:hiddify/core/notification/in_app_notification_controller.dart';
-import 'package:hiddify/features/notifications/model/notification_category.dart';
-import 'package:hiddify/features/notifications/model/notification_entity.dart';
-import 'package:hiddify/features/notifications/model/notification_priority.dart';
-import 'package:hiddify/utils/platform_utils.dart';
-import 'package:hiddify/utils/windows_privilege_utils.dart';
+import 'package:zeon/core/notification/in_app_notification_controller.dart';
+import 'package:zeon/features/notifications/model/notification_category.dart';
+import 'package:zeon/features/notifications/model/notification_entity.dart';
+import 'package:zeon/features/notifications/model/notification_priority.dart';
+import 'package:zeon/utils/platform_utils.dart';
+import 'package:zeon/utils/windows_privilege_utils.dart';
 
 typedef NotificationTapCallback = Future<void> Function(NotificationActionPayload payload);
 

@@ -225,7 +225,7 @@ Monitoring ограничивает один URL-тест тайм-аутом **
 
 ## Важные границы анализа
 
-- Документ описывает текущий штатный путь сборки Hiddify/sing-box конфига.
+- Документ описывает текущий штатный путь сборки ZEON/sing-box конфига.
 - В репозитории также встречается Xray `burstObservatory.pingConfig.interval`.
   Это отдельный механизм импортированного Xray-конфига; настройка Flutter
   `url-test-interval` не является его прямым регулятором.
@@ -240,7 +240,7 @@ Monitoring ограничивает один URL-тест тайм-аутом **
 - Сериализация в секундах: `lib/core/utils/json_converters.dart`
 - Переподключение после изменения: `lib/features/settings/notifier/config_option/config_option_notifier.dart`
 - Сборка `experimental.monitoring`: `hiddify-core/v2/config/builder.go`
-- Реализация monitoring: `hiddify-core/hiddify-sing-box/common/monitoring/outbound_monitoring.go`
-- HTTP `HEAD`-тест: `hiddify-core/hiddify-sing-box/common/urltest/urltest.go`
-- Реакция балансировщика: `hiddify-core/hiddify-sing-box/protocol/group/balancer/balancer.go`
+- Реализация monitoring: `hiddify-core/zeon-sing-box/common/monitoring/outbound_monitoring.go`
+- HTTP `HEAD`-тест: `hiddify-core/zeon-sing-box/common/urltest/urltest.go`
+- Реакция балансировщика: `hiddify-core/zeon-sing-box/protocol/group/balancer/balancer.go`
 - Передача результатов в UI: `hiddify-core/v2/hcore/proxy_info.go`

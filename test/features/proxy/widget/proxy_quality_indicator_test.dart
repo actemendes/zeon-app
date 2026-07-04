@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hiddify/features/proxy/widget/proxy_quality_indicator.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 void main() {
   test('formats every explicit URLTest status unambiguously', () {

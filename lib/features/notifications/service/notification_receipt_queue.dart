@@ -1,6 +1,6 @@
-import 'package:hiddify/features/notifications/data/notification_api_data_source.dart';
-import 'package:hiddify/features/notifications/data/notification_local_data_source.dart';
-import 'package:hiddify/features/notifications/model/notification_receipt.dart';
+import 'package:zeon/features/notifications/data/notification_api_data_source.dart';
+import 'package:zeon/features/notifications/data/notification_local_data_source.dart';
+import 'package:zeon/features/notifications/model/notification_receipt.dart';
 
 class NotificationReceiptQueue {
   NotificationReceiptQueue({

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:hiddify/core/directories/directories_provider.dart';
+import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class RuleSetDiagnosticsEntry {

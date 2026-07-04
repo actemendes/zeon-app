@@ -1,6 +1,6 @@
 # ZEON App
 
-ZEON App e um cliente de proxy multiplataforma desenvolvido e mantido pela equipe ZEON. Nos cuidamos do produto, dos lancamentos, das integracoes, do suporte e da experiencia do usuario, usando o Hiddify como uma das bases tecnicas do projeto ZEON.
+ZEON App e um cliente de proxy multiplataforma desenvolvido e mantido pela equipe ZEON. Nos cuidamos do produto, dos lancamentos, das integracoes, do suporte e da experiencia do usuario, usando o ZEON como uma das bases tecnicas do projeto ZEON.
 
 O app foi criado para facilitar o gerenciamento de perfis, assinaturas e protocolos em plataformas desktop e mobile.
 
@@ -51,9 +51,9 @@ Os arquivos de traducao ficam em `assets/translations`.
 
 ## Agradecimentos
 
-ZEON App foi criado usando o Hiddify como base, e agradecemos aos contribuidores do Hiddify pelo trabalho realizado. Tambem agradecemos ao ecossistema open-source usado pelo projeto:
+ZEON App foi criado usando o ZEON como base, e agradecemos aos contribuidores do ZEON pelo trabalho realizado. Tambem agradecemos ao ecossistema open-source usado pelo projeto:
 
-- [Hiddify](https://github.com/hiddify/hiddify-app)
+- [ZEON](https://github.com/zeon/zeon-app)
 - [Sing-box](https://github.com/SagerNet/sing-box)
 - [Sing-box for Android](https://github.com/SagerNet/sing-box-for-android)
 - [Sing-box for Apple](https://github.com/SagerNet/sing-box-for-apple)

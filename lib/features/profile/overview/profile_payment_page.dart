@@ -2,16 +2,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hiddify/core/http_client/http_client_provider.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/preferences/preferences_provider.dart';
-import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
-import 'package:hiddify/core/ui/ui_names.dart';
-import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
-import 'package:hiddify/features/mobile/data/mobile_payment_service.dart';
-import 'package:hiddify/features/pricing/data/pricing_data_providers.dart';
-import 'package:hiddify/features/pricing/model/pricing_models.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/http_client/http_client_provider.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
+import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/mobile/data/mobile_payment_service.dart';
+import 'package:zeon/features/pricing/data/pricing_data_providers.dart';
+import 'package:zeon/features/pricing/model/pricing_models.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ProfilePaymentPage extends HookConsumerWidget {

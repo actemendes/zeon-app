@@ -2,20 +2,19 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:hiddify/core/haptic/haptic_service.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/core/utils/throttler.dart';
-import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
-import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
-import 'package:hiddify/features/proxy/model/ip_info_entity.dart' as oldipinfo;
-import 'package:hiddify/features/proxy/model/proxy_display_name.dart';
-import 'package:hiddify/features/proxy/model/proxy_failure.dart';
-import 'package:hiddify/features/stats/data/stats_data_providers.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
-import 'package:hiddify/hiddifycore/init_signal.dart';
-import 'package:hiddify/utils/riverpod_utils.dart';
-import 'package:hiddify/utils/utils.dart';
-import 'package:protobuf/protobuf.dart';
+import 'package:zeon/core/haptic/haptic_service.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/utils/throttler.dart';
+import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/features/proxy/data/proxy_data_providers.dart';
+import 'package:zeon/features/proxy/model/ip_info_entity.dart' as oldipinfo;
+import 'package:zeon/features/proxy/model/proxy_display_name.dart';
+import 'package:zeon/features/proxy/model/proxy_failure.dart';
+import 'package:zeon/features/stats/data/stats_data_providers.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/zeoncore/init_signal.dart';
+import 'package:zeon/utils/riverpod_utils.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -50,7 +49,7 @@ class IpInfoNotifier extends _$IpInfoNotifier with AppLogger {
     _forceCheck = false;
     final info = await ref.watch(proxyRepositoryProvider).getCurrentIpInfo(cancelToken).getOrElse((err) {
       loggy.warning("error getting proxy ip info", err, StackTrace.current);
-      // throw err; //hiddify: remove exception to be logged
+      // throw err; //zeon: remove exception to be logged
       throw const UnknownIp();
     }).run();
 
@@ -224,7 +223,7 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
 
   OutboundInfo _asAutoBalancer(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {
     final realOutbound = _realOutbound(activeProxy, selector, stats);
-    final info = (realOutbound ?? activeProxy).deepCopy()
+    final info = (realOutbound ?? activeProxy).clone()
       ..tag = _autoBalancerTag
       ..type = "balancer"
       ..tagDisplay = _autoBalancerTag

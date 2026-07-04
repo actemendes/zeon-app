@@ -92,8 +92,8 @@ def flutterVersionCode = pubspecAppVersion.code.toString()
 def flutterVersionName = pubspecAppVersion.name
 
 android {
-    namespace 'com.hiddify.hiddify'
-    testNamespace "test.com.hiddify.hiddify"
+    namespace 'com.zeon.zeon'
+    testNamespace "test.com.zeon.zeon"
     compileSdkVersion 36
     ndkVersion "28.2.13676358"
 
@@ -188,8 +188,8 @@ dependencies {
     implementation 'io.grpc:grpc-okhttp:1.64.0'
     implementation 'io.grpc:grpc-protobuf-lite:1.64.0'
     implementation 'io.grpc:grpc-stub:1.64.0'
-//    protoPath(project(':hiddify_api'))
-//    implementation project(':hiddify_api')
+//    protoPath(project(':zeon_api'))
+//    implementation project(':zeon_api')
 
 
 

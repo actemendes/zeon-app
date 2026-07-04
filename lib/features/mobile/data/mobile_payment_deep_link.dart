@@ -1,5 +1,5 @@
 const mobilePaymentResultDeepLinkScheme = 'zeon';
-const legacyMobilePaymentResultDeepLinkScheme = 'hiddify';
+const legacyMobilePaymentResultDeepLinkScheme = 'zeon';
 const mobilePaymentResultDeepLinkHost = 'payment-result';
 const mobilePaymentResultDeepLinkBase = '$mobilePaymentResultDeepLinkScheme://$mobilePaymentResultDeepLinkHost';
 

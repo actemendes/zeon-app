@@ -16,21 +16,21 @@ project.build_configurations.each do |config|
   config.build_settings['CODE_SIGN_IDENTITY'] = 'Apple Development'
 end
 
-target = project.targets.find { |candidate| candidate.name == 'HiddifyPacketTunnel' }
-target ||= project.new_target(:app_extension, 'HiddifyPacketTunnel', :osx, '10.15')
+target = project.targets.find { |candidate| candidate.name == 'ZeonPacketTunnel' }
+target ||= project.new_target(:app_extension, 'ZeonPacketTunnel', :osx, '10.15')
 
 target.build_configurations.each do |config|
   config.base_configuration_reference = app_info
   settings = config.build_settings
   settings['ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES'] = 'YES'
   settings['CLANG_ENABLE_MODULES'] = 'YES'
-  settings['CODE_SIGN_ENTITLEMENTS'] = 'HiddifyPacketTunnel/HiddifyPacketTunnel.entitlements'
+  settings['CODE_SIGN_ENTITLEMENTS'] = 'ZeonPacketTunnel/ZeonPacketTunnel.entitlements'
   settings['CODE_SIGN_STYLE'] = 'Automatic'
   settings['DEVELOPMENT_TEAM'] = '$(MACOS_DEVELOPMENT_TEAM)'
-  settings['INFOPLIST_FILE'] = 'HiddifyPacketTunnel/Info.plist'
+  settings['INFOPLIST_FILE'] = 'ZeonPacketTunnel/Info.plist'
   settings['LD_RUNPATH_SEARCH_PATHS'] = ['$(inherited)', '@executable_path/../Frameworks', '@executable_path/../../../../Frameworks']
   settings['MACOSX_DEPLOYMENT_TARGET'] = '10.15'
-  settings['PRODUCT_BUNDLE_IDENTIFIER'] = '$(MACOS_BUNDLE_IDENTIFIER).HiddifyPacketTunnel'
+  settings['PRODUCT_BUNDLE_IDENTIFIER'] = '$(MACOS_BUNDLE_IDENTIFIER).ZeonPacketTunnel'
   settings['PRODUCT_NAME'] = '$(TARGET_NAME)'
   settings['SKIP_INSTALL'] = 'YES'
   settings['SWIFT_VERSION'] = '5.0'
@@ -66,8 +66,8 @@ runner_handlers_group = ensure_group(project, 'Runner/Handlers')
 runner_vpn_group = ensure_group(project, 'Runner/VPN')
 runner_vpn_helpers_group = ensure_group(project, 'Runner/VPN/Helpers')
 runner_extensions_group = ensure_group(project, 'Runner/Extensions')
-packet_group = ensure_group(project, 'HiddifyPacketTunnel')
-packet_singbox_group = ensure_group(project, 'HiddifyPacketTunnel/SingBox')
+packet_group = ensure_group(project, 'ZeonPacketTunnel')
+packet_singbox_group = ensure_group(project, 'ZeonPacketTunnel/SingBox')
 frameworks_group = ensure_group(project, 'Frameworks')
 
 runner_sources = {
@@ -109,7 +109,7 @@ packet_sources.each do |group, files|
 end
 
 ensure_file(packet_group, 'Info.plist')
-ensure_file(packet_group, 'HiddifyPacketTunnel.entitlements')
+ensure_file(packet_group, 'ZeonPacketTunnel.entitlements')
 
 framework_ref =
   frameworks_group.files.find { |file| file.path == '../hiddify-core/bin/HiddifyCore.xcframework' } ||

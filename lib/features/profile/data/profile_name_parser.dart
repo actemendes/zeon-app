@@ -1,4 +1,4 @@
-import 'package:hiddify/utils/link_parsers.dart';
+import 'package:zeon/utils/link_parsers.dart';
 
 String parseProfileName(String? value) {
   final raw = _decodeIfBase64Like((value ?? '').trim());

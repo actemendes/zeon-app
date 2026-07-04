@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hiddify/features/connection/model/connection_failure.dart';
+import 'package:zeon/features/connection/model/connection_failure.dart';
 
 void main() {
   group('isTunInterfacePermissionDenied', () {

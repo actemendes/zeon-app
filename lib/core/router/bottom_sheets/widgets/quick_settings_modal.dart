@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/singbox/model/singbox_config_enum.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class QuickSettingsModal extends HookConsumerWidget {

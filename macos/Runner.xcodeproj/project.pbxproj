@@ -41,7 +41,7 @@
 		673D895E6299DAD1A9F11D50 /* StatusEventHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C0A83D7291FCD6FB5184D58 /* StatusEventHandler.swift */; };
 		72CD47B70A2993EA676BEF54 /* HiddifyCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 81741A9F33E10A267F36E47C /* HiddifyCore.xcframework */; };
 		A31B5AEAB9BEBDB86AA3AB69 /* ExtensionPlatformInterface.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB4A8EC08ABD9DAEB8BCB3A3 /* ExtensionPlatformInterface.swift */; };
-		AC6C955BEA7E4F5329559833 /* HiddifyPacketTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E5A9ECD487F73C5CC51896D9 /* HiddifyPacketTunnel.appex */; };
+		AC6C955BEA7E4F5329559833 /* ZeonPacketTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E5A9ECD487F73C5CC51896D9 /* ZeonPacketTunnel.appex */; };
 		B5FDA09A07BA0BDEBD9655A9 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D25ECBFC0D25523A256E552 /* PacketTunnelProvider.swift */; };
 		BB64CF55F9CADDD48E89AD14 /* VPNConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 160B61B8F9E3467A1DB12618 /* VPNConfig.swift */; };
 		C0EF6BFE8BBE3CB287EFF916 /* FilePath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A7C51D3DD7086F391DA8597 /* FilePath.swift */; };
@@ -72,7 +72,7 @@
 			containerPortal = 33CC10E52044A3C60003C045 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = ED911678317C5F95097D7474;
-			remoteInfo = HiddifyPacketTunnel;
+			remoteInfo = ZeonPacketTunnel;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -94,7 +94,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				AC6C955BEA7E4F5329559833 /* HiddifyPacketTunnel.appex in Embed App Extensions */,
+				AC6C955BEA7E4F5329559833 /* ZeonPacketTunnel.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -112,7 +112,7 @@
 		331C80D7294CF71000263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		333000ED22D3DE5D00554162 /* Warnings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Warnings.xcconfig; sourceTree = "<group>"; };
 		335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GeneratedPluginRegistrant.swift; sourceTree = "<group>"; };
-		33CC10ED2044A3C60003C045 /* Hiddify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hiddify.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		33CC10ED2044A3C60003C045 /* ZEON.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZEON.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		33CC10F02044A3C60003C045 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		33CC10F22044A3C60003C045 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Runner/Assets.xcassets; sourceTree = "<group>"; };
 		33CC10F52044A3C60003C045 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
@@ -141,11 +141,11 @@
 		9C0A83D7291FCD6FB5184D58 /* StatusEventHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StatusEventHandler.swift; sourceTree = "<group>"; };
 		B9B770A9676F2DF34E1E3353 /* PlatformMethodHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlatformMethodHandler.swift; sourceTree = "<group>"; };
 		C41B6A4AB8127C3E4C4D115B /* Stored.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Stored.swift; sourceTree = "<group>"; };
-		D1B9161DF852047733B96403 /* HiddifyPacketTunnel.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = HiddifyPacketTunnel.entitlements; sourceTree = "<group>"; };
+		D1B9161DF852047733B96403 /* ZeonPacketTunnel.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ZeonPacketTunnel.entitlements; sourceTree = "<group>"; };
 		D96FD811DCD14FAF8EC1F071 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
 		DB9486FBC002A85E242199C0 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DBFB795F5E72237D66B9D391 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
-		E5A9ECD487F73C5CC51896D9 /* HiddifyPacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HiddifyPacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E5A9ECD487F73C5CC51896D9 /* ZeonPacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ZeonPacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB4A8EC08ABD9DAEB8BCB3A3 /* ExtensionPlatformInterface.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExtensionPlatformInterface.swift; sourceTree = "<group>"; };
 		F2681A3BF7C8A42FA3FFCD87 /* MethodHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MethodHandler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -224,16 +224,16 @@
 				D73912EC22F37F3D000D13A0 /* Frameworks */,
 				0B357514C188DFB6739B421A /* Pods */,
 				CABA522F9E883C0F6E27B6A4 /* Shared */,
-				929BEB636F4F46922E52D3AA /* HiddifyPacketTunnel */,
+				929BEB636F4F46922E52D3AA /* ZeonPacketTunnel */,
 			);
 			sourceTree = "<group>";
 		};
 		33CC10EE2044A3C60003C045 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				33CC10ED2044A3C60003C045 /* Hiddify.app */,
+				33CC10ED2044A3C60003C045 /* ZEON.app */,
 				331C80D5294CF71000263BE5 /* RunnerTests.xctest */,
-				E5A9ECD487F73C5CC51896D9 /* HiddifyPacketTunnel.appex */,
+				E5A9ECD487F73C5CC51896D9 /* ZeonPacketTunnel.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -304,16 +304,16 @@
 			path = Extensions;
 			sourceTree = "<group>";
 		};
-		929BEB636F4F46922E52D3AA /* HiddifyPacketTunnel */ = {
+		929BEB636F4F46922E52D3AA /* ZeonPacketTunnel */ = {
 			isa = PBXGroup;
 			children = (
 				DCAA2BC955133952C1A7F21E /* SingBox */,
 				6D25ECBFC0D25523A256E552 /* PacketTunnelProvider.swift */,
 				784F8FF88289CBEC60B5B37C /* Info.plist */,
-				D1B9161DF852047733B96403 /* HiddifyPacketTunnel.entitlements */,
+				D1B9161DF852047733B96403 /* ZeonPacketTunnel.entitlements */,
 			);
-			name = HiddifyPacketTunnel;
-			path = HiddifyPacketTunnel;
+			name = ZeonPacketTunnel;
+			path = ZeonPacketTunnel;
 			sourceTree = "<group>";
 		};
 		92E38AF2F974E5DB8D9508B7 /* Helpers */ = {
@@ -416,12 +416,12 @@
 				414949DB2CCE3D370069D5BA /* LaunchAtLogin */,
 			);
 			productName = Runner;
-			productReference = 33CC10ED2044A3C60003C045 /* Hiddify.app */;
+			productReference = 33CC10ED2044A3C60003C045 /* ZEON.app */;
 			productType = "com.apple.product-type.application";
 		};
-		ED911678317C5F95097D7474 /* HiddifyPacketTunnel */ = {
+		ED911678317C5F95097D7474 /* ZeonPacketTunnel */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 0FBD9A4DA3545CEF49E7DBCF /* Build configuration list for PBXNativeTarget "HiddifyPacketTunnel" */;
+			buildConfigurationList = 0FBD9A4DA3545CEF49E7DBCF /* Build configuration list for PBXNativeTarget "ZeonPacketTunnel" */;
 			buildPhases = (
 				3833EB2C1F413F0AA5508BC1 /* Sources */,
 				069004CFB3D753F70893BEBE /* Frameworks */,
@@ -431,9 +431,9 @@
 			);
 			dependencies = (
 			);
-			name = HiddifyPacketTunnel;
-			productName = HiddifyPacketTunnel;
-			productReference = E5A9ECD487F73C5CC51896D9 /* HiddifyPacketTunnel.appex */;
+			name = ZeonPacketTunnel;
+			productName = ZeonPacketTunnel;
+			productReference = E5A9ECD487F73C5CC51896D9 /* ZeonPacketTunnel.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -485,7 +485,7 @@
 				33CC10EC2044A3C60003C045 /* Runner */,
 				331C80D4294CF70F00263BE5 /* RunnerTests */,
 				33CC111A2044C6BA0003C045 /* Flutter Assemble */,
-				ED911678317C5F95097D7474 /* HiddifyPacketTunnel */,
+				ED911678317C5F95097D7474 /* ZeonPacketTunnel */,
 			);
 		};
 /* End PBXProject section */
@@ -692,8 +692,8 @@
 		};
 		BB1B65CBE20B9F33C9CAD880 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			name = HiddifyPacketTunnel;
-			target = ED911678317C5F95097D7474 /* HiddifyPacketTunnel */;
+			name = ZeonPacketTunnel;
+			target = ED911678317C5F95097D7474 /* ZeonPacketTunnel */;
 			targetProxy = 972585169CBA3F7B034B6572 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -718,17 +718,17 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_ENTITLEMENTS = HiddifyPacketTunnel/HiddifyPacketTunnel.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ZeonPacketTunnel/ZeonPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "$(MACOS_DEVELOPMENT_TEAM)";
-				INFOPLIST_FILE = HiddifyPacketTunnel/Info.plist;
+				INFOPLIST_FILE = ZeonPacketTunnel/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(MACOS_BUNDLE_IDENTIFIER).HiddifyPacketTunnel";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MACOS_BUNDLE_IDENTIFIER).ZeonPacketTunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -744,10 +744,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.hiddify.hiddify.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeon.zeon.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/hiddify.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/hiddify";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/zeon.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/zeon";
 			};
 			name = Debug;
 		};
@@ -759,10 +759,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.hiddify.hiddify.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeon.zeon.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/hiddify.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/hiddify";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/zeon.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/zeon";
 			};
 			name = Release;
 		};
@@ -774,10 +774,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.hiddify.hiddify.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.zeon.zeon.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/hiddify.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/hiddify";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/zeon.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/zeon";
 			};
 			name = Profile;
 		};
@@ -837,7 +837,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Hiddify;
+				INFOPLIST_KEY_CFBundleDisplayName = ZEON;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -965,7 +965,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Hiddify;
+				INFOPLIST_KEY_CFBundleDisplayName = ZEON;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -987,7 +987,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Hiddify;
+				INFOPLIST_KEY_CFBundleDisplayName = ZEON;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -1021,17 +1021,17 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_ENTITLEMENTS = HiddifyPacketTunnel/HiddifyPacketTunnel.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ZeonPacketTunnel/ZeonPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "$(MACOS_DEVELOPMENT_TEAM)";
-				INFOPLIST_FILE = HiddifyPacketTunnel/Info.plist;
+				INFOPLIST_FILE = ZeonPacketTunnel/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(MACOS_BUNDLE_IDENTIFIER).HiddifyPacketTunnel";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MACOS_BUNDLE_IDENTIFIER).ZeonPacketTunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -1046,17 +1046,17 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_ENTITLEMENTS = HiddifyPacketTunnel/HiddifyPacketTunnel.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ZeonPacketTunnel/ZeonPacketTunnel.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "$(MACOS_DEVELOPMENT_TEAM)";
-				INFOPLIST_FILE = HiddifyPacketTunnel/Info.plist;
+				INFOPLIST_FILE = ZeonPacketTunnel/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(MACOS_BUNDLE_IDENTIFIER).HiddifyPacketTunnel";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MACOS_BUNDLE_IDENTIFIER).ZeonPacketTunnel";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -1067,7 +1067,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		0FBD9A4DA3545CEF49E7DBCF /* Build configuration list for PBXNativeTarget "HiddifyPacketTunnel" */ = {
+		0FBD9A4DA3545CEF49E7DBCF /* Build configuration list for PBXNativeTarget "ZeonPacketTunnel" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5A113F1525ED54EA79B5D80B /* Release */,

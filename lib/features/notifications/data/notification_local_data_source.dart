@@ -1,9 +1,9 @@
 import 'package:drift/drift.dart';
-import 'package:hiddify/core/db/db.dart';
-import 'package:hiddify/features/notifications/model/notification_category.dart';
-import 'package:hiddify/features/notifications/model/notification_entity.dart';
-import 'package:hiddify/features/notifications/model/notification_priority.dart';
-import 'package:hiddify/features/notifications/model/notification_receipt.dart';
+import 'package:zeon/core/db/db.dart';
+import 'package:zeon/features/notifications/model/notification_category.dart';
+import 'package:zeon/features/notifications/model/notification_entity.dart';
+import 'package:zeon/features/notifications/model/notification_priority.dart';
+import 'package:zeon/features/notifications/model/notification_receipt.dart';
 
 abstract interface class NotificationLocalDataSource {
   Future<String?> getCursor();

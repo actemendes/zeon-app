@@ -1,6 +1,6 @@
-import 'package:hiddify/core/model/app_info_entity.dart';
-import 'package:hiddify/core/model/environment.dart';
-import 'package:hiddify/utils/platform_utils.dart';
+import 'package:zeon/core/model/app_info_entity.dart';
+import 'package:zeon/core/model/environment.dart';
+import 'package:zeon/utils/platform_utils.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 

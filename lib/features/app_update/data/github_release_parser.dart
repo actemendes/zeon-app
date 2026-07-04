@@ -1,7 +1,7 @@
 import 'package:dartx/dartx.dart';
 import 'package:flutter/foundation.dart';
-import 'package:hiddify/core/model/environment.dart';
-import 'package:hiddify/features/app_update/model/remote_version_entity.dart';
+import 'package:zeon/core/model/environment.dart';
+import 'package:zeon/features/app_update/model/remote_version_entity.dart';
 
 abstract class GithubReleaseParser {
   static const _androidExpectedAsset = "zeon-android-universal.apk";

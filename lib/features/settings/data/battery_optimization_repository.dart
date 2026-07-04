@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
-import 'package:hiddify/core/utils/exception_handler.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
+import 'package:zeon/core/utils/exception_handler.dart';
+import 'package:zeon/utils/custom_loggers.dart';
 import 'package:loggy/loggy.dart';
 
 abstract interface class BatteryOptimizationRepository {
@@ -9,7 +9,7 @@ abstract interface class BatteryOptimizationRepository {
 }
 
 class BatteryOptimizationRepositoryImpl with ExceptionHandler, InfraLogger implements BatteryOptimizationRepository {
-  final _methodChannel = const MethodChannel("com.hiddify.app/platform");
+  final _methodChannel = const MethodChannel("com.zeon.app/platform");
 
   @override
   Future<bool?> isIgnoringBatteryOptimizations() async {

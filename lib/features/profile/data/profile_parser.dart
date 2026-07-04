@@ -4,15 +4,15 @@ import 'dart:io';
 import 'package:dartx/dartx.dart';
 import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:hiddify/core/db/db.dart';
-import 'package:hiddify/core/http_client/dio_http_client.dart';
-import 'package:hiddify/features/profile/data/profile_data_mapper.dart';
-import 'package:hiddify/features/profile/data/profile_name_parser.dart';
-import 'package:hiddify/features/profile/model/profile_entity.dart';
-import 'package:hiddify/features/profile/model/profile_failure.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/singbox/model/singbox_proxy_type.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/db/db.dart';
+import 'package:zeon/core/http_client/dio_http_client.dart';
+import 'package:zeon/features/profile/data/profile_data_mapper.dart';
+import 'package:zeon/features/profile/data/profile_name_parser.dart';
+import 'package:zeon/features/profile/model/profile_entity.dart';
+import 'package:zeon/features/profile/model/profile_failure.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/singbox/model/singbox_proxy_type.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:meta/meta.dart';
 
@@ -212,7 +212,7 @@ class ProfileParser {
       tempFilePath,
       cancelToken: cancelToken,
       userAgent: _ref.read(ConfigOptions.useXrayCoreWhenPossible)
-          ? _httpClient.userAgent.replaceAll("HiddifyNext", "HiddifyNextX")
+          ? _httpClient.userAgent.replaceAll("ZEON", "ZEONX")
           : null,
       proxyOnly: proxyOnly,
       directOnly: directOnly,
@@ -834,7 +834,7 @@ class ProfileParser {
             tmpPath,
             cancelToken: cancelToken,
             userAgent: ref.read(ConfigOptions.useXrayCoreWhenPossible)
-                ? httpClient.userAgent.replaceAll('HiddifyNext', 'HiddifyNextX')
+                ? httpClient.userAgent.replaceAll('ZEON', 'ZEONX')
                 : null,
             proxyOnly: proxyOnly,
             directOnly: directOnly,

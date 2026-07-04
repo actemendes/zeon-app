@@ -4,7 +4,7 @@ public enum FilePath {
   public static let packageName = {
     Bundle.main.infoDictionary?["BASE_BUNDLE_IDENTIFIER"] as? String
       ?? Bundle.main.bundleIdentifier
-      ?? "app.hiddify.com"
+      ?? "app.zeon.macos"
   }()
 }
 

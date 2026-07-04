@@ -1,4 +1,4 @@
-﻿{
+{
   "common": {
     "appTitle": "ZEON",
     "start": "شروع",
@@ -94,7 +94,7 @@
     "ctaSubtitle": "و پریمیوم هدیه بگیرید",
     "alreadyHaveAccount": "من از قبل حساب دارم",
     "termsAndPolicyCaution(rich)": "با ادامه، شما با ${tap(@:pages.about.termsAndConditions)} موافقت می‌کنید",
-    "info(rich)": "ساخته شده با ❤️ توسط ZEON - ${tap_source(متن‌باز)} (${tap_license(مجوز)})"
+    "info": "ساخته شده با ❤️ توسط ZEON"
   },
   "pages": {
     "home": {
@@ -220,7 +220,6 @@
       "notAvailableMsg": "شما در حال استفاده از آخرین نسخه هستید",
       "checkForUpdate": "بررسی برای به‌روزرسانی",
       "openWorkingDir": "باز کردن پوشه کاری",
-      "sourceCode": "کد منبع",
       "telegramChannel": "کانال تلگرام",
       "termsAndConditions": "شرایط و ضوابط",
       "privacyPolicy": "سیاست حفظ حریم خصوصی"
@@ -607,7 +606,7 @@
       "msg": "بیایید با افزودن یک پروفایل اتصال که شامل جزئیات اتصال VPN شماست، شروع کنیم.\n\nهنوز سرور VPN ندارید؟ نگران نباشید، با دنبال کردن راهنمای زیر می‌توانید به سرعت و رایگان یکی برای خودتان بسازید.",
       "helpBtn": {
         "label": "راهنمایی کن",
-        "url": "https://hiddify.com/manager/"
+        "url": "https://zeonvpn.com/manager/"
       }
     },
     "unknownDomainsWarning": {
@@ -686,4 +685,3 @@
     }
   }
 }
-

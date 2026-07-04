@@ -1,17 +1,17 @@
 import 'dart:ui';
 
 import 'package:flutter/widgets.dart';
-import 'package:hiddify/core/db/db.dart';
-import 'package:hiddify/core/http_client/dio_http_client.dart';
-import 'package:hiddify/features/notifications/data/notification_api_data_source.dart';
-import 'package:hiddify/features/notifications/data/notification_device_auth.dart';
-import 'package:hiddify/features/notifications/data/notification_local_data_source.dart';
-import 'package:hiddify/features/notifications/data/notification_repository.dart';
-import 'package:hiddify/features/notifications/service/notification_action_handler.dart';
-import 'package:hiddify/features/notifications/service/notification_polling_service.dart';
-import 'package:hiddify/features/notifications/service/notification_receipt_queue.dart';
-import 'package:hiddify/features/notifications/service/system_notification_service.dart';
-import 'package:hiddify/utils/platform_utils.dart';
+import 'package:zeon/core/db/db.dart';
+import 'package:zeon/core/http_client/dio_http_client.dart';
+import 'package:zeon/features/notifications/data/notification_api_data_source.dart';
+import 'package:zeon/features/notifications/data/notification_device_auth.dart';
+import 'package:zeon/features/notifications/data/notification_local_data_source.dart';
+import 'package:zeon/features/notifications/data/notification_repository.dart';
+import 'package:zeon/features/notifications/service/notification_action_handler.dart';
+import 'package:zeon/features/notifications/service/notification_polling_service.dart';
+import 'package:zeon/features/notifications/service/notification_receipt_queue.dart';
+import 'package:zeon/features/notifications/service/system_notification_service.dart';
+import 'package:zeon/utils/platform_utils.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
@@ -42,7 +42,7 @@ Future<bool> runNotificationsBackgroundSync() async {
     final locale = PlatformDispatcher.instance.locale.toLanguageTag();
     final httpClient = DioHttpClient(
       timeout: const Duration(seconds: 8),
-      userAgent: 'HiddifyNext/${packageInfo.version} ($platform) like ClashMeta v2ray sing-box',
+      userAgent: 'ZEON/${packageInfo.version} ($platform) like ClashMeta v2ray sing-box',
       debug: false,
     );
     final local = NotificationDao(db);

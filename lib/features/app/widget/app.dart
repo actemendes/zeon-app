@@ -7,29 +7,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:hiddify/core/app_info/app_info_provider.dart';
-import 'package:hiddify/core/localization/locale_extensions.dart';
-import 'package:hiddify/core/localization/locale_preferences.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/model/constants.dart';
-import 'package:hiddify/core/model/environment.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
-import 'package:hiddify/core/router/go_router/go_router_notifier.dart';
-import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
-import 'package:hiddify/core/theme/app_theme.dart';
-import 'package:hiddify/core/theme/theme_preferences.dart';
-import 'package:hiddify/features/app_update/notifier/app_update_notifier.dart';
-import 'package:hiddify/features/connection/widget/connection_wrapper.dart';
-import 'package:hiddify/features/notifications/data/notification_data_providers.dart';
-import 'package:hiddify/features/per_app_proxy/overview/per_app_proxy_service_notifier.dart';
-import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
-import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
-import 'package:hiddify/features/shortcut/shortcut_wrapper.dart';
-import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
-import 'package:hiddify/features/window/widget/window_wrapper.dart';
-import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
-import 'package:hiddify/utils/utils.dart';
+import 'package:zeon/core/app_info/app_info_provider.dart';
+import 'package:zeon/core/localization/locale_extensions.dart';
+import 'package:zeon/core/localization/locale_preferences.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/model/constants.dart';
+import 'package:zeon/core/model/environment.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/router/dialog/dialog_notifier.dart';
+import 'package:zeon/core/router/go_router/go_router_notifier.dart';
+import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
+import 'package:zeon/core/theme/app_theme.dart';
+import 'package:zeon/core/theme/theme_preferences.dart';
+import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
+import 'package:zeon/features/connection/widget/connection_wrapper.dart';
+import 'package:zeon/features/notifications/data/notification_data_providers.dart';
+import 'package:zeon/features/per_app_proxy/overview/per_app_proxy_service_notifier.dart';
+import 'package:zeon/features/profile/notifier/profiles_update_notifier.dart';
+import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
+import 'package:zeon/features/shortcut/shortcut_wrapper.dart';
+import 'package:zeon/features/system_tray/notifier/system_tray_notifier.dart';
+import 'package:zeon/features/window/widget/window_wrapper.dart';
+import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:toastification/toastification.dart';
 import 'package:upgrader/upgrader.dart';
@@ -50,13 +50,13 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   void onPause(WidgetRef ref) {
     if (PlatformUtils.isDesktop) return;
     isOnPauseCalled = true;
-    ref.read(hiddifyCoreServiceProvider).closeFront();
+    ref.read(zeonCoreServiceProvider).closeFront();
   }
 
   void onResume(WidgetRef ref) {
     // if (PlatformUtils.isDesktop) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(hiddifyCoreServiceProvider).init();
+      ref.read(zeonCoreServiceProvider).init();
       ref.invalidate(activeProxyNotifierProvider);
       if (isOnPauseCalled && PlatformUtils.isAndroid) ref.invalidate(perAppProxyServiceProvider);
       isOnPauseCalled = false;

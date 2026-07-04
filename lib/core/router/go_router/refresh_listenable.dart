@@ -1,19 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/http_client/http_client_provider.dart';
-import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/notification/in_app_notification_controller.dart';
-import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/core/preferences/preferences_provider.dart';
-import 'package:hiddify/core/router/deep_linking/my_app_links.dart';
-import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
-import 'package:hiddify/features/mobile/data/mobile_payment_deep_link.dart';
-import 'package:hiddify/features/mobile/data/mobile_payment_service.dart';
-import 'package:hiddify/features/profile/model/profile_entity.dart';
-import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
+import 'package:zeon/core/http_client/http_client_provider.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/notification/in_app_notification_controller.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/core/router/deep_linking/my_app_links.dart';
+import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/mobile/data/mobile_payment_deep_link.dart';
+import 'package:zeon/features/mobile/data/mobile_payment_service.dart';
+import 'package:zeon/features/profile/model/profile_entity.dart';
+import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
+import 'package:zeon/features/profile/notifier/profile_notifier.dart';
+import 'package:zeon/utils/custom_loggers.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 // For temporary storage of the link received from AppLinks.

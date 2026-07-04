@@ -1,4 +1,4 @@
-import 'package:hiddify/gen/translations.g.dart';
+import 'package:zeon/gen/translations.g.dart';
 
 enum ActionsAtClosing {
   ask,

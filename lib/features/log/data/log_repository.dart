@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:hiddify/core/utils/exception_handler.dart';
-import 'package:hiddify/features/log/data/log_parser.dart';
-import 'package:hiddify/features/log/data/log_path_resolver.dart';
-import 'package:hiddify/features/log/model/log_entity.dart';
-import 'package:hiddify/features/log/model/log_failure.dart';
-import 'package:hiddify/hiddifycore/hiddify_core_service.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
+import 'package:zeon/core/utils/exception_handler.dart';
+import 'package:zeon/features/log/data/log_parser.dart';
+import 'package:zeon/features/log/data/log_path_resolver.dart';
+import 'package:zeon/features/log/model/log_entity.dart';
+import 'package:zeon/features/log/model/log_failure.dart';
+import 'package:zeon/zeoncore/zeon_core_service.dart';
+import 'package:zeon/utils/custom_loggers.dart';
 
 abstract interface class LogRepository {
   TaskEither<LogFailure, Unit> init();
@@ -17,7 +17,7 @@ abstract interface class LogRepository {
 class LogRepositoryImpl with ExceptionHandler, InfraLogger implements LogRepository {
   LogRepositoryImpl({required this.singbox, required this.logPathResolver});
 
-  final HiddifyCoreService singbox;
+  final ZeonCoreService singbox;
   final LogPathResolver logPathResolver;
 
   @override

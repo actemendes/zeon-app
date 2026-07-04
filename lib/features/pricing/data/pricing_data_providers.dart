@@ -1,9 +1,9 @@
-import 'package:hiddify/core/http_client/http_client_provider.dart';
-import 'package:hiddify/core/preferences/preferences_provider.dart';
-import 'package:hiddify/features/mobile/data/mobile_conn_link_import_service.dart';
-import 'package:hiddify/features/notifications/data/notification_data_providers.dart';
-import 'package:hiddify/features/notifications/data/notification_device_auth.dart';
-import 'package:hiddify/features/pricing/data/pricing_repository.dart';
+import 'package:zeon/core/http_client/http_client_provider.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/notifications/data/notification_data_providers.dart';
+import 'package:zeon/features/notifications/data/notification_device_auth.dart';
+import 'package:zeon/features/pricing/data/pricing_repository.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 final pricingRemoteDataSourceProvider = Provider<PricingRemoteDataSource>((ref) {

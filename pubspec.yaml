@@ -1,7 +1,7 @@
-name: hiddify
-description: Cross Platform Multi Protocol Proxy Frontend.
+name: zeon
+description: ZEON cross-platform VPN client.
 publish_to: "none"
-version: 1.2.1+10201
+version: 1.2.2+10202
 
 environment:
   sdk: ^3.10.4
@@ -35,6 +35,7 @@ dependencies:
   drift_flutter: ^0.2.1
   shared_preferences: ^2.5.2
   flutter_secure_storage: ^9.2.4
+  cryptography: ^2.7.0
   # shared_preferences_android: ^2.4.8
   dio: ^5.4.1
   ffi: ^2.1.2
@@ -254,9 +255,9 @@ flutter_native_splash:
     image_dark: assets/images/source/ic_launcher_splash_android12_dark.png
 
 ffigen:
-  name: "HiddifyCoreNativeLibrary"
-  description: "Bindings to Hiddify Core Library"
-  output: "lib/gen/hiddify_core_generated_bindings.dart"
+  name: "ZeonCoreNativeLibrary"
+  description: "Bindings to ZEON Core Library"
+  output: "lib/gen/zeon_core_generated_bindings.dart"
   headers:
     entry-points:
       - "hiddify-core/bin/desktop.h"

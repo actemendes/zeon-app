@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:hiddify/features/notifications/data/notification_repository.dart';
-import 'package:hiddify/features/notifications/service/notifications_background.dart';
-import 'package:hiddify/utils/custom_loggers.dart';
-import 'package:hiddify/utils/platform_utils.dart';
+import 'package:zeon/features/notifications/data/notification_repository.dart';
+import 'package:zeon/features/notifications/service/notifications_background.dart';
+import 'package:zeon/utils/custom_loggers.dart';
+import 'package:zeon/utils/platform_utils.dart';
 import 'package:workmanager/workmanager.dart';
 
 class NotificationPollingService with InfraLogger {
