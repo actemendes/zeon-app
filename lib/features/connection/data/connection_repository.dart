@@ -87,14 +87,10 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
         // TODO: Move core startup to in-memory config once the background service
         // no longer persists config_content or requires a readable config path.
         final tempFile = await profileConfigStore.createPlaintextTempFile(activeProfile.id);
-        try {
-          return (await singbox.start(tempFile.path, activeProfile.name, disableMemoryLimit).run()).match(
-            (failure) => throw failure,
-            (_) => unit,
-          );
-        } finally {
-          await profileConfigStore.deletePlaintextTempFile(activeProfile.id);
-        }
+        return (await singbox.start(tempFile.path, activeProfile.name, disableMemoryLimit).run()).match(
+          (failure) => throw failure,
+          (_) => unit,
+        );
       }, (err, st) => err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st)),
       // .mapLeft(UnexpectedConnectionFailure.new),
     ),
@@ -110,42 +106,38 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
           // TODO: Move core restart to in-memory config once the background service
           // no longer persists config_content or requires a readable config path.
           final tempFile = await profileConfigStore.createPlaintextTempFile(activeProfile.id);
-          try {
-            final path = tempFile.path;
-            Either<ConnectionFailure, Unit> result =
-                (await singbox.restart(path, activeProfile.name, disableMemoryLimit).run()).mapLeft(
-                  UnexpectedConnectionFailure.new,
-                );
-
-            for (var attempt = 1; attempt <= _tunRecoveryRestartAttempts && result.isLeft(); attempt++) {
-              final failure = result.getLeft().toNullable();
-              if (failure == null || !isTunInterfacePermissionDenied(failure)) {
-                break;
-              }
-
-              loggy.warning(
-                "TUN interface was not released during reconnect; "
-                "performing full connection restart "
-                "[$attempt/$_tunRecoveryRestartAttempts]",
+          final path = tempFile.path;
+          Either<ConnectionFailure, Unit> result =
+              (await singbox.restart(path, activeProfile.name, disableMemoryLimit).run()).mapLeft(
+                UnexpectedConnectionFailure.new,
               );
 
-              final stopResult = await singbox.stop(force: true).run();
-              stopResult.match(
-                (error) => loggy.warning(
-                  "core stop reported an error during TUN recovery; "
-                  "continuing because local cleanup has completed",
-                  error,
-                ),
-                (_) {},
-              );
-              await Future<void>.delayed(_tunReleaseDelay);
-              result = await singbox.start(path, activeProfile.name, disableMemoryLimit).run();
+          for (var attempt = 1; attempt <= _tunRecoveryRestartAttempts && result.isLeft(); attempt++) {
+            final failure = result.getLeft().toNullable();
+            if (failure == null || !isTunInterfacePermissionDenied(failure)) {
+              break;
             }
 
-            return result;
-          } finally {
-            await profileConfigStore.deletePlaintextTempFile(activeProfile.id);
+            loggy.warning(
+              "TUN interface was not released during reconnect; "
+              "performing full connection restart "
+              "[$attempt/$_tunRecoveryRestartAttempts]",
+            );
+
+            final stopResult = await singbox.stop(force: true).run();
+            stopResult.match(
+              (error) => loggy.warning(
+                "core stop reported an error during TUN recovery; "
+                "continuing because local cleanup has completed",
+                error,
+              ),
+              (_) {},
+            );
+            await Future<void>.delayed(_tunReleaseDelay);
+            result = await singbox.start(path, activeProfile.name, disableMemoryLimit).run();
           }
+
+          return result;
         }),
       );
 

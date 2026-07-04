@@ -162,8 +162,10 @@ public class MethodHandler: NSObject, FlutterPlugin {
 //                await mainResult(true)
 //            }
         case "stop":
-            VPNManager.shared.disconnect()
-            result(true)
+            Task {
+                await VPNManager.shared.disconnectAsync()
+                await mainResult(true)
+            }
         case "reset":
             VPNManager.shared.reset()
             result(true)

@@ -218,15 +218,21 @@ class VPNManager: ObservableObject {
     }
     
     func disconnect() {
+        Task {
+            await disconnectAsync()
+        }
+    }
+    
+    func disconnectAsync() async {
         if manager.isOnDemandEnabled {
             manager.isOnDemandEnabled = false
             manager.onDemandRules = []
             
-            manager.saveToPreferences { error in
-                if let error = error {
-                    print("save error:", error)
-                    return
-                }
+            do {
+                try await manager.saveToPreferences()
+                try await manager.loadFromPreferences()
+            } catch {
+                print("save error:", error.localizedDescription)
             }
         }
 

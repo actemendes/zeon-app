@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:protobuf/protobuf.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:zeon/core/haptic/haptic_service.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/utils/throttler.dart';
@@ -11,12 +14,10 @@ import 'package:zeon/features/proxy/model/ip_info_entity.dart' as oldipinfo;
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/features/proxy/model/proxy_failure.dart';
 import 'package:zeon/features/stats/data/stats_data_providers.dart';
-import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
-import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/utils/riverpod_utils.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:rxdart/rxdart.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/zeoncore/init_signal.dart';
 
 part 'active_proxy_notifier.g.dart';
 
@@ -223,7 +224,7 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
 
   OutboundInfo _asAutoBalancer(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {
     final realOutbound = _realOutbound(activeProxy, selector, stats);
-    final info = (realOutbound ?? activeProxy).clone()
+    final info = (realOutbound ?? activeProxy).deepCopy()
       ..tag = _autoBalancerTag
       ..type = "balancer"
       ..tagDisplay = _autoBalancerTag

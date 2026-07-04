@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:dartx/dartx.dart';
-
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:zeon/core/haptic/haptic_service.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
@@ -12,12 +13,10 @@ import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/features/proxy/model/proxy_failure.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:zeon/features/stats/data/stats_data_providers.dart';
-import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
-import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/utils/riverpod_utils.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:rxdart/rxdart.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/zeoncore/init_signal.dart';
 
 part 'proxies_overview_notifier.g.dart';
 
@@ -61,6 +60,8 @@ class ProxiesSortNotifier extends _$ProxiesSortNotifier with AppLogger {
 @riverpod
 class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
   String? _lastAutoDisplaySignature;
+  OutboundGroup? _lastGoodGroup;
+
   @override
   Stream<OutboundGroup?> build() async* {
     ref.disposeDelay(const Duration(seconds: 15));
@@ -96,16 +97,22 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
         .watch(proxyRepositoryProvider)
         .watchProxies()
         .map(
-          (event) => event.getOrElse((err) {
-            loggy.warning("error receiving proxies", err);
-            throw err;
-          }),
+          (event) => event.match((err) {
+            loggy.warning("error receiving proxies, keeping last good snapshot", err);
+            return _lastGoodGroup;
+          }, (group) => group),
         );
     yield* Rx.combineLatest2<OutboundGroup?, SystemInfo, ({OutboundGroup? proxies, SystemInfo stats})>(
       proxyStream,
       statsStream,
       (proxies, stats) => (proxies: proxies, stats: stats),
-    ).asyncMap((event) async => await _sortOutbounds(event.proxies, sortBy, event.stats));
+    ).asyncMap((event) async {
+      final group = await _sortOutbounds(event.proxies, sortBy, event.stats);
+      if (group != null) {
+        _lastGoodGroup = OutboundGroup()..mergeFromMessage(group);
+      }
+      return group;
+    });
   }
 
   // Future<List<OutboundGroup>> _sortOutbounds(

@@ -5,17 +5,16 @@ import 'dart:math';
 import 'package:basic_utils/basic_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:grpc/grpc.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:zeon/core/model/directories.dart';
 import 'package:zeon/core/utils/laststeam.dart';
+import 'package:zeon/singbox/model/core_status.dart';
+import 'package:zeon/utils/utils.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface.dart';
 import 'package:zeon/zeoncore/core_interface/mtls_channel_cred.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/generated/v2/hello/hello.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hello/hello_service.pbgrpc.dart';
-import 'package:zeon/singbox/model/core_status.dart';
-
-import 'package:zeon/utils/utils.dart';
-import 'package:rxdart/rxdart.dart';
 
 class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   static const channelPrefix = "com.zeon.app";
@@ -153,19 +152,19 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
   @override
   Future<bool> stop() async {
-    await stopMethodChannel();
-    if (!await waitUntilPort(
+    await stopMethodChannel().timeout(const Duration(seconds: 3), onTimeout: () {});
+    final stopped = await waitUntilPort(
       portBack,
       false,
-      null,
-      maxTry: 16,
+      stopMethodChannel,
       baseDelay: const Duration(milliseconds: 160),
-      maxDelay: const Duration(milliseconds: 1200),
-    )) {
+      maxDelay: const Duration(milliseconds: 900),
+    ).timeout(const Duration(seconds: 12), onTimeout: () => false);
+    _isBgClientAvailable = false;
+    if (!stopped) {
       return false;
     }
 
-    _isBgClientAvailable = false;
     return true;
   }
 

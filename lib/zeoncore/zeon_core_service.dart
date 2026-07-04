@@ -10,6 +10,7 @@ import 'package:grpc/grpc.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:loggy/loggy.dart' as loggyl;
 import 'package:path/path.dart' as p;
+import 'package:protobuf/protobuf.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
@@ -182,6 +183,20 @@ class ZeonCoreService with InfraLogger {
   List<OutboundGroup> _cloneGroups(List<OutboundGroup> groups) =>
       groups.map((group) => OutboundGroup()..mergeFromMessage(group)).toList();
 
+  void _rememberOutboundGroups(Iterable<OutboundGroup> groups, String source) {
+    final snapshot = _cloneGroups(groups.toList());
+    if (snapshot.isEmpty) return;
+    latest = snapshot;
+    loggy.debug("cached outbound snapshot from $source: groups=${snapshot.length}");
+  }
+
+  OutboundGroup? _firstOutboundGroupSnapshot() {
+    if (latest.isEmpty) return null;
+    return OutboundGroup()..mergeFromMessage(latest.first);
+  }
+
+  List<OutboundGroup> _outboundGroupsSnapshot() => _cloneGroups(latest);
+
   void _emitMockGroups({bool deferred = false}) {
     if (!_useMockCore) return;
     final payload = _cloneGroups(latest);
@@ -194,6 +209,12 @@ class ZeonCoreService with InfraLogger {
       return;
     }
     _mockGroupsController.add(payload);
+  }
+
+  void _clearRuntimeOutboundSnapshot(String reason) {
+    if (_useMockCore || latest.isEmpty) return;
+    loggy.debug("clearing outbound snapshot: $reason");
+    latest = [];
   }
 
   void _transitionLifecycle(_CoreLifecycleState next, {String reason = ""}) {
@@ -708,6 +729,7 @@ class ZeonCoreService with InfraLogger {
           return right(unit);
         }
 
+        _clearRuntimeOutboundSnapshot("start requested");
         _transitionLifecycle(_CoreLifecycleState.starting, reason: "start requested");
         statusController.add(currentState = const CoreStatus.starting());
         loggy.debug("starting");
@@ -815,7 +837,7 @@ class ZeonCoreService with InfraLogger {
 
         var errMsg = "";
         try {
-          await core.bgClient.stop(Empty());
+          await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
         } on GrpcError catch (e) {
           if (!_isTransientGrpcTransportClose(e)) {
             errMsg = e.message ?? "failed to stop core: $e";
@@ -824,13 +846,18 @@ class ZeonCoreService with InfraLogger {
         } catch (e) {
           loggy.error("failed to stop bg core: $e");
         }
+        var nativeStopped = true;
         try {
-          await core.stop();
+          nativeStopped = await core.stop().timeout(const Duration(seconds: 14), onTimeout: () => false);
         } finally {
           await _deleteCoreCurrentConfigSnapshot();
         }
+        if (!nativeStopped) {
+          loggy.warning("native core stop timed out; forcing local stopped state");
+        }
 
         _transitionLifecycle(_CoreLifecycleState.stopped, reason: "stop complete");
+        _clearRuntimeOutboundSnapshot("stop complete");
         statusController.add(currentState = const CoreStatus.stopped());
         if (errMsg.isNotEmpty) return left(errMsg);
         return right(unit);
@@ -884,6 +911,7 @@ class ZeonCoreService with InfraLogger {
         statusController.add(currentState = const CoreStatus.starting());
         _transitionLifecycle(_CoreLifecycleState.started, reason: "restart complete");
         statusController.add(currentState = const CoreStatus.started());
+        ref.read(coreRestartSignalProvider.notifier).restart();
         return right(unit);
       }),
     );
@@ -941,11 +969,47 @@ class ZeonCoreService with InfraLogger {
       loggy.debug("core is not initialized, returning empty group stream");
       return;
     }
-    try {
-      yield* core.bgClient.outboundsInfo(Empty()).map((event) => event.items.isEmpty ? null : event.items.first);
-    } catch (e) {
-      loggy.error("error watching group: $e");
-      rethrow;
+    final cached = _firstOutboundGroupSnapshot();
+    if (cached != null) {
+      loggy.debug("yielding cached group snapshot before live stream");
+      yield cached;
+    }
+
+    while (_lifecycleState != _CoreLifecycleState.stopped) {
+      try {
+        final snapshot = await core.bgClient
+            .outboundsInfo(Empty())
+            .map((event) {
+              _rememberOutboundGroups(event.items, "outboundsInfo initial");
+              return _firstOutboundGroupSnapshot();
+            })
+            .first
+            .timeout(const Duration(seconds: 2));
+        if (snapshot != null) yield snapshot;
+      } catch (e, st) {
+        loggy.debug("failed to read initial group snapshot", e, st);
+      }
+
+      try {
+        await for (final event in core.bgClient.outboundsInfo(Empty())) {
+          _rememberOutboundGroups(event.items, "outboundsInfo stream");
+          yield _firstOutboundGroupSnapshot();
+        }
+        if (_lifecycleState == _CoreLifecycleState.stopping || _lifecycleState == _CoreLifecycleState.stopped) {
+          return;
+        }
+        loggy.debug("group stream ended; retrying with cached snapshot");
+        await Future<void>.delayed(_listenerReconnectDelay("watchGroup"));
+      } catch (e, st) {
+        if (_lifecycleState == _CoreLifecycleState.stopping || _lifecycleState == _CoreLifecycleState.stopped) {
+          loggy.debug("group stream closed during ${_lifecycleState.name}", e, st);
+          return;
+        }
+        loggy.warning("group stream interrupted; retrying with cached snapshot", e, st);
+        final fallback = _firstOutboundGroupSnapshot();
+        if (fallback != null) yield fallback;
+        await Future<void>.delayed(_listenerReconnectDelay("watchGroup"));
+      }
     }
     // //emitting first event immediately
     // yield* core.bgClient.outboundsInfo(Empty()).take(1).map((event) => event.items.isEmpty ? null : event.items.first);
@@ -969,16 +1033,33 @@ class ZeonCoreService with InfraLogger {
       return;
     }
 
-    try {
-      yield* core.bgClient
-          .mainOutboundsInfo(Empty())
-          .map((event) {
-            return latest = event.items;
-          })
-          .startWith(latest);
-    } catch (e) {
-      loggy.error("error watching active groups: $e");
-      rethrow;
+    final cached = _outboundGroupsSnapshot();
+    if (cached.isNotEmpty) {
+      loggy.debug("yielding cached active groups before live stream");
+      yield cached;
+    }
+
+    while (_lifecycleState != _CoreLifecycleState.stopped) {
+      try {
+        await for (final event in core.bgClient.mainOutboundsInfo(Empty())) {
+          _rememberOutboundGroups(event.items, "mainOutboundsInfo stream");
+          yield _outboundGroupsSnapshot();
+        }
+        if (_lifecycleState == _CoreLifecycleState.stopping || _lifecycleState == _CoreLifecycleState.stopped) {
+          return;
+        }
+        loggy.debug("active group stream ended; retrying with cached snapshot");
+        await Future<void>.delayed(_listenerReconnectDelay("watchActiveGroups"));
+      } catch (e, st) {
+        if (_lifecycleState == _CoreLifecycleState.stopping || _lifecycleState == _CoreLifecycleState.stopped) {
+          loggy.debug("active group stream closed during ${_lifecycleState.name}", e, st);
+          return;
+        }
+        loggy.warning("active group stream interrupted; retrying with cached snapshot", e, st);
+        final fallback = _outboundGroupsSnapshot();
+        if (fallback.isNotEmpty) yield fallback;
+        await Future<void>.delayed(_listenerReconnectDelay("watchActiveGroups"));
+      }
     }
   }
 
@@ -1222,9 +1303,7 @@ class ZeonCoreService with InfraLogger {
       listenKey,
       () {
         return cc.logListener(LogRequest(level: coreLogLevel), options: grpcOptions).map((event) {
-          final safeEvent = event.copyWith((message) {
-            message.message = _redactCoreLogMessage(event.message);
-          });
+          final safeEvent = event.deepCopy()..message = _redactCoreLogMessage(event.message);
           // Handle incoming event
           logBuffer.add(safeEvent);
           if (logBuffer.length > 300) {

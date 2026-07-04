@@ -2,6 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:in_app_review/in_app_review.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:rxdart/rxdart.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:zeon/core/haptic/haptic_service.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/failures.dart';
@@ -15,13 +20,8 @@ import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
-import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:in_app_review/in_app_review.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:rxdart/rxdart.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:zeon/zeoncore/init_signal.dart';
 
 part 'connection_notifier.g.dart';
 
@@ -170,8 +170,14 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       }
       loggy.info("config options changed, restarting connection");
       await ref.read(Preferences.startedByUser.notifier).update(true);
-      await _disconnect();
-      await _connect();
+      await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit)).mapLeft((err) async {
+        loggy.warning("error restarting after config change", err);
+        state = AsyncError(err, StackTrace.current);
+        final t = ref.read(translationsProvider).requireValue;
+        await ref
+            .read(dialogNotifierProvider.notifier)
+            .showCustomAlertFromErrWithDiagnostic(err.present(t), diagnosticText: t.diagnosticError(err));
+      }).run();
     }
   }
 
@@ -336,7 +342,8 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       await _mockDisconnectFlow();
       return;
     }
-    await _connectionRepo.disconnect().mapLeft((err) {
+    state = const AsyncData(Disconnecting());
+    final result = await _connectionRepo.disconnect().mapLeft((err) {
       loggy.warning("error disconnecting", err);
       final t = ref.read(translationsProvider).requireValue;
       ref
@@ -344,6 +351,9 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
           .showCustomAlertFromErrWithDiagnostic(err.present(t), diagnosticText: t.diagnosticError(err));
       state = AsyncError(err, StackTrace.current);
     }).run();
+    if (result.isRight()) {
+      state = const AsyncData(Disconnected());
+    }
   }
 
   Future<void> _mockConnectFlow() async {
