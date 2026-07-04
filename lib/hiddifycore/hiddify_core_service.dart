@@ -408,7 +408,7 @@ class HiddifyCoreService with InfraLogger {
           try {
             await core.bgClient.changeHiddifySettings(request);
           } on GrpcError catch (e) {
-            if (e.code == StatusCode.unavailable) {
+            if (e.code == StatusCode.unavailable || _isTransientGrpcTransportClose(e)) {
               loggy.debug("background core is not started yet! $e");
             } else {
               rethrow;
@@ -416,12 +416,12 @@ class HiddifyCoreService with InfraLogger {
           }
           return right(unit);
         } on GrpcError catch (e, st) {
-          if (e.code != StatusCode.unavailable) {
+          if (e.code != StatusCode.unavailable && !_isTransientGrpcTransportClose(e)) {
             rethrow;
           }
-          loggy.warning("change options fg unavailable [$attempt/$maxAttempts]", e, st);
+          loggy.warning("change options grpc unavailable [$attempt/$maxAttempts]", e, st);
           if (attempt == maxAttempts) {
-            return left("fg core unavailable while applying options: $e");
+            return left("core unavailable while applying options: $e");
           }
           await setup().run();
           await Future<void>.delayed(const Duration(milliseconds: 200));
@@ -461,6 +461,36 @@ class HiddifyCoreService with InfraLogger {
     }
 
     return core.fgClient;
+  }
+
+  Future<bool> _ensureCoreInitializedForStream(String operation) async {
+    if (core.isInitialized()) return true;
+
+    final result = await setup().run();
+    return result.match((err) {
+      loggy.warning("$operation: setup before stream failed: $err");
+      return false;
+    }, (_) => core.isInitialized());
+  }
+
+  Future<bool> _isBackgroundCoreReachable() async {
+    if (!core.isInitialized()) return false;
+    if (core.isSingleChannel()) return true;
+    try {
+      return await core.isActiveBg();
+    } catch (e) {
+      loggy.debug("failed checking background core after transient grpc close", e);
+      return false;
+    }
+  }
+
+  bool _isTransientGrpcTransportClose(GrpcError error) {
+    final message = (error.message ?? error.toString()).toLowerCase();
+    return error.code == StatusCode.unknown &&
+        (message.contains("http/2") ||
+            message.contains("connection error") ||
+            message.contains("transport is closing") ||
+            message.contains("stream terminated"));
   }
 
   Future<Map<String, dynamic>> _buildCoreOptionsPayload(SingboxConfigOption options) async {
@@ -675,6 +705,12 @@ class HiddifyCoreService with InfraLogger {
         } on GrpcError catch (e) {
           loggy.error("failed to start bg core: $e");
           ref.read(coreRestartSignalProvider.notifier).restart();
+          if (_isTransientGrpcTransportClose(e) && await _isBackgroundCoreReachable()) {
+            loggy.warning("start bg core transport closed after start, but background core is active: $e");
+            _transitionLifecycle(_CoreLifecycleState.started, reason: "start transport closed with active bg");
+            statusController.add(currentState = const CoreStatus.started());
+            return right(unit);
+          }
           _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc error on start");
           if (_isMissingWindowsTunPrivilege()) {
             return left(const ConnectionFailure.missingPrivilege());
@@ -729,7 +765,7 @@ class HiddifyCoreService with InfraLogger {
         try {
           await core.bgClient.stop(Empty());
         } on GrpcError catch (e) {
-          if (e.code == StatusCode.unknown && !(e.message?.contains("HTTP/2") ?? false)) {
+          if (!_isTransientGrpcTransportClose(e)) {
             errMsg = e.message ?? "failed to stop core: $e";
             loggy.error("failed to stop bg core: $e");
           }
@@ -779,7 +815,7 @@ class HiddifyCoreService with InfraLogger {
           }
         } on GrpcError catch (e) {
           loggy.error("failed to restart bg core: $e");
-          if (e.code == StatusCode.unknown && !(e.message?.contains("HTTP/2 error") ?? false)) {
+          if (!_isTransientGrpcTransportClose(e)) {
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc restart failure");
             statusController.add(currentState = const CoreStatus.stopped());
             return left("${e.message}");
@@ -831,7 +867,7 @@ class HiddifyCoreService with InfraLogger {
       return;
     }
 
-    if (!core.isInitialized()) {
+    if (!await _ensureCoreInitializedForStream("watch group")) {
       loggy.debug("core is not initialized, returning empty group stream");
       return;
     }
@@ -858,7 +894,7 @@ class HiddifyCoreService with InfraLogger {
       return;
     }
 
-    if (!core.isInitialized()) {
+    if (!await _ensureCoreInitializedForStream("watch active groups")) {
       loggy.debug("core is not initialized, returning empty group stream");
       return;
     }
@@ -879,13 +915,21 @@ class HiddifyCoreService with InfraLogger {
   //
   // Stream<SingboxStatus> watchStatus() => _status;
 
-  Stream<SystemInfo> watchStats() {
-    if (_useMockCore || !core.isInitialized()) {
-      return const Stream<SystemInfo>.empty();
+  Stream<SystemInfo> watchStats() async* {
+    if (_useMockCore) {
+      return;
+    }
+    if (!await _ensureCoreInitializedForStream("watch stats")) {
+      return;
     }
     loggy.debug("watching stats");
     try {
-      return core.bgClient.getSystemInfoStream(Empty());
+      try {
+        yield await core.bgClient.getSystemInfo(Empty());
+      } catch (e, st) {
+        loggy.debug("failed to read initial stats snapshot", e, st);
+      }
+      yield* core.bgClient.getSystemInfoStream(Empty());
     } catch (e) {
       loggy.error("error watching stats: $e");
       rethrow;

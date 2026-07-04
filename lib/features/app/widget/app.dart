@@ -24,6 +24,7 @@ import 'package:hiddify/features/connection/widget/connection_wrapper.dart';
 import 'package:hiddify/features/notifications/data/notification_data_providers.dart';
 import 'package:hiddify/features/per_app_proxy/overview/per_app_proxy_service_notifier.dart';
 import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
+import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/shortcut/shortcut_wrapper.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
 import 'package:hiddify/features/window/widget/window_wrapper.dart';
@@ -56,6 +57,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
     // if (PlatformUtils.isDesktop) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(hiddifyCoreServiceProvider).init();
+      ref.invalidate(activeProxyNotifierProvider);
       if (isOnPauseCalled && PlatformUtils.isAndroid) ref.invalidate(perAppProxyServiceProvider);
       isOnPauseCalled = false;
       unawaited(ref.read(notificationPollingServiceProvider).onForeground());

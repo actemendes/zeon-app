@@ -97,7 +97,7 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
     final activeProxyStream = proxyProvider
         .watchActiveProxies()
         .map((event) => event.getOrElse((l) => List<OutboundGroup>.empty()))
-        .map((event) => event.firstOrNull?.items.first ?? OutboundInfo());
+        .map(_activeProxyFromGroups);
     final selectorStream = proxyProvider.watchProxies().map((event) => event.getOrElse((l) => null)).startWith(null);
     final statsStream = ref
         .watch(statsRepositoryProvider)
@@ -105,21 +105,25 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
         .map((event) => event.getOrElse((_) => SystemInfo.create()))
         .startWith(SystemInfo.create());
 
-    yield* Rx.combineLatest3<OutboundInfo, OutboundGroup?, SystemInfo, OutboundInfo>(
+    yield* Rx.combineLatest3<OutboundInfo, OutboundGroup?, SystemInfo, OutboundInfo?>(
       activeProxyStream,
       selectorStream,
       statsStream,
       (activeProxy, selector, stats) {
         final resolvedProxy = _resolveDisplayProxy(activeProxy, selector, stats);
-        if (_isAutoBalancerSelected(selector)) {
-          return _asAutoBalancer(resolvedProxy, selector, stats);
+        final displayProxy = _isAutoBalancerSelected(selector)
+            ? _asAutoBalancer(resolvedProxy, selector, stats)
+            : resolvedProxy;
+        if (_hasUsableDisplayProxy(displayProxy)) {
+          return _lastDisplayProxy = displayProxy;
         }
-        return resolvedProxy;
+        return _lastDisplayProxy;
       },
-    );
+    ).where((event) => event != null).cast<OutboundInfo>();
   }
 
   final _urlTestThrottler = Throttler(const Duration(seconds: 1));
+  OutboundInfo? _lastDisplayProxy;
 
   Future<void> urlTest(String? groupTag_) async {
     final groupTag = groupTag_ ?? "";
@@ -143,11 +147,45 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
 
   bool _isAutoBalancerTag(String tag) => tag.trim().toLowerCase() == _autoBalancerTag;
 
+  OutboundInfo _activeProxyFromGroups(List<OutboundGroup> groups) {
+    if (groups.isEmpty) return OutboundInfo();
+
+    final selector = _findGroup(groups, 'select') ?? groups.first;
+    final selected = selector.selected.trim();
+    final selectedGroup = _findGroup(groups, selected);
+    final selectedGroupLeaf = _bestVisibleLeaf(selectedGroup?.items ?? const <OutboundInfo>[]);
+    if (selectedGroupLeaf != null) return selectedGroupLeaf;
+
+    final selectedSelectorItem = findOutboundByTagOrDisplay(selector.items, selected);
+    if (_isDisplayableLeaf(selectedSelectorItem)) return selectedSelectorItem!;
+
+    final selectorLeaf = _bestVisibleLeaf(selector.items);
+    if (selectorLeaf != null) return selectorLeaf;
+
+    for (final group in groups) {
+      final leaf = _bestVisibleLeaf(group.items);
+      if (leaf != null) return leaf;
+    }
+
+    return groups.first.items.firstOrNull ?? OutboundInfo();
+  }
+
+  OutboundGroup? _findGroup(Iterable<OutboundGroup> groups, String tag) {
+    final normalized = tag.trim();
+    if (normalized.isEmpty) return null;
+    for (final group in groups) {
+      if (group.tag.trim() == normalized) return group;
+    }
+    return null;
+  }
+
   OutboundInfo _resolveDisplayProxy(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {
-    if (!_isEmptyOutbound(activeProxy)) return activeProxy;
+    if (!_isEmptyOutbound(activeProxy) && !_isAutoOutbound(activeProxy)) return activeProxy;
 
     final fallback = _realOutbound(activeProxy, selector, stats);
     if (fallback != null) return fallback;
+
+    if (!_isEmptyOutbound(activeProxy)) return activeProxy;
 
     final currentOutbound = extractRealOutboundTag(stats.currentOutbound) ?? stats.currentOutbound.trim();
     if (currentOutbound.isEmpty) return activeProxy;
@@ -168,9 +206,25 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
         (!outbound.hasGroupSelectedTagDisplay() || outbound.groupSelectedTagDisplay.trim().isEmpty);
   }
 
+  bool _hasUsableDisplayProxy(OutboundInfo outbound) {
+    if (_isEmptyOutbound(outbound)) return false;
+    if (_isDisplayableLeaf(outbound)) return true;
+    if (!_isAutoOutbound(outbound)) return false;
+
+    final realName = _firstNonEmpty([
+      if (outbound.hasGroupSelectedTagDisplay()) outbound.groupSelectedTagDisplay,
+      if (outbound.hasGroupSelectedTag()) outbound.groupSelectedTag,
+      extractRealOutboundTag(outbound.tagDisplay),
+    ]);
+    final hasRealName = realName != null && !_isTechnicalOrPlaceholderName(realName);
+    final hasUsablePing = outbound.hasUrlTestDelay() && outbound.urlTestDelay > 0 && outbound.urlTestDelay < 65000;
+    final hasHealth = outbound.hasHealthScore() && outbound.healthScore > 0;
+    return hasRealName || hasUsablePing || hasHealth;
+  }
+
   OutboundInfo _asAutoBalancer(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {
     final realOutbound = _realOutbound(activeProxy, selector, stats);
-    final info = activeProxy.deepCopy()
+    final info = (realOutbound ?? activeProxy).deepCopy()
       ..tag = _autoBalancerTag
       ..type = "balancer"
       ..tagDisplay = _autoBalancerTag
@@ -185,19 +239,117 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
 
   OutboundInfo? _realOutbound(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {
     final items = selector?.items ?? const <OutboundInfo>[];
-    final realTag = activeProxy.hasGroupSelectedTag() ? activeProxy.groupSelectedTag.trim() : '';
-    final fromGroupSelection =
-        findOutboundByTagOrDisplay(items, realTag) ??
-        findOutboundByTagOrDisplay(
-          items,
-          activeProxy.hasGroupSelectedTagDisplay() ? activeProxy.groupSelectedTagDisplay : null,
-        );
-    if (fromGroupSelection != null) return fromGroupSelection;
+    final autoItem = _selectedAutoItem(selector);
+    final selectedLeaf = _selectedLeafItem(selector);
+    final candidates = <String?>[
+      if (activeProxy.hasGroupSelectedTag()) activeProxy.groupSelectedTag,
+      if (activeProxy.hasGroupSelectedTagDisplay()) activeProxy.groupSelectedTagDisplay,
+      if (autoItem?.hasGroupSelectedTag() == true) autoItem?.groupSelectedTag,
+      if (autoItem?.hasGroupSelectedTagDisplay() == true) autoItem?.groupSelectedTagDisplay,
+      selectedLeaf?.tag,
+      selectedLeaf?.tagDisplay,
+      extractRealOutboundTag(stats.currentOutbound),
+      stats.currentOutbound,
+      extractRealOutboundTag(activeProxy.tagDisplay),
+      extractRealOutboundTag(autoItem?.tagDisplay ?? ''),
+    ];
 
-    final fromStats = extractRealOutboundTag(stats.currentOutbound);
-    final fromStatsItem = findOutboundByTagOrDisplay(items, fromStats);
-    if (fromStatsItem != null) return fromStatsItem;
+    for (final candidate in candidates) {
+      final outbound = findOutboundByTagOrDisplay(items, candidate);
+      if (_isDisplayableLeaf(outbound)) return outbound;
+    }
 
-    return findOutboundByTagOrDisplay(items, extractRealOutboundTag(activeProxy.tagDisplay));
+    final syntheticName = _firstNonEmpty([
+      if (autoItem?.hasGroupSelectedTagDisplay() == true) autoItem?.groupSelectedTagDisplay,
+      if (autoItem?.hasGroupSelectedTag() == true) autoItem?.groupSelectedTag,
+      extractRealOutboundTag(stats.currentOutbound),
+      stats.currentOutbound,
+    ]);
+    if (syntheticName != null && !_isTechnicalOrPlaceholderName(syntheticName)) {
+      return OutboundInfo(
+        tag: syntheticName,
+        tagDisplay: syntheticName,
+        type: 'proxy',
+        isSelected: true,
+        isVisible: true,
+      );
+    }
+
+    return _bestVisibleLeaf(items);
+  }
+
+  OutboundInfo? _selectedAutoItem(OutboundGroup? selector) {
+    final items = selector?.items ?? const <OutboundInfo>[];
+    final selected = selector?.selected.trim();
+    final selectedItem = findOutboundByTagOrDisplay(items, selected);
+    if (_isAutoOutbound(selectedItem)) return selectedItem;
+    for (final item in items) {
+      if (item.isSelected && _isAutoOutbound(item)) return item;
+    }
+    for (final item in items) {
+      if (_isAutoOutbound(item)) return item;
+    }
+    return null;
+  }
+
+  OutboundInfo? _selectedLeafItem(OutboundGroup? selector) {
+    final items = selector?.items ?? const <OutboundInfo>[];
+    final selected = findOutboundByTagOrDisplay(items, selector?.selected);
+    if (_isDisplayableLeaf(selected)) return selected;
+    for (final item in items) {
+      if (item.isSelected && _isDisplayableLeaf(item)) return item;
+    }
+    return null;
+  }
+
+  OutboundInfo? _bestVisibleLeaf(Iterable<OutboundInfo> items) {
+    final candidates = items.where(_isDisplayableLeaf).toList();
+    if (candidates.isEmpty) return null;
+    candidates.sort((a, b) {
+      final successCompare = _successRank(b).compareTo(_successRank(a));
+      if (successCompare != 0) return successCompare;
+      final scoreCompare = _healthScore(b).compareTo(_healthScore(a));
+      if (scoreCompare != 0) return scoreCompare;
+      return _delay(a).compareTo(_delay(b));
+    });
+    return candidates.first;
+  }
+
+  bool _isAutoOutbound(OutboundInfo? item) =>
+      item != null && (_isAutoBalancerTag(item.tag) || isAutoSelectedOutbound(item));
+
+  bool _isDisplayableLeaf(OutboundInfo? item) {
+    if (item == null) return false;
+    if (item.isGroup || isAutoSelectedOutbound(item)) return false;
+    if (!item.isVisible || item.tag.contains('§hide§') || item.tagDisplay.contains('§hide§')) return false;
+    return !_isTechnicalOrPlaceholderName(item.tag) && !_isTechnicalOrPlaceholderName(item.tagDisplay);
+  }
+
+  bool _isTechnicalOrPlaceholderName(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) return true;
+    if (normalized == 'select' || normalized == 'selector') return true;
+    if (_isAutoBalancerTag(normalized) || normalized == 'lowest' || normalized == 'urltest') return true;
+    return normalized.contains('приобретите доступ') ||
+        normalized.contains('buy access') ||
+        normalized.contains('purchase access') ||
+        normalized.contains('upgrade');
+  }
+
+  String? _firstNonEmpty(Iterable<String?> values) {
+    for (final value in values) {
+      final trimmed = value?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) return trimmed;
+    }
+    return null;
+  }
+
+  int _successRank(OutboundInfo item) => item.success ? 1 : 0;
+
+  int _healthScore(OutboundInfo item) => item.hasHealthScore() ? item.healthScore : 0;
+
+  int _delay(OutboundInfo item) {
+    final delay = item.hasUrlTestDelay() ? item.urlTestDelay : 65535;
+    return delay > 0 ? delay : 65535;
   }
 }
