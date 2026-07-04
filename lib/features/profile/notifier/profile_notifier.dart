@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/haptic/haptic_service.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
@@ -20,8 +22,6 @@ import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/utils/riverpod_utils.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'profile_notifier.g.dart';
 
@@ -74,7 +74,7 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
       // final markAsActive = activeProfile == null || ref.read(Preferences.markNewProfileActive);
       final TaskEither<ProfileFailure, Unit> task;
       if (LinkParser.parse(rawInput) case (final rs)?) {
-        loggy.debug("adding profile, url: [${rs.url}]");
+        loggy.debug("adding profile, url: [${_redactUrl(rs.url)}]");
         task = _profilesRepo.upsertRemote(
           rs.url,
           userOverride: rs.name.isNotEmpty ? UserOverride(name: rs.name) : null,
@@ -98,6 +98,14 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
           )
           .run();
     });
+  }
+
+  String _redactUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+    if (uri == null || uri.host.isEmpty) return '<redacted>';
+    final last = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '';
+    final suffix = last.length <= 4 ? '' : last.substring(last.length - 4);
+    return Uri(scheme: uri.scheme, host: uri.host, path: suffix.isEmpty ? '/...' : '/...$suffix').toString();
   }
 
   Future<void> addManual({required String url, required UserOverride userOverride}) async {

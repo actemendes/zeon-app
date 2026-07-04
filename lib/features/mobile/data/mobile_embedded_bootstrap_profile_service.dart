@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/profile/data/profile_config_store.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/data/profile_data_source.dart';
 import 'package:zeon/features/profile/data/profile_parser.dart';
@@ -16,13 +19,12 @@ import 'package:zeon/zeoncore/zeon_core_service.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 final mobileEmbeddedBootstrapProfileServiceProvider = Provider<MobileEmbeddedBootstrapProfileService>((ref) {
   return MobileEmbeddedBootstrapProfileService(
     profileDataSource: ref.read(profileDataSourceProvider),
     profilePathResolver: ref.read(profilePathResolverProvider),
+    profileConfigStore: ref.read(profileConfigStoreProvider),
     profileParser: ref.read(profileParserProvider),
     configOptionRepository: ref.read(configOptionRepositoryProvider),
     singbox: ref.read(zeonCoreServiceProvider),
@@ -34,12 +36,14 @@ class MobileEmbeddedBootstrapProfileService with InfraLogger {
   MobileEmbeddedBootstrapProfileService({
     required ProfileDataSource profileDataSource,
     required ProfilePathResolver profilePathResolver,
+    required ProfileConfigStore profileConfigStore,
     required ProfileParser profileParser,
     required ConfigOptionRepository configOptionRepository,
     required ZeonCoreService singbox,
     required SharedPreferences preferences,
   }) : _profileDataSource = profileDataSource,
        _profilePathResolver = profilePathResolver,
+       _profileConfigStore = profileConfigStore,
        _profileParser = profileParser,
        _configOptionRepository = configOptionRepository,
        _singbox = singbox,
@@ -64,6 +68,7 @@ class MobileEmbeddedBootstrapProfileService with InfraLogger {
 
   final ProfileDataSource _profileDataSource;
   final ProfilePathResolver _profilePathResolver;
+  final ProfileConfigStore _profileConfigStore;
   final ProfileParser _profileParser;
   final ConfigOptionRepository _configOptionRepository;
   final ZeonCoreService _singbox;
@@ -78,20 +83,20 @@ class MobileEmbeddedBootstrapProfileService with InfraLogger {
     }
 
     await _profilePathResolver.directory.create(recursive: true);
-    final profileFile = _profilePathResolver.file(profileId);
     final tempFile = _profilePathResolver.tempFile(profileId);
     final rawContent = _EmbeddedBootstrapProfilePayload.decode();
+    await tempFile.parent.create(recursive: true);
     await tempFile.writeAsString(rawContent);
 
     try {
       final parsedEntry = _profileParser
           .offlineUpdate(profile: _buildProfile(), tempFilePath: tempFile.path)
           .match((failure) => throw failure, (entry) => _buildEntryFromParsed(entry));
-      await _validateEmbeddedConfig(
-        profileFile.path,
+      final validatedContent = await _validateEmbeddedConfig(
         tempFile.path,
         parsedEntry.profileOverride.present ? parsedEntry.profileOverride.value : '{}',
       );
+      await _profileConfigStore.write(profileId, validatedContent);
 
       final existing = await _profileDataSource.getById(profileId);
       if (existing == null) {
@@ -113,7 +118,7 @@ class MobileEmbeddedBootstrapProfileService with InfraLogger {
     return true;
   }
 
-  Future<void> _validateEmbeddedConfig(String path, String tempPath, String? profileOverride) async {
+  Future<String> _validateEmbeddedConfig(String tempPath, String? profileOverride) async {
     final options = _configOptionRepository
         .fullOptionsOverrided(profileOverride)
         .match((failure) => throw failure, (options) => options);
@@ -124,11 +129,11 @@ class MobileEmbeddedBootstrapProfileService with InfraLogger {
       throw changeOptionsError;
     }
 
-    final validateResult = await _singbox.validateConfigByPath(path, tempPath, false).run();
-    final validateError = validateResult.match<String?>((error) => error, (_) => null);
-    if (validateError != null) {
-      throw validateError;
-    }
+    final content = await File(tempPath).readAsString();
+    return (await _singbox.validateConfigContent(content, false).run()).match(
+      (error) => throw error,
+      (content) => content,
+    );
   }
 
   bool isEmbeddedProfile(ProfileEntry profile) {

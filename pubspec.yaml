@@ -35,6 +35,7 @@ dependencies:
   drift_flutter: ^0.2.1
   shared_preferences: ^2.5.2
   flutter_secure_storage: ^9.2.4
+  cryptography: ^2.7.0
   # shared_preferences_android: ^2.4.8
   dio: ^5.4.1
   ffi: ^2.1.2

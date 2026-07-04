@@ -114,6 +114,12 @@ class BoxService(
             )
         }
 
+        private fun redactSensitiveTag(value: String): String {
+            val normalized = value.trim()
+            if (normalized.length <= 8) return "<redacted>"
+            return "${normalized.take(3)}...${normalized.takeLast(3)}"
+        }
+
 
     }
 
@@ -157,7 +163,7 @@ class BoxService(
                 Log.i(TAG, "[ManualRefresh] user_refresh_requested source=notification group=$OUTBOUND_SELECTOR_TAG")
                 val coreClient = GrpcClientProvider.grpcClient.create(CoreClient::class)
                 val currentOutbound = coreClient.GetSystemInfo().executeBlocking(Empty()).current_outbound
-                Log.i(TAG, "[ManualRefresh] current_outbound_before=$currentOutbound")
+                Log.i(TAG, "[ManualRefresh] current_outbound_before=${redactSensitiveTag(currentOutbound)}")
 
                 // "balance" is the automatic balancer selected by the core. A
                 // manual server selection is reported as its server tag instead.

@@ -7,19 +7,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:grpc/grpc.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:loggy/loggy.dart' as loggyl;
+import 'package:path/path.dart' as p;
+import 'package:rxdart/rxdart.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/log/model/log_level.dart' as config_log_level;
 import 'package:zeon/features/settings/data/config_option_repository.dart';
-import 'package:zeon/zeoncore/core_interface/core_interface_wrapper_stub.dart'
-    if (dart.library.io) 'package:zeon/zeoncore/core_interface/core_interface_wrapper.dart';
-import 'package:zeon/zeoncore/generated/v2/config/route_rule.pb.dart' as route_rule;
-import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
-import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
-import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
-import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/singbox/model/singbox_config_option.dart';
@@ -27,9 +24,13 @@ import 'package:zeon/singbox/model/warp_account.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/utils/windows_privilege_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:loggy/loggy.dart' as loggyl;
-import 'package:rxdart/rxdart.dart';
+import 'package:zeon/zeoncore/core_interface/core_interface_wrapper_stub.dart'
+    if (dart.library.io) 'package:zeon/zeoncore/core_interface/core_interface_wrapper.dart';
+import 'package:zeon/zeoncore/generated/v2/config/route_rule.pb.dart' as route_rule;
+import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
+import 'package:zeon/zeoncore/init_signal.dart';
 
 enum _CoreLifecycleState { stopped, starting, started, stopping }
 
@@ -275,6 +276,7 @@ class ZeonCoreService with InfraLogger {
   }
 
   Future<void> init() async {
+    await _deleteCoreCurrentConfigSnapshot();
     await setup()
         .mapLeft((e) {
           loggy.error(e);
@@ -334,6 +336,43 @@ class ZeonCoreService with InfraLogger {
     });
   }
 
+  TaskEither<String, String> generateFullConfig(String content) {
+    return TaskEither(() async {
+      if (_useMockCore) {
+        return right("{}");
+      }
+      final response = await core.fgClient.parse(ParseRequest(content: content, debug: false));
+      if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
+      return right(response.content);
+    });
+  }
+
+  TaskEither<String, String> validateConfigContent(String content, bool debug) {
+    return TaskEither(() async {
+      if (_useMockCore) {
+        return right(content);
+      }
+      const maxAttempts = 3;
+      Object? lastError;
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          final response = await core.fgClient.parse(ParseRequest(content: content, debug: debug));
+          if (response.responseCode == ResponseCode.OK) {
+            return right(response.content);
+          }
+          return left("${response.responseCode} ${response.message}");
+        } catch (e, st) {
+          lastError = e;
+          loggy.warning("validate config content attempt [$attempt/$maxAttempts] failed", e, st);
+          if (attempt == maxAttempts) break;
+          await setup().run();
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        }
+      }
+      return left("validate config grpc unavailable: $lastError");
+    });
+  }
+
   TaskEither<String, Unit> setup() {
     return TaskEither(() async {
       if (_useMockCore) {
@@ -343,6 +382,7 @@ class ZeonCoreService with InfraLogger {
         return right(unit);
       }
       try {
+        await _deleteCoreCurrentConfigSnapshot();
         final directories = ref.read(appDirectoriesProvider).requireValue;
         // In Flutter debug builds we need the core platform log bridge enabled
         // even when the user-facing debug setting is off. The hcore bridge still
@@ -603,8 +643,18 @@ class ZeonCoreService with InfraLogger {
         statusController.add(currentState = const CoreStatus.starting());
         loggy.debug("starting");
 
-        final background = await core.setupBackground(path, name);
+        final CoreStatus background;
+        try {
+          background = await core.setupBackground(path, name);
+        } catch (e, st) {
+          await _deleteCoreCurrentConfigSnapshot();
+          loggy.error("failed to setup background core", e, st);
+          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "background setup error");
+          statusController.add(currentState = const CoreStatus.stopped());
+          return left(const ConnectionFailure.unexpected("failed to setup background core"));
+        }
         if (background != const CoreStatus.started()) {
+          await _deleteCoreCurrentConfigSnapshot();
           _transitionLifecycle(_CoreLifecycleState.stopped, reason: "background setup failed");
           statusController.add(currentState = const CoreStatus.stopped());
           return left(background.getCoreAlert() ?? const ConnectionFailure.unexpected("failed to start core"));
@@ -644,6 +694,8 @@ class ZeonCoreService with InfraLogger {
             return left(const ConnectionFailure.unexpected("background core is not started yet!"));
           }
           return left(const ConnectionFailure.unexpected("failed to start background core"));
+        } finally {
+          await _deleteCoreCurrentConfigSnapshot();
         }
 
         _transitionLifecycle(_CoreLifecycleState.started, reason: "start complete");
@@ -697,7 +749,11 @@ class ZeonCoreService with InfraLogger {
         } catch (e) {
           loggy.error("failed to stop bg core: $e");
         }
-        await core.stop();
+        try {
+          await core.stop();
+        } finally {
+          await _deleteCoreCurrentConfigSnapshot();
+        }
 
         _transitionLifecycle(_CoreLifecycleState.stopped, reason: "stop complete");
         statusController.add(currentState = const CoreStatus.stopped());
@@ -745,6 +801,8 @@ class ZeonCoreService with InfraLogger {
             statusController.add(currentState = const CoreStatus.stopped());
             return left("${e.message}");
           }
+        } finally {
+          await _deleteCoreCurrentConfigSnapshot();
         }
 
         _transitionLifecycle(_CoreLifecycleState.starting, reason: "restart in progress");
@@ -754,6 +812,18 @@ class ZeonCoreService with InfraLogger {
         return right(unit);
       }),
     );
+  }
+
+  Future<void> _deleteCoreCurrentConfigSnapshot() async {
+    try {
+      final directories = ref.read(appDirectoriesProvider).requireValue;
+      final file = File(p.join(directories.workingDir.path, "data", "current-config.json"));
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e, st) {
+      loggy.warning("failed to delete core current config snapshot", e, st);
+    }
   }
 
   TaskEither<String, Unit> resetTunnel() {
@@ -1069,17 +1139,20 @@ class ZeonCoreService with InfraLogger {
       listenKey,
       () {
         return cc.logListener(LogRequest(level: coreLogLevel), options: grpcOptions).map((event) {
+          final safeEvent = event.copyWith((message) {
+            message.message = _redactCoreLogMessage(event.message);
+          });
           // Handle incoming event
-          logBuffer.add(event);
+          logBuffer.add(safeEvent);
           if (logBuffer.length > 300) {
             logBuffer.removeAt(0);
           }
           logController.add(logBuffer);
           // loggy.log(getLogLevel(event.level), event.message);
-          event.message.split('\n').forEach((line) {
-            loggy.log(getLogLevel(event.level), line);
+          safeEvent.message.split('\n').forEach((line) {
+            loggy.log(getLogLevel(safeEvent.level), line);
           });
-          return event;
+          return safeEvent;
         });
       },
       onDone: () {
@@ -1091,6 +1164,29 @@ class ZeonCoreService with InfraLogger {
         _scheduleListenerReconnect(listenKey, () => startListeningLogs(key, cc));
       },
     );
+  }
+
+  String _redactCoreLogMessage(String message) {
+    var safe = message;
+    safe = safe.replaceAll(
+      RegExp(r'\b(vless|vmess|trojan|ss|hysteria2?)://\S+', caseSensitive: false),
+      '<redacted-link>',
+    );
+    safe = safe.replaceAll(
+      RegExp(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', caseSensitive: false),
+      '<redacted-uuid>',
+    );
+    safe = safe.replaceAllMapped(
+      RegExp(r'\b(public_key|short_id|uuid|password|token)=([^&\s]+)', caseSensitive: false),
+      (match) => '${match.group(1)}=<redacted>',
+    );
+    safe = safe.replaceAll(
+      RegExp(r'\b(outbound)/(vless|vmess|trojan|ss|hysteria2?|shadowsocks)\[[^\]]*\]', caseSensitive: false),
+      'outbound/<redacted>',
+    );
+    safe = safe.replaceAll(RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}:\d{2,5}\b'), '<redacted-endpoint>');
+    safe = safe.replaceAll(RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}\b'), '<redacted-ip>');
+    return safe;
   }
 
   Future<void> stopListenSingle(String key) async {
