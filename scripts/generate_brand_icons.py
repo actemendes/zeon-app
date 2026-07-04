@@ -69,6 +69,7 @@ ANDROID_ADAPTIVE_FOREGROUND_SIZES = {
 
 # 5) Размер логотипа внутри контейнера (safe area)
 MASTER_LOGO_WIDTH_RATIO = 0.4
+APPLE_LOGO_WIDTH_RATIO = 0.52
 
 # 6) Android notification / quick tile (монохром)
 STAT_ICON_LOGO_WIDTH_RATIO = 0.50
@@ -499,6 +500,18 @@ def _compose_master_icon(
     return icon
 
 
+def _compose_apple_icon(size: int, logo: Image.Image) -> Image.Image:
+    icon = Image.new("RGBA", (size, size), (0, 0, 0, 255))
+    logo_w = int(round(size * APPLE_LOGO_WIDTH_RATIO))
+    logo_img = _fit_logo(logo, logo_w)
+
+    x = (size - logo_img.width) // 2
+    y = (size - logo_img.height) // 2
+
+    icon.alpha_composite(logo_img, (x, y))
+    return icon.convert("RGB")
+
+
 def _compose_monochrome_stat(size: int, logo_mask: Image.Image) -> Image.Image:
     icon = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     logo_w = int(round(size * STAT_ICON_LOGO_WIDTH_RATIO))
@@ -579,19 +592,19 @@ def _write_android_stat_icons(logo_mono: Image.Image) -> None:
         _save_png(ROOT / f"android/app/src/main/res/{bucket}/ic_stat_logo.png", icon)
 
 
-def _write_ios_and_macos(master: Image.Image) -> None:
+def _write_ios_and_macos(ios_master: Image.Image, mac_master: Image.Image) -> None:
     ios_root = ROOT / "ios/Runner/Assets.xcassets/AppIcon.appiconset"
     for path in sorted(ios_root.rglob("*.png")):
         with Image.open(path) as current:
             size = current.size
-        icon = master.resize(size, Image.Resampling.LANCZOS)
+        icon = ios_master.resize(size, Image.Resampling.LANCZOS)
         _save_png(path, icon)
 
     mac_root = ROOT / "macos/Runner/Assets.xcassets/AppIcon.appiconset"
     for path in sorted(mac_root.glob("*.png")):
         with Image.open(path) as current:
             size = current.size
-        icon = master.resize(size, Image.Resampling.LANCZOS)
+        icon = mac_master.resize(size, Image.Resampling.LANCZOS)
         _save_png(path, icon)
 
 
@@ -861,6 +874,7 @@ def main() -> None:
     startup_dark_logo = _load_logo_image(STARTUP_LOGO_DARK_PNG)
     logo_mono_white = _recolor_logo(logo, STAT_ICON_MONO_COLOR)
     master = _compose_master_icon(MASTER_ICON_SIZE, logo)
+    apple_master = _compose_apple_icon(MASTER_ICON_SIZE, logo)
     android_master = _compose_master_icon(
         MASTER_ICON_SIZE,
         logo,
@@ -874,7 +888,7 @@ def main() -> None:
     _write_android_adaptive_icon(logo)
     _write_android_stat_icons(logo_mono_white)
     _write_android_banner(master)
-    _write_ios_and_macos(master)
+    _write_ios_and_macos(apple_master, apple_master)
     _write_web(master)
     _write_windows_linux_sources(master, startup_light, startup_dark)
     _write_startup_splash_assets(startup_light_logo, startup_dark_logo)
