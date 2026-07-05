@@ -8,7 +8,7 @@
 PRODUCT_NAME = ZEON
 
 // The application's bundle identifier
-MACOS_BUNDLE_IDENTIFIER = app.zeon.macos
+MACOS_BUNDLE_IDENTIFIER = app.zeon.ios
 MACOS_DEVELOPMENT_TEAM =
 MACOS_SERVICE_IDENTIFIER = com.zeon.app
 

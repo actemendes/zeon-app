@@ -9,6 +9,7 @@ OUT_DIR="${PROJECT_ROOT}/out/apple"
 TARGET="${FLUTTER_TARGET:-lib/main.dart}"
 APPLE_RELEASE="${APPLE_RELEASE:-app-store}"
 MACOS_EXPORT_DESTINATION="${MACOS_EXPORT_DESTINATION:-export}"
+IOS_UPLOAD_SKIP_BUILD="${IOS_UPLOAD_SKIP_BUILD:-0}"
 BUILD_ARGS=(--release --target "${TARGET}")
 BUILD_ARGS+=(--dart-define "release=${APPLE_RELEASE}")
 if [[ -n "${SENTRY_DSN:-}" ]]; then
@@ -197,15 +198,63 @@ build_ios_ipa() {
   echo "${OUT_DIR}/ZEON-iOS.ipa"
 }
 
+upload_ios_app_store() {
+  require_file ios/AppleSigning.xcconfig
+  require_file ios/exportOptions.plist
+  require_file ios/Frameworks/HiddifyCore.xcframework
+  if ! security find-identity -v -p codesigning | grep -qE '[1-9][0-9]* valid identities found'; then
+    echo "No Apple code-signing identity is installed in the keychain." >&2
+    exit 1
+  fi
+
+  if [[ "${IOS_UPLOAD_SKIP_BUILD}" != "1" ]]; then
+    build_ios_ipa
+  else
+    ensure_generated_sources
+  fi
+
+  local archive_path="${PROJECT_ROOT}/build/ios/archive/Runner.xcarchive"
+  require_file "${archive_path}"
+
+  mkdir -p "${OUT_DIR}" "${PROJECT_ROOT}/.apple-build"
+  local export_path="${OUT_DIR}/ZEON-iOS-upload"
+  local export_options="${PROJECT_ROOT}/.apple-build/ios-exportOptions-upload.plist"
+  rm -rf "${export_path}"
+  cp ios/exportOptions.plist "${export_options}"
+  set_plist_string "${export_options}" destination upload
+  if [[ -n "${IOS_EXPORT_TEAM_ID:-}" ]]; then
+    set_plist_string "${export_options}" teamID "${IOS_EXPORT_TEAM_ID}"
+  fi
+
+  run_xcodebuild \
+    -exportArchive \
+    -archivePath "${archive_path}" \
+    -exportPath "${export_path}" \
+    -exportOptionsPlist "${export_options}" \
+    -allowProvisioningUpdates
+}
+
+upload_macos_app_store() {
+  MACOS_EXPORT_DESTINATION=upload build_macos_app_store
+}
+
+upload_all_app_store() {
+  upload_ios_app_store
+  upload_macos_app_store
+}
+
 case "${1:-doctor}" in
   doctor) doctor ;;
+  apple-upload) upload_all_app_store ;;
   macos-app) build_macos_app ;;
   macos-artifacts) build_macos_artifacts ;;
   macos-app-store) build_macos_app_store ;;
+  macos-app-store-upload) upload_macos_app_store ;;
   ios-unsigned) build_ios_unsigned ;;
   ios-ipa) build_ios_ipa ;;
+  ios-upload) upload_ios_app_store ;;
   *)
-    echo "Usage: $0 {doctor|macos-app|macos-artifacts|macos-app-store|ios-unsigned|ios-ipa}" >&2
+    echo "Usage: $0 {doctor|apple-upload|macos-app|macos-artifacts|macos-app-store|macos-app-store-upload|ios-unsigned|ios-ipa|ios-upload}" >&2
     exit 2
     ;;
 esac

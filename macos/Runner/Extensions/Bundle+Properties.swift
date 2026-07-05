@@ -8,6 +8,6 @@ extension Bundle {
   var baseBundleIdentifier: String {
     (infoDictionary?["BASE_BUNDLE_IDENTIFIER"] as? String)
       ?? bundleIdentifier
-      ?? "app.zeon.macos"
+      ?? "app.zeon.ios"
   }
 }

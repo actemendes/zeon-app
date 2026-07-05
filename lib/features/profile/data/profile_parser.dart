@@ -372,110 +372,18 @@ class ProfileParser {
 
   @visibleForTesting
   static String sanitizeImportedServerConfigs(String content) {
-    final sanitizedLines = content
-        .split('\n')
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty && !_isAutoServerConfigLine(line))
-        .map(_sanitizeServerConfigLine)
-        .where((line) => line.trim().isNotEmpty)
-        .join('\n')
-        .trim();
-    if (sanitizedLines.isEmpty) return sanitizedLines;
+    final filteredLines = content.split('\n').where((line) => !_isAutoServerConfigLine(line.trim())).join('\n').trim();
+    if (filteredLines.isEmpty) return filteredLines;
 
     try {
-      final decoded = jsonDecode(sanitizedLines);
+      final decoded = jsonDecode(filteredLines);
       if (_isAutoServerConfigMap(_asMap(decoded))) {
         return '';
       }
-      return jsonEncode(_sanitizeServerNamesInJson(_removeAutoServerConfigsFromJson(decoded)));
+      return jsonEncode(_removeAutoServerConfigsFromJson(decoded));
     } catch (_) {
-      return sanitizedLines;
+      return filteredLines;
     }
-  }
-
-  static String _sanitizeServerConfigLine(String line) {
-    if (_isUriLine(line)) {
-      return _sanitizeServerUriLine(line);
-    }
-    if (!line.startsWith('{')) return line;
-    try {
-      final decoded = jsonDecode(line);
-      return jsonEncode(_sanitizeServerNamesInJson(decoded));
-    } catch (_) {
-      return line;
-    }
-  }
-
-  static String _sanitizeServerUriLine(String line) {
-    final uri = Uri.tryParse(line);
-    if (uri == null || !uri.hasFragment) return line;
-
-    final fragment = _decodeUriFragment(uri.fragment);
-    final sanitizedFragment = _sanitizeServerName(fragment);
-    if (sanitizedFragment == fragment.trim()) return line;
-
-    return uri.replace(fragment: sanitizedFragment).toString();
-  }
-
-  static String _decodeUriFragment(String value) {
-    try {
-      return Uri.decodeComponent(value);
-    } catch (_) {
-      return value;
-    }
-  }
-
-  static dynamic _sanitizeServerNamesInJson(dynamic value, {String? parentKey}) {
-    if (value is List) {
-      return value.map((item) {
-        if (parentKey == "outbounds" && item is String) {
-          return _sanitizeServerName(item);
-        }
-        return _sanitizeServerNamesInJson(item, parentKey: parentKey);
-      }).toList();
-    }
-    if (value is Map) {
-      final out = <String, dynamic>{};
-      for (final entry in value.entries) {
-        final key = entry.key.toString();
-        final item = entry.value;
-        if ((key == "tag" || key == "remarks" || key == "default") && item is String) {
-          out[key] = _sanitizeServerName(item);
-          continue;
-        }
-        out[key] = _sanitizeServerNamesInJson(item, parentKey: key);
-      }
-      return out;
-    }
-    return value;
-  }
-
-  static String _sanitizeServerName(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return trimmed;
-
-    final buffer = StringBuffer();
-    for (final rune in trimmed.runes) {
-      if (_isEmojiRune(rune)) continue;
-      buffer.writeCharCode(rune);
-    }
-
-    final sanitized = buffer
-        .toString()
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .replaceAll(RegExp(r'^[\s|*.,:;+\-/]+'), '')
-        .replaceAll(RegExp(r'[\s|*.,:;+\-/]+$'), '')
-        .trim();
-    return sanitized.isEmpty ? 'proxy' : sanitized;
-  }
-
-  static bool _isEmojiRune(int rune) {
-    return rune == 0x200D ||
-        rune == 0x20E3 ||
-        (rune >= 0xFE00 && rune <= 0xFE0F) ||
-        (rune >= 0x1F000 && rune <= 0x1FAFF) ||
-        (rune >= 0x2600 && rune <= 0x27BF) ||
-        (rune >= 0x2B00 && rune <= 0x2BFF);
   }
 
   static bool _isAutoServerConfigLine(String line) {
@@ -593,7 +501,7 @@ class ProfileParser {
     final protocol = _stringValue(outbound["protocol"])?.toLowerCase();
     if (protocol == null || protocol.isEmpty) return null;
 
-    final remarks = _sanitizeServerName(_stringValue(root["remarks"]) ?? _stringValue(outbound["tag"]) ?? "proxy");
+    final remarks = _stringValue(root["remarks"]) ?? _stringValue(outbound["tag"]) ?? "proxy";
 
     switch (protocol) {
       case "vless":

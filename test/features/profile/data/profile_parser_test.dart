@@ -218,43 +218,6 @@ void main() {
       expect(ProfileParser.sanitizeImportedServerConfigs(content), "vless://id@example.com:443#Germany");
     });
 
-    test("removes emoji from URI server names", () {
-      final content = [
-        "vless://id@example.com:443#%F0%9F%87%A9%F0%9F%87%AA%20Germany",
-        "trojan://pass@example.com:443#%E2%9A%A1%20Fast%20Server",
-      ].join("\n");
-
-      expect(
-        ProfileParser.sanitizeImportedServerConfigs(content),
-        ["vless://id@example.com:443#Germany", "trojan://pass@example.com:443#Fast%20Server"].join("\n"),
-      );
-    });
-
-    test("removes emoji from JSON server names and selector references", () {
-      const content = '''
-{
-  "outbounds": [
-    {
-      "type": "selector",
-      "tag": "select",
-      "outbounds": ["\uD83C\uDDE9\uD83C\uDDEA Germany", "\u26A1 Fast"],
-      "default": "\uD83C\uDDE9\uD83C\uDDEA Germany"
-    },
-    {"type": "vless", "tag": "\uD83C\uDDE9\uD83C\uDDEA Germany"},
-    {"type": "trojan", "tag": "\u26A1 Fast"}
-  ]
-}
-''';
-
-      final sanitized = ProfileParser.sanitizeImportedServerConfigs(content);
-
-      expect(sanitized, isNot(contains("\u{1F1E9}\u{1F1EA}")));
-      expect(sanitized, isNot(contains("\u{26A1}")));
-      expect(sanitized, contains('"tag":"Germany"'));
-      expect(sanitized, contains('"default":"Germany"'));
-      expect(sanitized, contains('"outbounds":["Germany","Fast"]'));
-    });
-
     test("removes auto outbounds and selector references from JSON", () {
       const content = '''
 {

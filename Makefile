@@ -486,6 +486,9 @@ apple-setup:
 apple-doctor:
 	./scripts/apple/build.sh doctor
 
+apple-upload:
+	./scripts/apple/build.sh apple-upload
+
 macos-app:
 	./scripts/apple/build.sh macos-app
 
@@ -495,11 +498,17 @@ macos-artifacts:
 macos-app-store:
 	./scripts/apple/build.sh macos-app-store
 
+macos-app-store-upload:
+	./scripts/apple/build.sh macos-app-store-upload
+
 ios-unsigned:
 	./scripts/apple/build.sh ios-unsigned
 
 ios-ipa:
 	./scripts/apple/build.sh ios-ipa
+
+ios-upload:
+	./scripts/apple/build.sh ios-upload
 
 android-libs:
 	$(MKDIR) $(ANDROID_OUT) || echo Folder already exists. Skipping...

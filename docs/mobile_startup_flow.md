@@ -204,7 +204,7 @@ flowchart TD
 2. Восстанавливает зашитый anonymus subscription `open/7697542005` из gzip+xor+base64 payload, прогоняет через `ProfileParser.normalizeContentForCoreImport(...)` и пишет файл `configs/mobile-embedded-bootstrap-anonymous-v1.json`.
 3. Вставляет/обновляет remote-профиль:
    - `id = mobile-embedded-bootstrap-anonymous-v1`
-   - `url = embedded://mobile-bootstrap/open/7697542005?v=3`
+   - `url = embedded://mobile-bootstrap/open/7697542005?v=4`
    - `name = anonimous`
    - `subInfo` с `expire = 3000-12-31 09:00:00 UTC`
 4. Сохраняет:

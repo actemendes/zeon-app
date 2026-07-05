@@ -111,7 +111,7 @@ if [[ -z "${APP_GROUP_ID}" ]]; then
       print value
     }' macos/Runner/Configs/AppInfo.xcconfig macos/Runner/Configs/AppleSigning.xcconfig 2>/dev/null | tail -1
   )"
-  APP_GROUP_ID="group.${MACOS_BUNDLE_ID:-app.zeon.macos}"
+  APP_GROUP_ID="group.${MACOS_BUNDLE_ID:-app.zeon.ios}"
 fi
 
 mkdir -p "${OUT_DIR}/logs" "${OUT_DIR}/snapshots"
@@ -175,7 +175,7 @@ cleanup_stale_registered_apps() {
       print value
     }' macos/Runner/Configs/AppInfo.xcconfig macos/Runner/Configs/AppleSigning.xcconfig 2>/dev/null | tail -1
   )"
-  expected_bundle_id="${expected_bundle_id:-app.zeon.macos}"
+  expected_bundle_id="${expected_bundle_id:-app.zeon.ios}"
   log_note "### cleanup_stale_registered_apps"
   {
     echo "# cleanup_stale_registered_apps"
@@ -204,18 +204,22 @@ cleanup_stale_registered_apps() {
 
 register_current_app_bundle() {
   [[ -d "${APP_PATH}" ]] || return 0
+  local registered_bundle_id
+  registered_bundle_id="$(plutil -extract CFBundleIdentifier raw -o - "${APP_PATH}/Contents/Info.plist" 2>/dev/null || true)"
+  registered_bundle_id="${registered_bundle_id:-app.zeon.ios}"
   log_note "### register_current_app_bundle"
   {
     echo "# register_current_app_bundle"
     date
     echo "APP_PATH=${APP_PATH}"
     echo "EXTENSION_PATH=${EXTENSION_PATH}"
+    echo "registered_bundle_id=${registered_bundle_id}"
     "${LSREGISTER}" -f -R -trusted "${APP_PATH}" 2>&1 || true
     if [[ -d "${EXTENSION_PATH}" ]]; then
       pluginkit -a "${EXTENSION_PATH}" 2>&1 || true
     fi
     echo "REGISTERED_PLUGINS"
-    pluginkit -m -A -D -vvv -i app.zeon.macos.ZeonPacketTunnel 2>&1 || true
+    pluginkit -m -A -D -vvv -i "${registered_bundle_id}.ZeonPacketTunnel" 2>&1 || true
   } >"${OUT_DIR}/logs/register_current_app_bundle.log" 2>&1
 }
 
@@ -353,7 +357,8 @@ capture_snapshot() {
 copy_runtime_logs() {
   local stage="$1"
   local dest="${OUT_DIR}/runtime-${stage}"
-  local support="${HOME}/Library/Application Support/app.zeon.macos"
+  local support_id="${APP_GROUP_ID#group.}"
+  local support="${HOME}/Library/Application Support/${support_id}"
   local group="${HOME}/Library/Group Containers/${APP_GROUP_ID}"
   mkdir -p "${dest}"
   [[ -f "${support}/app.log" ]] && cp "${support}/app.log" "${dest}/app.log"

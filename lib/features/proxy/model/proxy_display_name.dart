@@ -20,7 +20,10 @@ String formatSelectedServerTitle({
   required String? realOutboundName,
   required String? realOutboundFlag,
 }) {
-  if (!isAutoSelected) return selectedName?.trim() ?? realOutboundName?.trim() ?? '';
+  if (!isAutoSelected) {
+    final name = selectedName?.trim().isNotEmpty == true ? selectedName!.trim() : realOutboundName?.trim() ?? '';
+    return _withoutLeadingFlag(name);
+  }
 
   final realName = displayNameFromRealOutbound(realOutboundName);
   if (realName == null) return autoSelectionDisplayName;

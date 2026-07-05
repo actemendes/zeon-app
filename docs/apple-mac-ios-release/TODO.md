@@ -173,10 +173,10 @@
 
 ### Загрузка в TestFlight
 
-- [ ] iOS: загрузить `1.2.2+10202` в App Store Connect/TestFlight через `flutter build ipa` / Transporter / App Store Connect API.
-- [ ] macOS: загрузить `out/apple/ZEON-macOS-app-store/ZEON.pkg` в App Store Connect/TestFlight или выполнить `MACOS_EXPORT_DESTINATION=upload make macos-app-store`.
-- [ ] Проверить, что App Store Connect принимает bundle ids, entitlements, Network Extension capability, App Group и provisioning для host app и Packet Tunnel extension.
-- [ ] Проверить, что version/build в App Store Connect совпадают с `1.2.2+10202`, а следующий patch будет иметь монотонно больший build number.
+- [x] iOS: загрузить `1.2.2+10202` в App Store Connect/TestFlight через `flutter build ipa` / Transporter / App Store Connect API.
+- [x] macOS: загрузить `out/apple/ZEON-macOS-app-store/ZEON.pkg` в App Store Connect/TestFlight или выполнить `MACOS_EXPORT_DESTINATION=upload make macos-app-store`.
+- [x] Проверить, что App Store Connect принимает bundle ids, entitlements, Network Extension capability, App Group и provisioning для host app и Packet Tunnel extension.
+- [x] Проверить, что version/build в App Store Connect совпадают с `1.2.2+10202`, а следующий patch будет иметь монотонно больший build number.
 
 ### Проверить на тесте
 
@@ -209,6 +209,25 @@
 
 Добавлять сюда краткие выдержки ошибок и ссылки на полные логи.
 
+- 2026-07-05 / macOS unified App Store Connect ids for iOS multi-platform record:
+  - Environment captured after `source scripts/apple/env.sh`: macOS 26.5.1 (25F80), Xcode 26.5 build 17F42, Flutter 3.38.5, Dart 3.10.4, CocoaPods 1.16.2.
+  - Changed macOS host bundle id default/signing config from `app.zeon.macos` to `app.zeon.ios`; the Packet Tunnel target continues to derive its child id as `$(MACOS_BUNDLE_IDENTIFIER).ZeonPacketTunnel`, now `app.zeon.ios.ZeonPacketTunnel`.
+  - macOS App Group now resolves from the same base id as `group.app.zeon.ios`; host and Packet Tunnel entitlements still include App Sandbox, Network Extension `packet-tunnel-provider`, VPN API `allow-vpn`, App Group, and network client/server permissions.
+  - Updated macOS runtime fallbacks and diagnostics helper to use the unified `app.zeon.ios` / `group.app.zeon.ios` flow instead of stale `app.zeon.macos` defaults.
+  - Verified `macos/exportOptions.plist` remains `method=app-store-connect`; `scripts/apple/build.sh` continues to pass `--dart-define release=app-store` by default.
+  - Ran `source scripts/apple/env.sh && flutter pub get && cd macos && pod install && cd ..`; completed successfully. CocoaPods repeated existing custom base configuration warnings, and printed non-fatal `DART_DEFINES` key/value warnings.
+  - Ran `source scripts/apple/env.sh && ./scripts/apple/build.sh macos-app-store`; archive and export succeeded. Artifact: `out/apple/ZEON-macOS-app-store/ZEON.pkg`.
+  - `pkgutil --check-signature out/apple/ZEON-macOS-app-store/ZEON.pkg` reports a package signed with `3rd Party Mac Developer Installer: Dima Moiseev (CH87655747)`.
+  - `DistributionSummary.plist` reports `versionNumber=1.2.2`, `buildNumber=10202`, Store provisioning profiles `Mac Team Store Provisioning Profile: app.zeon.ios` and `Mac Team Store Provisioning Profile: app.zeon.ios.ZeonPacketTunnel`, App Group `group.app.zeon.ios`, and universal `x86_64`/`arm64` architectures.
+  - No local provisioning/export blocker remains for the unified macOS package. Upload was completed after adding `LSApplicationCategoryType=public.app-category.utilities` to `macos/Runner/Info.plist`.
+
+- 2026-07-05 / TestFlight uploads:
+  - iOS `1.2.2+10202` uploaded successfully with `xcodebuild -exportArchive ... destination=upload`: App Store Connect reported `Upload succeeded`, `Uploaded Runner`, `EXPORT SUCCEEDED`.
+  - App Store Connect app record was found for app id `6787655856`, bundle id `app.zeon.ios`, with iOS and macOS app store versions attached.
+  - First macOS upload attempt failed with App Store Connect error `90242`: missing `LSApplicationCategoryType` in the macOS app `Info.plist`.
+  - Added `LSApplicationCategoryType=public.app-category.utilities` to `macos/Runner/Info.plist`, rebuilt/exported `out/apple/ZEON-macOS-app-store/ZEON.pkg`, and re-uploaded successfully.
+  - macOS upload finished with `Upload succeeded`, `Uploaded Runner`, `EXPORT SUCCEEDED`; App Store Connect accepted bundle ids `app.zeon.ios` and `app.zeon.ios.ZeonPacketTunnel`, App Group `group.app.zeon.ios`, and Store provisioning profiles.
+  - Non-blocking symbol warnings remain for missing dSYM files for `hiddify-core.dylib` and `LaunchAtLoginHelper.app`; upload was accepted and package processing started.
 - 2026-07-05 / Milestone 6 Apple Store update readiness:
   - Product decision applied: Apple builds use TestFlight/App Store updates only; GitHub/appcast download/install flow is skipped for Apple Store releases.
   - Added `Release.appStore("app-store")`; `allowCustomUpdateChecker=false` covers both `google-play` and `app-store`.
