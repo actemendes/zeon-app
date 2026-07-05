@@ -181,10 +181,14 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                 .run()
                 .then((result) => result.getOrElse((failure) => throw failure));
 
-      final contentTask = validateConfigOnImport
-          ? validateConfig(tempFile.path, profEntity.profileOverride.value, false)
-          : _readTempConfig(tempFile.path);
-      final content = await contentTask.run().then((result) => result.getOrElse((failure) => throw failure));
+      final content = validateConfigOnImport
+          ? await _validatedOrRawUpdatedConfig(
+              tempPath: tempFile.path,
+              profileOverride: profEntity.profileOverride.value,
+              debug: false,
+              allowTransientValidationFallback: isUpdate,
+            )
+          : await _readTempConfig(tempFile.path).run().then((result) => result.getOrElse((failure) => throw failure));
       await _profileConfigStore.write(id, content);
 
       if (isUpdate) {
@@ -280,6 +284,42 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
 
   TaskEither<ProfileFailure, String> _readTempConfig(String tempPath) {
     return TaskEither.tryCatch(() => File(tempPath).readAsString(), ProfileFailure.unexpected);
+  }
+
+  Future<String> _validatedOrRawUpdatedConfig({
+    required String tempPath,
+    required String? profileOverride,
+    required bool debug,
+    required bool allowTransientValidationFallback,
+  }) async {
+    final validation = await validateConfig(tempPath, profileOverride, debug).run();
+    return await validation.match((failure) async {
+      if (!allowTransientValidationFallback || !_isTransientCoreValidationFailure(failure)) {
+        throw failure;
+      }
+      loggy.warning(
+        "profile update validation failed because core is temporarily unavailable; "
+        "keeping downloaded config without blocking profile update",
+        failure,
+      );
+      return await _readTempConfig(
+        tempPath,
+      ).run().then((result) => result.getOrElse((readFailure) => throw readFailure));
+    }, Future.value);
+  }
+
+  bool _isTransientCoreValidationFailure(ProfileFailure failure) {
+    if (failure case ProfileInvalidConfigFailure(:final message, configOptionFailure: null)) {
+      final normalized = (message ?? "").toLowerCase();
+      return normalized.contains("core unavailable") ||
+          normalized.contains("grpc") ||
+          normalized.contains("connection refused") ||
+          normalized.contains("http/2") ||
+          normalized.contains("transport is closing") ||
+          normalized.contains("stream terminated") ||
+          normalized.contains("socketexception");
+    }
+    return false;
   }
 
   TaskEither<ProfileFailure, Unit> _writeConfig(String id, String content) {

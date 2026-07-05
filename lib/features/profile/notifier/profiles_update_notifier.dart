@@ -1,4 +1,7 @@
 import 'package:dartx/dartx.dart';
+import 'package:meta/meta.dart';
+import 'package:neat_periodic_task/neat_periodic_task.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/failures.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
@@ -9,9 +12,6 @@ import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/data/profile_name_parser.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/utils/custom_loggers.dart';
-import 'package:meta/meta.dart';
-import 'package:neat_periodic_task/neat_periodic_task.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'profiles_update_notifier.g.dart';
 
