@@ -21,11 +21,19 @@ open class ExtensionProvider: NEPacketTunnelProvider {
         do {
             writeMessage("(packet-tunnel) starting")
             
-            // Extract options with better error handling
-            let disableMemoryLimit = false && (options?["DisableMemoryLimit"] as? NSString as? String ?? "NO") == "YES" 
-            let grpcServiceModePort = (options?["GrpcServiceModePort"] as? NSNumber)?.intValue ?? 17179
-            
-            let config = options?["Config"] as? NSString as? String ?? ""
+            let providerConfiguration = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration ?? [:]
+            let launchedFromApp = options?["Config"] != nil
+            let disableMemoryLimit = false && optionString(
+                "DisableMemoryLimit",
+                options: options,
+                providerConfiguration: providerConfiguration
+            ) == "YES"
+            let grpcServiceModePort = optionInt(
+                "GrpcServiceModePort",
+                options: options,
+                providerConfiguration: providerConfiguration
+            ) ?? 17179
+            let config = optionString("Config", options: options, providerConfiguration: providerConfiguration) ?? ""
             
             // guard let config = SingBox.setupConfig(config: config2) else {
             //             writeFatalError("(packet-tunnel) error: config is invalid")
@@ -75,7 +83,11 @@ open class ExtensionProvider: NEPacketTunnelProvider {
             LibboxSetMemoryLimit(!disableMemoryLimit)
             
             writeMessage("(packet-tunnel) setup completed successfully")
-            if (config==""){
+            if (!launchedFromApp) {
+                if config.isEmpty {
+                    writeMessage("(packet-tunnel) saved configuration is missing; waiting for app start command")
+                    return
+                }
                 try await startService1(config)
             }
 
@@ -101,6 +113,49 @@ open class ExtensionProvider: NEPacketTunnelProvider {
             writeFatalError("(packet-tunnel) error: start service: \(error.localizedDescription)")
             throw error
         }
+    }
+
+    private func optionString(
+        _ key: String,
+        options: [String: NSObject]?,
+        providerConfiguration: [String: Any]
+    ) -> String? {
+        if let value = options?[key] as? NSString {
+            return value as String
+        }
+        if let value = options?[key] as? String {
+            return value
+        }
+        if let value = providerConfiguration[key] as? String {
+            return value
+        }
+        if let value = providerConfiguration[key] as? NSString {
+            return value as String
+        }
+        return nil
+    }
+
+    private func optionInt(
+        _ key: String,
+        options: [String: NSObject]?,
+        providerConfiguration: [String: Any]
+    ) -> Int? {
+        if let value = options?[key] as? NSNumber {
+            return value.intValue
+        }
+        if let value = options?[key] as? NSString {
+            return Int(value as String)
+        }
+        if let value = providerConfiguration[key] as? NSNumber {
+            return value.intValue
+        }
+        if let value = providerConfiguration[key] as? Int {
+            return value
+        }
+        if let value = providerConfiguration[key] as? String {
+            return Int(value)
+        }
+        return nil
     }
     
     private func createRequiredDirectories() throws {

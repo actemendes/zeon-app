@@ -63,7 +63,7 @@ class VPNManager: ObservableObject {
     init() {
         observer = NotificationCenter.default.addObserver(forName: .NEVPNStatusDidChange, object: nil, queue: nil) { [weak self] notification in
             guard let connection = notification.object as? NEVPNConnection else { return }
-            self?.state = connection.status
+            self?.setState(connection.status)
         }
         
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -85,6 +85,7 @@ class VPNManager: ObservableObject {
         loaded = true
         do {
             try await loadVPNPreference()
+            try await migrateStoredProviderConfigurationIfNeeded()
         } catch {
             print(error.localizedDescription)
         }
@@ -95,6 +96,7 @@ class VPNManager: ObservableObject {
             let managers = try await NETunnelProviderManager.loadAllFromPreferences()
             if let manager = managers.first {
                 self.manager = manager
+                setState(manager.connection.status)
                 return
             }
             let newManager = NETunnelProviderManager()
@@ -106,24 +108,104 @@ class VPNManager: ObservableObject {
             try await newManager.saveToPreferences()
             try await newManager.loadFromPreferences()
             self.manager = newManager
+            setState(newManager.connection.status)
         } catch {
             print(error.localizedDescription)	
         }
     }
     
-    private func enableVPNManager() async throws {
+    private func enableVPNManager(config: String, grpcServiceModePort: Int, disableMemoryLimit: Bool) async throws {
         manager.isEnabled = true
-        let rule = NEOnDemandRuleConnect()
-        rule.interfaceTypeMatch = .any
-        rule.probeURL = URL(string: "http://captive.apple.com")
-        manager.onDemandRules = [rule]
-        manager.isOnDemandEnabled = true
+        manager.isOnDemandEnabled = false
+        manager.onDemandRules = []
+
+        if let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol {
+            tunnelProtocol.providerConfiguration = providerConfiguration(
+                config: config,
+                grpcServiceModePort: grpcServiceModePort,
+                disableMemoryLimit: disableMemoryLimit
+            )
+            manager.protocolConfiguration = tunnelProtocol
+        }
         
         do {
             try await manager.saveToPreferences()
             try await manager.loadFromPreferences()
+            setState(manager.connection.status)
         } catch {
             print(error.localizedDescription)
+        }
+    }
+
+    private func setState(_ status: NEVPNStatus) {
+        DispatchQueue.main.async { [weak self] in
+            self?.state = status
+        }
+    }
+
+    private func migrateStoredProviderConfigurationIfNeeded() async throws {
+        let config = VPNConfig.shared.activeConfigPath
+        guard !config.isEmpty else { return }
+        guard let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol else { return }
+
+        let grpcPort = VPNConfig.shared.grpcServiceModePort == 0 ? 17179 : VPNConfig.shared.grpcServiceModePort
+        let nextConfiguration = providerConfiguration(
+            config: config,
+            grpcServiceModePort: grpcPort,
+            disableMemoryLimit: VPNConfig.shared.disableMemoryLimit
+        )
+        let currentConfiguration = tunnelProtocol.providerConfiguration ?? [:]
+        let currentPort = (currentConfiguration["GrpcServiceModePort"] as? NSNumber)?.intValue
+            ?? currentConfiguration["GrpcServiceModePort"] as? Int
+        if currentConfiguration["Config"] as? String == nextConfiguration["Config"] as? String,
+           currentPort == grpcPort,
+           currentConfiguration["DisableMemoryLimit"] as? String == nextConfiguration["DisableMemoryLimit"] as? String {
+            return
+        }
+
+        let shouldRestartConnectedTunnel = isActiveTunnelStatus(manager.connection.status)
+        manager.isEnabled = true
+        manager.isOnDemandEnabled = false
+        manager.onDemandRules = []
+        tunnelProtocol.providerConfiguration = nextConfiguration
+        manager.protocolConfiguration = tunnelProtocol
+        try await manager.saveToPreferences()
+        try await manager.loadFromPreferences()
+        setState(manager.connection.status)
+
+        if shouldRestartConnectedTunnel {
+            manager.connection.stopVPNTunnel()
+            for _ in 0..<20 {
+                let status = manager.connection.status
+                setState(status)
+                if status == .disconnected || status == .invalid {
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            try? manager.connection.startVPNTunnel()
+            setState(manager.connection.status)
+        }
+    }
+
+    private func providerConfiguration(
+        config: String,
+        grpcServiceModePort: Int,
+        disableMemoryLimit: Bool
+    ) -> [String: Any] {
+        [
+            "Config": config,
+            "GrpcServiceModePort": grpcServiceModePort,
+            "DisableMemoryLimit": disableMemoryLimit ? "YES" : "NO",
+        ]
+    }
+
+    private func isActiveTunnelStatus(_ status: NEVPNStatus) -> Bool {
+        switch status {
+        case .connected, .connecting, .reasserting:
+            return true
+        default:
+            return false
         }
     }
     
@@ -204,7 +286,11 @@ class VPNManager: ObservableObject {
         await set(upload: 0, download: 0)
 //        guard state == .disconnected else { return }
         do {
-            try await enableVPNManager()
+            try await enableVPNManager(
+                config: config,
+                grpcServiceModePort: grpcServiceModePort,
+                disableMemoryLimit: disableMemoryLimit
+            )
             try manager.connection.startVPNTunnel(options: [
                 "Config": config as NSString,
                 "GrpcServiceModePort":NSNumber(value: grpcServiceModePort),

@@ -5,7 +5,6 @@ import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:loggy/loggy.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/features/profile/data/profile_path_resolver.dart';
@@ -39,6 +38,7 @@ class ProfileConfigStore with InfraLogger {
 
   static const formatVersion = 1;
   static const algorithmName = 'AES-256-GCM';
+  static const metadataPrefix = 'enc:v1:';
   static const _secureKeyName = 'profile_config_encryption_key_v1';
   static const _fallbackKeyName = 'profile_config_encryption_key_v1_insecure_fallback';
   static const _fallbackMarkerName = 'profile_config_encryption_key_uses_insecure_fallback';
@@ -179,6 +179,55 @@ class ProfileConfigStore with InfraLogger {
     }
   }
 
+  Future<String> protectMetadata(String plaintext) async {
+    if (plaintext.startsWith(metadataPrefix)) return plaintext;
+
+    final keyBytes = await _getOrCreateKeyBytes();
+    final nonce = _randomBytes(_nonceLength);
+    final secretBox = await _cipher.encrypt(utf8.encode(plaintext), secretKey: SecretKey(keyBytes), nonce: nonce);
+    final payload = jsonEncode(<String, Object?>{
+      'n': base64Encode(secretBox.nonce),
+      'c': base64Encode(secretBox.cipherText),
+      't': base64Encode(secretBox.mac.bytes),
+    });
+    return '$metadataPrefix${base64UrlEncode(utf8.encode(payload))}';
+  }
+
+  Future<String?> protectNullableMetadata(String? plaintext) async {
+    if (plaintext == null) return null;
+    return protectMetadata(plaintext);
+  }
+
+  Future<String> revealMetadata(String value) async {
+    if (!value.startsWith(metadataPrefix)) return value;
+
+    try {
+      final encoded = value.substring(metadataPrefix.length);
+      final decoded = jsonDecode(utf8.decode(base64Url.decode(encoded)));
+      if (decoded is! Map<String, dynamic>) {
+        throw ProfileConfigStoreException('encrypted metadata has invalid envelope');
+      }
+      final nonce = _decodeShortField(decoded, 'n');
+      final cipherText = _decodeShortField(decoded, 'c');
+      final tag = _decodeShortField(decoded, 't');
+      final keyBytes = await _getExistingKeyBytes();
+      final clearBytes = await _cipher.decrypt(
+        SecretBox(cipherText, nonce: nonce, mac: Mac(tag)),
+        secretKey: SecretKey(keyBytes),
+      );
+      return utf8.decode(clearBytes);
+    } on SecretBoxAuthenticationError catch (error) {
+      throw ProfileConfigStoreException('encrypted metadata integrity check failed', error);
+    } on FormatException catch (error) {
+      throw ProfileConfigStoreException('encrypted metadata envelope is corrupted', error);
+    }
+  }
+
+  Future<String?> revealNullableMetadata(String? value) async {
+    if (value == null) return null;
+    return revealMetadata(value);
+  }
+
   Future<String> _decryptFile(File file) async {
     try {
       final decoded = jsonDecode(await file.readAsString());
@@ -213,6 +262,14 @@ class ProfileConfigStore with InfraLogger {
     final value = decoded[field];
     if (value is! String || value.isEmpty) {
       throw ProfileConfigStoreException('encrypted profile missing $field');
+    }
+    return base64Decode(value);
+  }
+
+  List<int> _decodeShortField(Map<String, dynamic> decoded, String field) {
+    final value = decoded[field];
+    if (value is! String || value.isEmpty) {
+      throw ProfileConfigStoreException('encrypted metadata missing $field');
     }
     return base64Decode(value);
   }

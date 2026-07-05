@@ -2,9 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gap/gap.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
@@ -17,7 +19,6 @@ import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/features/settings/notifier/config_option/config_option_notifier.dart';
 import 'package:zeon/gen/assets.gen.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ConnectionButton extends HookConsumerWidget {
   const ConnectionButton({super.key});
@@ -27,6 +28,11 @@ class ConnectionButton extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final connectionStatus = ref.watch(connectionNotifierProvider);
     final resolvedConnectionStatus = connectionStatus.valueOrNull;
+    final lastSettledConnectionStatus = useRef<ConnectionStatus?>(null);
+    if (resolvedConnectionStatus case Connected() || Disconnected()) {
+      lastSettledConnectionStatus.value = resolvedConnectionStatus;
+    }
+    final visualConnectionStatus = resolvedConnectionStatus ?? lastSettledConnectionStatus.value;
     final activeProxy = ref.watch(activeProxyNotifierProvider);
     final delay = activeProxy.valueOrNull?.urlTestDelay ?? 0;
     final hasValidDelay = delay > 0 && delay < 65000;
@@ -44,7 +50,7 @@ class ConnectionButton extends HookConsumerWidget {
 
     final isInitialConnectionLoad = connectionStatus.isLoading && resolvedConnectionStatus == null;
 
-    final visualState = switch (resolvedConnectionStatus) {
+    final visualState = switch (visualConnectionStatus) {
       Connecting() || Disconnecting() => _ConnectionButtonVisualState.loading,
       Connected() => _ConnectionButtonVisualState.connected,
       _ when isInitialConnectionLoad => _ConnectionButtonVisualState.loading,

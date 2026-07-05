@@ -10,6 +10,7 @@ import 'package:zeon/features/profile/data/profile_parser.dart';
 import 'package:zeon/features/profile/data/profile_path_resolver.dart';
 import 'package:zeon/features/profile/data/profile_repository.dart';
 import 'package:zeon/features/settings/data/config_option_data_providers.dart';
+import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
 part 'profile_data_providers.g.dart';
@@ -30,7 +31,11 @@ Future<ProfileRepository> profileRepository(Ref ref) async {
 
 @Riverpod(keepAlive: true)
 ProfileDataSource profileDataSource(Ref ref) {
-  return ProfileDao(ref.watch(dbProvider));
+  return ProtectedProfileDataSource(
+    delegate: ProfileDao(ref.watch(dbProvider)),
+    configStore: ref.watch(profileConfigStoreProvider),
+    enabled: PlatformUtils.isApple,
+  );
 }
 
 @Riverpod(keepAlive: true)

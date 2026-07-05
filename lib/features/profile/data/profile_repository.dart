@@ -16,8 +16,8 @@ import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/model/profile_failure.dart';
 import 'package:zeon/features/profile/model/profile_sort_enum.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
-import 'package:zeon/zeoncore/zeon_core_service.dart';
 import 'package:zeon/utils/custom_loggers.dart';
+import 'package:zeon/zeoncore/zeon_core_service.dart';
 
 abstract interface class ProfileRepository {
   TaskEither<ProfileFailure, Unit> init();
@@ -76,6 +76,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
           await _profilePathResolver.directory.create(recursive: true);
         }
         await _profileConfigStore.init();
+        await _profileDataSource.migrateSensitiveFields();
       }
 
       return right(unit);

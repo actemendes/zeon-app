@@ -627,7 +627,7 @@ class _OperatorsCard extends StatelessWidget {
       width: double.infinity,
       height: _ServersCard.height,
       decoration: BoxDecoration(color: theme.colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(16)),
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -641,27 +641,15 @@ class _OperatorsCard extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          Align(
-            alignment: Alignment.bottomLeft,
-            child: SizedBox(
-              width: (32 * 3) + (10 * 2),
-              child: GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: operatorAssetPaths.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  mainAxisExtent: 32,
-                ),
-                itemBuilder: (context, index) {
-                  return SizedBox.square(
-                    dimension: 32,
-                    child: Image.asset(operatorAssetPaths[index], fit: BoxFit.contain),
-                  );
-                },
-              ),
+          SizedBox(
+            width: (30 * 3) + (8 * 2),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final assetPath in operatorAssetPaths)
+                  SizedBox.square(dimension: 30, child: Image.asset(assetPath, fit: BoxFit.contain)),
+              ],
             ),
           ),
         ],

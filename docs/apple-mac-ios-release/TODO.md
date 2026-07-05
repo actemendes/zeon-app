@@ -533,6 +533,9 @@ Manual validation required:
 - [x] Milestone 3 / stale Packet Tunnel PlugInKit registration: `pluginkit -m -A -D -vvv -i app.zeon.macos.HiddifyPacketTunnel` showed duplicate providers: old default Xcode `DerivedData` and current `build/macos`. The old `DerivedData` `Hiddify.app` was unregistered with `lsregister -u`, its appex removed from PlugInKit, and the stale app bundle deleted. Current PlugInKit state now shows only the fresh `build/macos/.../HiddifyPacketTunnel.appex`.
 - [x] Milestone 3 / macOS Packet Tunnel provisioning: after the Apple Developer account was added in Xcode, signed debug build succeeded for current ids `app.zeon.macos` and `app.zeon.macos.HiddifyPacketTunnel`. Profiles verified: `Mac Team Provisioning Profile: app.zeon.macos` UUID `a8092090-552f-4fe8-ba67-1acdeca293ae` and `Mac Team Provisioning Profile: app.zeon.macos.HiddifyPacketTunnel` UUID `16aeaa1d-e0db-4cbe-96d6-61f87f488b2a`.
 - [x] Milestone 3 / macOS Packet Tunnel TUN stack mismatch: provider log showed `system and mixed stack are not available when includeAllNetworks is enabled`; Apple builds now force `tun-implementation = gvisor` in migration/preferences/UI/core payload. Later diagnostics reached `CONNECTED`, so the next failure is tracked separately as post-connect interface discovery.
+- [x] Milestone 3 / Edge Chromium traffic parity: current live macOS VPN runtime showed Safari working while Edge/Chromium could fail because Chromium aggressively uses Secure DNS/DoH, QUIC/HTTP3 and IPv6/AAAA paths. Fresh App Group inspection showed `packet-tunnel-config.json` contains only `outbounds` and `route`, while `box.log` contained direct `en1` IPv6 `no route to host`, DNS/DoH resets to `2001:4860:4860::8844:443/853`, and repeated direct outbound timeouts. Fixed in `lib/zeoncore/zeon_core_service.dart`: Apple runtime payload now forces `ipv6-mode=ipv4_only`, both DNS domain strategies to `ipv4_only`, and `block-quic=true`. User launched the rebuilt `build/macos/Build/Products/Debug/ZEON.app` and confirmed Safari/Edge traffic now works correctly.
+- [!] Milestone 3 / Apple profile metadata privacy: profile content files are already AES-256-GCM `.zcfg` envelopes on macOS App Group storage, but profile metadata in Flutter Drift DB (`name`, `url`, headers/override fields) was still plaintext. Implemented Apple-only `ProtectedProfileDataSource`: writes and migrates sensitive metadata as `enc:v1:*`, reads/decrypts transparently for UI, preserves plaintext lookup by decrypting rows in memory, and restores sort-by-name after decryption. Debug macOS build succeeds. Следующий минимальный шаг: launch the rebuilt `build/macos/Build/Products/Debug/ZEON.app`, let `ProfileRepository.init()` run metadata migration, then verify `~/Library/Containers/app.zeon.macos/Data/Library/db.sqlite` has encrypted profile `name/url` counters and the UI still displays profile names correctly.
+- [x] Milestone 3 / Apple rebuild helper scripts: added executable helper scripts for local Apple dev loops. `scripts/rebuild_macos.sh` rebuilds macOS (`BUILD_MODE=debug|profile|release`, `OPEN_APP=1` optional). `scripts/rebuild_ios_install_iphone.sh` builds iOS (`IOS_MODE=debug|profile|release`), auto-detects a connected iPhone via `devicectl`, installs `build/ios/iphoneos/Runner.app`, and supports `DEVICE_ID=<CoreDevice-UUID>` plus `LAUNCH_APP=1`.
 - [x] Milestone 4 / clean iOS VPN permission flow: accepted closed for this release pass by user manual observation without destructive reset of the personal iPhone.
 - [x] Milestone 4 / live iOS stability scenarios: accepted closed after installed build and user manual observation; no more iOS VPN/profile/fragmentation errors were seen.
 - [x] Milestone 4 / DNS routing and 15+ minute resource stability: accepted closed for this release pass by manual observation; no fresh DNS/resource instability was reported after the fixes.
@@ -1264,3 +1267,99 @@ Verification:
 
 Open issues:
 - Для будущего UX-улучшения можно отдельно вернуться к Smart Active состоянию "идёт выбор/собираем кандидатов" или более агрессивному startup/manual-refresh, но это не блокирует закрытие Milestone 4.
+
+### 2026-07-05 / Codex
+
+Scope:
+- Продолжил только Milestone 3: разобрал macOS VPN сценарий, где Safari работает через Zeon, а Edge/Chromium пропускает только RU-трафик или блокирует остальное.
+
+Result:
+- Проверил реальное live-окружение: Zeon VPN подключен как `app.zeon.macos`, default route/DNS уходят на `utun5`, provider использует `packet-tunnel-config.json` с `route.default_interface=en1` и `auto_detect_interface=false`.
+- Нашел отличие по поведению браузеров: Safari в основном следует системному DNS/NetworkExtension пути, а Edge/Chromium агрессивно использует Secure DNS/DoH, QUIC/HTTP3 и IPv6/AAAA. В текущем `box.log` есть прямые `en1` IPv6 ошибки `no route to host`, DNS/DoH resets на `2001:4860:4860::8844:443/853` и direct outbound timeouts.
+- Внес минимальный Apple-only runtime fix: для Apple payload теперь принудительно выставляются `ipv6-mode=ipv4_only`, `remote-dns-domain-strategy=ipv4_only`, `direct-dns-domain-strategy=ipv4_only`, `block-quic=true`.
+
+Changed files:
+- `lib/zeoncore/zeon_core_service.dart`
+- `docs/apple-mac-ios-release/TODO.md`
+
+Verification:
+- `find macos -iname '*Packet*' -o -iname '*Tunnel*'`: подтвердил актуальный `macos/ZeonPacketTunnel`.
+- `jq` по `~/Library/Group Containers/group.app.zeon.macos/Library/Caches/Working/packet-tunnel-config.json`: runtime config contains `outbounds` + `route`, `route.default_interface=en1`, no generated `dns`/`inbounds` keys in provider copy.
+- `tail`/`rg` по App Group `box.log`: confirmed Edge-relevant IPv6/DoH/direct errors without exposing proxy secrets.
+- `source scripts/apple/env.sh && dart format lib/zeoncore/zeon_core_service.dart`: formatted successfully.
+- `source scripts/apple/env.sh && flutter analyze lib/zeoncore/zeon_core_service.dart`: no issues.
+- `source scripts/apple/env.sh && flutter build macos --debug`: build succeeded at `build/macos/Build/Products/Debug/ZEON.app`; only existing Pods/AppIcon warnings were emitted.
+
+Open issues:
+- Нужно пересобрать и запустить macOS app, включить VPN, открыть Safari и Edge, затем снять свежий diagnostics run. Проверить, что safe payload содержит `ipv4_only`/`block-quic=true`, а Edge больше не блокирует non-RU трафик.
+
+### 2026-07-05 / Codex
+
+Scope:
+- Закрыл Milestone 3 Edge/Chromium parity после пользовательской проверки свежей macOS debug-сборки.
+
+Result:
+- Пользователь запустил `build/macos/Build/Products/Debug/ZEON.app` после Apple-only IPv4/DNS/QUIC runtime fix.
+- Подтверждено: Safari и Edge теперь работают корректно через macOS VPN tunnel.
+- Блокер `Milestone 3 / Edge Chromium traffic parity` переведен из `[!]` в `[x]`.
+
+Changed files:
+- `docs/apple-mac-ios-release/TODO.md`
+
+Verification:
+- Manual user acceptance on macOS: "Да, все отлично работает теперь".
+
+Open issues:
+- По Edge/Chromium parity открытых вопросов не осталось.
+
+### 2026-07-05 / Codex
+
+Scope:
+- Продолжил только Milestone 3: применил Windows-подобную privacy-схему к Apple-сборкам для профилей и локальных файлов.
+
+Result:
+- Подтвердил по реальному macOS App Group, что profile content уже хранится как encrypted `.zcfg` envelope (`version`, `algorithm`, `nonce`, `ciphertext`, `tag`), а не plaintext `.json`.
+- Нашел незакрытый слой: Flutter/Drift metadata DB `~/Library/Containers/app.zeon.macos/Data/Library/db.sqlite` хранит `profile_entries.name/url/...` обычными строками.
+- Добавил Apple-only `ProtectedProfileDataSource`: при insert/edit sensitive metadata шифруется через тот же AES-256-GCM key из `ProfileConfigStore`, при read/watch прозрачно расшифровывается для UI, `getByName/getByUrl` работают через in-memory decrypt, sort-by-name выполняется после decrypt.
+- Добавил startup migration через `ProfileRepository.init()`: старые plaintext metadata будут переписаны в `enc:v1:*` при запуске новой Apple-сборки.
+
+Changed files:
+- `lib/features/profile/data/profile_config_store.dart`
+- `lib/features/profile/data/profile_data_source.dart`
+- `lib/features/profile/data/profile_data_providers.dart`
+- `lib/features/profile/data/profile_repository.dart`
+- `docs/apple-mac-ios-release/TODO.md`
+
+Verification:
+- `jq` по `~/Library/Group Containers/group.app.zeon.macos/Library/Caches/Working/configs/*.zcfg`: confirmed AES-256-GCM envelope without plaintext profile content.
+- `sqlite3 ~/Library/Containers/app.zeon.macos/Data/Library/db.sqlite "select count(*), ..."` before launching the new build: `1|0|0`, confirming existing profile metadata still needs runtime migration.
+- `source scripts/apple/env.sh && dart format lib/features/profile/data/profile_config_store.dart lib/features/profile/data/profile_data_source.dart lib/features/profile/data/profile_data_providers.dart lib/features/profile/data/profile_repository.dart`: formatted successfully.
+- `source scripts/apple/env.sh && flutter analyze lib/features/profile/data/profile_config_store.dart lib/features/profile/data/profile_data_source.dart lib/features/profile/data/profile_data_providers.dart lib/features/profile/data/profile_repository.dart`: no issues.
+- `source scripts/apple/env.sh && flutter build macos --debug`: build succeeded at `build/macos/Build/Products/Debug/ZEON.app`; only existing Pods privacy warnings were emitted.
+
+Open issues:
+- Нужно запустить свежий `build/macos/Build/Products/Debug/ZEON.app`, открыть список профилей, убедиться что UI показывает имя профиля, затем повторить safe sqlite counter check: ожидается `encrypted_names = total` и `encrypted_urls = remote profile count`.
+
+### 2026-07-05 / Codex
+
+Scope:
+- Продолжил только Milestone 3: добавил быстрые Apple dev-loop скрипты для пересборки macOS и iOS с установкой iOS build на физический iPhone.
+
+Result:
+- Добавлен `scripts/rebuild_macos.sh`: source-ит `scripts/apple/env.sh`, пересобирает macOS через `flutter build macos`, по умолчанию в `debug`, печатает абсолютный путь к `.app`, поддерживает `BUILD_MODE=debug|profile|release`, `FLUTTER_TARGET`, `SENTRY_DSN` и `OPEN_APP=1`.
+- Добавлен `scripts/rebuild_ios_install_iphone.sh`: source-ит `scripts/apple/env.sh`, пересобирает iOS через `flutter build ios`, по умолчанию в `profile`, auto-detect-ит подключенный iPhone через `xcrun devicectl list devices`, устанавливает `build/ios/iphoneos/Runner.app`, поддерживает `DEVICE_ID=<CoreDevice-UUID>`, `IOS_MODE=debug|profile|release`, `FLUTTER_TARGET`, `SENTRY_DSN` и `LAUNCH_APP=1`.
+- Проверил реальное окружение: `xcrun devicectl list devices` видит подключенный `iPhone (Zeon)`, а `flutter devices --machine` видит тот же physical iOS device.
+- Скрипты сделаны executable.
+
+Changed files:
+- `scripts/rebuild_macos.sh`
+- `scripts/rebuild_ios_install_iphone.sh`
+- `docs/apple-mac-ios-release/TODO.md`
+
+Verification:
+- `bash -n scripts/rebuild_macos.sh`
+- `bash -n scripts/rebuild_ios_install_iphone.sh`
+- `ls -l scripts/rebuild_macos.sh scripts/rebuild_ios_install_iphone.sh`
+
+Open issues:
+- Полный iOS build/install не запускался автоматически в этом шаге, чтобы не трогать подключенный iPhone без отдельной команды пользователя. Для проверки запуска: `./scripts/rebuild_ios_install_iphone.sh`.

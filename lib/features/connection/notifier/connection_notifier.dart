@@ -96,6 +96,16 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       if (event case Disconnected(connectionFailure: final _?) when PlatformUtils.isDesktop) {
         ref.read(Preferences.startedByUser.notifier).update(false);
       }
+      if (PlatformUtils.isIOS) {
+        switch (event) {
+          case Connected():
+            ref.read(Preferences.startedByUser.notifier).update(true);
+          case Disconnected():
+            ref.read(Preferences.startedByUser.notifier).update(false);
+          default:
+            break;
+        }
+      }
       final previousStatus = _lastObservedConnectionStatus;
       _lastObservedConnectionStatus = event;
       loggy.info("connection status: ${event.format()}");

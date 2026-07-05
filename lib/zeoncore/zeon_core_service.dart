@@ -580,6 +580,10 @@ class ZeonCoreService with InfraLogger {
     }
     if (PlatformUtils.isApple) {
       map["tun-implementation"] = TunImplementation.gvisor.name;
+      map["ipv6-mode"] = IPv6Mode.disable.key;
+      map["remote-dns-domain-strategy"] = DomainStrategy.ipv4Only.key;
+      map["direct-dns-domain-strategy"] = DomainStrategy.ipv4Only.key;
+      map["block-quic"] = true;
     }
     if (_debugUdpProbeEnabled) {
       if (_debugUdpProbeSecret.isEmpty) {
@@ -630,6 +634,10 @@ class ZeonCoreService with InfraLogger {
       "critical-domains-fallback-enabled": payload["critical-domains-fallback-enabled"],
       "mtu": payload["mtu"],
       "tun-implementation": payload["tun-implementation"],
+      "ipv6-mode": payload["ipv6-mode"],
+      "remote-dns-domain-strategy": payload["remote-dns-domain-strategy"],
+      "direct-dns-domain-strategy": payload["direct-dns-domain-strategy"],
+      "block-quic": payload["block-quic"],
       "strict-route": payload["strict-route"],
       "udp-probe-enabled": payload["udp-probe-enabled"],
       "udp-probe-endpoint": payload["udp-probe-endpoint"],
@@ -1264,6 +1272,9 @@ class ZeonCoreService with InfraLogger {
       }
     } catch (e) {
       loggy.debug("background core is not ready for status listener: $e");
+    }
+    if (!statusController.hasValue) {
+      statusController.add(currentState);
     }
     yield* statusController.stream;
     // .endWith(const CoreStatus.stopped());

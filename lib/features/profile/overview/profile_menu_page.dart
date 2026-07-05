@@ -156,7 +156,7 @@ class ProfileMenuPage extends HookConsumerWidget {
 
     return Scaffold(
       key: const ValueKey(UiNames.screenProfileMenu),
-      appBar: AppBar(title: Text(t.pages.profileDetails.title.toUpperCase())),
+      appBar: AppBar(centerTitle: false, title: Text(t.pages.profileDetails.title.toUpperCase())),
       body: CustomMultiChildLayout(
         delegate: _ProfileMenuLayoutDelegate(),
         children: [
