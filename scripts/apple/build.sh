@@ -7,9 +7,29 @@ cd "${PROJECT_ROOT}"
 
 OUT_DIR="${PROJECT_ROOT}/out/apple"
 TARGET="${FLUTTER_TARGET:-lib/main.dart}"
+APPLE_RELEASE="${APPLE_RELEASE:-app-store}"
+MACOS_EXPORT_DESTINATION="${MACOS_EXPORT_DESTINATION:-export}"
 BUILD_ARGS=(--release --target "${TARGET}")
+BUILD_ARGS+=(--dart-define "release=${APPLE_RELEASE}")
 if [[ -n "${SENTRY_DSN:-}" ]]; then
   BUILD_ARGS+=(--dart-define "sentry_dsn=${SENTRY_DSN}")
+fi
+
+XCODEBUILD_AUTH_ARGS=()
+if [[ -n "${APP_STORE_CONNECT_API_KEY_PATH:-}" ||
+      -n "${APP_STORE_CONNECT_API_KEY_ID:-}" ||
+      -n "${APP_STORE_CONNECT_API_ISSUER_ID:-}" ]]; then
+  if [[ -z "${APP_STORE_CONNECT_API_KEY_PATH:-}" ||
+        -z "${APP_STORE_CONNECT_API_KEY_ID:-}" ||
+        -z "${APP_STORE_CONNECT_API_ISSUER_ID:-}" ]]; then
+    echo "Set APP_STORE_CONNECT_API_KEY_PATH, APP_STORE_CONNECT_API_KEY_ID, and APP_STORE_CONNECT_API_ISSUER_ID together." >&2
+    exit 2
+  fi
+  XCODEBUILD_AUTH_ARGS+=(
+    -authenticationKeyPath "${APP_STORE_CONNECT_API_KEY_PATH}"
+    -authenticationKeyID "${APP_STORE_CONNECT_API_KEY_ID}"
+    -authenticationKeyIssuerID "${APP_STORE_CONNECT_API_ISSUER_ID}"
+  )
 fi
 
 require_file() {
@@ -17,6 +37,25 @@ require_file() {
     echo "Missing $1. Run ./scripts/apple/bootstrap.sh first." >&2
     exit 1
   }
+}
+
+set_plist_string() {
+  local plist="$1"
+  local key="$2"
+  local value="$3"
+  if /usr/libexec/PlistBuddy -c "Print :${key}" "${plist}" >/dev/null 2>&1; then
+    /usr/libexec/PlistBuddy -c "Set :${key} ${value}" "${plist}"
+  else
+    /usr/libexec/PlistBuddy -c "Add :${key} string ${value}" "${plist}"
+  fi
+}
+
+run_xcodebuild() {
+  if ((${#XCODEBUILD_AUTH_ARGS[@]})); then
+    xcodebuild "$@" "${XCODEBUILD_AUTH_ARGS[@]}"
+  else
+    xcodebuild "$@"
+  fi
 }
 
 ensure_generated_sources() {
@@ -84,6 +123,54 @@ build_macos_artifacts() {
   echo "Artifacts: ${OUT_DIR}"
 }
 
+build_macos_app_store() {
+  case "${MACOS_EXPORT_DESTINATION}" in
+    export|upload) ;;
+    *)
+      echo "Unsupported MACOS_EXPORT_DESTINATION=${MACOS_EXPORT_DESTINATION}. Use export or upload." >&2
+      exit 2
+      ;;
+  esac
+
+  require_file macos/Runner/Configs/AppleSigning.xcconfig
+  require_file macos/exportOptions.plist
+  require_file hiddify-core/bin/HiddifyCore.xcframework
+  ensure_generated_sources
+
+  flutter build macos "${BUILD_ARGS[@]}" --config-only
+
+  mkdir -p "${OUT_DIR}" "${PROJECT_ROOT}/.apple-build"
+  local archive_path="${PROJECT_ROOT}/build/macos/archive/ZEON.xcarchive"
+  local export_path="${OUT_DIR}/ZEON-macOS-app-store"
+  local export_options="${PROJECT_ROOT}/.apple-build/macos-exportOptions.plist"
+  rm -rf "${archive_path}" "${export_path}"
+  cp macos/exportOptions.plist "${export_options}"
+  set_plist_string "${export_options}" destination "${MACOS_EXPORT_DESTINATION}"
+  if [[ -n "${MACOS_EXPORT_TEAM_ID:-}" ]]; then
+    set_plist_string "${export_options}" teamID "${MACOS_EXPORT_TEAM_ID}"
+  fi
+
+  run_xcodebuild \
+    -workspace macos/Runner.xcworkspace \
+    -scheme Runner \
+    -configuration Release \
+    -destination "generic/platform=macOS" \
+    -archivePath "${archive_path}" \
+    -allowProvisioningUpdates \
+    archive
+
+  run_xcodebuild \
+    -exportArchive \
+    -archivePath "${archive_path}" \
+    -exportPath "${export_path}" \
+    -exportOptionsPlist "${export_options}" \
+    -allowProvisioningUpdates
+
+  echo "Archive: ${archive_path}"
+  echo "Export: ${export_path}"
+  find "${export_path}" -maxdepth 2 -type f -print
+}
+
 build_ios_unsigned() {
   require_file ios/Frameworks/HiddifyCore.xcframework
   ensure_generated_sources
@@ -114,10 +201,11 @@ case "${1:-doctor}" in
   doctor) doctor ;;
   macos-app) build_macos_app ;;
   macos-artifacts) build_macos_artifacts ;;
+  macos-app-store) build_macos_app_store ;;
   ios-unsigned) build_ios_unsigned ;;
   ios-ipa) build_ios_ipa ;;
   *)
-    echo "Usage: $0 {doctor|macos-app|macos-artifacts|ios-unsigned|ios-ipa}" >&2
+    echo "Usage: $0 {doctor|macos-app|macos-artifacts|macos-app-store|ios-unsigned|ios-ipa}" >&2
     exit 2
     ;;
 esac

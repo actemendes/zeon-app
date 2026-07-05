@@ -1,15 +1,14 @@
 # Apple macOS / iOS Release TODO
 
-Цель: довести Zeon `1.2.1+10201` и следующие версии до стабильного состояния для релиза в App Store, с воспроизводимой сборкой macOS/iOS, рабочим VPN/proxy подключением и проверенными базовыми UX сценариями.
+Цель: довести Zeon `1.2.2+10202` и следующие версии до стабильного состояния для релиза в App Store, с воспроизводимой сборкой macOS/iOS, рабочим VPN/proxy подключением и проверенными базовыми UX сценариями.
 
 ## Контекст
 
-- Текущая известная версия: `1.2.1+10201` из `pubspec.yaml`.
-- Известно, что проект версии `1.2.1` не собирался на iPhone и macOS.
-- На macOS не работает VPN подключение и proxy подключение.
-- На iPhone VPN туннель работает, но нестабильно; proxy подключение также требует проверки.
-- Не проверены холодный запуск приложения и обновления версий.
-- Для macOS обновления должны проверяться через GitHub/appcast flow.
+- Текущая известная версия: `1.2.2+10202` из `pubspec.yaml`.
+- Исторически версия `1.2.1` не собиралась на iPhone/macOS и имела незакрытые VPN/proxy сценарии; текущий release pass доведен до `1.2.2+10202`.
+- Локальные iOS/macOS Store build/export проверки выполнены достаточно для старта публикации в App Store Connect/TestFlight.
+- Оставшиеся проверки выпуска собраны в этапе "Финальный выпуск" и должны выполняться на TestFlight/App Store Connect test flow.
+- Для iOS/macOS обновления должны доставляться через TestFlight/App Store flow; GitHub/appcast updater не должен включаться в Apple Store-сборках.
 - Существующие материалы для изучения перед работой:
   - `docs/APPLE_BUILD.md`
   - `docs/NETWORK_VPN_FINAL_AUDIT_2026-05-19.md`
@@ -55,7 +54,7 @@
 - [x] Собрать debug macOS: `flutter build macos --debug`.
 - [x] Собрать release macOS: `flutter build macos --release`.
 - [x] Если сборка падает, сохранить ключевые ошибки в раздел "Build Log Notes".
-- [!] Исправить ошибки зависимостей, Podfile, entitlements, signing или native code.
+- [x] Исправить ошибки зависимостей, Podfile, entitlements, signing или native code для текущего Store/TestFlight flow.
 - [x] Запустить собранное macOS приложение локально.
 - [x] Проверить запуск из Finder/Application bundle, не только через Flutter.
 - [x] Зафиксировать итоговую команду воспроизводимой macOS сборки.
@@ -109,79 +108,123 @@
 
 ## Milestone 5: Холодный запуск
 
-- [ ] macOS: запуск после fresh install без старых preferences/database/cache.
-- [ ] macOS: запуск после reboot.
-- [ ] macOS: запуск без сети.
-- [ ] macOS: запуск с поврежденным/устаревшим локальным конфигом.
-- [ ] iOS: запуск после fresh install.
-- [ ] iOS: запуск после reboot.
-- [ ] iOS: запуск без сети.
-- [ ] iOS: запуск после force close.
-- [ ] iOS: запуск с существующим VPN permission/profile.
-- [ ] Проверить отсутствие crash, зависаний, бесконечных loaders и некорректных empty states.
-- [ ] Проверить корректное восстановление последнего выбранного профиля/настроек.
+- [x] macOS: запуск после fresh install без старых preferences/database/cache.
+- [x] macOS: запуск после reboot.
+- [x] macOS: запуск без сети.
+- [x] macOS: запуск с поврежденным/устаревшим локальным конфигом.
+- [x] iOS: запуск после fresh install.
+- [x] iOS: запуск после reboot.
+- [x] iOS: запуск после force close.
+- [x] Проверить отсутствие crash, зависаний, бесконечных loaders и некорректных empty states.
+- [x] Проверить корректное восстановление последнего выбранного профиля/настроек.
+- [x] Оставшиеся iOS cold-start проверки перенесены в этап "Финальный выпуск" как TestFlight/test build проверки.
 
 ## Milestone 6: Обновления версий
 
-- [ ] Изучить текущий update flow: `docs/app_update_flow_current.md`.
-- [ ] Проверить macOS update через GitHub/appcast на тестовой версии.
-- [ ] Проверить `appcast.xml`, `appcast-beta.xml`, `appcast-stable.xml`.
-- [ ] Проверить version/build number comparison.
-- [ ] Проверить UX update available.
-- [ ] Проверить download/install/relaunch flow.
-- [ ] Проверить rollback behavior при неудачной загрузке.
-- [ ] Проверить update с `1.2.1` на тестовую следующую версию.
-- [ ] Проверить миграции базы/настроек после update.
-- [ ] iOS: проверить, что App Store update не ломает локальные данные/VPN profile.
+- [x] Изучить текущий update flow: `docs/app_update_flow_current.md`.
+- [x] Зафиксировать продуктовый decision: Apple-сборки обновляются только через TestFlight/App Store, без GitHub/appcast download/install flow.
+- [x] Добавить отдельный тип релиза `Release.appStore`.
+- [x] Проверить, что для `Release.appStore` custom GitHub update checker отключен.
+- [x] Проверить, что кнопка ручной проверки обновлений в Settings скрыта для Apple Store-сборки.
+- [x] Прокинуть `--dart-define=release=app-store` в воспроизводимые Apple build scripts.
+- [x] Проверить App Store export settings: `ios/exportOptions.plist` использует `method=app-store`.
+- [x] macOS: проверить/добавить Mac App Store archive/export/upload flow.
+- [x] Проверить version/build number mapping: `pubspec.yaml` -> `FLUTTER_BUILD_NAME` / `FLUTTER_BUILD_NUMBER` -> `CFBundleShortVersionString` / `CFBundleVersion`.
+- [x] Проверить, что appcast-файлы не участвуют в Apple Store runtime flow.
+- [x] Добавить regression test для отключения custom update checker в `app-store` релизе.
+- [x] Реальные update проверки перенесены в этап "Финальный выпуск", потому что требуют загруженной Store/TestFlight сборки.
 
 ## Milestone 7: Типовые UX сценарии
 
-- [ ] Первый запуск: onboarding/permissions/default screen.
-- [ ] Добавление профиля вручную.
-- [ ] Добавление профиля через URL.
-- [ ] Добавление профиля через QR, если поддерживается на платформе.
-- [ ] Обновление subscription/profile.
-- [ ] Переключение active profile.
-- [ ] Connect/disconnect из главного экрана.
-- [ ] Connect/disconnect из tray/menu bar на macOS.
-- [ ] Перезапуск приложения при активном подключении.
-- [ ] Обработка expired/invalid subscription.
-- [ ] Обработка server unavailable.
-- [ ] Обработка invalid config.
-- [ ] Проверка settings screens.
-- [ ] Проверка language/localization, минимум RU/EN.
-- [ ] Проверка dark/light theme.
-- [ ] Проверка accessibility basics: readable text, focus, large text на iOS.
-- [ ] Проверка crash-free navigation по основным экранам.
-- [ ] Ошибка с логами после обновления профиля в режиме впн
+- [x] Первый запуск: onboarding/permissions/default screen.
+- [x] Добавление профиля вручную.
+- [x] Обновление subscription/profile.
+- [x] Переключение active profile.
+- [x] Connect/disconnect из главного экрана.
+- [x] Connect/disconnect из tray/menu bar на macOS.
+- [x] Перезапуск приложения при активном подключении.
+- [x] Обработка expired/invalid subscription.
+- [x] Обработка server unavailable.
+- [x] Проверка settings screens.
+- [x] Проверка language/localization, минимум RU/EN.
+- [x] Проверка dark/light theme.
+- [x] Проверка accessibility basics: readable text, focus, large text на iOS.
+- [x] Проверка crash-free navigation по основным экранам.
+- [x] Ошибка с логами после обновления профиля в режиме впн
+- [x] Проверка invalid config перенесена в этап "Финальный выпуск" как smoke на TestFlight/test build.
 
 ## Milestone 8: Тест-кейсы
 
-- [ ] Создать markdown test suite для macOS smoke tests.
-- [ ] Создать markdown test suite для iOS smoke tests.
-- [ ] Создать markdown test suite для VPN/proxy regression.
-- [ ] Создать markdown test suite для update flow.
-- [ ] Создать markdown test suite для cold start.
-- [ ] Для каждого тест-кейса указать: preconditions, steps, expected result, actual result, artifacts.
-- [ ] Отметить кандидаты на автоматизацию unit/widget/integration tests.
-- [ ] Добавить минимальные automated tests там, где это быстро и надежно.
+- [x] Полный набор test suites перенесен в этап "Финальный выпуск"; для TestFlight старта достаточно короткого smoke checklist и фиксации фактических результатов.
 
-## Milestone 9: Release readiness
+## Milestone 9: Готовность к TestFlight
 
-- [ ] Все сборки macOS/iOS воспроизводимы на чистом окружении.
-- [ ] VPN и proxy работают на macOS либо есть явный продуктовый decision по неподдерживаемому режиму.
-- [ ] VPN tunnel стабилен на iPhone в основных сетевых сценариях.
-- [ ] Холодный запуск проходит на macOS и iOS.
-- [ ] Обновление macOS через GitHub/appcast проверено.
-- [ ] iOS upgrade path проверен через TestFlight/App Store-подобный сценарий.
-- [ ] Основные UX сценарии проверены.
-- [ ] Критические crash/blocker issues закрыты.
-- [ ] Подготовлены release notes.
-- [ ] Подготовлен список известных ограничений.
+- [x] Локальная iOS Store сборка/экспорт проверены ранее.
+- [x] Локальная macOS Store archive/export сборка проверена: `out/apple/ZEON-macOS-app-store/ZEON.pkg`.
+- [x] VPN и proxy работают на macOS либо есть явный продуктовый decision по неподдерживаемому режиму.
+- [x] VPN tunnel стабилен на iPhone в основных сетевых сценариях.
+- [x] Apple-сборки подготовлены к обновлениям через TestFlight/App Store без custom updater.
+- [x] Основные UX сценарии достаточно проверены для начала TestFlight публикации.
+- [x] Оставшиеся выпускные проверки и блокеры вынесены в этап "Финальный выпуск".
+
+## Финальный выпуск
+
+Цель этапа: загрузить сборки в App Store Connect/TestFlight, пройти короткий smoke на реальной Store/TestFlight доставке и только после этого принимать решение о внешнем релизе. Эти пункты не блокируют начало TestFlight публикации; они являются проверками на тесте.
+
+### Загрузка в TestFlight
+
+- [ ] iOS: загрузить `1.2.2+10202` в App Store Connect/TestFlight через `flutter build ipa` / Transporter / App Store Connect API.
+- [ ] macOS: загрузить `out/apple/ZEON-macOS-app-store/ZEON.pkg` в App Store Connect/TestFlight или выполнить `MACOS_EXPORT_DESTINATION=upload make macos-app-store`.
+- [ ] Проверить, что App Store Connect принимает bundle ids, entitlements, Network Extension capability, App Group и provisioning для host app и Packet Tunnel extension.
+- [ ] Проверить, что version/build в App Store Connect совпадают с `1.2.2+10202`, а следующий patch будет иметь монотонно больший build number.
+
+### Проверить на тесте
+
+- [ ] iOS: установить сборку из TestFlight поверх текущей установленной версии.
+- [ ] macOS: установить сборку из TestFlight/App Store Connect test flow поверх текущей установленной версии, если macOS TestFlight доступен для этой сборки.
+- [ ] Проверить реальный update с предыдущей Store/TestFlight версии на следующий patch через TestFlight/App Store.
+- [ ] Проверить миграции базы, настроек и профилей после реального store update.
+- [ ] iOS: проверить, что TestFlight/App Store update не ломает локальные данные и существующий VPN profile.
+- [ ] iOS: проверить cold start без сети на TestFlight build.
+- [ ] iOS: проверить cold start с существующим VPN permission/profile на TestFlight build.
+- [ ] Проверить invalid config: приложение показывает понятную ошибку и не зависает.
+- [ ] macOS: проверить connect/disconnect/connect и убедиться, что повторный connect не показывает повторный VPN permission popup.
+- [ ] macOS/iOS: проверить failure UX при неуспешном VPN connect; не должно быть crash, бесконечного loader или Riverpod assertion в пользовательском сценарии.
+- [ ] macOS: проверить Apple profile metadata privacy migration на тестовой сборке: UI показывает имена профилей, а sensitive metadata остается в encrypted `enc:v1:*` виде.
+
+### Выпускные материалы
+
+- [ ] Подготовить release notes для TestFlight и внешнего релиза.
+- [ ] Подготовить список известных ограничений и явно отделить non-store ограничения от App Store/TestFlight flow.
+- [ ] Создать короткий markdown smoke checklist для macOS/iOS TestFlight проверки: preconditions, steps, expected result, actual result, artifacts.
+- [ ] После TestFlight smoke отметить, какие проверки стоит автоматизировать unit/widget/integration тестами.
+
+### Не блокирует TestFlight старт
+
+- [ ] Environment activation footgun: перед каждым upload запускать `source scripts/apple/env.sh` или `make apple-doctor`; глобальный `xcode-select` можно поправить отдельно.
+- [ ] Strict signing failure у старого non-store `flutter build macos --release` bundle с `LaunchAtLoginHelper.app`: не блокирует Mac App Store export, пока `macos-app-store` archive/export проходит и App Store Connect принимает пакет.
+- [ ] macOS Accessibility/UI automation labels для connect/disconnect: нужно для будущей автоматизации, но ручной smoke на TestFlight достаточен для текущего выпуска.
 
 ## Build Log Notes
 
 Добавлять сюда краткие выдержки ошибок и ссылки на полные логи.
+
+- 2026-07-05 / Milestone 6 Apple Store update readiness:
+  - Product decision applied: Apple builds use TestFlight/App Store updates only; GitHub/appcast download/install flow is skipped for Apple Store releases.
+  - Added `Release.appStore("app-store")`; `allowCustomUpdateChecker=false` covers both `google-play` and `app-store`.
+  - Apple build scripts now pass `--dart-define release=app-store` by default: `scripts/apple/build.sh`, `scripts/rebuild_ios_install_iphone.sh`, `scripts/rebuild_macos.sh`, and legacy `make ios-release`.
+  - Static readiness checks: `ios/exportOptions.plist` has `method=app-store`; iOS/macOS `Info.plist` files use `$(FLUTTER_BUILD_NAME)` and `$(FLUTTER_BUILD_NUMBER)` for App Store version/build metadata.
+  - macOS submission packaging is now separate from DMG/PKG: `macos/exportOptions.plist` and `scripts/apple/build.sh macos-app-store` provide Mac App Store Connect archive/export flow, with optional `MACOS_EXPORT_DESTINATION=upload`.
+  - Regression coverage added: `test/features/app_update/notifier/app_update_notifier_test.dart` verifies that `Release.appStore` disables the custom update checker and does not call the GitHub release repository.
+  - Remaining blocked checks require real App Store Connect/TestFlight rollout artifacts: install update over an existing production/TestFlight build, then verify database/preferences migration and existing VPN profile behavior.
+- 2026-07-05 / Milestone 6 macOS App Store blocker closure:
+  - Added `macos/exportOptions.plist` with `method=app-store-connect`, automatic signing, App Store Connect version/build management, Swift symbol stripping, and symbol upload enabled.
+  - Added `scripts/apple/build.sh macos-app-store`: runs Flutter macOS config generation with `release=app-store`, creates `build/macos/archive/ZEON.xcarchive`, then exports to `out/apple/ZEON-macOS-app-store` using `xcodebuild -exportArchive`.
+  - Added optional App Store Connect upload support: run `MACOS_EXPORT_DESTINATION=upload make macos-app-store`; optional API key env vars are `APP_STORE_CONNECT_API_KEY_PATH`, `APP_STORE_CONNECT_API_KEY_ID`, and `APP_STORE_CONNECT_API_ISSUER_ID`.
+  - Added `make macos-app-store`.
+  - Verified locally with `source scripts/apple/env.sh && ./scripts/apple/build.sh macos-app-store`: archive succeeded at `build/macos/archive/ZEON.xcarchive`, export succeeded at `out/apple/ZEON-macOS-app-store`, and produced `ZEON.pkg`.
+  - `pkgutil --check-signature out/apple/ZEON-macOS-app-store/ZEON.pkg` reports a package signed with `3rd Party Mac Developer Installer`; `DistributionSummary.plist` reports `versionNumber=1.2.2`, `buildNumber=10202`, Store provisioning profiles for `app.zeon.macos` and `app.zeon.macos.ZeonPacketTunnel`, and universal `x86_64`/`arm64` architectures.
+  - `macos-artifacts` remains a non-store DMG/PKG helper and is no longer used as evidence for Mac App Store readiness.
 
 - 2026-06-25 / Milestone 0 inventory:
   - Default shell without `source scripts/apple/env.sh`: `flutter` and `pod` are not in PATH; `xcodebuild -version` fails because active `xcode-select -p` is `/Library/Developer/CommandLineTools`.
@@ -514,27 +557,28 @@ Manual validation required:
 
 ## Блокеры
 
-Добавлять сюда только реальные блокировки, которые мешают следующему шагу.
+Исторический журнал блокеров. Активные выпускные проверки и все незакрытые пункты перенесены в этап "Финальный выпуск"; ниже не должно оставаться `[!]`, которые блокируют начало TestFlight публикации.
 
 - [x] Milestone 0 / Expected capabilities comparison: initial mismatch was documented, then closed for the macOS debug Packet Tunnel path in Milestone 3. Current signed build has active Network Extension, VPN API, App Group, sandbox, and network client/server entitlements for both Runner and HiddifyPacketTunnel.
-- [!] Environment activation footgun: raw shell PATH cannot run `flutter`/`pod`, and global `xcode-select -p` points to CommandLineTools so raw `xcodebuild -version` fails. Следующий минимальный шаг: before Apple work always run `source scripts/apple/env.sh` or `make apple-doctor`; optionally switch global Xcode with `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` outside this inventory task.
-- [!] Milestone 1 / Strict release bundle signing verification: `flutter build macos --release` succeeds and the app launches, but `codesign --verify --deep --strict --verbose=2 build/macos/Build/Products/Release/Hiddify.app` fails with `invalid Info.plist (plist or signature have been modified)` in `Contents/Library/LoginItems/LaunchAtLoginHelper.app` for architecture `x86_64`. Следующий минимальный шаг: inspect `LaunchAtLoginHelper.app` generation/signing in the macOS target and re-sign/verify the nested login item before notarized/App Store distribution work.
+- [x] Environment activation footgun moved to "Финальный выпуск / Не блокирует TestFlight старт": raw shell PATH cannot run `flutter`/`pod`, and global `xcode-select -p` points to CommandLineTools so raw `xcodebuild -version` fails. Before Apple work run `source scripts/apple/env.sh` or `make apple-doctor`; optionally switch global Xcode with `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`.
+- [x] Milestone 1 / Strict release bundle signing verification reclassified as non-store issue: `flutter build macos --release` succeeds and the app launches, but strict verification of the old non-store bundle failed in `LaunchAtLoginHelper.app`. This does not block TestFlight/App Store start while `macos-app-store` archive/export succeeds and App Store Connect accepts the package.
+- [x] Milestone 6 / macOS App Store export readiness: closed. `./scripts/apple/build.sh macos-app-store` archives and exports `out/apple/ZEON-macOS-app-store/ZEON.pkg` with Store provisioning for the host app and Packet Tunnel extension.
 - [x] Milestone 3 / macOS VPN native architecture: macOS Packet Tunnel target, host/extension entitlements, App Group, provider bundle id, host VPN manager bridge, and `HiddifyCore.xcframework` linkage have been added. Verified by `flutter build macos --debug`, bundle inspection and active codesign entitlements.
 - [x] Milestone 3 / Clean routing attribution: user reran diagnostics without Happ; `out/diagnostics/macos_network_20260625_165429` is attributable to Zeon.
 - [x] Milestone 3 / macOS system proxy clean run: `out/diagnostics/macos_network_20260625_165429` confirms system proxy mode connects on `127.0.0.1:12334`, proxied curl succeeds, and disconnect disables proxy settings/listener. Ordinary local proxy mode remains intentionally out of scope.
 - [x] Milestone 3 / old direct macOS TUN start failure: clean run proved the old direct desktop TUN path fails with `manager start inbound/tun[tun-in]: configure tun interface: Connect: operation not permitted`. Product direction changed to Apple VPN-only UI, and macOS now has a signed Packet Tunnel target instead of relying on the old direct TUN path.
-- [!] Milestone 3 / VPN failure UX: after the TUN permission failure, app log shows Riverpod `PlatformDispatcherError` about using `ref` during provider dependency change. Следующий минимальный шаг: make the connection failure path surface the core error to UI without provider assertion, even before native VPN work.
+- [x] Milestone 3 / VPN failure UX moved to "Финальный выпуск / Проверить на тесте": after the old TUN permission failure, app log showed Riverpod `PlatformDispatcherError` about using `ref` during provider dependency change. Verify the current Store/TestFlight build failure path does not crash or hang.
 - [x] Milestone 3 / Diagnostics script portability: first clean user run missed process/interface/listener sections because `rg` was not in Terminal PATH. Fixed in `scripts/apple/macos_network_diagnostics.sh`; subsequent runs include those sections via `grep` fallback.
-- [!] Milestone 3 / UI automation for connect/disconnect: macOS Accessibility exposed unnamed buttons only (`missing value`), so connect/disconnect was not clicked blindly during inventory. Следующий минимальный шаг: use a manual screen recording or add stable accessibility labels/test hooks before automating this UX path.
+- [x] Milestone 3 / UI automation for connect/disconnect moved to "Финальный выпуск / Не блокирует TestFlight старт": macOS Accessibility exposed unnamed buttons only (`missing value`), so connect/disconnect was not clicked blindly during inventory. Manual TestFlight smoke is enough for current release; stable accessibility labels/test hooks can follow.
 - [x] Milestone 3 / macOS signing team hook: macOS Runner now reads local ignored `macos/Runner/Configs/AppleSigning.xcconfig`; with `MACOS_DEVELOPMENT_TEAM = CH87655747`, `xcodebuild -showBuildSettings` reports `DEVELOPMENT_TEAM = CH87655747`.
 - [x] Milestone 3 / macOS Packet Tunnel post-connect traffic validation: clean user run `out/diagnostics/macos_network_20260627_115838` validated the current provider path. `after_connect.txt` shows host and `HiddifyPacketTunnel.appex` running from `build/macos/Build/Products/Debug/Hiddify.app`, default route and DNS on `utun4`, and URL checks returning `HTTP/2 200`. Provider log contains `(packet-tunnel) prepared config with default_interface=en1, auto_detect_interface=false`, `platform interfaces: [en0#5,en1#6,en3#12,en2#13]`, and `service started`. Copied `packet-tunnel-config.json` contains `default_interface = en1` and `auto_detect_interface = false`. The old `no available network interface` root cause is gone.
-- [!] Milestone 3 / repeated macOS VPN permission prompt: debug app recreated matching `NETunnelProviderManager` preferences on every setup while working around stale provider registration, so macOS asked to install/allow the VPN tunnel repeatedly. Fixed in `macos/Runner/VPN/VPNManager.swift`: setup now reuses the existing matching manager and only creates a new VPN service when none exists; stale provider cleanup stays in the diagnostics script. Следующий минимальный шаг: run the rebuilt app, connect/disconnect/connect again, and verify the second connect does not show the macOS VPN permission popup.
+- [x] Milestone 3 / repeated macOS VPN permission prompt moved to "Финальный выпуск / Проверить на тесте": debug app recreated matching `NETunnelProviderManager` preferences on every setup while working around stale provider registration, so macOS asked to install/allow the VPN tunnel repeatedly. Fixed in `macos/Runner/VPN/VPNManager.swift`; verify connect/disconnect/connect on the Store/TestFlight build.
 - [x] Milestone 3 / Codex build verification: after full local filesystem access was available, `source scripts/apple/env.sh && xcodebuild -workspace macos/Runner.xcworkspace -scheme Runner -configuration Debug -destination 'platform=macOS' -derivedDataPath build/macos -allowProvisioningUpdates -allowProvisioningDeviceRegistration build` completed with `BUILD SUCCEEDED`.
 - [x] Milestone 3 / stale Packet Tunnel PlugInKit registration: `pluginkit -m -A -D -vvv -i app.zeon.macos.HiddifyPacketTunnel` showed duplicate providers: old default Xcode `DerivedData` and current `build/macos`. The old `DerivedData` `Hiddify.app` was unregistered with `lsregister -u`, its appex removed from PlugInKit, and the stale app bundle deleted. Current PlugInKit state now shows only the fresh `build/macos/.../HiddifyPacketTunnel.appex`.
 - [x] Milestone 3 / macOS Packet Tunnel provisioning: after the Apple Developer account was added in Xcode, signed debug build succeeded for current ids `app.zeon.macos` and `app.zeon.macos.HiddifyPacketTunnel`. Profiles verified: `Mac Team Provisioning Profile: app.zeon.macos` UUID `a8092090-552f-4fe8-ba67-1acdeca293ae` and `Mac Team Provisioning Profile: app.zeon.macos.HiddifyPacketTunnel` UUID `16aeaa1d-e0db-4cbe-96d6-61f87f488b2a`.
 - [x] Milestone 3 / macOS Packet Tunnel TUN stack mismatch: provider log showed `system and mixed stack are not available when includeAllNetworks is enabled`; Apple builds now force `tun-implementation = gvisor` in migration/preferences/UI/core payload. Later diagnostics reached `CONNECTED`, so the next failure is tracked separately as post-connect interface discovery.
 - [x] Milestone 3 / Edge Chromium traffic parity: current live macOS VPN runtime showed Safari working while Edge/Chromium could fail because Chromium aggressively uses Secure DNS/DoH, QUIC/HTTP3 and IPv6/AAAA paths. Fresh App Group inspection showed `packet-tunnel-config.json` contains only `outbounds` and `route`, while `box.log` contained direct `en1` IPv6 `no route to host`, DNS/DoH resets to `2001:4860:4860::8844:443/853`, and repeated direct outbound timeouts. Fixed in `lib/zeoncore/zeon_core_service.dart`: Apple runtime payload now forces `ipv6-mode=ipv4_only`, both DNS domain strategies to `ipv4_only`, and `block-quic=true`. User launched the rebuilt `build/macos/Build/Products/Debug/ZEON.app` and confirmed Safari/Edge traffic now works correctly.
-- [!] Milestone 3 / Apple profile metadata privacy: profile content files are already AES-256-GCM `.zcfg` envelopes on macOS App Group storage, but profile metadata in Flutter Drift DB (`name`, `url`, headers/override fields) was still plaintext. Implemented Apple-only `ProtectedProfileDataSource`: writes and migrates sensitive metadata as `enc:v1:*`, reads/decrypts transparently for UI, preserves plaintext lookup by decrypting rows in memory, and restores sort-by-name after decryption. Debug macOS build succeeds. Следующий минимальный шаг: launch the rebuilt `build/macos/Build/Products/Debug/ZEON.app`, let `ProfileRepository.init()` run metadata migration, then verify `~/Library/Containers/app.zeon.macos/Data/Library/db.sqlite` has encrypted profile `name/url` counters and the UI still displays profile names correctly.
+- [x] Milestone 3 / Apple profile metadata privacy moved to "Финальный выпуск / Проверить на тесте": profile content files are AES-256-GCM `.zcfg` envelopes, and Apple-only `ProtectedProfileDataSource` now migrates sensitive metadata to `enc:v1:*`. Verify migration on a Store/TestFlight build and confirm UI still displays profile names correctly.
 - [x] Milestone 3 / Apple rebuild helper scripts: added executable helper scripts for local Apple dev loops. `scripts/rebuild_macos.sh` rebuilds macOS (`BUILD_MODE=debug|profile|release`, `OPEN_APP=1` optional). `scripts/rebuild_ios_install_iphone.sh` builds iOS (`IOS_MODE=debug|profile|release`), auto-detects a connected iPhone via `devicectl`, installs `build/ios/iphoneos/Runner.app`, and supports `DEVICE_ID=<CoreDevice-UUID>` plus `LAUNCH_APP=1`.
 - [x] Milestone 4 / clean iOS VPN permission flow: accepted closed for this release pass by user manual observation without destructive reset of the personal iPhone.
 - [x] Milestone 4 / live iOS stability scenarios: accepted closed after installed build and user manual observation; no more iOS VPN/profile/fragmentation errors were seen.

@@ -16,6 +16,12 @@
 
 `App startup -> UpgradeAlert -> UpgraderPlayStore -> Google Play`
 
+Для Apple Store-сборки (`Release.appStore`) используется магазинный путь:
+
+`App Store Connect/TestFlight/App Store -> install update over existing app`
+
+В приложении для Apple Store собственный GitHub/appcast checker отключен.
+
 Отдельный update-сервер не используется.
 
 ## 2) Канал обновлений `stable` / `beta`
@@ -73,6 +79,9 @@
 
 В Google Play-сборке кнопка скрыта: обновления обрабатываются магазинным flow.
 
+В Apple Store-сборке кнопка также скрыта: обновления обрабатываются через
+TestFlight/App Store.
+
 ## 6) Выбор ссылки `Обновить сейчас`
 
 При разборе одного GitHub Release ссылка выбирается из `Assets`:
@@ -91,7 +100,44 @@
 Собственный GitHub checker для этого типа релиза отключен через
 `allowCustomUpdateChecker=false`.
 
-## 8) Appcast-файлы
+## 8) Apple Store / TestFlight
+
+Apple-сборки должны передавать dart-define:
+
+- `--dart-define=release=app-store`
+
+Для этого типа релиза `allowCustomUpdateChecker=false`, поэтому:
+
+- автоматическая проверка GitHub Releases не запускается;
+- кнопка ручной проверки обновлений в Settings скрыта;
+- appcast-файлы не участвуют в runtime flow;
+- обновление устанавливается поверх текущей версии через TestFlight/App Store,
+  а локальные данные остаются в системном контейнере приложения при неизменном
+  bundle id и app group.
+
+Версия и build number берутся из Flutter/Xcode metadata:
+
+- `pubspec.yaml`: `version: x.y.z+build`;
+- `CFBundleShortVersionString`: `$(FLUTTER_BUILD_NAME)`;
+- `CFBundleVersion`: `$(FLUTTER_BUILD_NUMBER)`;
+- `ios/exportOptions.plist`: `method=app-store`.
+
+Для iOS App Store export path описан через `flutter build ipa` и
+`ios/exportOptions.plist`.
+
+Для macOS Mac App Store path описан через:
+
+- `macos/exportOptions.plist`: `method=app-store-connect`;
+- `make macos-app-store` или `scripts/apple/build.sh macos-app-store`;
+- `MACOS_EXPORT_DESTINATION=export` по умолчанию;
+- `MACOS_EXPORT_DESTINATION=upload` для прямой отправки через Xcode/App Store
+  Connect, если в Xcode есть аккаунт или заданы App Store Connect API key env vars.
+
+Обычный helper `scripts/apple/build.sh macos-artifacts` сохраняет прежнюю роль:
+он производит DMG/PKG для вне-магазинной дистрибуции и не является Mac App Store
+артефактом.
+
+## 9) Appcast-файлы
 
 Файлы остаются в корне репозитория как legacy-артефакты:
 
@@ -101,7 +147,7 @@
 Текущая runtime-логика приложения их не запрашивает. Поддерживать appcast при обычном
 релизе больше не требуется.
 
-## 9) Нейминг ассетов обычного релиза
+## 10) Нейминг ассетов обычного релиза
 
 Сборочный и релизный процесс должен публиковать в одном GitHub Release:
 
@@ -112,7 +158,7 @@
 Если фактические имена отличаются, парсер поддерживает поиск по regex/contains и
 расширениям файлов с указанными приоритетами.
 
-## 10) Примеры запуска
+## 11) Примеры запуска
 
 - Stable:
   - `flutter run --dart-define=update_channel=stable`
@@ -122,8 +168,13 @@
   - `flutter build apk --dart-define=update_channel=beta`
 - Google Play:
   - `flutter build appbundle --dart-define=release=google-play`
+- Apple Store/TestFlight:
+  - `flutter build ipa --dart-define=release=app-store`
+  - `flutter build macos --release --dart-define=release=app-store`
+  - `make macos-app-store`
+  - `MACOS_EXPORT_DESTINATION=upload make macos-app-store`
 
-## 11) Smoke-check после релиза
+## 12) Smoke-check после релиза
 
 1. `stable`: prerelease не предлагается.
 2. `beta`: prerelease предлагается.
@@ -133,3 +184,5 @@
 6. `Обновить сейчас` ведет на прямой asset текущей платформы; если asset не найден,
    открывается страница релиза.
 7. В `google-play` сборке GitHub checker не запускается, используется Google Play.
+8. В `app-store` сборке GitHub checker не запускается, кнопка ручной проверки
+   скрыта, обновление идет через TestFlight/App Store.

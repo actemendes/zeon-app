@@ -8,6 +8,7 @@ cd "${PROJECT_ROOT}"
 BUILD_MODE="${BUILD_MODE:-debug}"
 TARGET="${FLUTTER_TARGET:-lib/main.dart}"
 APP_NAME="${APP_NAME:-ZEON.app}"
+APPLE_RELEASE="${APPLE_RELEASE:-app-store}"
 
 case "${BUILD_MODE}" in
   debug|profile|release) ;;
@@ -29,6 +30,7 @@ ensure_generated_sources() {
 }
 
 build_args=(--"${BUILD_MODE}" --target "${TARGET}")
+build_args+=(--dart-define "release=${APPLE_RELEASE}")
 if [[ -n "${SENTRY_DSN:-}" ]]; then
   build_args+=(--dart-define "sentry_dsn=${SENTRY_DSN}")
 fi

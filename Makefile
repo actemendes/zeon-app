@@ -478,7 +478,7 @@ macos-release:
 	fastforge package --platform macos --targets dmg,pkg $(DISTRIBUTOR_ARGS)
 
 ios-release: #not tested
-	fastforge package --platform ios --targets ipa --build-export-options-plist  ios/exportOptions.plist $(DISTRIBUTOR_ARGS)
+	fastforge package --platform ios --targets ipa --build-export-options-plist  ios/exportOptions.plist $(DISTRIBUTOR_ARGS) --build-dart-define=release=app-store
 
 apple-setup:
 	./scripts/apple/bootstrap.sh
@@ -491,6 +491,9 @@ macos-app:
 
 macos-artifacts:
 	./scripts/apple/build.sh macos-artifacts
+
+macos-app-store:
+	./scripts/apple/build.sh macos-app-store
 
 ios-unsigned:
 	./scripts/apple/build.sh ios-unsigned

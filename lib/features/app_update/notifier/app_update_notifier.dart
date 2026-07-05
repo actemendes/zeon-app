@@ -1,3 +1,7 @@
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:upgrader/upgrader.dart';
+import 'package:version/version.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/localization/locale_preferences.dart';
 import 'package:zeon/core/model/environment.dart';
@@ -8,10 +12,6 @@ import 'package:zeon/features/app_update/model/app_update_failure.dart';
 import 'package:zeon/features/app_update/model/remote_version_entity.dart';
 import 'package:zeon/features/app_update/notifier/app_update_state.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:upgrader/upgrader.dart';
-import 'package:version/version.dart';
 
 part 'app_update_notifier.g.dart';
 

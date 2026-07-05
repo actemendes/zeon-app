@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/failures.dart';
@@ -10,9 +11,7 @@ import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/features/app_update/notifier/app_update_state.dart';
 import 'package:zeon/features/settings/notifier/config_option/config_option_notifier.dart';
-import 'package:zeon/features/settings/notifier/reset_tunnel/reset_tunnel_notifier.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 enum ConfigOptionSection {
   fragment;

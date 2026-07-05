@@ -8,6 +8,7 @@ cd "${PROJECT_ROOT}"
 IOS_MODE="${IOS_MODE:-profile}"
 TARGET="${FLUTTER_TARGET:-lib/main.dart}"
 BUNDLE_ID="${BUNDLE_ID:-app.zeon.ios}"
+APPLE_RELEASE="${APPLE_RELEASE:-app-store}"
 
 case "${IOS_MODE}" in
   debug|profile|release) ;;
@@ -48,6 +49,7 @@ if [[ -z "${DEVICE_ID}" ]]; then
 fi
 
 build_args=(--"${IOS_MODE}" --target "${TARGET}")
+build_args+=(--dart-define "release=${APPLE_RELEASE}")
 if [[ -n "${SENTRY_DSN:-}" ]]; then
   build_args+=(--dart-define "sentry_dsn=${SENTRY_DSN}")
 fi

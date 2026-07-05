@@ -2,6 +2,8 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/model/app_info_entity.dart';
 import 'package:zeon/core/model/environment.dart';
@@ -12,8 +14,6 @@ import 'package:zeon/features/app_update/model/app_update_failure.dart';
 import 'package:zeon/features/app_update/model/remote_version_entity.dart';
 import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/features/app_update/notifier/app_update_state.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   test('automatic update notification is emitted only once per release', () async {
@@ -43,6 +43,18 @@ void main() {
 
   test('google play release disables custom update checker', () async {
     final setup = await _createContainer(_remoteVersion('1.1.0'), release: Release.googlePlay);
+    final container = setup.container;
+    final repository = setup.repository;
+    addTearDown(container.dispose);
+    final notifier = container.read(appUpdateNotifierProvider.notifier);
+
+    expect(await notifier.checkAutomatically(), isNull);
+    expect(container.read(appUpdateNotifierProvider), isA<AppUpdateStateDisabled>());
+    expect(repository.callCount, 0);
+  });
+
+  test('app store release disables custom update checker', () async {
+    final setup = await _createContainer(_remoteVersion('1.1.0'), release: Release.appStore);
     final container = setup.container;
     final repository = setup.repository;
     addTearDown(container.dispose);
