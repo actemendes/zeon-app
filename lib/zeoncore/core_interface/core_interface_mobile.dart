@@ -151,6 +151,17 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   @override
+  Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit) async {
+    await methodChannel.invokeMethod("prepare_vpn", {
+      "path": path,
+      "name": name,
+      "grpcPort": portBack,
+      "disableMemoryLimit": disableMemoryLimit,
+    });
+    return true;
+  }
+
+  @override
   Future<bool> stop() async {
     await stopMethodChannel().timeout(const Duration(seconds: 3), onTimeout: () {});
     final stopped = await waitUntilPort(

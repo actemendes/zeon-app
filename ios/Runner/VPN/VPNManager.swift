@@ -115,25 +115,39 @@ class VPNManager: ObservableObject {
     }
     
     private func enableVPNManager(config: String, grpcServiceModePort: Int, disableMemoryLimit: Bool) async throws {
-        manager.isEnabled = true
-        manager.isOnDemandEnabled = false
-        manager.onDemandRules = []
+        var lastError: Error?
+        for attempt in 0..<2 {
+            do {
+                try? await manager.loadFromPreferences()
+                manager.isEnabled = true
+                manager.isOnDemandEnabled = false
+                manager.onDemandRules = []
 
-        if let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol {
-            tunnelProtocol.providerConfiguration = providerConfiguration(
-                config: config,
-                grpcServiceModePort: grpcServiceModePort,
-                disableMemoryLimit: disableMemoryLimit
-            )
-            manager.protocolConfiguration = tunnelProtocol
+                if let tunnelProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol {
+                    tunnelProtocol.providerConfiguration = providerConfiguration(
+                        config: config,
+                        grpcServiceModePort: grpcServiceModePort,
+                        disableMemoryLimit: disableMemoryLimit
+                    )
+                    manager.protocolConfiguration = tunnelProtocol
+                }
+
+                try await manager.saveToPreferences()
+                try await manager.loadFromPreferences()
+                setState(manager.connection.status)
+                return
+            } catch {
+                lastError = error
+                print(error.localizedDescription)
+                if attempt == 0 && error.localizedDescription.lowercased().contains("stale") {
+                    try? await loadVPNPreference()
+                    continue
+                }
+                throw error
+            }
         }
-        
-        do {
-            try await manager.saveToPreferences()
-            try await manager.loadFromPreferences()
-            setState(manager.connection.status)
-        } catch {
-            print(error.localizedDescription)
+        if let lastError = lastError {
+            throw lastError
         }
     }
 
@@ -207,6 +221,24 @@ class VPNManager: ObservableObject {
         default:
             return false
         }
+    }
+
+    private func isInactiveTunnelStatus(_ status: NEVPNStatus) -> Bool {
+        status == .disconnected || status == .invalid
+    }
+
+    private func waitForInactiveTunnel(timeout: TimeInterval = 8) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let status = manager.connection.status
+            setState(status)
+            if isInactiveTunnelStatus(status) {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        setState(manager.connection.status)
+        return isInactiveTunnelStatus(manager.connection.status)
     }
     
     @MainActor private func set(upload: Int64, download: Int64) {
@@ -285,22 +317,39 @@ class VPNManager: ObservableObject {
         
         await set(upload: 0, download: 0)
 //        guard state == .disconnected else { return }
-        do {
-            try await enableVPNManager(
-                config: config,
-                grpcServiceModePort: grpcServiceModePort,
-                disableMemoryLimit: disableMemoryLimit
-            )
-            try manager.connection.startVPNTunnel(options: [
-                "Config": config as NSString,
-                "GrpcServiceModePort":NSNumber(value: grpcServiceModePort),
-                "DisableMemoryLimit": (disableMemoryLimit ? "YES" : "NO") as NSString,
-            ])
-            
-        } catch {
-            print(error.localizedDescription)
+        try await enableVPNManager(
+            config: config,
+            grpcServiceModePort: grpcServiceModePort,
+            disableMemoryLimit: disableMemoryLimit
+        )
+
+        let status = manager.connection.status
+        if isActiveTunnelStatus(status) || status == .disconnecting {
+            manager.connection.stopVPNTunnel()
+            guard await waitForInactiveTunnel() else {
+                throw NSError(
+                    domain: "VPNManager",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "VPN tunnel did not stop before reconnect"]
+                )
+            }
         }
+
+        try manager.connection.startVPNTunnel(options: [
+            "Config": config as NSString,
+            "GrpcServiceModePort":NSNumber(value: grpcServiceModePort),
+            "DisableMemoryLimit": (disableMemoryLimit ? "YES" : "NO") as NSString,
+        ])
+        setState(manager.connection.status)
         connectTime = .now
+    }
+
+    func prepare(with config: String, grpcServiceModePort:Int, disableMemoryLimit: Bool = false) async throws {
+        try await enableVPNManager(
+            config: config,
+            grpcServiceModePort: grpcServiceModePort,
+            disableMemoryLimit: disableMemoryLimit
+        )
     }
     
     func disconnect() {
@@ -323,6 +372,14 @@ class VPNManager: ObservableObject {
         }
 
 //        guard state == .connected else { return }
+        let status = manager.connection.status
+        if !isActiveTunnelStatus(status) && status != .disconnecting {
+            setState(status)
+            connectTime = nil
+            return
+        }
         manager.connection.stopVPNTunnel()
+        _ = await waitForInactiveTunnel()
+        connectTime = nil
     }
 }

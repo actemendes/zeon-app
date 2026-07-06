@@ -133,6 +133,35 @@ public class MethodHandler: NSObject, FlutterPlugin {
                 }
                 await mainResult(true)
             }
+        case "prepare_vpn":
+            Task {
+                guard
+                    let args = call.arguments as? [String:Any?],
+                    let path = args["path"] as? String,
+                    let name = args["name"] as? String,
+                    let grpcPort=args["grpcPort"] as? Int
+                else {
+                    await mainResult(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+                    return
+                }
+                let disableMemoryLimit = args["disableMemoryLimit"] as? Bool ?? VPNConfig.shared.disableMemoryLimit
+                VPNConfig.shared.activeConfigPath = path
+                VPNConfig.shared.activeProfileName = name
+                VPNConfig.shared.grpcServiceModePort=grpcPort
+                VPNConfig.shared.disableMemoryLimit = disableMemoryLimit
+                do {
+                    try await VPNManager.shared.setup()
+                    try await VPNManager.shared.prepare(
+                        with: path,
+                        grpcServiceModePort: grpcPort,
+                        disableMemoryLimit: disableMemoryLimit
+                    )
+                } catch {
+                    await mainResult(FlutterError(code: "PREPARE_VPN", message: error.localizedDescription, details: nil))
+                    return
+                }
+                await mainResult(true)
+            }
 //        case "restart":
 //            Task { [unowned self] in
 //                guard

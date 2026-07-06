@@ -1,6 +1,6 @@
 import 'package:zeon/core/model/directories.dart';
-import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/singbox/model/core_status.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 
 class CoreInterface {
   late CoreClient fgClient;
@@ -12,6 +12,10 @@ class CoreInterface {
 
   Future<CoreStatus> setupBackground(String path, String name) async {
     return const CoreStarted();
+  }
+
+  Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit) async {
+    return true;
   }
 
   Future<bool> restart(String path, String name) async {
@@ -45,6 +49,7 @@ class CoreInterface {
 
   bool isInitialized() {
     try {
+      // ignore: unnecessary_statements
       bgClient; // touch it
       return true;
     } catch (_) {

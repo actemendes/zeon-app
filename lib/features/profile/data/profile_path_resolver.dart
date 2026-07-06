@@ -12,6 +12,8 @@ class ProfilePathResolver {
 
   Directory get tempDirectory => Directory(p.join(_tempDir.path, "zeon-profile-configs"));
 
+  Directory get runtimeDirectory => Directory(p.join(_workingDir.path, "runtime-configs"));
+
   File file(String fileName) {
     return encryptedFile(fileName);
   }
@@ -25,9 +27,12 @@ class ProfilePathResolver {
   }
 
   File tempFile(String fileName) {
-    final opaqueName = fileName.hashCode.toUnsigned(32).toRadixString(16).padLeft(8, '0');
-    return File(p.join(tempDirectory.path, "$opaqueName.tmp.json"));
+    return File(p.join(tempDirectory.path, "${_opaqueName(fileName)}.tmp.json"));
   }
 
+  File runtimeConnectionFile(String fileName) => File(p.join(runtimeDirectory.path, "${_opaqueName(fileName)}.json"));
+
   File legacyTempFile(String fileName) => File(p.join(tempDirectory.path, "$fileName.tmp.json"));
+
+  String _opaqueName(String fileName) => fileName.hashCode.toUnsigned(32).toRadixString(16).padLeft(8, '0');
 }

@@ -1,9 +1,9 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:loggy/loggy.dart';
 import 'package:zeon/core/logger/custom_logger.dart';
 import 'package:zeon/utils/custom_loggers.dart';
-import 'package:loggy/loggy.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 class LoggerController extends LoggyPrinter with InfraLogger {
   LoggerController(this.consolePrinter, this.otherPrinters);
@@ -20,13 +20,15 @@ class LoggerController extends LoggyPrinter with InfraLogger {
   }
 
   static void init(String appLogPath) {
-    _instance = LoggerController(const ConsolePrinter(), {"app": kIsWeb ? const ConsolePrinter() : FileLogPrinter(appLogPath)});
+    _instance = LoggerController(const ConsolePrinter(), {
+      "app": kIsWeb ? const ConsolePrinter() : FileLogPrinter(appLogPath),
+    });
     Loggy.initLoggy(logPrinter: _instance);
   }
 
   static Future<void> postInit(bool debugMode) async {
-    final logLevel = debugMode && false ? LogLevel.all : LogLevel.info;
-    final logToFile = debugMode || (!Platform.isAndroid && !Platform.isIOS);
+    final logLevel = debugMode ? LogLevel.all : LogLevel.info;
+    final logToFile = debugMode || Platform.isIOS || (!Platform.isAndroid && !Platform.isIOS);
 
     if (!logToFile || kIsWeb) _instance.removePrinter("app");
 

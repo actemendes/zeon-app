@@ -59,6 +59,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       await _connectionRepo.setup().mapLeft((l) {
         loggy.error("error setting up connection repository", l);
       }).run();
+      unawaited(_prepareSystemVpnForActiveProfile());
     }
 
     listenSelf((previous, next) async {
@@ -148,6 +149,19 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   }
 
   ConnectionRepository get _connectionRepo => ref.read(connectionRepositoryProvider);
+
+  Future<void> _prepareSystemVpnForActiveProfile() async {
+    try {
+      final activeProfile = await ref.read(activeProfileProvider.future);
+      if (activeProfile == null) return;
+      await _connectionRepo
+          .prepareSystemVpn(activeProfile, ref.read(Preferences.disableMemoryLimit))
+          .mapLeft((err) => loggy.warning("error preparing system VPN configuration", err))
+          .run();
+    } catch (e, st) {
+      loggy.warning("error preparing system VPN configuration", e, st);
+    }
+  }
 
   Future<void> mayConnect() async {
     if (state case AsyncData(:final value)) {

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -182,14 +183,18 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                 .then((result) => result.getOrElse((failure) => throw failure));
 
       final content = validateConfigOnImport
-          ? await _validatedOrRawUpdatedConfig(
+          ? await _validatedOrPreviousUpdatedConfig(
+              profileId: id,
               tempPath: tempFile.path,
               profileOverride: profEntity.profileOverride.value,
               debug: false,
               allowTransientValidationFallback: isUpdate,
             )
-          : await _readTempConfig(tempFile.path).run().then((result) => result.getOrElse((failure) => throw failure));
+          : await _configWithoutValidation(profileId: id, tempPath: tempFile.path, isUpdate: isUpdate);
       await _profileConfigStore.write(id, content);
+      if (isUpdate) {
+        await _profileConfigStore.refreshRuntimeConnectionFileIfExists(id, content: content);
+      }
 
       if (isUpdate) {
         await _profileDataSource.edit(id, profEntity);
@@ -251,6 +256,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
             false,
           ).run().then((result) => result.getOrElse((failure) => throw failure));
           await _profileConfigStore.write(id, content);
+          await _profileConfigStore.refreshRuntimeConnectionFileIfExists(id, content: content);
           await _profileDataSource.edit(id, profEntity);
           return unit;
         } finally {
@@ -286,7 +292,8 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
     return TaskEither.tryCatch(() => File(tempPath).readAsString(), ProfileFailure.unexpected);
   }
 
-  Future<String> _validatedOrRawUpdatedConfig({
+  Future<String> _validatedOrPreviousUpdatedConfig({
+    required String profileId,
     required String tempPath,
     required String? profileOverride,
     required bool debug,
@@ -299,13 +306,41 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
       }
       loggy.warning(
         "profile update validation failed because core is temporarily unavailable; "
-        "keeping downloaded config without blocking profile update",
+        "keeping previous generated config without blocking profile metadata update",
         failure,
       );
-      return await _readTempConfig(
-        tempPath,
-      ).run().then((result) => result.getOrElse((readFailure) => throw readFailure));
+      final previousContent = await _profileConfigStore.read(profileId);
+      if (!_looksLikeGeneratedJsonConfig(previousContent)) {
+        loggy.warning("previous profile config is not generated JSON; refusing transient validation fallback");
+        throw failure;
+      }
+      return previousContent;
     }, Future.value);
+  }
+
+  Future<String> _configWithoutValidation({
+    required String profileId,
+    required String tempPath,
+    required bool isUpdate,
+  }) async {
+    final content = await _readTempConfig(
+      tempPath,
+    ).run().then((result) => result.getOrElse((failure) => throw failure));
+    if (_looksLikeGeneratedJsonConfig(content)) return content;
+
+    if (isUpdate) {
+      final previousContent = await _profileConfigStore.read(profileId);
+      if (_looksLikeGeneratedJsonConfig(previousContent)) {
+        loggy.warning(
+          "profile update skipped validation but downloaded content is not generated JSON; keeping previous config",
+        );
+        return previousContent;
+      }
+    }
+
+    throw const ProfileFailure.invalidConfig(
+      "profile validation skipped but downloaded content is not generated JSON config",
+    );
   }
 
   bool _isTransientCoreValidationFailure(ProfileFailure failure) {
@@ -320,6 +355,14 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
           normalized.contains("socketexception");
     }
     return false;
+  }
+
+  bool _looksLikeGeneratedJsonConfig(String content) {
+    try {
+      return jsonDecode(content) is Map;
+    } catch (_) {
+      return false;
+    }
   }
 
   TaskEither<ProfileFailure, Unit> _writeConfig(String id, String content) {

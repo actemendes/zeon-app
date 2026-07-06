@@ -55,6 +55,7 @@ class ProfileConfigStore with InfraLogger {
   Future<void> init() async {
     await _pathResolver.directory.create(recursive: true);
     await _pathResolver.tempDirectory.create(recursive: true);
+    await _pathResolver.runtimeDirectory.create(recursive: true);
     await cleanupStaleTempFiles();
     await _getOrCreateKeyBytes();
     await migrateLegacyPlaintextConfigs();
@@ -148,6 +149,7 @@ class ProfileConfigStore with InfraLogger {
       _pathResolver.legacyPlaintextFile(profileId),
       _pathResolver.tempFile(profileId),
       _pathResolver.legacyTempFile(profileId),
+      _pathResolver.runtimeConnectionFile(profileId),
     ]) {
       try {
         if (await file.exists()) await file.delete();
@@ -164,6 +166,21 @@ class ProfileConfigStore with InfraLogger {
     await file.writeAsString(plaintext, flush: true);
     await _restrictOwnerOnly(file);
     return file;
+  }
+
+  Future<File> createRuntimeConnectionFile(String profileId, {String? content}) async {
+    final plaintext = content ?? await read(profileId);
+    final file = _pathResolver.runtimeConnectionFile(profileId);
+    await file.parent.create(recursive: true);
+    await file.writeAsString(plaintext, flush: true);
+    await _restrictOwnerOnly(file);
+    return file;
+  }
+
+  Future<void> refreshRuntimeConnectionFileIfExists(String profileId, {String? content}) async {
+    final file = _pathResolver.runtimeConnectionFile(profileId);
+    if (!await file.exists()) return;
+    await createRuntimeConnectionFile(profileId, content: content);
   }
 
   Future<void> deletePlaintextTempFile(String profileId) async {

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:fpdart/fpdart.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:meta/meta.dart';
@@ -19,6 +22,7 @@ abstract interface class ConnectionRepository {
   SingboxConfigOption? get configOptionsSnapshot;
 
   TaskEither<ConnectionFailure, Unit> setup();
+  TaskEither<ConnectionFailure, Unit> prepareSystemVpn(ProfileEntity activeProfile, bool disableMemoryLimit);
   Stream<ConnectionStatus> watchConnectionStatus();
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit);
   TaskEither<ConnectionFailure, Unit> disconnect();
@@ -44,6 +48,7 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
 
   final ConfigOptionRepository configOptionRepository;
   final ProfileConfigStore profileConfigStore;
+  final Map<String, Future<File>> _runtimeConfigRepairByProfile = {};
 
   SingboxConfigOption? _configOptionsSnapshot;
   @override
@@ -81,13 +86,21 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   }
 
   @override
+  TaskEither<ConnectionFailure, Unit> prepareSystemVpn(ProfileEntity activeProfile, bool disableMemoryLimit) =>
+      TaskEither.tryCatch(() async {
+        final runtimeFile = await _createRuntimeConfigFile(activeProfile);
+        return (await singbox.prepareVpnConfiguration(runtimeFile.path, activeProfile.name, disableMemoryLimit).run())
+            .match((failure) => throw ConnectionFailure.unexpected(failure), (_) => unit);
+      }, (err, st) => err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st));
+
+  @override
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit) => setup().flatMap(
     (_) => applyConfigOption(activeProfile).flatMap(
       (_) => TaskEither.tryCatch(() async {
         // TODO: Move core startup to in-memory config once the background service
         // no longer persists config_content or requires a readable config path.
-        final tempFile = await profileConfigStore.createPlaintextTempFile(activeProfile.id);
-        return (await singbox.start(tempFile.path, activeProfile.name, disableMemoryLimit).run()).match(
+        final runtimeFile = await _createRuntimeConfigFile(activeProfile);
+        return (await singbox.start(runtimeFile.path, activeProfile.name, disableMemoryLimit).run()).match(
           (failure) => throw failure,
           (_) => unit,
         );
@@ -103,14 +116,19 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   TaskEither<ConnectionFailure, Unit> reconnect(ProfileEntity activeProfile, bool disableMemoryLimit) =>
       applyConfigOption(activeProfile).flatMap(
         (_) => TaskEither(() async {
-          // TODO: Move core restart to in-memory config once the background service
-          // no longer persists config_content or requires a readable config path.
-          final tempFile = await profileConfigStore.createPlaintextTempFile(activeProfile.id);
-          final path = tempFile.path;
-          Either<ConnectionFailure, Unit> result =
-              (await singbox.restart(path, activeProfile.name, disableMemoryLimit).run()).mapLeft(
-                UnexpectedConnectionFailure.new,
-              );
+          late final String path;
+          Either<ConnectionFailure, Unit> result;
+          try {
+            // TODO: Move core restart to in-memory config once the background service
+            // no longer persists config_content or requires a readable config path.
+            final runtimeFile = await _createRuntimeConfigFile(activeProfile);
+            path = runtimeFile.path;
+            result = (await singbox.restart(path, activeProfile.name, disableMemoryLimit).run()).mapLeft(
+              UnexpectedConnectionFailure.new,
+            );
+          } catch (err, st) {
+            return left(err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st));
+          }
 
           for (var attempt = 1; attempt <= _tunRecoveryRestartAttempts && result.isLeft(); attempt++) {
             final failure = result.getLeft().toNullable();
@@ -140,6 +158,65 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
           return result;
         }),
       );
+
+  Future<File> _createRuntimeConfigFile(ProfileEntity activeProfile) async {
+    final content = await profileConfigStore.read(activeProfile.id);
+    if (_looksLikeGeneratedJsonConfig(content)) {
+      return profileConfigStore.createRuntimeConnectionFile(activeProfile.id, content: content);
+    }
+
+    final repair = _runtimeConfigRepairByProfile.putIfAbsent(
+      activeProfile.id,
+      () => _repairRuntimeConfig(activeProfile),
+    );
+    try {
+      return await repair;
+    } finally {
+      if (identical(_runtimeConfigRepairByProfile[activeProfile.id], repair)) {
+        _runtimeConfigRepairByProfile.remove(activeProfile.id);
+      }
+    }
+  }
+
+  Future<File> _repairRuntimeConfig(ProfileEntity activeProfile) async {
+    final content = await profileConfigStore.read(activeProfile.id);
+    if (_looksLikeGeneratedJsonConfig(content)) {
+      return profileConfigStore.createRuntimeConnectionFile(activeProfile.id, content: content);
+    }
+
+    loggy.warning("stored profile config is not generated JSON; trying to regenerate it before core start");
+    final regenerated = await _regenerateStoredConfig(activeProfile, content);
+    await profileConfigStore.write(activeProfile.id, regenerated);
+    final file = await profileConfigStore.createRuntimeConnectionFile(activeProfile.id, content: regenerated);
+    loggy.info("stored profile config repaired and runtime config refreshed");
+    return file;
+  }
+
+  Future<String> _regenerateStoredConfig(ProfileEntity activeProfile, String rawContent) async {
+    final options = configOptionRepository
+        .fullOptionsOverrided(activeProfile.profileOverride)
+        .match((failure) => throw ConnectionFailure.invalidConfigOption(null, failure), (options) => options);
+
+    final optionsResult = await singbox.changeOptions(options).run();
+    optionsResult.match(
+      (err) => throw ConnectionFailure.unexpected("failed to apply core options before config repair: $err"),
+      (_) => unit,
+    );
+
+    final validationResult = await singbox.validateConfigContent(rawContent, false).run();
+    return validationResult.match(
+      (err) => throw ConnectionFailure.unexpected("failed to repair stored profile config: $err"),
+      (content) => content,
+    );
+  }
+
+  bool _looksLikeGeneratedJsonConfig(String content) {
+    try {
+      return jsonDecode(content) is Map;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @visibleForTesting
   TaskEither<ConnectionFailure, Unit> applyConfigOption(ProfileEntity prof) =>

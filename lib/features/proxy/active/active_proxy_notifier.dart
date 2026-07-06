@@ -91,7 +91,8 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
     }
     final serviceRunning = await ref.watch(serviceRunningProvider.future);
     if (!serviceRunning) {
-      throw const ServiceNotRunning();
+      loggy.debug("service is not running, skipping active proxy stream");
+      return;
     }
     final proxyProvider = ref.watch(proxyRepositoryProvider);
     final activeProxyStream = proxyProvider

@@ -67,8 +67,11 @@ class ZeonCoreService with InfraLogger {
   final CallOptions? grpcOptions = null; //CallOptions(timeout: const Duration(milliseconds: 10000));
   final Map<String, StreamSubscription?> subscriptions = {};
   final Map<String, int> _listenerReconnectAttempt = {};
+  final Map<String, Future<void>> _statusListenerRecoveryByKey = {};
+  int _stoppingStatusWatchdogGeneration = 0;
   Future<void> _lifecycleQueueTail = Future<void>.value();
   _CoreLifecycleState _lifecycleState = _CoreLifecycleState.stopped;
+  ChangeHiddifySettingsRequest? _latestCoreOptionsRequest;
   static const _platformChannel = MethodChannel("com.zeon.app/platform");
   List<OutboundGroup> latest = [];
   final BehaviorSubject<List<OutboundGroup>> _mockGroupsController = BehaviorSubject<List<OutboundGroup>>();
@@ -250,6 +253,9 @@ class ZeonCoreService with InfraLogger {
     currentState = next;
     _syncLifecycleFromCoreStatus(currentState, reason: "coreInfoListener[$key]");
     statusController.add(currentState);
+    if (next is CoreStopping) {
+      _scheduleStoppingStatusWatchdog("coreInfoListener[$key]");
+    }
     return currentState;
   }
 
@@ -295,6 +301,60 @@ class ZeonCoreService with InfraLogger {
         loggy.warning("listener reconnect failed [$key]", e, st);
       }
     });
+  }
+
+  void _recoverStatusAfterListenerClose(String key, Object? error) {
+    final stateNeedsRecovery = _lifecycleState == _CoreLifecycleState.stopping || currentState is CoreStopping;
+    if (!stateNeedsRecovery || _useMockCore) return;
+
+    final recovery = _statusListenerRecoveryByKey.putIfAbsent(key, () async {
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await _recoverStuckStoppingStatus("status listener recovery", error, listenerKey: key);
+    });
+
+    unawaited(
+      recovery.whenComplete(() {
+        if (identical(_statusListenerRecoveryByKey[key], recovery)) {
+          _statusListenerRecoveryByKey.remove(key);
+        }
+      }),
+    );
+  }
+
+  void _scheduleStoppingStatusWatchdog(String reason) {
+    final generation = ++_stoppingStatusWatchdogGeneration;
+    unawaited(
+      Future<void>.delayed(const Duration(seconds: 10), () async {
+        if (generation != _stoppingStatusWatchdogGeneration) return;
+        await _recoverStuckStoppingStatus("stopping watchdog/$reason", null);
+      }),
+    );
+  }
+
+  Future<void> _recoverStuckStoppingStatus(String reason, Object? error, {String? listenerKey}) async {
+    final stillNeedsRecovery = _lifecycleState == _CoreLifecycleState.stopping || currentState is CoreStopping;
+    if (!stillNeedsRecovery || _useMockCore) return;
+
+    final bgReachable = await _isBackgroundCoreReachable();
+    if (!bgReachable) {
+      loggy.warning("$reason: background core is down, forcing stopped", error);
+      await _deleteCoreCurrentConfigSnapshot();
+      _transitionLifecycle(_CoreLifecycleState.stopped, reason: reason);
+      _clearRuntimeOutboundSnapshot(reason);
+      statusController.add(currentState = const CoreStatus.stopped());
+      return;
+    }
+
+    loggy.warning("$reason: background core is still active, forcing started", error);
+    _transitionLifecycle(_CoreLifecycleState.started, reason: reason);
+    statusController.add(currentState = const CoreStatus.started());
+    if (listenerKey != null && core.isInitialized()) {
+      try {
+        await startListeningStatus(listenerKey, listenerKey == "bg" ? core.bgClient : core.fgClient);
+      } catch (e, st) {
+        loggy.warning("failed to restart status listener after recovery [$listenerKey]", e, st);
+      }
+    }
   }
 
   Future<void> init() async {
@@ -380,7 +440,8 @@ class ZeonCoreService with InfraLogger {
       Object? lastError;
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-          final response = await core.fgClient.parse(ParseRequest(content: content, debug: debug));
+          final client = await _clientForForegroundOperation("validate config content");
+          final response = await client.parse(ParseRequest(content: content, debug: debug));
           if (response.responseCode == ResponseCode.OK) {
             return right(response.content);
           }
@@ -458,7 +519,9 @@ class ZeonCoreService with InfraLogger {
       final payload = await _buildCoreOptionsPayload(options);
       loggy.info("core payload (safe): ${_safeCorePayload(payload)}");
       final request = ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(payload));
+      _latestCoreOptionsRequest = request;
       const maxAttempts = 3;
+      Object? lastTransientError;
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           final client = await _clientForForegroundOperation("change options");
@@ -477,19 +540,69 @@ class ZeonCoreService with InfraLogger {
           }
           return right(unit);
         } on GrpcError catch (e, st) {
-          if (e.code != StatusCode.unavailable && !_isTransientGrpcTransportClose(e)) {
+          if (!_isTransientGrpcFailure(e)) {
             rethrow;
           }
+          lastTransientError = e;
           loggy.warning("change options grpc unavailable [$attempt/$maxAttempts]", e, st);
-          if (attempt == maxAttempts) {
-            return left("core unavailable while applying options: $e");
-          }
           await setup().run();
           await Future<void>.delayed(const Duration(milliseconds: 200));
         }
       }
-      return left("failed to apply options");
+
+      if (core.isInitialized() && !core.isSingleChannel()) {
+        try {
+          if (await core.isActiveBg()) {
+            return await _applyCoreOptionsToClient(request, core.bgClient, "background");
+          }
+        } catch (e, st) {
+          if (!_isTransientCoreFailure(e)) rethrow;
+          lastTransientError = e;
+          loggy.warning("change options background fallback unavailable", e, st);
+        }
+      }
+
+      loggy.warning(
+        "core options deferred until background core is available",
+        lastTransientError ?? "foreground core unavailable",
+      );
+      return right(unit);
     });
+  }
+
+  Future<Either<String, Unit>> _applyLatestCoreOptionsToBackground(String reason) async {
+    final request = _latestCoreOptionsRequest;
+    if (request == null || _useMockCore) return right(unit);
+    return _applyCoreOptionsToClient(request, core.bgClient, "background/$reason");
+  }
+
+  Future<Either<String, Unit>> _applyCoreOptionsToClient(
+    ChangeHiddifySettingsRequest request,
+    CoreClient client,
+    String target,
+  ) async {
+    const maxAttempts = 3;
+    Object? lastTransientError;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final res = await client.ChangeHiddifySettings(request);
+        if (res.messageType != MessageType.EMPTY) {
+          return left("${res.messageType} ${res.message}");
+        }
+        loggy.debug("core options applied to $target");
+        return right(unit);
+      } on GrpcError catch (e, st) {
+        if (!_isTransientGrpcFailure(e)) {
+          rethrow;
+        }
+        lastTransientError = e;
+        loggy.warning("apply core options to $target failed [$attempt/$maxAttempts]", e, st);
+        if (attempt < maxAttempts) {
+          await Future<void>.delayed(Duration(milliseconds: 180 * attempt));
+        }
+      }
+    }
+    return left("core unavailable while applying options to $target: $lastTransientError");
   }
 
   Future<CoreClient> _clientForForegroundOperation(String operation) async {
@@ -552,6 +665,22 @@ class ZeonCoreService with InfraLogger {
             message.contains("connection error") ||
             message.contains("transport is closing") ||
             message.contains("stream terminated"));
+  }
+
+  bool _isTransientGrpcFailure(GrpcError error) {
+    return error.code == StatusCode.unavailable || _isTransientGrpcTransportClose(error);
+  }
+
+  bool _isTransientCoreFailure(Object error) {
+    if (error is GrpcError) return _isTransientGrpcFailure(error);
+    final message = error.toString().toLowerCase();
+    return message.contains("core unavailable") ||
+        message.contains("grpc") ||
+        message.contains("connection refused") ||
+        message.contains("http/2") ||
+        message.contains("transport is closing") ||
+        message.contains("stream terminated") ||
+        message.contains("socketexception");
   }
 
   Future<Map<String, dynamic>> _buildCoreOptionsPayload(SingboxConfigOption options) async {
@@ -764,6 +893,15 @@ class ZeonCoreService with InfraLogger {
           await startListeningStatus("bg", core.bgClient);
         }
 
+        final optionsResult = await _applyLatestCoreOptionsToBackground("start");
+        if (optionsResult.isLeft()) {
+          final error = optionsResult.getLeft().toNullable() ?? "failed to apply core options";
+          await _deleteCoreCurrentConfigSnapshot();
+          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "background options failed");
+          statusController.add(currentState = const CoreStatus.stopped());
+          return left(ConnectionFailure.unexpected("failed to apply core options: $error"));
+        }
+
         try {
           final res = await core.bgClient.start(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
@@ -808,6 +946,18 @@ class ZeonCoreService with InfraLogger {
         return right(unit);
       }),
     );
+  }
+
+  TaskEither<String, Unit> prepareVpnConfiguration(String path, String name, bool disableMemoryLimit) {
+    return TaskEither(() async {
+      if (!PlatformUtils.isIOS || _useMockCore) return right(unit);
+      try {
+        final prepared = await core.prepareVpn(path, name, disableMemoryLimit);
+        return prepared ? right(unit) : left("failed to prepare VPN configuration");
+      } catch (e) {
+        return left(e.toString());
+      }
+    });
   }
 
   bool _isMissingWindowsTunPrivilege() {
@@ -896,6 +1046,13 @@ class ZeonCoreService with InfraLogger {
         statusController.add(currentState = const CoreStatus.stopping());
 
         try {
+          final optionsResult = await _applyLatestCoreOptionsToBackground("restart");
+          if (optionsResult.isLeft()) {
+            final error = optionsResult.getLeft().toNullable() ?? "failed to apply core options";
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart options failed");
+            statusController.add(currentState = const CoreStatus.stopped());
+            return left("failed to apply core options: $error");
+          }
           final res = await core.bgClient.restart(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit, delayStart: true),
           );
@@ -1298,10 +1455,12 @@ class ZeonCoreService with InfraLogger {
           .asyncMap((event) => _applyCoreStatusFromListener(key, CoreStatus.fromCoreInfo(event))),
       onDone: () {
         loggy.warning("status listener closed [$key], scheduling reconnect");
+        _recoverStatusAfterListenerClose(key, null);
         _scheduleListenerReconnect(listenKey, () => startListeningStatus(key, cc));
       },
       onError: (error) {
         loggy.error("Stream error in $listenKey: $error");
+        _recoverStatusAfterListenerClose(key, error);
         _scheduleListenerReconnect(listenKey, () => startListeningStatus(key, cc));
       },
     );
