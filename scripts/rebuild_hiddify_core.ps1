@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet("android", "windows", "linux")]
-    [string[]]$Platform = @("windows"),
+    [string[]]$Platform = @("android"),
 
     [string]$WslDistribution,
 
@@ -147,10 +147,6 @@ if [ "$smart_active_debug" = "1" ]; then
 fi
 
 export PATH="/usr/local/go/bin:/usr/local/bin:$PATH"
-export GOPATH="${GOPATH:-$(go env GOPATH 2>/dev/null || true)}"
-if [ -n "$GOPATH" ]; then
-  export PATH="$PATH:$GOPATH/bin"
-fi
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -166,12 +162,63 @@ require_directory() {
   fi
 }
 
-require_command go
 require_directory "$core_dir"
 
 required_go_version="$(awk '$1 == "go" { print $2; exit }' "$core_dir/go.mod")"
+install_go_toolchain() {
+  if command -v go >/dev/null 2>&1; then
+    return
+  fi
+
+  if [ -z "$required_go_version" ]; then
+    echo "Required command 'go' was not found inside WSL and $core_dir/go.mod does not declare a Go version." >&2
+    exit 1
+  fi
+
+  case "$(uname -m)" in
+    x86_64|amd64) go_arch="amd64" ;;
+    aarch64|arm64) go_arch="arm64" ;;
+    *)
+      echo "Required command 'go' was not found inside WSL and automatic install does not support architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+
+  go_url="https://go.dev/dl/go${required_go_version}.linux-${go_arch}.tar.gz"
+  go_archive="$(mktemp)"
+  echo "Go was not found inside WSL. Installing Go ${required_go_version} from ${go_url}..."
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL "$go_url" -o "$go_archive"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "$go_archive" "$go_url"
+  else
+    echo "Required command 'go' was not found inside WSL. Install Go ${required_go_version}, or install curl/wget so this script can download it." >&2
+    exit 1
+  fi
+
+  if [ "$(id -u)" -ne 0 ] && ! command -v sudo >/dev/null 2>&1; then
+    echo "Required command 'go' was not found inside WSL and sudo is unavailable. Install Go ${required_go_version} into /usr/local/go." >&2
+    exit 1
+  fi
+
+  install_cmd='rm -rf /usr/local/go && tar -C /usr/local -xzf "$1"'
+  if [ "$(id -u)" -eq 0 ]; then
+    sh -c "$install_cmd" sh "$go_archive"
+  else
+    sudo sh -c "$install_cmd" sh "$go_archive"
+  fi
+  rm -f "$go_archive"
+}
+
+install_go_toolchain
+
 if [ -n "$required_go_version" ]; then
   export GOTOOLCHAIN="go$required_go_version"
+fi
+require_command go
+export GOPATH="${GOPATH:-$(go env GOPATH 2>/dev/null || true)}"
+if [ -n "$GOPATH" ]; then
+  export PATH="$PATH:$GOPATH/bin"
 fi
 echo "Using Go toolchain: $(go version)"
 

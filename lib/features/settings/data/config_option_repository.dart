@@ -28,8 +28,8 @@ abstract class ConfigOptions {
 
   static final balancerStrategy = PreferencesNotifier.create<BalancerStrategy, String>(
     "balancer-strategy",
-    BalancerStrategy.defaultStrategy,
-    mapFrom: BalancerStrategy.fromKey,
+    BalancerStrategy.smartActiveAuto,
+    mapFrom: (value) => BalancerStrategy.values.firstWhere((e) => e.key == value),
     mapTo: (value) => value.key,
   );
 

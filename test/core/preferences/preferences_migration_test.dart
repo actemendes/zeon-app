@@ -63,12 +63,21 @@ void main() {
     expect(prefs.getBool("bypass-lan"), true);
   });
 
-  test("latest migration version is 14", () async {
+  test("v15 does not change non-Android round-robin values", () async {
+    SharedPreferences.setMockInitialValues({PreferencesMigration.versionKey: 14, "balancer-strategy": "round-robin"});
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs).migrate();
+
+    expect(prefs.getString("balancer-strategy"), "round-robin");
+  });
+
+  test("latest migration version is 15", () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
 
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
-    expect(prefs.getInt(PreferencesMigration.versionKey), 14);
+    expect(prefs.getInt(PreferencesMigration.versionKey), 15);
   });
 }

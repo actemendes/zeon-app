@@ -95,7 +95,7 @@ class RouteOptionsPage extends HookConsumerWidget {
           ChoicePreferenceWidget(
             selected: ref.watch(ConfigOptions.balancerStrategy),
             preferences: ref.watch(ConfigOptions.balancerStrategy.notifier),
-            choices: BalancerStrategy.choices,
+            choices: const [BalancerStrategy.roundRobin, BalancerStrategy.smartActiveAuto],
             title: t.pages.settings.routing.balancerStrategy.title,
             icon: Icons.auto_awesome_rounded,
             presentChoice: (value) => value.present(t),

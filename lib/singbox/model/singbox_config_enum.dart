@@ -64,23 +64,6 @@ enum BalancerStrategy {
 
   final String key;
 
-  static BalancerStrategy get defaultStrategy => PlatformUtils.isAndroid ? roundRobin : smartActiveAuto;
-
-  static List<BalancerStrategy> get choices {
-    if (PlatformUtils.isAndroid) {
-      return [roundRobin];
-    }
-    return [roundRobin, smartActiveAuto];
-  }
-
-  static BalancerStrategy fromKey(String value) {
-    final strategy = values.firstWhere((e) => e.key == value, orElse: () => defaultStrategy);
-    if (PlatformUtils.isAndroid && strategy == smartActiveAuto) {
-      return roundRobin;
-    }
-    return strategy;
-  }
-
   String present(TranslationsEn t) => switch (this) {
     roundRobin => t.pages.settings.routing.balancerStrategy.roundRobin,
     smartActiveAuto => t.pages.settings.routing.balancerStrategy.smartActiveAuto,

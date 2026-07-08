@@ -26,6 +26,7 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion12Migration(sharedPreferences),
       PreferencesVersion13Migration(sharedPreferences),
       PreferencesVersion14Migration(sharedPreferences),
+      PreferencesVersion15Migration(sharedPreferences, currentVersion),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -393,13 +394,22 @@ class PreferencesVersion14Migration extends PreferencesMigrationStep with InfraL
   PreferencesVersion14Migration(super.sharedPreferences);
 
   @override
+  Future<void> migrate() async {}
+}
+
+class PreferencesVersion15Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion15Migration(super.sharedPreferences, this._currentVersion);
+
+  final int _currentVersion;
+
+  @override
   Future<void> migrate() async {
     if (!PlatformUtils.isAndroid) return;
 
     final balancerStrategy = sharedPreferences.getString("balancer-strategy");
-    if (balancerStrategy == "smart-active-auto") {
-      loggy.debug("v14: changing Android balancer-strategy from [smart-active-auto] to [round-robin]");
-      await sharedPreferences.setString("balancer-strategy", "round-robin");
+    if (_currentVersion == 14 && balancerStrategy == "round-robin") {
+      loggy.debug("v15: restoring balancer-strategy from [round-robin] to [smart-active-auto]");
+      await sharedPreferences.setString("balancer-strategy", "smart-active-auto");
     }
   }
 }
