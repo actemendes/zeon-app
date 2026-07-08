@@ -1,5 +1,7 @@
 import 'package:dartx/dartx.dart';
 import 'package:fpdart/fpdart.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/model/optional_range.dart';
 import 'package:zeon/core/model/region.dart';
 import 'package:zeon/core/utils/exception_handler.dart';
@@ -12,8 +14,6 @@ import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/singbox/model/singbox_config_option.dart';
 import 'package:zeon/singbox/model/singbox_rule.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class ConfigOptions {
   static const _mobileUrlTestInterval = Duration(minutes: 3);
@@ -28,8 +28,8 @@ abstract class ConfigOptions {
 
   static final balancerStrategy = PreferencesNotifier.create<BalancerStrategy, String>(
     "balancer-strategy",
-    BalancerStrategy.smartActiveAuto,
-    mapFrom: (value) => BalancerStrategy.values.firstWhere((e) => e.key == value),
+    BalancerStrategy.defaultStrategy,
+    mapFrom: BalancerStrategy.fromKey,
     mapTo: (value) => value.key,
   );
 

@@ -26,7 +26,9 @@ function Assert-Command {
 }
 
 function Get-ConnectedDeviceIds {
-    $adbOutput = & adb devices
+    param([Parameter(Mandatory = $true)][string]$AdbPath)
+
+    $adbOutput = & $AdbPath devices
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to query connected Android devices via adb."
     }
@@ -40,13 +42,16 @@ function Get-ConnectedDeviceIds {
 }
 
 function Resolve-DeviceId {
-    param([string]$RequestedDeviceId)
+    param(
+        [string]$RequestedDeviceId,
+        [Parameter(Mandatory = $true)][string]$AdbPath
+    )
 
     if ($RequestedDeviceId) {
         return $RequestedDeviceId
     }
 
-    $connectedDeviceIds = @(Get-ConnectedDeviceIds)
+    $connectedDeviceIds = @(Get-ConnectedDeviceIds -AdbPath $AdbPath)
     switch ($connectedDeviceIds.Count) {
         0 {
             throw "No connected Android devices were found."
@@ -158,6 +163,23 @@ function Resolve-AaptPath {
     return $aapt.FullName
 }
 
+function Resolve-AdbPath {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $adbCommand = Get-Command "adb" -ErrorAction SilentlyContinue
+    if ($adbCommand) {
+        return $adbCommand.Source
+    }
+
+    $sdkRoot = Resolve-AndroidSdkRoot -RepoRoot $RepoRoot
+    $adbPath = Join-Path $sdkRoot "platform-tools\adb.exe"
+    if (Test-Path -LiteralPath $adbPath) {
+        return (Resolve-Path -LiteralPath $adbPath).Path
+    }
+
+    throw "adb.exe was not found in PATH or Android SDK platform-tools: $adbPath"
+}
+
 function Resolve-ApkPackageId {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
@@ -180,11 +202,12 @@ function Resolve-ApkPackageId {
 
 function Get-InstalledPackagePath {
     param(
+        [Parameter(Mandatory = $true)][string]$AdbPath,
         [Parameter(Mandatory = $true)][string]$DeviceId,
         [Parameter(Mandatory = $true)][string]$PackageId
     )
 
-    return ((& adb -s $DeviceId shell pm path $PackageId 2>$null) | Out-String).Trim()
+    return ((& $AdbPath -s $DeviceId shell pm path $PackageId 2>$null) | Out-String).Trim()
 }
 
 $scriptDir = Split-Path -Parent $PSCommandPath
@@ -194,18 +217,18 @@ Push-Location $repoRoot
 try {
     Assert-Command "flutter"
     Assert-Command "dart"
-    Assert-Command "adb"
     if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $BuildTarget))) {
         throw "Build target not found: $BuildTarget"
     }
 
-    $resolvedDeviceId = Resolve-DeviceId -RequestedDeviceId $DeviceId
-    $deviceState = ((& adb -s $resolvedDeviceId get-state) | Out-String).Trim()
+    $adbPath = Resolve-AdbPath -RepoRoot $repoRoot
+    $resolvedDeviceId = Resolve-DeviceId -RequestedDeviceId $DeviceId -AdbPath $adbPath
+    $deviceState = ((& $adbPath -s $resolvedDeviceId get-state) | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $deviceState -ne "device") {
         throw "Device '$resolvedDeviceId' is not ready. Current adb state: '$deviceState'."
     }
 
-    $deviceAbi = ((& adb -s $resolvedDeviceId shell getprop ro.product.cpu.abi) | Out-String).Trim()
+    $deviceAbi = ((& $adbPath -s $resolvedDeviceId shell getprop ro.product.cpu.abi) | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $deviceAbi) {
         throw "Failed to detect device ABI for '$resolvedDeviceId'."
     }
@@ -249,10 +272,10 @@ try {
     }
 
     if ($CleanInstall) {
-        $installedPackagePath = Get-InstalledPackagePath -DeviceId $resolvedDeviceId -PackageId $effectivePackageId
+        $installedPackagePath = Get-InstalledPackagePath -AdbPath $adbPath -DeviceId $resolvedDeviceId -PackageId $effectivePackageId
         if ($installedPackagePath) {
             Write-Host "Removing installed package: $effectivePackageId"
-            & adb -s $resolvedDeviceId uninstall $effectivePackageId
+            & $adbPath -s $resolvedDeviceId uninstall $effectivePackageId
             if ($LASTEXITCODE -ne 0) {
                 throw "adb uninstall failed for package '$effectivePackageId'."
             }
@@ -268,12 +291,12 @@ try {
     }
 
     Write-Host ("Running: adb " + ($installArgs -join " "))
-    & adb @installArgs
+    & $adbPath @installArgs
     if ($LASTEXITCODE -ne 0) {
         throw "adb install failed."
     }
 
-    $installedPackagePath = Get-InstalledPackagePath -DeviceId $resolvedDeviceId -PackageId $effectivePackageId
+    $installedPackagePath = Get-InstalledPackagePath -AdbPath $adbPath -DeviceId $resolvedDeviceId -PackageId $effectivePackageId
     if (-not $installedPackagePath) {
         throw "adb install returned success, but package '$effectivePackageId' is not installed or not visible to adb."
     }
@@ -282,7 +305,7 @@ try {
     $legacyPackageIds = @("app.zeonvpn.com")
     foreach ($legacyPackageId in $legacyPackageIds) {
         if ($legacyPackageId -ne $effectivePackageId) {
-            $legacyPackagePath = Get-InstalledPackagePath -DeviceId $resolvedDeviceId -PackageId $legacyPackageId
+            $legacyPackagePath = Get-InstalledPackagePath -AdbPath $adbPath -DeviceId $resolvedDeviceId -PackageId $legacyPackageId
             if ($legacyPackagePath) {
                 Write-Warning "Legacy package '$legacyPackageId' is also installed. If you open it manually from launcher, you will test the old app, not '$effectivePackageId'."
             }
@@ -292,7 +315,7 @@ try {
     if ($Launch) {
         $launchArgs = @("-s", $resolvedDeviceId, "shell", "monkey", "-p", $effectivePackageId, "-c", "android.intent.category.LAUNCHER", "1")
         Write-Host ("Running: adb " + ($launchArgs -join " "))
-        & adb @launchArgs
+        & $adbPath @launchArgs
         if ($LASTEXITCODE -ne 0) {
             throw "App install succeeded, but launch failed for package '$effectivePackageId'."
         }

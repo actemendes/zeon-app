@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/region.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
@@ -12,7 +13,6 @@ import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/features/settings/widget/preference_tile.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class RouteOptionsPage extends HookConsumerWidget {
   const RouteOptionsPage({super.key});
@@ -95,7 +95,7 @@ class RouteOptionsPage extends HookConsumerWidget {
           ChoicePreferenceWidget(
             selected: ref.watch(ConfigOptions.balancerStrategy),
             preferences: ref.watch(ConfigOptions.balancerStrategy.notifier),
-            choices: const [BalancerStrategy.roundRobin, BalancerStrategy.smartActiveAuto],
+            choices: BalancerStrategy.choices,
             title: t.pages.settings.routing.balancerStrategy.title,
             icon: Icons.auto_awesome_rounded,
             presentChoice: (value) => value.present(t),

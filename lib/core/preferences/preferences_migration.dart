@@ -1,5 +1,5 @@
-import 'package:zeon/utils/utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zeon/utils/utils.dart';
 
 class PreferencesMigration with InfraLogger {
   PreferencesMigration({required this.sharedPreferences});
@@ -25,6 +25,7 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion11Migration(sharedPreferences),
       PreferencesVersion12Migration(sharedPreferences),
       PreferencesVersion13Migration(sharedPreferences),
+      PreferencesVersion14Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -384,6 +385,21 @@ class PreferencesVersion13Migration extends PreferencesMigrationStep with InfraL
     if (tunImplementation != "gvisor") {
       loggy.debug("v13: changing Apple tun-implementation from [$tunImplementation] to [gvisor]");
       await sharedPreferences.setString("tun-implementation", "gvisor");
+    }
+  }
+}
+
+class PreferencesVersion14Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion14Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    if (!PlatformUtils.isAndroid) return;
+
+    final balancerStrategy = sharedPreferences.getString("balancer-strategy");
+    if (balancerStrategy == "smart-active-auto") {
+      loggy.debug("v14: changing Android balancer-strategy from [smart-active-auto] to [round-robin]");
+      await sharedPreferences.setString("balancer-strategy", "round-robin");
     }
   }
 }

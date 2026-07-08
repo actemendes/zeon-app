@@ -16,6 +16,7 @@ import 'package:zeon/features/connection/data/connection_data_providers.dart';
 import 'package:zeon/features/connection/data/connection_repository.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
+import 'package:zeon/features/diagnostics/data/diagnostics_providers.dart';
 import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
@@ -46,6 +47,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   int _mockConnectAttempts = 0;
   Future<void>? _embeddedPromotionInFlight;
   ConnectionStatus? _lastObservedConnectionStatus;
+  bool _connectionWasUp = false;
+  bool _vpnExpectedRunning = false;
+  String? _lastUserAction;
+  DateTime? _lastUserActionAt;
+  DateTime? _expectedStopUntil;
 
   @override
   Stream<ConnectionStatus> build() async* {
@@ -93,6 +99,33 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     ref.watch(coreRestartSignalProvider);
 
     yield* _connectionRepo.watchConnectionStatus().doOnData((event) {
+      final previousStatus = _lastObservedConnectionStatus;
+      final wasUpBefore = _connectionWasUp;
+      final startedByUser = ref.read(Preferences.startedByUser);
+
+      if (event case Connected()) {
+        _connectionWasUp = true;
+        _vpnExpectedRunning = true;
+      } else if (event case Disconnected()) {
+        final expectedRunning = _vpnExpectedRunning || startedByUser;
+        if (wasUpBefore && expectedRunning && !_isExpectedStop()) {
+          unawaited(
+            ref
+                .read(errorReportControllerProvider)
+                .captureUnexpectedVpnDisconnect(
+                  previousStatus: previousStatus,
+                  disconnected: event,
+                  lastUserAction: _lastUserAction,
+                  lastUserActionAt: _lastUserActionAt,
+                  startedByUser: expectedRunning,
+                ),
+          );
+        }
+        _connectionWasUp = false;
+        _vpnExpectedRunning = false;
+        _expectedStopUntil = null;
+      }
+
       if (event case Disconnected(connectionFailure: final _?) when PlatformUtils.isDesktop) {
         ref.read(Preferences.startedByUser.notifier).update(false);
       }
@@ -106,7 +139,6 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
             break;
         }
       }
-      final previousStatus = _lastObservedConnectionStatus;
       _lastObservedConnectionStatus = event;
       loggy.info("connection status: ${event.format()}");
       if (event case Connected() when previousStatus is! Connected) {
@@ -132,11 +164,13 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       switch (value) {
         case Disconnected():
           await haptic.lightImpact();
+          _markUserAction('manual_connect');
           await ref.read(Preferences.startedByUser.notifier).update(true);
           await _connect();
         case Connected():
           // default:
           await haptic.mediumImpact();
+          _markUserAction('manual_disconnect', expectsStop: true);
           await ref.read(Preferences.startedByUser.notifier).update(false);
           await _disconnect();
         default:
@@ -149,6 +183,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     if (state case AsyncData(:final value) when value == const Connected()) {
       if (profile == null) {
         loggy.info("no active profile, disconnecting");
+        _markUserAction('no_active_profile_disconnect', expectsStop: true);
         return _disconnect();
       }
       if (_useMockConnectionFlow) {
@@ -156,9 +191,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         return _mockReconnectFlow();
       }
       loggy.info("active profile changed, reconnecting");
+      _markUserAction('profile_reconnect', expectsStop: true);
       await ref.read(Preferences.startedByUser.notifier).update(true);
       await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit)).mapLeft((err) async {
         loggy.warning("error reconnecting", err);
+        unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(err, StackTrace.current));
         state = AsyncError(err, StackTrace.current);
         final t = ref.read(translationsProvider).requireValue;
         await ref
@@ -172,6 +209,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     if (state case AsyncData(:final value) when value == const Connected()) {
       if (profile == null) {
         loggy.info("no active profile, disconnecting");
+        _markUserAction('config_restart_no_profile_disconnect', expectsStop: true);
         return _disconnect();
       }
       if (_useMockConnectionFlow) {
@@ -179,9 +217,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         return _mockReconnectFlow();
       }
       loggy.info("config options changed, restarting connection");
+      _markUserAction('config_restart', expectsStop: true);
       await ref.read(Preferences.startedByUser.notifier).update(true);
       await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit)).mapLeft((err) async {
         loggy.warning("error restarting after config change", err);
+        unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(err, StackTrace.current));
         state = AsyncError(err, StackTrace.current);
         final t = ref.read(translationsProvider).requireValue;
         await ref
@@ -196,6 +236,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       switch (value) {
         case Connected() || Connecting():
           loggy.debug("aborting connection");
+          _markUserAction('abort_connection', expectsStop: true);
           await _disconnect();
         default:
       }
@@ -287,6 +328,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       loggy.warning(
         "mobile embedded bootstrap promotion exhausted after reachable backend; disconnecting temporary embedded profile",
       );
+      _markUserAction('embedded_profile_cleanup_disconnect', expectsStop: true);
       await ref.read(Preferences.startedByUser.notifier).update(false);
       await _disconnect();
     }
@@ -333,6 +375,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       ConnectionFailure err,
     ) async {
       loggy.warning("error connecting", err);
+      unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(err, StackTrace.current));
       final t = ref.read(translationsProvider).requireValue;
       //Go err is not normal object to see the go errors are string and need to be dumped
       await ref
@@ -355,6 +398,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     state = const AsyncData(Disconnecting());
     final result = await _connectionRepo.disconnect().mapLeft((err) {
       loggy.warning("error disconnecting", err);
+      unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(err, StackTrace.current));
       final t = ref.read(translationsProvider).requireValue;
       ref
           .read(dialogNotifierProvider.notifier)
@@ -404,6 +448,20 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     state = const AsyncData(Connecting());
     await Future<void>.delayed(const Duration(milliseconds: 2400));
     state = const AsyncData(Connected());
+  }
+
+  void _markUserAction(String action, {bool expectsStop = false}) {
+    _lastUserAction = action;
+    _lastUserActionAt = DateTime.now().toUtc();
+    if (expectsStop) {
+      _vpnExpectedRunning = false;
+      _expectedStopUntil = _lastUserActionAt!.add(const Duration(seconds: 30));
+    }
+  }
+
+  bool _isExpectedStop() {
+    final expectedStopUntil = _expectedStopUntil;
+    return expectedStopUntil != null && expectedStopUntil.isAfter(DateTime.now().toUtc());
   }
 }
 

@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
@@ -17,6 +20,7 @@ import 'package:zeon/core/theme/app_theme_mode.dart';
 import 'package:zeon/features/app/widget/app.dart';
 import 'package:zeon/features/auto_start/notifier/auto_start_notifier.dart';
 import 'package:zeon/features/bootstrap/widget/bootstrap_splash_screen.dart';
+import 'package:zeon/features/diagnostics/data/diagnostics_providers.dart';
 import 'package:zeon/features/log/data/log_data_providers.dart';
 import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
@@ -28,12 +32,9 @@ import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/system_tray/notifier/system_tray_notifier.dart';
 import 'package:zeon/features/window/notifier/window_notifier.dart';
-import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 import 'package:zeon/riverpod_observer.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
 Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async {
   final shouldPreserveNativeSplash = await _shouldShowNativeSplashOnThisRun();
@@ -258,6 +259,7 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   }
   unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
   await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
+  await _safeInit("error reports", () => container.read(errorReportControllerProvider).init(), timeout: 3000);
 
   if (!kIsWeb) {
     // await _safeInit(

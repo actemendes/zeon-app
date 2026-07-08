@@ -1,6 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:zeon/core/preferences/preferences_migration.dart";
 import "package:shared_preferences/shared_preferences.dart";
+import "package:zeon/core/preferences/preferences_migration.dart";
 
 void main() {
   test("migrates execute-config-as-is to enable-full-config without data loss", () async {
@@ -23,7 +23,7 @@ void main() {
     expect(prefs.getBool("execute-config-as-is"), true);
   });
 
-  test("fresh installations use smart-active-auto balancer strategy", () async {
+  test("fresh installations use platform default balancer strategy", () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
 
@@ -61,5 +61,14 @@ void main() {
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
     expect(prefs.getBool("bypass-lan"), true);
+  });
+
+  test("latest migration version is 14", () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs).migrate();
+
+    expect(prefs.getInt(PreferencesMigration.versionKey), 14);
   });
 }
