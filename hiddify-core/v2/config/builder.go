@@ -54,6 +54,8 @@ const (
 	InboundTProxy    = "tproxy-in"
 	InboundRedirect  = "redirect-in"
 	InboundDirectTag = "dns-in"
+
+	RUAdListHardcodedRuleSetTag = "ru-adlist-hardcoded"
 )
 
 var (
@@ -61,6 +63,78 @@ var (
 	OutboundWARPConfigDetour = OutboundDirectFragmentTag
 	PredefinedOutboundTags   = []string{OutboundDirectTag, OutboundBypassTag, OutboundSelectTag, OutboundURLTestTag, OutboundDNSTag, OutboundDirectFragmentTag, WARPConfigTag}
 )
+
+var ruAdListHardcodedDomains = []string{
+	"ad.mail.ru",
+	"adfox.ru",
+	"adlook.me",
+	"ads.betweendigital.com",
+	"adriver.ru",
+	"advarkads.com",
+	"advertur.ru",
+	"advmaker.ru",
+	"an.yandex.ru",
+	"between.digital",
+	"betweendigital.com",
+	"bidvol.com",
+	"bodyclick.net",
+	"buzzoola.com",
+	"directadvert.ru",
+	"gnezdo.ru",
+	"kadam.net",
+	"ladycash.ru",
+	"marketgid.com",
+	"mc.yandex.ru",
+	"mgid.com",
+	"mixmarket.biz",
+	"otm-r.com",
+	"relap.io",
+	"rotaban.ru",
+	"rs.mail.ru",
+	"smi2.ru",
+	"soloway.ru",
+	"target.my.com",
+	"teasernet.com",
+	"trafmag.com",
+	"videonow.ru",
+	"videoroll.net",
+}
+
+var ruAdListHardcodedDomainSuffixes = []string{
+	".ad.mail.ru",
+	".adfox.ru",
+	".adlook.me",
+	".ads.betweendigital.com",
+	".adriver.ru",
+	".advarkads.com",
+	".advertur.ru",
+	".advmaker.ru",
+	".an.yandex.ru",
+	".between.digital",
+	".betweendigital.com",
+	".bidvol.com",
+	".bodyclick.net",
+	".buzzoola.com",
+	".directadvert.ru",
+	".gnezdo.ru",
+	".kadam.net",
+	".ladycash.ru",
+	".marketgid.com",
+	".mc.yandex.ru",
+	".mgid.com",
+	".mixmarket.biz",
+	".otm-r.com",
+	".relap.io",
+	".rotaban.ru",
+	".rs.mail.ru",
+	".smi2.ru",
+	".soloway.ru",
+	".target.my.com",
+	".teasernet.com",
+	".trafmag.com",
+	".videonow.ru",
+	".videoroll.net",
+}
 
 // TODO include selectors
 func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptions) (*option.Options, error) {
@@ -1009,6 +1083,21 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	}
 	if hopt.BlockAds {
 		rulesets = append(rulesets, option.RuleSet{
+			Type: C.RuleSetTypeInline,
+			Tag:  RUAdListHardcodedRuleSetTag,
+			InlineOptions: option.PlainRuleSet{
+				Rules: []option.HeadlessRule{
+					{
+						Type: C.RuleTypeDefault,
+						DefaultOptions: option.DefaultHeadlessRule{
+							Domain:       ruAdListHardcodedDomains,
+							DomainSuffix: ruAdListHardcodedDomainSuffixes,
+						},
+					},
+				},
+			},
+		})
+		rulesets = append(rulesets, option.RuleSet{
 			Type:   C.RuleSetTypeRemote,
 			Tag:    "geosite-ads",
 			Format: C.RuleSetFormatBinary,
@@ -1074,6 +1163,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			DefaultOptions: option.DefaultRule{
 				RawDefaultRule: option.RawDefaultRule{
 					RuleSet: []string{
+						RUAdListHardcodedRuleSetTag,
 						"geosite-ads",
 						"geosite-malware",
 						"geosite-phishing",
@@ -1094,6 +1184,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			RawDefaultDNSRule: option.RawDefaultDNSRule{
 
 				RuleSet: []string{
+					RUAdListHardcodedRuleSetTag,
 					"geosite-ads",
 					"geosite-malware",
 					"geosite-phishing",

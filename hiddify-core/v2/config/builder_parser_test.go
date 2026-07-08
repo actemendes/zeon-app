@@ -122,6 +122,84 @@ func TestSetRoutingOptionsAppliesUserRules(t *testing.T) {
 	}
 }
 
+func TestSetRoutingOptionsAddsHardcodedRUAdListWhenBlockAdsEnabled(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.BlockAds = true
+	opts := option.Options{
+		DNS: &option.DNSOptions{},
+	}
+	if err := setRoutingOptions(&opts, hopt); err != nil {
+		t.Fatalf("setRoutingOptions returned error: %v", err)
+	}
+	if opts.Route == nil {
+		t.Fatalf("route options should not be nil")
+	}
+
+	foundRuleSet := false
+	for _, ruleSet := range opts.Route.RuleSet {
+		if ruleSet.Tag != RUAdListHardcodedRuleSetTag {
+			continue
+		}
+		foundRuleSet = true
+		if ruleSet.Type != constant.RuleSetTypeInline {
+			t.Fatalf("RU adlist rule-set type = %s, want inline", ruleSet.Type)
+		}
+		if len(ruleSet.InlineOptions.Rules) != 1 {
+			t.Fatalf("RU adlist inline rules length = %d, want 1", len(ruleSet.InlineOptions.Rules))
+		}
+		rule := ruleSet.InlineOptions.Rules[0].DefaultOptions
+		if !containsString(rule.Domain, "adfox.ru") {
+			t.Fatalf("RU adlist domains should include adfox.ru")
+		}
+		if !containsString(rule.DomainSuffix, ".adfox.ru") {
+			t.Fatalf("RU adlist domain suffixes should include .adfox.ru")
+		}
+		break
+	}
+	if !foundRuleSet {
+		t.Fatalf("expected %s rule-set to be present", RUAdListHardcodedRuleSetTag)
+	}
+
+	foundRouteReject := false
+	for _, rule := range opts.Route.Rules {
+		if !containsString(rule.DefaultOptions.RuleSet, RUAdListHardcodedRuleSetTag) {
+			continue
+		}
+		foundRouteReject = true
+		if rule.DefaultOptions.Action != constant.RuleActionTypeReject {
+			t.Fatalf("RU adlist route action = %s, want reject", rule.DefaultOptions.Action)
+		}
+		break
+	}
+	if !foundRouteReject {
+		t.Fatalf("expected route reject rule for %s", RUAdListHardcodedRuleSetTag)
+	}
+
+	foundDNSReject := false
+	for _, rule := range opts.DNS.Rules {
+		if !containsString(rule.DefaultOptions.RuleSet, RUAdListHardcodedRuleSetTag) {
+			continue
+		}
+		foundDNSReject = true
+		if rule.DefaultOptions.Action != constant.RuleActionTypePredefined {
+			t.Fatalf("RU adlist DNS action = %s, want predefined reject", rule.DefaultOptions.Action)
+		}
+		break
+	}
+	if !foundDNSReject {
+		t.Fatalf("expected DNS reject rule for %s", RUAdListHardcodedRuleSetTag)
+	}
+}
+
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
 func TestParseConfigUsesFullConfigFlag(t *testing.T) {
 	ctx := context.Background()
 	raw := `{
