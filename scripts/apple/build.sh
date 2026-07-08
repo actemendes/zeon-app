@@ -169,7 +169,9 @@ build_macos_app_store() {
 
   echo "Archive: ${archive_path}"
   echo "Export: ${export_path}"
-  find "${export_path}" -maxdepth 2 -type f -print
+  if [[ "${MACOS_EXPORT_DESTINATION}" == "export" ]]; then
+    find "${export_path}" -maxdepth 2 -type f -print
+  fi
 }
 
 build_ios_unsigned() {
