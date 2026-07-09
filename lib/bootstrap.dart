@@ -269,7 +269,7 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
     // );
 
     if (PlatformUtils.isDesktop) {
-      await _safeInit("system tray", () => container.read(systemTrayNotifierProvider.future), timeout: 1000);
+      _initSystemTrayInBackground(container);
     }
 
     if (PlatformUtils.isAndroid) {
@@ -408,6 +408,26 @@ Future<void> _retryMobileAutoImport(MobileBootstrapImportService service) async 
       // Intentionally ignored: best-effort background retries.
     }
   }
+}
+
+void _initSystemTrayInBackground(ProviderContainer container) {
+  final stopWatch = Stopwatch()..start();
+  Logger.bootstrap.info("initializing [system tray] in background");
+  unawaited(
+    container
+        .read(systemTrayNotifierProvider.future)
+        .then((_) {
+          Logger.bootstrap.debug("[system tray] initialized in ${stopWatch.elapsedMilliseconds}ms");
+        })
+        .catchError((Object e, StackTrace stackTrace) {
+          Logger.bootstrap.warning(
+            "[system tray] background initialization failed after ${stopWatch.elapsedMilliseconds}ms",
+            e,
+            stackTrace,
+          );
+        })
+        .whenComplete(stopWatch.stop),
+  );
 }
 
 Future<T> _init<T>(String name, Future<T> Function() initializer, {int? timeout}) async {

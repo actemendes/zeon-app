@@ -16,7 +16,7 @@
 | `smart-active-auto` неизвестен core | 28 | 7 | Android, `1.3.0-dev.1` build `10300` | Каскад из 4 отчетов на одну попытку запуска. Вероятен рассинхрон app config и core binary/artifact. |
 | Android TUN `permission denied` | 12 | 4 | Android, 1 устройство | Core не может настроить TUN; каждый случай дополнительно рождает gRPC listener errors. |
 | iOS local gRPC `Connection refused` | 7 | 7 | iOS, 1 устройство | Похоже на гонку готовности/жизненного цикла Network Extension или stale port. Fingerprint раздут портом. |
-| Windows tray init timeout | 4 | 4 | Windows, 1 устройство | `_safeInit("system tray", timeout: 1000)` не успевает; не похоже на VPN root cause. |
+| Windows tray init timeout | 4 | 4 | Windows, 1 устройство | Исправлено: tray init переведен в background best-effort, операции tray логируют elapsed/operation. |
 | Startup/disconnect watchdog | 6 | 5 | Android/iOS/Windows | Часть событий вторична к TUN/config/tray, часть требует отдельной корреляции. |
 | Одиночные UI/config/system-info ошибки | 3 | 3 | mixed | Низкий приоритет, но есть понятные точки проверки. |
 
@@ -166,6 +166,12 @@ Triggers:
 - Либо увеличить timeout, либо перевести tray init в fully background best-effort без error-level report.
 - В report добавить elapsed time и concrete operation (`setIcon`, `setToolTip`, `setContextMenu`), чтобы отличить timeout от tray_manager exception.
 
+Что сделано:
+
+- `lib/bootstrap.dart`: desktop tray init переведен в background best-effort через `_initSystemTrayInBackground`; bootstrap больше не ждет 1000 ms и не пишет `[system tray] error initializing` как error-level событие при медленном tray на Windows.
+- `lib/features/system_tray/notifier/system_tray_notifier.dart`: операции `setIcon`, `setToolTip`, `setContextMenu` обернуты в `_tryTrayOperation`, warning теперь содержит concrete operation и elapsed time (`system tray <operation> failed after <N>ms`).
+- При ошибке одного tray шага остальные шаги продолжают выполняться, а локальный кеш (`_lastIconPath`, `_lastTooltip`, `_lastMenuSignature`) обновляется только после успешной операции.
+
 ### 6. Startup/disconnect watchdog
 
 Симптомы:
@@ -232,3 +238,74 @@ Triggers:
 4. **P2: iOS gRPC connection refused.** Проверить lifecycle/port readiness Network Extension и нормализацию fingerprint.
 5. **P3: Windows tray timeout и одиночные UI/config ошибки.** Низкий объем, но понятные небольшие улучшения.
 
+## Отчет о выполненной работе: Android TUN `permission denied`
+
+Дата выполнения: 2026-07-09.
+
+Цель: закрыть P1-пункт по Android TUN `permission denied`, чтобы при revoke VPN permission / Always-on VPN / другом активном VPN / быстром reconnect приложение сначала проходило Android VPN permission flow, а один TUN failure не превращался в пачку `log_error`-отчетов.
+
+Что сделано:
+
+1. Добавлен нативный Android handler `prepare_vpn`:
+   - `android/app/src/main/kotlin/com/zeon/zeon/MethodHandler.kt` теперь принимает `prepare_vpn`;
+   - `android/app/src/main/kotlin/com/zeon/zeon/MainActivity.kt` вызывает `VpnService.prepare`, возвращает результат во Flutter и не стартует service при подготовительном вызове;
+   - обычный `startService()` сохранил прежнюю семантику: после grant VPN permission сервис стартует.
+
+2. Включен `prepareVpnConfiguration` перед core start/restart:
+   - `lib/zeoncore/zeon_core_service.dart` больше не пропускает Android TUN mode;
+   - `lib/features/connection/data/connection_repository.dart` вызывает prepare перед `connect`, перед первичным `reconnect` и перед recovery `start`;
+   - отказ Android VPN permission мапится в `ConnectionFailure.missingVpnPermission`, а не в generic unexpected failure.
+
+3. Уточнена классификация VPN permission denied:
+   - `lib/features/connection/model/connection_failure.dart` добавляет общий `isVpnPermissionDenied`;
+   - классификатор покрывает `manager start inbound/tun`, `missing vpn permission`, `application is not prepared` и `not prepared or is revoked`.
+
+4. Снижен вторичный diagnostic noise:
+   - `start` с VPN permission denied больше не пишет параллельный `loggy.error`, а сразу возвращает `missingVpnPermission`;
+   - `restart` с TUN permission denied не отправляет финальный alert до recovery, а дает repository возможность выполнить stop/start recovery;
+   - ожидаемые gRPC listener closures во время `starting/stopping/stopped` логируются как warning вместо error.
+
+5. В recovery добавлен cooldown:
+   - `ConnectionRepositoryImpl` получил `_tunRecoveryCooldown = 2s`;
+   - recovery loop пишет один warning на попытку и выдерживает cooldown перед forced stop/start.
+
+Ожидаемый эффект:
+
+- Перед Android TUN start/restart вызывается `prepare_vpn`.
+- Отказ или revoke VPN permission виден как `missingVpnPermission`.
+- Один TUN failure больше не должен порождать отдельные error-level reports для core failure и ожидаемых listener stream closures.
+- Recovery остается, но становится менее шумным и не запускает быстрые повторные stop/start без паузы.
+
+Проверки:
+
+- `dart analyze lib/features/connection/model/connection_failure.dart lib/features/connection/data/connection_repository.dart lib/zeoncore/zeon_core_service.dart` - без issues.
+- `.\gradlew.bat :app:compileDebugKotlin --no-daemon` - успешно.
+- `flutter analyze --no-fatal-infos --no-fatal-warnings` - успешно; в проекте остаются существующие non-fatal warnings/infos, не связанные с этой правкой.
+
+## Отчет о выполненной работе: Windows system tray timeout
+
+Дата выполнения: 2026-07-09.
+
+Цель: убрать ложный error-level report `[system tray] error initializing` на Windows, где 1000 ms timeout в bootstrap был слишком агрессивен для cold start, и добавить диагностику конкретного tray operation.
+
+Что сделано:
+
+1. `lib/bootstrap.dart`:
+   - desktop tray init больше не идет через `_safeInit("system tray", timeout: 1000)`;
+   - добавлен `_initSystemTrayInBackground`, который запускает `systemTrayNotifierProvider.future` как background best-effort;
+   - успешная инициализация логирует elapsed time, а ошибка уходит в warning (`background initialization failed after <N>ms`), не в error-level report.
+
+2. `lib/features/system_tray/notifier/system_tray_notifier.dart`:
+   - `setIcon`, `setToolTip`, `setContextMenu` обернуты в `_tryTrayOperation`;
+   - warning теперь содержит concrete operation и elapsed time: `system tray <operation> failed after <N>ms`;
+   - при сбое одного tray шага остальные шаги продолжают выполняться, а кеш последнего состояния обновляется только после успешной операции.
+
+Ожидаемый эффект:
+
+- Медленный Windows tray на cold start больше не блокирует bootstrap и не создает `[system tray] error initializing`.
+- Если проблема окажется exception внутри `tray_manager`, в логах будет видно, на какой операции и через сколько миллисекунд это произошло.
+
+Проверки:
+
+- `dart format lib/bootstrap.dart lib/features/system_tray/notifier/system_tray_notifier.dart` - успешно, изменений форматтер не внес.
+- `dart analyze lib/bootstrap.dart lib/features/system_tray/notifier/system_tray_notifier.dart` - без errors; остались существующие info по deprecated/redundant/directive ordering.

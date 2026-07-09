@@ -111,25 +111,44 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
   }
 
   Future<void> _applyTraySnapshot(_TraySnapshot snapshot) async {
-    try {
-      if (_lastIconPath != snapshot.iconPath) {
-        await trayManager.setIcon(snapshot.iconPath, isTemplate: PlatformUtils.isMacOS);
+    if (_lastIconPath != snapshot.iconPath) {
+      final updated = await _tryTrayOperation(
+        'setIcon',
+        () => trayManager.setIcon(snapshot.iconPath, isTemplate: PlatformUtils.isMacOS),
+      );
+      if (updated) {
         _lastIconPath = snapshot.iconPath;
       }
+    }
 
-      if (!PlatformUtils.isLinux && _shouldUpdateTooltip(snapshot)) {
-        await trayManager.setToolTip(snapshot.tooltip);
+    if (!PlatformUtils.isLinux && _shouldUpdateTooltip(snapshot)) {
+      final updated = await _tryTrayOperation('setToolTip', () => trayManager.setToolTip(snapshot.tooltip));
+      if (updated) {
         _lastTooltip = snapshot.tooltip;
         _lastTooltipStatusKey = snapshot.tooltipStatusKey;
         _lastTooltipUpdatedAt = DateTime.now();
       }
+    }
 
-      if (_lastMenuSignature != snapshot.menuSignature) {
-        await trayManager.setContextMenu(snapshot.menu);
+    if (_lastMenuSignature != snapshot.menuSignature) {
+      final updated = await _tryTrayOperation('setContextMenu', () => trayManager.setContextMenu(snapshot.menu));
+      if (updated) {
         _lastMenuSignature = snapshot.menuSignature;
       }
+    }
+  }
+
+  Future<bool> _tryTrayOperation(String operation, Future<void> Function() action) async {
+    final stopWatch = Stopwatch()..start();
+    try {
+      await action();
+      loggy.debug('system tray $operation completed in ${stopWatch.elapsedMilliseconds}ms');
+      return true;
     } catch (e, st) {
-      loggy.warning('failed to update system tray', e, st);
+      loggy.warning('system tray $operation failed after ${stopWatch.elapsedMilliseconds}ms', e, st);
+      return false;
+    } finally {
+      stopWatch.stop();
     }
   }
 
