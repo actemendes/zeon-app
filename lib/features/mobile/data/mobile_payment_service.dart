@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_payment_deep_link.dart';
 import 'package:zeon/features/mobile/data/stable_device_id_service.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class MobilePaymentService with InfraLogger {
   MobilePaymentService({
@@ -28,6 +28,7 @@ class MobilePaymentService with InfraLogger {
   static const _prefLegacyPaymentUserId = "mobile_payment_user_id";
   static const _prefLastPaymentSessionId = "mobile_payment_session_id";
   static const _prefLastPaymentSessionCreatedAtMs = "mobile_payment_session_created_at_ms";
+  static const _createRequestTimeout = Duration(seconds: 8);
   static const paymentSessionRecoveryWindow = Duration(minutes: 15);
   static const _statusPendingBackoff = <Duration>[
     Duration(seconds: 1),
@@ -50,9 +51,17 @@ class MobilePaymentService with InfraLogger {
 
     final normalizedPlan = _normalizePlan(plan);
     final userId = await _resolveCanonicalUserId(allowCreate: true);
-    if (userId == null || userId <= 0) return null;
+    if (userId == null || userId <= 0) {
+      final failure = PaymentCreateFailure(reason: "user_id_missing", plan: normalizedPlan);
+      loggy.warning("mobile payment create aborted [$failure]");
+      throw failure;
+    }
     final deviceId = await _ensureDeviceId();
-    if (deviceId.isEmpty) return null;
+    if (deviceId.isEmpty) {
+      final failure = PaymentCreateFailure(reason: "device_id_missing", plan: normalizedPlan, userId: userId);
+      loggy.warning("mobile payment create aborted [$failure]");
+      throw failure;
+    }
 
     final uri = Uri.parse(_apiBaseUrl).resolve("/api/mobile/payments/create").toString();
     final payload = {"user_id": userId, "device_id": deviceId, "plan": normalizedPlan, "source": "app"};
@@ -62,22 +71,70 @@ class MobilePaymentService with InfraLogger {
       "[canonical_user_id=$userId, user_id=${payload["user_id"]}, device_id=${payload["device_id"]}, plan=${payload["plan"]}]",
     );
 
+    Object? lastError;
+    StackTrace? lastStackTrace;
+    PaymentCreateFailure? lastFailure;
     for (final directOnly in const [true, false]) {
       try {
         loggy.info(
           "mobile payments/create attempt "
           "[directOnly=$directOnly, user_id=${payload["user_id"]}, device_id=${payload["device_id"]}, plan=${payload["plan"]}]",
         );
-        final response = await _httpClient.post<Map<String, dynamic>>(
-          uri,
-          data: payload,
-          headers: {"X-API-Key": _apiKey, "Content-Type": "application/json"},
-          directOnly: directOnly,
-        );
+        final response = await _httpClient
+            .post<Map<String, dynamic>>(
+              uri,
+              data: payload,
+              headers: {"X-API-Key": _apiKey, "Content-Type": "application/json"},
+              directOnly: directOnly,
+              disableRetry: true,
+            )
+            .timeout(_createRequestTimeout);
         final body = response.data;
-        if (body == null || body["ok"] != true) continue;
+        if (body == null) {
+          lastFailure = PaymentCreateFailure(
+            reason: "empty_body",
+            plan: normalizedPlan,
+            userId: userId,
+            directOnly: directOnly,
+            statusCode: response.statusCode,
+          );
+          loggy.warning(
+            "mobile payments/create rejected [reason=empty_body, status=${response.statusCode}, directOnly=$directOnly]",
+          );
+          continue;
+        }
+        if (body["ok"] != true) {
+          lastFailure = PaymentCreateFailure(
+            reason: "api_not_ok",
+            plan: normalizedPlan,
+            userId: userId,
+            directOnly: directOnly,
+            statusCode: response.statusCode,
+            responseData: body,
+          );
+          loggy.warning(
+            "mobile payments/create rejected "
+            "[reason=api_not_ok, status=${response.statusCode}, directOnly=$directOnly, "
+            "error=${body["error"] ?? "-"}, message=${body["message"] ?? "-"}, keys=${body.keys.join(",")}]",
+          );
+          continue;
+        }
         final data = body["data"];
-        if (data is! Map<String, dynamic>) continue;
+        if (data is! Map<String, dynamic>) {
+          lastFailure = PaymentCreateFailure(
+            reason: "invalid_data",
+            plan: normalizedPlan,
+            userId: userId,
+            directOnly: directOnly,
+            statusCode: response.statusCode,
+            responseData: body,
+          );
+          loggy.warning(
+            "mobile payments/create rejected "
+            "[reason=invalid_data, status=${response.statusCode}, directOnly=$directOnly, data_type=${data.runtimeType}]",
+          );
+          continue;
+        }
 
         final sessionId = _firstNonEmpty([
           data["payment_session_id"]?.toString(),
@@ -90,9 +147,37 @@ class MobilePaymentService with InfraLogger {
           data["payment_url"]?.toString(),
           data["url"]?.toString(),
         ]);
-        if (confirmationUrl == null) continue;
+        if (confirmationUrl == null) {
+          lastFailure = PaymentCreateFailure(
+            reason: "confirmation_url_missing",
+            plan: normalizedPlan,
+            userId: userId,
+            directOnly: directOnly,
+            statusCode: response.statusCode,
+            responseData: data,
+          );
+          loggy.warning(
+            "mobile payments/create rejected "
+            "[reason=confirmation_url_missing, status=${response.statusCode}, directOnly=$directOnly, "
+            "data_keys=${data.keys.join(",")}]",
+          );
+          continue;
+        }
         final normalizedConfirmationUrl = _normalizePaymentReturnDeepLink(confirmationUrl);
-        if (Uri.tryParse(normalizedConfirmationUrl) == null) continue;
+        if (Uri.tryParse(normalizedConfirmationUrl) == null) {
+          lastFailure = PaymentCreateFailure(
+            reason: "confirmation_url_invalid",
+            plan: normalizedPlan,
+            userId: userId,
+            directOnly: directOnly,
+            statusCode: response.statusCode,
+          );
+          loggy.warning(
+            "mobile payments/create rejected "
+            "[reason=confirmation_url_invalid, status=${response.statusCode}, directOnly=$directOnly]",
+          );
+          continue;
+        }
         if (sessionId != null) {
           await _rememberPaymentSession(sessionId);
         }
@@ -105,10 +190,21 @@ class MobilePaymentService with InfraLogger {
           paymentId: _firstNonEmpty([data["payment_id"]?.toString(), data["paymentId"]?.toString()]),
         );
       } catch (e, st) {
+        lastError = e;
+        lastStackTrace = st;
+        lastFailure = PaymentCreateFailure.fromError(
+          reason: "request_failed",
+          plan: normalizedPlan,
+          userId: userId,
+          directOnly: directOnly,
+          error: e,
+        );
         loggy.warning("mobile payments/create failed [directOnly=$directOnly]", e, st);
       }
     }
-    return null;
+    final failure = lastFailure ?? PaymentCreateFailure(reason: "unknown", plan: normalizedPlan, userId: userId);
+    loggy.warning("mobile payment create exhausted [$failure]", lastError ?? failure, lastStackTrace);
+    throw failure;
   }
 
   Future<PaymentSessionProcessResult> processPaymentSessionReturn({required String sid, int maxAttempts = 7}) async {
@@ -296,27 +392,91 @@ class MobilePaymentService with InfraLogger {
     if (deviceId.isEmpty) return null;
 
     final uri = Uri.parse(_apiBaseUrl).resolve("/api/mobile/users/create").toString();
+    Object? lastError;
+    StackTrace? lastStackTrace;
+    PaymentCreateFailure? lastFailure;
     for (final directOnly in const [true, false]) {
       try {
-        final response = await _httpClient.post<Map<String, dynamic>>(
-          uri,
-          data: {"device_id": deviceId},
-          headers: {"X-API-Key": _apiKey, "Content-Type": "application/json"},
-          directOnly: directOnly,
-        );
+        loggy.info("mobile users/create attempt while ensuring user id [directOnly=$directOnly]");
+        final response = await _httpClient
+            .post<Map<String, dynamic>>(
+              uri,
+              data: {"device_id": deviceId},
+              headers: {"X-API-Key": _apiKey, "Content-Type": "application/json"},
+              directOnly: directOnly,
+              disableRetry: true,
+            )
+            .timeout(_createRequestTimeout);
         final body = response.data;
-        if (body == null || body["ok"] != true) continue;
+        if (body == null) {
+          lastFailure = PaymentCreateFailure(
+            reason: "user_create_empty_body",
+            directOnly: directOnly,
+            statusCode: response.statusCode,
+          );
+          loggy.warning(
+            "mobile users/create rejected [reason=empty_body, status=${response.statusCode}, directOnly=$directOnly]",
+          );
+          continue;
+        }
+        if (body["ok"] != true) {
+          lastFailure = PaymentCreateFailure(
+            reason: "user_create_api_not_ok",
+            directOnly: directOnly,
+            statusCode: response.statusCode,
+            responseData: body,
+          );
+          loggy.warning(
+            "mobile users/create rejected "
+            "[reason=api_not_ok, status=${response.statusCode}, directOnly=$directOnly, "
+            "error=${body["error"] ?? "-"}, message=${body["message"] ?? "-"}, keys=${body.keys.join(",")}]",
+          );
+          continue;
+        }
         final data = body["data"];
-        if (data is! Map<String, dynamic>) continue;
+        if (data is! Map<String, dynamic>) {
+          lastFailure = PaymentCreateFailure(
+            reason: "user_create_invalid_data",
+            directOnly: directOnly,
+            statusCode: response.statusCode,
+            responseData: body,
+          );
+          loggy.warning(
+            "mobile users/create rejected "
+            "[reason=invalid_data, status=${response.statusCode}, directOnly=$directOnly, data_type=${data.runtimeType}]",
+          );
+          continue;
+        }
         final userId = (data["user_id"] as num?)?.toInt() ?? int.tryParse(data["user_id"]?.toString() ?? "");
-        if (userId == null || userId <= 0) continue;
+        if (userId == null || userId <= 0) {
+          lastFailure = PaymentCreateFailure(
+            reason: "user_create_user_id_invalid",
+            directOnly: directOnly,
+            statusCode: response.statusCode,
+            responseData: data,
+          );
+          loggy.warning(
+            "mobile users/create rejected "
+            "[reason=user_id_invalid, status=${response.statusCode}, directOnly=$directOnly, data_keys=${data.keys.join(",")}]",
+          );
+          continue;
+        }
         await _storeCanonicalUserId(userId, source: "mobile_users_create");
         return userId;
       } catch (e, st) {
+        lastError = e;
+        lastStackTrace = st;
+        lastFailure = PaymentCreateFailure.fromError(
+          reason: "user_create_request_failed",
+          directOnly: directOnly,
+          error: e,
+        );
         loggy.warning("mobile users/create failed while ensuring user id [directOnly=$directOnly]", e, st);
       }
     }
-    return null;
+    final failure = lastFailure ?? const PaymentCreateFailure(reason: "user_create_unknown");
+    loggy.warning("mobile users/create exhausted [$failure]", lastError ?? failure, lastStackTrace);
+    throw failure;
   }
 
   Future<PaymentSessionStatus?> _fetchPaymentStatus(String sid) async {
@@ -632,4 +792,76 @@ class PaymentCheckout {
   final String? paymentSessionId;
   final String? orderId;
   final String? paymentId;
+}
+
+class PaymentCreateFailure implements Exception {
+  const PaymentCreateFailure({
+    required this.reason,
+    this.plan,
+    this.userId,
+    this.directOnly,
+    this.statusCode,
+    this.responseData,
+    this.errorType,
+    this.errorMessage,
+  });
+
+  factory PaymentCreateFailure.fromError({
+    required String reason,
+    String? plan,
+    int? userId,
+    bool? directOnly,
+    required Object error,
+  }) {
+    if (error is DioException) {
+      return PaymentCreateFailure(
+        reason: reason,
+        plan: plan,
+        userId: userId,
+        directOnly: directOnly,
+        statusCode: error.response?.statusCode,
+        responseData: error.response?.data,
+        errorType: error.type.name,
+        errorMessage: error.message,
+      );
+    }
+    return PaymentCreateFailure(
+      reason: reason,
+      plan: plan,
+      userId: userId,
+      directOnly: directOnly,
+      errorType: error.runtimeType.toString(),
+      errorMessage: error.toString(),
+    );
+  }
+
+  final String reason;
+  final String? plan;
+  final int? userId;
+  final bool? directOnly;
+  final int? statusCode;
+  final Object? responseData;
+  final String? errorType;
+  final String? errorMessage;
+
+  @override
+  String toString() {
+    final parts = <String>[
+      "reason=$reason",
+      if (plan != null) "plan=$plan",
+      if (userId != null) "user_id=$userId",
+      if (directOnly != null) "directOnly=$directOnly",
+      if (statusCode != null) "status=$statusCode",
+      if (errorType != null) "errorType=$errorType",
+      if (errorMessage != null) "error=${_compact(errorMessage)}",
+      if (responseData != null) "response=${_compact(responseData)}",
+    ];
+    return "PaymentCreateFailure[${parts.join(", ")}]";
+  }
+
+  static String _compact(Object? value) {
+    final text = value.toString().replaceAll(RegExp(r"\s+"), " ").trim();
+    if (text.length <= 700) return text;
+    return "${text.substring(0, 700)}...";
+  }
 }

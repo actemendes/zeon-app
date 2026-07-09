@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
@@ -12,9 +15,8 @@ import 'package:zeon/features/mobile/data/mobile_payment_service.dart';
 import 'package:zeon/features/pricing/data/pricing_data_providers.dart';
 import 'package:zeon/features/pricing/model/pricing_models.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-class ProfilePaymentPage extends HookConsumerWidget {
+class ProfilePaymentPage extends HookConsumerWidget with PresLogger {
   const ProfilePaymentPage({super.key});
 
   static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
@@ -37,7 +39,7 @@ class ProfilePaymentPage extends HookConsumerWidget {
     final theme = Theme.of(context);
     final breakpoint = Breakpoint(context);
     final pricingState = ref.watch(pricingControllerProvider);
-    final useDebugPricing = kDebugMode && _debugSeedProfileEnabled;
+    const useDebugPricing = kDebugMode && _debugSeedProfileEnabled;
     final plans = useDebugPricing ? _debugPricingPlans : pricingState.catalog?.data.plans ?? const <PricingPlan>[];
     final selectedPlanCode = useState('1');
     final isProcessingPayment = useState(false);
@@ -304,30 +306,50 @@ class ProfilePaymentPage extends HookConsumerWidget {
     if (isProcessingPayment.value || plan.bundledFallback) return;
     isProcessingPayment.value = true;
     try {
-      const retryDelay = Duration(seconds: 5);
-      const maxAttempts = 3;
-
-      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-        final checkout = await paymentService.createPayment(plan: plan.code);
-        if (checkout != null) {
-          final paymentUri = Uri.tryParse(checkout.confirmationUrl);
-          if (paymentUri != null) {
-            final opened = await UriUtils.tryLaunch(paymentUri);
-            if (!context.mounted || opened) return;
-          }
-        }
-
-        if (attempt < maxAttempts) {
-          await Future.delayed(retryDelay);
+      final checkout = await paymentService.createPayment(plan: plan.code).timeout(const Duration(seconds: 25));
+      if (checkout != null) {
+        final paymentUri = Uri.tryParse(checkout.confirmationUrl);
+        if (paymentUri != null) {
+          final opened = await UriUtils.tryLaunch(paymentUri);
+          if (!context.mounted || opened) return;
         }
       }
 
       if (context.mounted) {
-        CustomToast.error(t.pages.profileDetails.specialServers.paymentLaunchError).show(context);
+        CustomToast.error(
+          t.pages.profileDetails.specialServers.paymentLaunchError,
+          diagnosticText: "Payment checkout was not created. See logs for 'mobile payment create exhausted'.",
+        ).show(context);
+      }
+    } catch (e, st) {
+      loggy.warning("mobile payment checkout failed [plan=${plan.code}]", e, st);
+      if (context.mounted) {
+        CustomToast.error(
+          t.pages.profileDetails.specialServers.paymentLaunchError,
+          diagnosticText: _paymentLaunchDiagnostic(e, st),
+        ).show(context);
       }
     } finally {
       isProcessingPayment.value = false;
     }
+  }
+
+  String _paymentLaunchDiagnostic(Object error, StackTrace stackTrace) {
+    final buffer = StringBuffer()
+      ..writeln("Payment checkout failed before the browser could be opened.")
+      ..writeln("Error type: ${error.runtimeType}")
+      ..writeln("Error: $error");
+    if (error is TimeoutException) {
+      buffer.writeln("Reason: payment checkout request timed out.");
+    } else if (error is PaymentCreateFailure) {
+      buffer.writeln("Reason: payment create failed.");
+      buffer.writeln("Payment details: $error");
+    }
+    buffer
+      ..writeln()
+      ..writeln("Stack trace:")
+      ..write(stackTrace);
+    return buffer.toString();
   }
 }
 
