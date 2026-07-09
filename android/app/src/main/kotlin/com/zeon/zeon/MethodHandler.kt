@@ -26,6 +26,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
 
         enum class Trigger(val method: String) {
             Setup("setup"),
+            PrepareVpn("prepare_vpn"),
             Start("start"),
             Stop("stop"),
             Restart("restart"),
@@ -106,6 +107,24 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                 }
             }
 
+
+            Trigger.PrepareVpn.method -> {
+                scope.launch {
+                    try {
+                        val args = call.arguments as Map<*, *>
+                        Settings.activeConfigPath = args["path"] as String? ?: ""
+                        Settings.activeProfileName = args["name"] as String? ?: ""
+                        Settings.grpcServiceModePort = args["grpcPort"] as Int
+                        Settings.disableMemoryLimit = args["disableMemoryLimit"] as Boolean? ?: false
+
+                        MainActivity.instance.prepareVpn { prepared ->
+                            result.success(prepared)
+                        }
+                    } catch (e: Exception) {
+                        result.error("prepare_vpn_failed", e.message, null)
+                    }
+                }
+            }
 
             Trigger.Start.method -> {
                 scope.launch {

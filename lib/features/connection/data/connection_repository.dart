@@ -32,6 +32,7 @@ abstract interface class ConnectionRepository {
 class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements ConnectionRepository {
   static const _tunRecoveryRestartAttempts = 2;
   static const _tunReleaseDelay = Duration(milliseconds: 500);
+  static const _tunRecoveryCooldown = Duration(seconds: 2);
 
   ConnectionRepositoryImpl({
     required this.ref,
@@ -49,6 +50,7 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   final ConfigOptionRepository configOptionRepository;
   final ProfileConfigStore profileConfigStore;
   final Map<String, Future<File>> _runtimeConfigRepairByProfile = {};
+  DateTime? _lastTunRecoveryAttemptAt;
 
   SingboxConfigOption? _configOptionsSnapshot;
   @override
@@ -90,7 +92,7 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
       TaskEither.tryCatch(() async {
         final runtimeFile = await _createRuntimeConfigFile(activeProfile);
         return (await singbox.prepareVpnConfiguration(runtimeFile.path, activeProfile.name, disableMemoryLimit).run())
-            .match((failure) => throw ConnectionFailure.unexpected(failure), (_) => unit);
+            .match((failure) => throw _vpnPreparationFailure(failure), (_) => unit);
       }, (err, st) => err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st));
 
   @override
@@ -100,6 +102,10 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
         // TODO: Move core startup to in-memory config once the background service
         // no longer persists config_content or requires a readable config path.
         final runtimeFile = await _createRuntimeConfigFile(activeProfile);
+        final prepared = await _prepareVpnBeforeCoreStart(runtimeFile.path, activeProfile.name, disableMemoryLimit);
+        if (prepared.isLeft()) {
+          throw prepared.getLeft().toNullable() ?? const ConnectionFailure.missingVpnPermission();
+        }
         return (await singbox.start(runtimeFile.path, activeProfile.name, disableMemoryLimit).run()).match(
           (failure) => throw failure,
           (_) => unit,
@@ -123,6 +129,10 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
             // no longer persists config_content or requires a readable config path.
             final runtimeFile = await _createRuntimeConfigFile(activeProfile);
             path = runtimeFile.path;
+            final prepared = await _prepareVpnBeforeCoreStart(path, activeProfile.name, disableMemoryLimit);
+            if (prepared.isLeft()) {
+              return left(prepared.getLeft().toNullable() ?? const ConnectionFailure.missingVpnPermission());
+            }
             result = (await singbox.restart(path, activeProfile.name, disableMemoryLimit).run()).mapLeft(
               UnexpectedConnectionFailure.new,
             );
@@ -137,11 +147,11 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
             }
 
             loggy.warning(
-              "TUN interface was not released during reconnect; "
-              "performing full connection restart "
+              "TUN recovery attempt "
               "[$attempt/$_tunRecoveryRestartAttempts]",
             );
 
+            await _waitForTunRecoveryCooldown();
             final stopResult = await singbox.stop(force: true).run();
             stopResult.match(
               (error) => loggy.warning(
@@ -152,12 +162,44 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
               (_) {},
             );
             await Future<void>.delayed(_tunReleaseDelay);
+            final prepared = await _prepareVpnBeforeCoreStart(path, activeProfile.name, disableMemoryLimit);
+            if (prepared.isLeft()) {
+              return left(prepared.getLeft().toNullable() ?? const ConnectionFailure.missingVpnPermission());
+            }
             result = await singbox.start(path, activeProfile.name, disableMemoryLimit).run();
           }
 
           return result;
         }),
       );
+
+  Future<Either<ConnectionFailure, Unit>> _prepareVpnBeforeCoreStart(
+    String path,
+    String name,
+    bool disableMemoryLimit,
+  ) async {
+    final result = await singbox.prepareVpnConfiguration(path, name, disableMemoryLimit).run();
+    return result.mapLeft(_vpnPreparationFailure);
+  }
+
+  ConnectionFailure _vpnPreparationFailure(String message) {
+    if (isVpnPermissionDenied(message)) {
+      return ConnectionFailure.missingVpnPermission(message);
+    }
+    return ConnectionFailure.unexpected(message);
+  }
+
+  Future<void> _waitForTunRecoveryCooldown() async {
+    final now = DateTime.now();
+    final lastAttemptAt = _lastTunRecoveryAttemptAt;
+    if (lastAttemptAt != null) {
+      final elapsed = now.difference(lastAttemptAt);
+      if (elapsed < _tunRecoveryCooldown) {
+        await Future<void>.delayed(_tunRecoveryCooldown - elapsed);
+      }
+    }
+    _lastTunRecoveryAttemptAt = DateTime.now();
+  }
 
   Future<File> _createRuntimeConfigFile(ProfileEntity activeProfile) async {
     final content = await profileConfigStore.read(activeProfile.id);

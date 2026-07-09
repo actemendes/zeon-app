@@ -12,6 +12,16 @@ bool isTunInterfacePermissionDenied(Object error) {
       message.contains("permission denied");
 }
 
+bool isVpnPermissionDenied(Object error) {
+  final message = error.toString().toLowerCase();
+  return isTunInterfacePermissionDenied(error) ||
+      message.contains("missing vpn permission") ||
+      message.contains("requestvpnpermission") ||
+      message.contains("vpn permission") ||
+      message.contains("application is not prepared") ||
+      message.contains("not prepared or is revoked");
+}
+
 @freezed
 sealed class ConnectionFailure with _$ConnectionFailure, Failure {
   const ConnectionFailure._();

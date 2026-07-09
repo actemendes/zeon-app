@@ -671,6 +671,14 @@ class ZeonCoreService with InfraLogger {
     return error.code == StatusCode.unavailable || _isTransientGrpcTransportClose(error);
   }
 
+  bool _isExpectedLifecycleGrpcClose(Object? error) {
+    return error is GrpcError &&
+        (_isTransientGrpcFailure(error) ||
+            _lifecycleState == _CoreLifecycleState.starting ||
+            _lifecycleState == _CoreLifecycleState.stopping ||
+            _lifecycleState == _CoreLifecycleState.stopped);
+  }
+
   bool _isTransientCoreFailure(Object error) {
     if (error is GrpcError) return _isTransientGrpcFailure(error);
     final message = error.toString().toLowerCase();
@@ -908,7 +916,7 @@ class ZeonCoreService with InfraLogger {
           );
           ref.read(coreRestartSignalProvider.notifier).restart();
           if (res.messageType != MessageType.ALREADY_STARTED && res.messageType != MessageType.EMPTY) {
-            final alert = res.message.contains("denied") ? CoreAlert.requestVPNPermission : CoreAlert.startFailed;
+            final alert = isVpnPermissionDenied(res.message) ? CoreAlert.requestVPNPermission : CoreAlert.startFailed;
             currentState = CoreStatus.stopped(
               alert: alert,
               message: "failed to start core ${res.messageType} ${res.message}",
@@ -921,8 +929,16 @@ class ZeonCoreService with InfraLogger {
             );
           }
         } on GrpcError catch (e) {
-          loggy.error("failed to start bg core: $e");
           ref.read(coreRestartSignalProvider.notifier).restart();
+          if (isVpnPermissionDenied(e)) {
+            final message = e.message ?? e.toString();
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "vpn permission denied on start");
+            statusController.add(
+              currentState = CoreStatus.stopped(alert: CoreAlert.requestVPNPermission, message: message),
+            );
+            return left(ConnectionFailure.missingVpnPermission(message));
+          }
+          loggy.error("failed to start bg core: $e");
           if (_isTransientGrpcTransportClose(e) && await _isBackgroundCoreReachable()) {
             loggy.warning("start bg core transport closed after start, but background core is active: $e");
             _transitionLifecycle(_CoreLifecycleState.started, reason: "start transport closed with active bg");
@@ -950,10 +966,14 @@ class ZeonCoreService with InfraLogger {
 
   TaskEither<String, Unit> prepareVpnConfiguration(String path, String name, bool disableMemoryLimit) {
     return TaskEither(() async {
-      if (!PlatformUtils.isIOS || _useMockCore) return right(unit);
+      if ((!PlatformUtils.isIOS && !PlatformUtils.isAndroid) ||
+          (PlatformUtils.isAndroid && ref.read(ConfigOptions.serviceMode) != ServiceMode.tun) ||
+          _useMockCore) {
+        return right(unit);
+      }
       try {
         final prepared = await core.prepareVpn(path, name, disableMemoryLimit);
-        return prepared ? right(unit) : left("failed to prepare VPN configuration");
+        return prepared ? right(unit) : left("missing VPN permission");
       } catch (e) {
         return left(e.toString());
       }
@@ -1062,6 +1082,11 @@ class ZeonCoreService with InfraLogger {
             return left("${res.messageType} ${res.message}");
           }
         } on GrpcError catch (e) {
+          if (isTunInterfacePermissionDenied(e)) {
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "tun permission denied on restart");
+            statusController.add(currentState = const CoreStatus.stopped());
+            return left(e.message ?? e.toString());
+          }
           loggy.error("failed to restart bg core: $e");
           if (!_isTransientGrpcTransportClose(e)) {
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc restart failure");
@@ -1459,7 +1484,11 @@ class ZeonCoreService with InfraLogger {
         _scheduleListenerReconnect(listenKey, () => startListeningStatus(key, cc));
       },
       onError: (error) {
-        loggy.error("Stream error in $listenKey: $error");
+        if (_isExpectedLifecycleGrpcClose(error)) {
+          loggy.warning("Stream closed in $listenKey during lifecycle transition: $error");
+        } else {
+          loggy.error("Stream error in $listenKey: $error");
+        }
         _recoverStatusAfterListenerClose(key, error);
         _scheduleListenerReconnect(listenKey, () => startListeningStatus(key, cc));
       },
@@ -1492,7 +1521,11 @@ class ZeonCoreService with InfraLogger {
         _scheduleListenerReconnect(listenKey, () => startListeningLogs(key, cc));
       },
       onError: (error) {
-        loggy.error("Stream error in $listenKey: $error");
+        if (_isExpectedLifecycleGrpcClose(error)) {
+          loggy.warning("Stream closed in $listenKey during lifecycle transition: $error");
+        } else {
+          loggy.error("Stream error in $listenKey: $error");
+        }
         _scheduleListenerReconnect(listenKey, () => startListeningLogs(key, cc));
       },
     );

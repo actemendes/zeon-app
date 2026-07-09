@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.LinkedList
+import java.util.ArrayDeque
 
 
 class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
@@ -38,6 +39,8 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     var logCallback: ((Boolean) -> Unit)? = null
     val serviceStatus = MutableLiveData(Status.Stopped)
     val serviceAlerts = MutableLiveData<ServiceEvent?>(null)
+    private val vpnPermissionCallbacks = ArrayDeque<(Boolean) -> Unit>()
+    private var startServiceAfterVpnPermission = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -65,13 +68,26 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         startService0()
     }
 
+    fun prepareVpn(callback: (Boolean) -> Unit) {
+        lifecycleScope.launch(Dispatchers.Main) {
+            if (Settings.serviceMode != ServiceMode.VPN) {
+                callback(true)
+                return@launch
+            }
+            val waitingForUser = requestVpnPermission(startAfterGrant = false, callback = callback)
+            if (!waitingForUser) {
+                callback(true)
+            }
+        }
+    }
+
     private fun startService0() {
         lifecycleScope.launch(Dispatchers.IO) {
             if (Settings.rebuildServiceMode()) {
                 connection.reconnect()
             }
             if (Settings.serviceMode == ServiceMode.VPN) {
-                if (prepare()) {
+                if (prepareForServiceStart()) {
                     return@launch
                 }
             }
@@ -83,10 +99,22 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         }
     }
 
-    private suspend fun prepare() = withContext(Dispatchers.Main) {
-        try {
+    private suspend fun prepareForServiceStart() = withContext(Dispatchers.Main) {
+        requestVpnPermission(startAfterGrant = true)
+    }
+
+    private fun requestVpnPermission(startAfterGrant: Boolean, callback: ((Boolean) -> Unit)? = null): Boolean {
+        if (vpnPermissionCallbacks.isNotEmpty()) {
+            callback?.let { vpnPermissionCallbacks.add(it) }
+            startServiceAfterVpnPermission = startServiceAfterVpnPermission || startAfterGrant
+            return true
+        }
+
+        return try {
             val intent = VpnService.prepare(this@MainActivity)
             if (intent != null) {
+                callback?.let { vpnPermissionCallbacks.add(it) }
+                startServiceAfterVpnPermission = startAfterGrant
                 prepareLauncher.launch(intent)
                 true
             } else {
@@ -94,9 +122,27 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
             }
         } catch (e: Exception) {
             onServiceAlert(Alert.RequestVPNPermission, e.message)
+            callback?.invoke(false)
             true
         }
     }
+
+    private fun completeVpnPermissionRequest(granted: Boolean) {
+        val callbacks = ArrayList<(Boolean) -> Unit>()
+        while (vpnPermissionCallbacks.isNotEmpty()) {
+            callbacks.add(vpnPermissionCallbacks.removeFirst())
+        }
+        val shouldStartService = startServiceAfterVpnPermission && granted
+        startServiceAfterVpnPermission = false
+
+        callbacks.forEach { it(granted) }
+        if (shouldStartService) {
+            startService0()
+        } else if (!granted) {
+            onServiceAlert(Alert.RequestVPNPermission, null)
+        }
+    }
+
     private val notificationPermissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission(),
@@ -111,11 +157,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         registerForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
         ) { result ->
-            if (result.resultCode == RESULT_OK) {
-                startService0()
-            } else {
-                onServiceAlert(Alert.RequestVPNPermission, null)
-            }
+            completeVpnPermissionRequest(result.resultCode == RESULT_OK)
         }
 
     override fun onServiceStatusChanged(status: Status) {
@@ -164,8 +206,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == VPN_PERMISSION_REQUEST_CODE) {
-            if (resultCode == RESULT_OK) startService()
-            else onServiceAlert(Alert.RequestVPNPermission, null)
+            completeVpnPermissionRequest(resultCode == RESULT_OK)
         } else if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
             if (resultCode == RESULT_OK) startService()
             else {
