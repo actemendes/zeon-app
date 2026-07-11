@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/adaptive_layout/my_adaptive_layout.dart';
@@ -6,6 +7,7 @@ import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dar
 import 'package:zeon/core/router/go_router/helper/custom_transition.dart';
 import 'package:zeon/core/router/go_router/refresh_listenable.dart';
 import 'package:zeon/features/about/widget/about_page.dart';
+import 'package:zeon/features/diagnostics/network_diagnostics_page.dart';
 import 'package:zeon/features/home/widget/home_page.dart';
 import 'package:zeon/features/intro/widget/intro_page.dart';
 import 'package:zeon/features/log/overview/logs_page.dart';
@@ -206,6 +208,13 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                       pageBuilder: (_, state) =>
                           customTransition(TransitionType.slide, state.pageKey, const WarpOptionsPage()),
                     ),
+                    if (kDebugMode && PlatformUtils.isAndroid)
+                      GoRoute(
+                        name: 'networkDiagnostics',
+                        path: '/network-diagnostics',
+                        pageBuilder: (_, state) =>
+                            customTransition(TransitionType.slide, state.pageKey, const NetworkDiagnosticsPage()),
+                      ),
                     if (isMobileBreakpoint) ...[
                       GoRoute(
                         name: 'logs',

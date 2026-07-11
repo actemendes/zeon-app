@@ -122,6 +122,9 @@ func getHealthScore(tag string, his *adapter.URLTestHistory) int {
 	if his == nil {
 		return 0
 	}
+	if his.CheckGeneration > 0 && !his.CombinedReady {
+		return 0
+	}
 	policyPenalty := getPolicyPenalty(tag, his)
 	if his.Delay > 0 && his.Delay < monitoring.TimeoutDelay && his.ErrorType == "" {
 		return urltest.CalculateHealthScoreWithEvidence(his.Delay, true, urltest.ErrorTypeNone, his.IsFromCache, his.Time, his.RuntimePenalty, his.RealUserPenalty, his.VolatilityPenalty, his.UDPPenalty, policyPenalty)
@@ -155,7 +158,7 @@ func getTagHealthScore(tag string, history map[string]*adapter.URLTestHistory) i
 
 func getTagSuccess(tag string, history map[string]*adapter.URLTestHistory) bool {
 	his, ok := history[tag]
-	return ok && his != nil && his.Success
+	return ok && his != nil && his.Success && (his.CheckGeneration == 0 || his.PingReady && his.CombinedReady)
 }
 
 func filterOutbounds(outbounds []adapter.Outbound, network string) []adapter.Outbound {

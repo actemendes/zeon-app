@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -180,6 +181,12 @@ class SettingsPage extends HookConsumerWidget {
               namedLocation: context.namedLocation('about'),
             ),
           ],
+          if (kDebugMode && PlatformUtils.isAndroid)
+            SettingsSection(
+              title: "Network diagnostics",
+              icon: Icons.bug_report_rounded,
+              namedLocation: context.namedLocation('networkDiagnostics'),
+            ),
           if (appInfo.release.allowCustomUpdateChecker && !PlatformUtils.isIOS)
             Material(
               child: ListTile(

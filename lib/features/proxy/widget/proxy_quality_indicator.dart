@@ -21,14 +21,18 @@ class QualityBars extends StatelessWidget {
     bool isActive = false,
     Color? activeColor,
     Color? inactiveColor,
-  }) => QualityBars(
-    healthScore: outbound.hasHealthScore() ? outbound.healthScore : null,
-    success: outbound.hasSuccess() ? outbound.success : null,
-    errorType: outbound.hasErrorType() ? outbound.errorType : null,
-    isActive: isActive,
-    activeColor: activeColor,
-    inactiveColor: inactiveColor,
-  );
+  }) {
+    final status = outboundPingStatus(outbound);
+    final hasCurrentResult = status == ProxyPingStatus.success;
+    return QualityBars(
+      healthScore: hasCurrentResult && outbound.hasHealthScore() ? outbound.healthScore : null,
+      success: hasCurrentResult && outbound.hasSuccess() ? outbound.success : false,
+      errorType: hasCurrentResult && outbound.hasErrorType() ? outbound.errorType : null,
+      isActive: isActive,
+      activeColor: activeColor,
+      inactiveColor: inactiveColor,
+    );
+  }
 
   final int? healthScore;
   final bool? success;

@@ -15,7 +15,9 @@ import 'package:rxdart/rxdart.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
+import 'package:zeon/features/diagnostics/network_diagnostic_variant.dart';
 import 'package:zeon/features/log/model/log_level.dart' as config_log_level;
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/singbox/model/core_status.dart';
@@ -44,6 +46,12 @@ class ZeonCoreService with InfraLogger {
   static const _debugFragmentMode = String.fromEnvironment("debug_fragment_mode");
   static const _debugProfileDnsStrategy = String.fromEnvironment("debug_profile_dns_strategy");
   static const _debugTunImplementation = String.fromEnvironment("debug_tun_implementation");
+  static const _debugDisableTrafficHooks = bool.fromEnvironment("debug_disable_zeon_traffic_hooks");
+  static const _debugTraceTrafficRoute = bool.fromEnvironment("debug_trace_traffic_route");
+  static const _debugDisableQuic = bool.fromEnvironment("debug_disable_quic");
+  static const _debugForceIpv4 = bool.fromEnvironment("debug_force_ipv4");
+  static const _debugOverrideMtu = int.fromEnvironment("debug_override_mtu");
+  static const _debugDisableUdpProbe = bool.fromEnvironment("debug_disable_udp_probe");
   static const _debugUdpProbeEnabled = bool.fromEnvironment("debug_udp_probe_enabled");
   static const _debugUdpProbeEndpoint = String.fromEnvironment("debug_udp_probe_endpoint");
   static const _debugUdpProbeSecret = String.fromEnvironment("debug_udp_probe_secret");
@@ -693,6 +701,20 @@ class ZeonCoreService with InfraLogger {
 
   Future<Map<String, dynamic>> _buildCoreOptionsPayload(SingboxConfigOption options) async {
     final map = Map<String, dynamic>.from(options.toCoreJson());
+    const diagnosticsEnabled = kDebugMode;
+    final runtimeDiagnosticVariant = diagnosticsEnabled
+        ? _readRuntimeDiagnosticVariant()
+        : const NetworkDiagnosticVariant();
+    final disableTrafficHooks =
+        diagnosticsEnabled && (_debugDisableTrafficHooks || runtimeDiagnosticVariant.disableTrafficHooks);
+    final traceTrafficRoute =
+        diagnosticsEnabled && (_debugTraceTrafficRoute || runtimeDiagnosticVariant.enableRouteTrace);
+    final disableQuic = diagnosticsEnabled && (_debugDisableQuic || runtimeDiagnosticVariant.disableQuic);
+    final forceIpv4 = diagnosticsEnabled && (_debugForceIpv4 || runtimeDiagnosticVariant.forceIpv4);
+    final overrideMtu = diagnosticsEnabled
+        ? (runtimeDiagnosticVariant.overrideMtu > 0 ? runtimeDiagnosticVariant.overrideMtu : _debugOverrideMtu)
+        : 0;
+    final disableUdpProbe = diagnosticsEnabled && (_debugDisableUdpProbe || runtimeDiagnosticVariant.disableUdpProbe);
     final fullConfig = switch (map["enable-full-config"] ?? map["execute-config-as-is"] ?? false) {
       final bool v => v,
       _ => false,
@@ -700,29 +722,44 @@ class ZeonCoreService with InfraLogger {
     map["enable-full-config"] = fullConfig;
     map["execute-config-as-is"] = fullConfig;
 
-    if (_debugNetworkProfile.isNotEmpty) {
+    if (diagnosticsEnabled && _debugNetworkProfile.isNotEmpty) {
       map["network-profile"] = _debugNetworkProfile;
     }
-    if (_debugNetworkMtuMode.isNotEmpty) {
+    if (diagnosticsEnabled && _debugNetworkMtuMode.isNotEmpty) {
       map["network-mtu-mode"] = _debugNetworkMtuMode;
     }
-    if (_debugFragmentMode.isNotEmpty) {
+    if (diagnosticsEnabled && _debugFragmentMode.isNotEmpty) {
       map["fragment-mode"] = _debugFragmentMode;
     }
-    if (_debugProfileDnsStrategy.isNotEmpty) {
+    if (diagnosticsEnabled && _debugProfileDnsStrategy.isNotEmpty) {
       map["profile-dns-strategy"] = _debugProfileDnsStrategy;
     }
-    if (_debugTunImplementation.isNotEmpty) {
+    if (diagnosticsEnabled && _debugTunImplementation.isNotEmpty) {
       map["tun-implementation"] = _debugTunImplementation;
     }
-    if (PlatformUtils.isApple) {
-      map["tun-implementation"] = TunImplementation.gvisor.name;
+    if (disableTrafficHooks) {
+      map["debug-disable-zeon-traffic-hooks"] = true;
+    }
+    if (traceTrafficRoute) {
+      map["debug-trace-traffic-route"] = true;
+    }
+    if (disableQuic) {
+      map["block-quic"] = true;
+    }
+    if (forceIpv4) {
       map["ipv6-mode"] = IPv6Mode.disable.key;
       map["remote-dns-domain-strategy"] = DomainStrategy.ipv4Only.key;
       map["direct-dns-domain-strategy"] = DomainStrategy.ipv4Only.key;
-      map["block-quic"] = true;
     }
-    if (_debugUdpProbeEnabled) {
+    if (overrideMtu > 0) {
+      map["network-mtu-mode"] = "fixed";
+      map["mtu"] = overrideMtu;
+      map["network-interface-mtu"] = 0;
+    }
+    if (PlatformUtils.isApple) {
+      map["tun-implementation"] = TunImplementation.gvisor.name;
+    }
+    if (diagnosticsEnabled && _debugUdpProbeEnabled) {
       if (_debugUdpProbeSecret.isEmpty) {
         map["udp-probe-enabled"] = false;
         loggy.warning("debug UDP probe requested without secret; keeping probe disabled");
@@ -740,9 +777,17 @@ class ZeonCoreService with InfraLogger {
         map["udp-probe-top-n"] = _debugUdpProbeTopN;
       }
     }
+    if (disableUdpProbe) {
+      map["udp-probe-enabled"] = false;
+    }
     final runtime = await _readRuntimeNetworkInfo();
     map["network-transport-type"] = runtime.$1;
     map["network-interface-mtu"] = runtime.$2;
+    if (overrideMtu > 0) {
+      map["network-mtu-mode"] = "fixed";
+      map["mtu"] = overrideMtu;
+      map["network-interface-mtu"] = 0;
+    }
 
     final userRules = await _loadUserRouteRulesFromProto();
     if (userRules.isNotEmpty) {
@@ -752,7 +797,42 @@ class ZeonCoreService with InfraLogger {
     loggy.info(
       "core options prepared: full-config=$fullConfig transport=${runtime.$1} iface-mtu=${runtime.$2} user-rules=${(map["rules"] as List?)?.length ?? 0}",
     );
+    _logRuntimeDiagnosticVariant(
+      NetworkDiagnosticVariant(
+        disableTrafficHooks: disableTrafficHooks,
+        disableUdpProbe: disableUdpProbe,
+        forceIpv4: forceIpv4,
+        disableQuic: disableQuic,
+        overrideMtu: overrideMtu,
+        enableRouteTrace: traceTrafficRoute,
+      ),
+      udpProbeEffective: map["udp-probe-enabled"] == true,
+    );
     return map;
+  }
+
+  NetworkDiagnosticVariant _readRuntimeDiagnosticVariant() {
+    if (!NetworkDiagnosticVariantStore.isAvailable) return const NetworkDiagnosticVariant();
+    try {
+      return NetworkDiagnosticVariantStore.read(ref.read(sharedPreferencesProvider).requireValue);
+    } catch (e, st) {
+      loggy.debug("failed reading runtime network diagnostic variant", e, st);
+      return const NetworkDiagnosticVariant();
+    }
+  }
+
+  void _logRuntimeDiagnosticVariant(NetworkDiagnosticVariant variant, {required bool udpProbeEffective}) {
+    const hasCompileTimeDiagnostic =
+        kDebugMode &&
+        (_debugDisableTrafficHooks ||
+            _debugTraceTrafficRoute ||
+            _debugDisableQuic ||
+            _debugForceIpv4 ||
+            _debugOverrideMtu > 0 ||
+            _debugDisableUdpProbe ||
+            _debugUdpProbeEnabled);
+    if (!NetworkDiagnosticVariantStore.isAvailable && !hasCompileTimeDiagnostic) return;
+    loggy.info("${variant.describe(udpProbeEffective: udpProbeEffective)} source=core_payload");
   }
 
   Map<String, dynamic> _safeCorePayload(Map<String, dynamic> payload) {
@@ -776,6 +856,8 @@ class ZeonCoreService with InfraLogger {
       "direct-dns-domain-strategy": payload["direct-dns-domain-strategy"],
       "block-quic": payload["block-quic"],
       "strict-route": payload["strict-route"],
+      "debug-disable-zeon-traffic-hooks": payload["debug-disable-zeon-traffic-hooks"],
+      "debug-trace-traffic-route": payload["debug-trace-traffic-route"],
       "udp-probe-enabled": payload["udp-probe-enabled"],
       "udp-probe-endpoint": payload["udp-probe-endpoint"],
       "udp-probe-count": payload["udp-probe-count"],

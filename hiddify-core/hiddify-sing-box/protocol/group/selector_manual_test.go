@@ -43,3 +43,26 @@ func TestManualSelectorKeepsExplicitSelection(t *testing.T) {
 		}
 	}
 }
+
+func TestManualSelectorStoresRealOutboundForTCPAndUDP(t *testing.T) {
+	manual := newSelectorTestOutbound("manual-server")
+	selector := &Selector{
+		tags:      []string{manual.Tag()},
+		outbounds: map[string]adapter.Outbound{manual.Tag(): manual},
+	}
+	selector.selected.Store(manual)
+
+	tcpMetadata := &adapter.InboundContext{}
+	tcpCtx := adapter.WithContext(context.Background(), tcpMetadata)
+	_, _ = selector.DialContext(tcpCtx, N.NetworkTCP, M.ParseSocksaddr("example.com:443"))
+	if got := tcpMetadata.GetRealOutbound(); got != manual.Tag() {
+		t.Fatalf("tcp real outbound = %q, want %q", got, manual.Tag())
+	}
+
+	udpMetadata := &adapter.InboundContext{}
+	udpCtx := adapter.WithContext(context.Background(), udpMetadata)
+	_, _ = selector.ListenPacket(udpCtx, M.ParseSocksaddr("example.com:443"))
+	if got := udpMetadata.GetRealOutbound(); got != manual.Tag() {
+		t.Fatalf("udp real outbound = %q, want %q", got, manual.Tag())
+	}
+}

@@ -18,6 +18,7 @@ import (
 
 var DnsDirectTags = []string{
 	DNSStaticTag,
+	DNSBootstrapTag,
 	DNSDirectTag,
 	DNSLocalTag,
 }
@@ -46,22 +47,26 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 	// 	remoteAddr = strings.Replace(remoteAddr, "udp://", "tcp://", 1)
 	// }
 
-	remote_dns, err := getDNSServerOptions(DNSRemoteTag, remoteAddr, DNSDirectTag, OutboundMainDetour)
-	if err != nil {
-		return err
-	}
-	remote_dns_fallback, err := getDNSServerOptions(DNSRemoteTagFallback, fallbackAddr, DNSDirectTag, OutboundMainDetour)
-	if err != nil {
-		return err
-	}
-	remote_no_warp_dns, err := getDNSServerOptions(DNSRemoteNoWarpTag, opt.RemoteDnsAddress, DNSDirectTag, OutboundWARPConfigDetour)
-	if err != nil {
-		return err
-	}
-
 	direct_detour := OutboundDirectFragmentTag
 	if strings.HasPrefix(opt.DirectDnsAddress, "udp://") || !strings.Contains(opt.DirectDnsAddress, "://") {
 		direct_detour = ""
+	}
+
+	bootstrap_dns, err := getDNSServerOptions(DNSBootstrapTag, opt.DirectDnsAddress, DNSLocalTag, direct_detour)
+	if err != nil {
+		return err
+	}
+	remote_dns, err := getDNSServerOptions(DNSRemoteTag, remoteAddr, DNSBootstrapTag, OutboundMainDetour)
+	if err != nil {
+		return err
+	}
+	remote_dns_fallback, err := getDNSServerOptions(DNSRemoteTagFallback, fallbackAddr, DNSBootstrapTag, OutboundMainDetour)
+	if err != nil {
+		return err
+	}
+	remote_no_warp_dns, err := getDNSServerOptions(DNSRemoteNoWarpTag, opt.RemoteDnsAddress, DNSBootstrapTag, OutboundWARPConfigDetour)
+	if err != nil {
+		return err
 	}
 
 	direct_dns, err := getDNSServerOptions(DNSDirectTag, opt.DirectDnsAddress, DNSLocalTag, direct_detour)
@@ -105,6 +110,7 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 
 			Servers: []option.DNSServerOptions{
 				*static_dns,
+				*bootstrap_dns,
 				*remote_dns,
 				*remote_dns_fallback,
 				*trick_dns,

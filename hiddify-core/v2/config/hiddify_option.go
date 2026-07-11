@@ -40,21 +40,23 @@ type HiddifyOptions struct {
 	TLSTricks TLSTricks   `json:"tls-tricks,omitempty"`
 	EnableNTP bool        `json:"enable-ntp,omitempty"`
 
-	NetworkProfile       string `json:"network-profile,omitempty"`
-	NetworkMtuMode       string `json:"network-mtu-mode,omitempty"`
-	FragmentMode         string `json:"fragment-mode,omitempty"`
-	ProfileDnsStrategy   string `json:"profile-dns-strategy,omitempty"`
-	NetworkTransportType string `json:"network-transport-type,omitempty"`
-	NetworkInterfaceMTU  int    `json:"network-interface-mtu,omitempty"`
-	UDPProbeEnabled      bool   `json:"udp-probe-enabled,omitempty"`
-	UDPProbeEndpoint     string `json:"udp-probe-endpoint,omitempty"`
-	UDPProbeSecret       string `json:"udp-probe-secret,omitempty"`
-	UDPProbeCount        int    `json:"udp-probe-count,omitempty"`
-	UDPProbeSize         int    `json:"udp-probe-size,omitempty"`
-	UDPProbeIntervalMs   int    `json:"udp-probe-interval-ms,omitempty"`
-	UDPProbeTimeoutMs    int    `json:"udp-probe-timeout-ms,omitempty"`
-	UDPProbeCooldownSec  int    `json:"udp-probe-cooldown-sec,omitempty"`
-	UDPProbeTopN         int    `json:"udp-probe-top-n,omitempty"`
+	NetworkProfile           string `json:"network-profile,omitempty"`
+	NetworkMtuMode           string `json:"network-mtu-mode,omitempty"`
+	FragmentMode             string `json:"fragment-mode,omitempty"`
+	ProfileDnsStrategy       string `json:"profile-dns-strategy,omitempty"`
+	NetworkTransportType     string `json:"network-transport-type,omitempty"`
+	NetworkInterfaceMTU      int    `json:"network-interface-mtu,omitempty"`
+	UDPProbeEnabled          bool   `json:"udp-probe-enabled,omitempty"`
+	UDPProbeEndpoint         string `json:"udp-probe-endpoint,omitempty"`
+	UDPProbeSecret           string `json:"udp-probe-secret,omitempty"`
+	UDPProbeCount            int    `json:"udp-probe-count,omitempty"`
+	UDPProbeSize             int    `json:"udp-probe-size,omitempty"`
+	UDPProbeIntervalMs       int    `json:"udp-probe-interval-ms,omitempty"`
+	UDPProbeTimeoutMs        int    `json:"udp-probe-timeout-ms,omitempty"`
+	UDPProbeCooldownSec      int    `json:"udp-probe-cooldown-sec,omitempty"`
+	UDPProbeTopN             int    `json:"udp-probe-top-n,omitempty"`
+	DebugDisableTrafficHooks bool   `json:"debug-disable-zeon-traffic-hooks,omitempty"`
+	DebugTraceTrafficRoute   bool   `json:"debug-trace-traffic-route,omitempty"`
 
 	DNSOptions
 	InboundOptions
@@ -136,9 +138,9 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 		EnableNTP: true,
 		DNSOptions: DNSOptions{
 			RemoteDnsAddress:        "1.1.1.1",
-			RemoteDnsDomainStrategy: option.DomainStrategy(dns.DomainStrategyAsIS),
+			RemoteDnsDomainStrategy: option.DomainStrategy(dns.DomainStrategyPreferIPv4),
 			DirectDnsAddress:        "1.1.1.1",
-			DirectDnsDomainStrategy: option.DomainStrategy(dns.DomainStrategyAsIS),
+			DirectDnsDomainStrategy: option.DomainStrategy(dns.DomainStrategyPreferIPv4),
 			IndependentDNSCache:     false,
 			EnableFakeDNS:           false,
 			// EnableDNSRouting:        false,
@@ -161,7 +163,7 @@ func DefaultHiddifyOptions() *HiddifyOptions {
 		},
 		RouteOptions: RouteOptions{
 			ResolveDestination:     false,
-			IPv6Mode:               option.DomainStrategy(dns.DomainStrategyAsIS),
+			IPv6Mode:               option.DomainStrategy(dns.DomainStrategyPreferIPv4),
 			BypassLAN:              false,
 			AllowConnectionFromLAN: false,
 		},

@@ -41,6 +41,12 @@ type URLTestHistory struct {
 	UDPPenalty        int            `json:"udp_penalty,omitempty"`
 	UDPLoss           float64        `json:"udp_loss,omitempty"`
 	UDPJitterMs       int            `json:"udp_jitter_ms,omitempty"`
+	CheckGeneration   uint64         `json:"check_generation,omitempty"`
+	PingReady         bool           `json:"ping_ready,omitempty"`
+	QualityReady      bool           `json:"quality_ready,omitempty"`
+	SpeedReady        bool           `json:"speed_ready,omitempty"`
+	UDPReady          bool           `json:"udp_ready,omitempty"`
+	CombinedReady     bool           `json:"combined_ready,omitempty"`
 }
 
 type RuntimePenaltyStats struct {
@@ -57,6 +63,18 @@ type RuntimePenaltyStats struct {
 	BurstScore      int       `json:"burst_score,omitempty"`
 	UpdatedAt       time.Time `json:"updated_at"`
 	Penalty         int       `json:"penalty"`
+}
+
+type RuntimeTrafficStats struct {
+	Tag               string
+	UploadBytes       int64
+	DownloadBytes     int64
+	LastUploadAt      time.Time
+	LastDownloadAt    time.Time
+	UpdatedAt         time.Time
+	LastProbeAt       time.Time
+	UploadOnlySamples int
+	CleanSamples      int
 }
 
 type URLTestHistoryStorage interface {
