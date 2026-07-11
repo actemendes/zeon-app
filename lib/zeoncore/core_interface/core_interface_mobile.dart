@@ -64,7 +64,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
         "mode": mode,
         "debug": debug,
       });
-      final res = await helloClient.sayHello(HelloRequest(name: "test"));
+      final res = await _sayHelloWhenReady(helloClient);
       loggy.info(res.toString());
     }
 
@@ -96,6 +96,33 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     );
     // await start("/sdcard/Android/data/app.zeonvpn.com/files/configs/cdc633e9-8cfc-4a67-948d-009f779a5c91.json", "zeon");
     return "";
+  }
+
+  Future<HelloResponse> _sayHelloWhenReady(HelloClient client) async {
+    const maxAttempts = 10;
+    var delay = const Duration(milliseconds: 120);
+    final random = Random();
+    Object? lastError;
+    StackTrace? lastStackTrace;
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await client.sayHello(HelloRequest(name: "test"));
+      } catch (e, st) {
+        lastError = e;
+        lastStackTrace = st;
+        if (attempt == maxAttempts) break;
+        loggy.debug("foreground core hello not ready [$attempt/$maxAttempts]: $e");
+        final jitterMs = random.nextInt(max(1, delay.inMilliseconds ~/ 3));
+        await Future<void>.delayed(Duration(milliseconds: delay.inMilliseconds + jitterMs));
+        delay = Duration(milliseconds: min(1000, max(delay.inMilliseconds + 1, (delay.inMilliseconds * 1.7).round())));
+      }
+    }
+
+    Error.throwWithStackTrace(
+      lastError ?? StateError("foreground core hello failed"),
+      lastStackTrace ?? StackTrace.current,
+    );
   }
 
   @override

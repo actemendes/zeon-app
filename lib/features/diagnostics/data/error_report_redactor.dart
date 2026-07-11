@@ -20,22 +20,42 @@ class ErrorReportRedactor {
     RegExp(r'\b(public_key|short_id|uuid|password|token|access_token|secret)=([^&\s]+)', caseSensitive: false),
   ];
 
-  Object? redactJson(Object? value) {
+  Object? redactJson(Object? value) => _redactJson(value, const []);
+
+  Object? _redactJson(Object? value, List<String> path) {
     if (value == null || value is num || value is bool) return value;
     if (value is String) return redactText(value);
     if (value is Iterable) {
-      return value.map(redactJson).toList(growable: false);
+      return value.map((entry) => _redactJson(entry, path)).toList(growable: false);
     }
     if (value is Map) {
       return value.map((key, entryValue) {
         final safeKey = key.toString();
+        final entryPath = [...path, safeKey];
+        if (_isAllowedAppMetadata(entryPath, entryValue)) {
+          return MapEntry(safeKey, _sanitizeMetadataValue(entryValue));
+        }
         if (_sensitiveKeyPattern.hasMatch(safeKey)) {
           return MapEntry(safeKey, _redacted);
         }
-        return MapEntry(safeKey, redactJson(entryValue));
+        return MapEntry(safeKey, _redactJson(entryValue, entryPath));
       });
     }
     return redactText(value.toString());
+  }
+
+  bool _isAllowedAppMetadata(List<String> path, Object? value) {
+    if (path.length != 2 || path.first != 'app') return false;
+    if (value is! String && value is! num && value is! bool) return false;
+    return switch (path.last) {
+      'name' || 'version' || 'build_number' || 'environment' || 'release' => true,
+      _ => false,
+    };
+  }
+
+  Object? _sanitizeMetadataValue(Object? value) {
+    if (value is String) return truncate(value.replaceAll('\u0000', '[NUL]'), _maxStringLength);
+    return value;
   }
 
   Map<String, dynamic> redactMap(Map<String, dynamic> value) {

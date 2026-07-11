@@ -482,7 +482,7 @@ class ZeonCoreService with InfraLogger {
 
         await startListeningLogs("fg", core.fgClient);
         // await startListeningStatus("fg", core.fgClient);
-        final bgActive = core.isSingleChannel() || await core.isActiveBg();
+        final bgActive = await _isBackgroundCoreReachable(attempts: PlatformUtils.isIOS ? 8 : 1);
         if (bgActive && !core.isSingleChannel()) {
           await startListeningLogs("bg", core.bgClient);
         }
@@ -520,6 +520,12 @@ class ZeonCoreService with InfraLogger {
       loggy.info("core payload (safe): ${_safeCorePayload(payload)}");
       final request = ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(payload));
       _latestCoreOptionsRequest = request;
+
+      if (await _shouldDeferCoreOptionsUntilStart()) {
+        loggy.info("core options queued until background core starts");
+        return right(unit);
+      }
+
       const maxAttempts = 3;
       Object? lastTransientError;
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -568,6 +574,23 @@ class ZeonCoreService with InfraLogger {
       );
       return right(unit);
     });
+  }
+
+  Future<bool> _shouldDeferCoreOptionsUntilStart() async {
+    if (_useMockCore || core.isSingleChannel()) return false;
+
+    final stoppedOrStopping =
+        _lifecycleState == _CoreLifecycleState.stopped ||
+        _lifecycleState == _CoreLifecycleState.stopping ||
+        currentState is CoreStopped ||
+        currentState is CoreStopping;
+    if (!stoppedOrStopping) return false;
+
+    final bgReachable = await _isBackgroundCoreReachable(
+      attempts: PlatformUtils.isIOS ? 2 : 1,
+      retryDelay: const Duration(milliseconds: 150),
+    );
+    return !bgReachable;
   }
 
   Future<Either<String, Unit>> _applyLatestCoreOptionsToBackground(String reason) async {
@@ -647,15 +670,29 @@ class ZeonCoreService with InfraLogger {
     }, (_) => core.isInitialized());
   }
 
-  Future<bool> _isBackgroundCoreReachable() async {
+  Future<bool> _isBackgroundCoreReachable({
+    int attempts = 1,
+    Duration retryDelay = const Duration(milliseconds: 250),
+  }) async {
     if (!core.isInitialized()) return false;
     if (core.isSingleChannel()) return true;
-    try {
-      return await core.isActiveBg();
-    } catch (e) {
-      loggy.debug("failed checking background core after transient grpc close", e);
-      return false;
+
+    Object? lastError;
+    final maxAttempts = max(1, attempts);
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        if (await core.isActiveBg()) return true;
+      } catch (e) {
+        lastError = e;
+      }
+      if (attempt < maxAttempts) {
+        await Future<void>.delayed(retryDelay);
+      }
     }
+    if (lastError != null) {
+      loggy.debug("failed checking background core after transient grpc close", lastError);
+    }
+    return false;
   }
 
   bool _isTransientGrpcTransportClose(GrpcError error) {
@@ -1510,8 +1547,9 @@ class ZeonCoreService with InfraLogger {
           }
           logController.add(logBuffer);
           // loggy.log(getLogLevel(event.level), event.message);
+          final logLevel = _coreLogLevelForAppLog(safeEvent);
           safeEvent.message.split('\n').forEach((line) {
-            loggy.log(getLogLevel(safeEvent.level), line);
+            loggy.log(logLevel, line);
           });
           return safeEvent;
         });
@@ -1529,6 +1567,22 @@ class ZeonCoreService with InfraLogger {
         _scheduleListenerReconnect(listenKey, () => startListeningLogs(key, cc));
       },
     );
+  }
+
+  loggyl.LogLevel _coreLogLevelForAppLog(LogMessage message) {
+    final level = getLogLevel(message.level);
+    if (level == loggyl.LogLevel.error && _isBenignCanceledSystemInfoLog(message.message)) {
+      return loggyl.LogLevel.warning;
+    }
+    return level;
+  }
+
+  bool _isBenignCanceledSystemInfoLog(String message) {
+    if (!PlatformUtils.isIOS) return false;
+    final lower = message.toLowerCase();
+    return lower.contains("send system info failed") &&
+        lower.contains("code = canceled") &&
+        lower.contains("context canceled");
   }
 
   String _redactCoreLogMessage(String message) {
@@ -1590,7 +1644,9 @@ class ZeonCoreService with InfraLogger {
       cancelOnError: true,
       onError: (error) {
         streamFailed = true;
-        loggy.log(loggyl.LogLevel.error, 'Stream error: $error');
+        if (onError == null) {
+          loggy.log(loggyl.LogLevel.error, 'Stream error: $error');
+        }
         onError?.call(error);
         subscriptions[key]?.cancel();
         subscriptions.remove(key);

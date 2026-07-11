@@ -219,7 +219,12 @@ class ErrorReportController {
     final configOptions = _safeConfigSnapshot();
     final safeMessage = _redactor.redactText(message ?? error.toString());
     final safeStack = stackTrace == null ? null : _redactor.redactText(stackTrace.toString(), maxLength: 20000);
-    final fingerprint = _fingerprint([trigger, error.runtimeType.toString(), safeMessage, _firstStackLine(safeStack)]);
+    final fingerprint = _fingerprint([
+      trigger,
+      error.runtimeType.toString(),
+      _normalizeFingerprintText(safeMessage),
+      _normalizeFingerprintText(_firstStackLine(safeStack)),
+    ]);
 
     final report = <String, dynamic>{
       'schema_version': 1,
@@ -260,7 +265,18 @@ class ErrorReportController {
       'logs': await _logs(),
       if (context != null && context.isNotEmpty) 'context': _redactor.redactJson(context),
     };
-    return _redactor.redactMap(report);
+    return _preserveAppMetadata(_redactor.redactMap(report));
+  }
+
+  Map<String, dynamic> _preserveAppMetadata(Map<String, dynamic> report) {
+    final app = Map<String, dynamic>.from((report['app'] as Map?) ?? const <String, dynamic>{});
+    app['name'] = _appInfo.name;
+    app['version'] = _appInfo.version;
+    app['build_number'] = _appInfo.buildNumber;
+    app['environment'] = _appInfo.environment.name;
+    app['release'] = _appInfo.release.name;
+    report['app'] = app;
+    return report;
   }
 
   Future<ProfileEntity?> _tryReadActiveProfile() async {
@@ -390,6 +406,18 @@ class ErrorReportController {
   String? _firstStackLine(String? stackTrace) {
     if (stackTrace == null || stackTrace.isEmpty) return null;
     return stackTrace.split('\n').firstOrNull;
+  }
+
+  String? _normalizeFingerprintText(String? value) {
+    if (value == null || value.isEmpty) return value;
+    var normalized = value;
+    normalized = normalized.replaceAll(
+      RegExp(r'address = <redacted>, port = \d+'),
+      'address = <redacted>, port = <port>',
+    );
+    normalized = normalized.replaceAll(RegExp(r'address = [^,\)]+, port = \d+'), 'address = <address>, port = <port>');
+    normalized = normalized.replaceAll(RegExp(r'port = \d+'), 'port = <port>');
+    return normalized;
   }
 
   String _fingerprint(List<Object?> parts) {

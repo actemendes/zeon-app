@@ -309,3 +309,58 @@ Triggers:
 
 - `dart format lib/bootstrap.dart lib/features/system_tray/notifier/system_tray_notifier.dart` - успешно, изменений форматтер не внес.
 - `dart analyze lib/bootstrap.dart lib/features/system_tray/notifier/system_tray_notifier.dart` - без errors; остались существующие info по deprecated/redundant/directive ordering.
+
+## Отчет о выполненной работе: iOS gRPC readiness и app version в отчетах
+
+Дата выполнения: 2026-07-11.
+
+Цель: закрыть P2-пункт по iOS `gRPC Connection refused` после resume/startup и исправить ситуацию, когда часть iOS-отчетов приходила с `app_version=<redacted>` / `app_build_number=<redacted>`.
+
+Дополнительная проверка БД:
+
+- В живой таблице на момент проверки было 18 iOS-событий за период `2026-07-08` - `2026-07-11`.
+- 14 из 18 iOS-событий уже содержали `<redacted>` внутри `payload_json.app.version` и `payload_json.app.build_number`; серверные колонки просто повторяли payload.
+- 4 iOS-события из одного кластера корректно содержали `1.3.0 / 100300`, поэтому проблема не выглядела как общий дефект схемы таблицы.
+- Серия `Connection refused` коррелировала с `AppLifecycleState.resumed` и `ZeonCoreService: watching active groups`: приложение считало core `Started`, но локальный gRPC endpoint мог быть еще не готов или уже пересоздавался.
+
+Что сделано:
+
+1. Устранена гонка foreground gRPC readiness на iOS:
+   - `lib/zeoncore/core_interface/core_interface_mobile.dart` после native `MobileSetup` больше не делает одиночный `sayHello`;
+   - добавлен `_sayHelloWhenReady` с retry/backoff и jitter, чтобы дождаться готовности foreground gRPC перед продолжением setup.
+
+2. Снижен риск ложного `Started -> Stopped` на iOS resume:
+   - `lib/zeoncore/zeon_core_service.dart` больше не решает, что background core down, по одному короткому `isActiveBg`;
+   - для iOS `setup background probe` использует несколько попыток `_isBackgroundCoreReachable`.
+
+3. Снижен diagnostic noise вокруг ожидаемых transport closures:
+   - общая `listenSingle`-обертка больше не пишет unconditional `Stream error` до того, как caller классифицирует ошибку;
+   - iOS core-log `send System Info failed ... code = Canceled ... context canceled` понижен до warning, так как в БД он шел на shutdown/re-init path и не выглядел root cause.
+
+4. Нормализован fingerprint для volatile gRPC transport messages:
+   - `lib/features/diagnostics/data/error_report_controller.dart` нормализует `address = ..., port = N` и `port = N` перед расчетом fingerprint;
+   - один iOS `Connection refused` больше не должен распадаться на отдельный fingerprint из-за динамического socket port.
+
+5. Исправлено сохранение iOS app version/build в client error reports:
+   - `lib/core/app_info/app_info_provider.dart` добавляет fallback из compile-time `dart-define app_version/app_build_number`, если `PackageInfo` вернул пустое значение, `<redacted>` или неразрешенный `$(FLUTTER_BUILD_NAME)`;
+   - `Makefile`, `scripts/apple/build.sh`, `scripts/rebuild_ios_install_iphone.sh` автоматически прокидывают `app_version` и `app_build_number` из `pubspec.yaml`;
+   - `lib/features/diagnostics/data/error_report_redactor.dart` стал path-aware и сохраняет `app.name`, `app.version`, `app.build_number`, `app.environment`, `app.release`;
+   - `ErrorReportController` после общей редактуры явно восстанавливает app metadata из `AppInfoEntity`.
+
+6. Добавлен регрессионный тест:
+   - `test/features/diagnostics/data/error_report_redactor_test.dart` проверяет, что `app.version` не редактируется даже когда выглядит как IP (`1.2.3.4`), при этом обычный текст с IP продолжает редактироваться.
+
+Ожидаемый эффект:
+
+- После resume/startup iOS приложение меньше будет ловить ложный `gRPC UNAVAILABLE / Connection refused` на еще не готовом foreground gRPC.
+- Один краткий сбой port readiness не должен переводить локальное состояние в `Stopped/Disconnected`, если background core фактически жив.
+- Возможные реальные disconnect/reconnect останутся видимыми, но вторичный gRPC шум и benign canceled system-info события больше не должны доминировать в отчетах.
+- Новые iOS client error reports должны содержать реальный `app_version` и `app_build_number`, даже если `PackageInfo.fromPlatform()` на конкретной IPA вернет `<redacted>`.
+
+Проверки:
+
+- `.toolchains/flutter/bin/dart analyze lib/core/app_info/app_info_provider.dart lib/features/diagnostics/data/error_report_controller.dart lib/features/diagnostics/data/error_report_redactor.dart lib/zeoncore/core_interface/core_interface_mobile.dart lib/zeoncore/zeon_core_service.dart test/features/diagnostics/data/error_report_redactor_test.dart` - без issues.
+- `.toolchains/flutter/bin/flutter test --no-pub test/features/diagnostics/data/error_report_redactor_test.dart` - успешно.
+- `bash -n scripts/apple/build.sh scripts/rebuild_ios_install_iphone.sh` - успешно.
+- `make -pn ios-release` показал корректное извлечение из текущего `pubspec.yaml`: `PUBSPEC_APP_VERSION := 1.3.0`, `PUBSPEC_APP_BUILD_NUMBER := 10301`.
+- `/Users/actemendes/Documents/zeon-app/zeon-app/scripts/rebuild_ios_install_iphone.sh` - успешно собрал и установил iOS profile app на устройство `FE12C9C0-D99D-5EA0-B386-AEBC58E16123`; итоговый artifact: `build/ios/iphoneos/Runner.app` (`168.0MB`).

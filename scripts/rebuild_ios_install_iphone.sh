@@ -9,6 +9,12 @@ IOS_MODE="${IOS_MODE:-profile}"
 TARGET="${FLUTTER_TARGET:-lib/main.dart}"
 BUNDLE_ID="${BUNDLE_ID:-app.zeon.ios}"
 APPLE_RELEASE="${APPLE_RELEASE:-app-store}"
+PUBSPEC_VERSION="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d " '\"")"
+APP_VERSION="${PUBSPEC_VERSION%%+*}"
+APP_BUILD_NUMBER="${PUBSPEC_VERSION#*+}"
+if [[ "${APP_BUILD_NUMBER}" == "${PUBSPEC_VERSION}" ]]; then
+  APP_BUILD_NUMBER=""
+fi
 
 case "${IOS_MODE}" in
   debug|profile|release) ;;
@@ -50,6 +56,12 @@ fi
 
 build_args=(--"${IOS_MODE}" --target "${TARGET}")
 build_args+=(--dart-define "release=${APPLE_RELEASE}")
+if [[ -n "${APP_VERSION}" ]]; then
+  build_args+=(--dart-define "app_version=${APP_VERSION}")
+fi
+if [[ -n "${APP_BUILD_NUMBER}" ]]; then
+  build_args+=(--dart-define "app_build_number=${APP_BUILD_NUMBER}")
+fi
 if [[ -n "${SENTRY_DSN:-}" ]]; then
   build_args+=(--dart-define "sentry_dsn=${SENTRY_DSN}")
 fi

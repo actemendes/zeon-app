@@ -109,7 +109,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         _vpnExpectedRunning = true;
       } else if (event case Disconnected()) {
         final expectedRunning = _vpnExpectedRunning || startedByUser;
-        if (wasUpBefore && expectedRunning && !_isExpectedStop()) {
+        if (_shouldCaptureUnexpectedDisconnect(event, wasUpBefore: wasUpBefore, expectedRunning: expectedRunning)) {
           unawaited(
             ref
                 .read(errorReportControllerProvider)
@@ -476,6 +476,23 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   bool _isExpectedStop() {
     final expectedStopUntil = _expectedStopUntil;
     return expectedStopUntil != null && expectedStopUntil.isAfter(DateTime.now().toUtc());
+  }
+
+  bool _shouldCaptureUnexpectedDisconnect(
+    Disconnected disconnected, {
+    required bool wasUpBefore,
+    required bool expectedRunning,
+  }) {
+    if (!wasUpBefore || !expectedRunning || _isExpectedStop()) {
+      return false;
+    }
+
+    if (PlatformUtils.isIOS && disconnected.connectionFailure == null) {
+      loggy.info("iOS VPN disconnected without failure; treating as external user stop");
+      return false;
+    }
+
+    return true;
   }
 }
 

@@ -61,8 +61,12 @@ else
 	TARGET=lib/main.dart
 endif
 
-BUILD_ARGS=--dart-define sentry_dsn=$(SENTRY_DSN)
-DISTRIBUTOR_ARGS=--skip-clean --build-target $(TARGET) --build-dart-define sentry_dsn=$(SENTRY_DSN)
+PUBSPEC_APP_VERSION := $(shell sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d " '\"" | awk -F+ '{print $$1}')
+PUBSPEC_APP_BUILD_NUMBER := $(shell sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d " '\"" | awk -F+ '{print $$2}')
+APP_VERSION_DEFINES=--dart-define app_version=$(PUBSPEC_APP_VERSION) --dart-define app_build_number=$(PUBSPEC_APP_BUILD_NUMBER)
+DISTRIBUTOR_APP_VERSION_DEFINES=--build-dart-define app_version=$(PUBSPEC_APP_VERSION) --build-dart-define app_build_number=$(PUBSPEC_APP_BUILD_NUMBER)
+BUILD_ARGS=--dart-define sentry_dsn=$(SENTRY_DSN) $(APP_VERSION_DEFINES)
+DISTRIBUTOR_ARGS=--skip-clean --build-target $(TARGET) --build-dart-define sentry_dsn=$(SENTRY_DSN) $(DISTRIBUTOR_APP_VERSION_DEFINES)
 
 
 

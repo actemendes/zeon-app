@@ -10,8 +10,20 @@ TARGET="${FLUTTER_TARGET:-lib/main.dart}"
 APPLE_RELEASE="${APPLE_RELEASE:-app-store}"
 MACOS_EXPORT_DESTINATION="${MACOS_EXPORT_DESTINATION:-export}"
 IOS_UPLOAD_SKIP_BUILD="${IOS_UPLOAD_SKIP_BUILD:-0}"
+PUBSPEC_VERSION="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d " '\"")"
+APP_VERSION="${PUBSPEC_VERSION%%+*}"
+APP_BUILD_NUMBER="${PUBSPEC_VERSION#*+}"
+if [[ "${APP_BUILD_NUMBER}" == "${PUBSPEC_VERSION}" ]]; then
+  APP_BUILD_NUMBER=""
+fi
 BUILD_ARGS=(--release --target "${TARGET}")
 BUILD_ARGS+=(--dart-define "release=${APPLE_RELEASE}")
+if [[ -n "${APP_VERSION}" ]]; then
+  BUILD_ARGS+=(--dart-define "app_version=${APP_VERSION}")
+fi
+if [[ -n "${APP_BUILD_NUMBER}" ]]; then
+  BUILD_ARGS+=(--dart-define "app_build_number=${APP_BUILD_NUMBER}")
+fi
 if [[ -n "${SENTRY_DSN:-}" ]]; then
   BUILD_ARGS+=(--dart-define "sentry_dsn=${SENTRY_DSN}")
 fi

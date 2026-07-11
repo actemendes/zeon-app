@@ -33,4 +33,28 @@ void main() {
       'app_file_tail': ['[NUL]binary-prefix'],
     });
   });
+
+  test('preserves app version metadata even when it looks like an address', () {
+    const redactor = ErrorReportRedactor();
+
+    final redacted = redactor.redactMap({
+      'app': {
+        'name': 'ZEON',
+        'version': '1.2.3.4',
+        'build_number': '100300',
+        'release': 'appStore',
+        'environment': 'dev',
+      },
+      'message': 'connection failed 1.2.3.4:443',
+    });
+
+    expect(redacted['app'], {
+      'name': 'ZEON',
+      'version': '1.2.3.4',
+      'build_number': '100300',
+      'release': 'appStore',
+      'environment': 'dev',
+    });
+    expect(redacted['message'], isNot(contains('1.2.3.4')));
+  });
 }
