@@ -27,7 +27,6 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion13Migration(sharedPreferences),
       PreferencesVersion14Migration(sharedPreferences),
       PreferencesVersion15Migration(sharedPreferences, currentVersion),
-      PreferencesVersion16Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -411,39 +410,6 @@ class PreferencesVersion15Migration extends PreferencesMigrationStep with InfraL
     if (_currentVersion == 14 && balancerStrategy == "round-robin") {
       loggy.debug("v15: restoring balancer-strategy from [round-robin] to [smart-active-auto]");
       await sharedPreferences.setString("balancer-strategy", "smart-active-auto");
-    }
-  }
-}
-
-class PreferencesVersion16Migration extends PreferencesMigrationStep with InfraLogger {
-  PreferencesVersion16Migration(super.sharedPreferences);
-
-  @override
-  Future<void> migrate() async {
-    if (!PlatformUtils.isMobile) return;
-
-    final ipv6Mode = sharedPreferences.getString("ipv6-mode");
-    if (ipv6Mode == null || ipv6Mode == "ipv4_only") {
-      loggy.debug("v16 network baseline: changing ipv6-mode from [$ipv6Mode] to [prefer_ipv4]");
-      await sharedPreferences.setString("ipv6-mode", "prefer_ipv4");
-    }
-
-    final remoteStrategy = sharedPreferences.getString("remote-dns-domain-strategy");
-    if (remoteStrategy == null || remoteStrategy.isEmpty || remoteStrategy == "ipv4_only") {
-      loggy.debug("v16 network baseline: changing remote-dns-domain-strategy from [$remoteStrategy] to [prefer_ipv4]");
-      await sharedPreferences.setString("remote-dns-domain-strategy", "prefer_ipv4");
-    }
-
-    final directStrategy = sharedPreferences.getString("direct-dns-domain-strategy");
-    if (directStrategy == null || directStrategy.isEmpty || directStrategy == "ipv4_only") {
-      loggy.debug("v16 network baseline: changing direct-dns-domain-strategy from [$directStrategy] to [prefer_ipv4]");
-      await sharedPreferences.setString("direct-dns-domain-strategy", "prefer_ipv4");
-    }
-
-    final mtuMode = sharedPreferences.getString("network-mtu-mode");
-    if (mtuMode == null || mtuMode.isEmpty) {
-      loggy.debug("v16 network baseline: setting network-mtu-mode to [dynamic]");
-      await sharedPreferences.setString("network-mtu-mode", "dynamic");
     }
   }
 }

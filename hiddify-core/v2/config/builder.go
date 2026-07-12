@@ -26,7 +26,6 @@ import (
 const (
 	DNSRemoteTag         = "dns-remote"
 	DNSRemoteTagFallback = "dns-remote-fallback"
-	DNSBootstrapTag      = "dns-bootstrap"
 	DNSLocalTag          = "dns-local"
 	DNSStaticTag         = "dns-static"
 	DNSDirectTag         = "dns-direct"
@@ -144,7 +143,6 @@ func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptio
 	if err != nil {
 		return nil, err
 	}
-	applyHiddifyCompatibleNetworkBaseline(hopts)
 
 	var options option.Options
 	if hopts.EnableFullConfig {
@@ -171,10 +169,6 @@ func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptio
 		return nil, err
 	}
 
-	logRuntimeConfigFingerprints(&options, "zeon")
-	logRuntimeDiagnosticVariant(&options, hopts)
-	logNetworkBaseline(&options, hopts)
-	logDNSRoutes(&options)
 	return &options, nil
 }
 
@@ -361,7 +355,7 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			// IdleTimeout: badoption.Duration(opt.URLTestIdleTimeout.Duration()),
 			Tolerance: 1,
 			// IdleTimeout:               badoption.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
-			InterruptExistConnections: false,
+			InterruptExistConnections: true,
 		},
 	}
 
@@ -382,7 +376,7 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			// IdleTimeout: badoption.Duration(opt.URLTestIdleTimeout.Duration()),
 			Tolerance: 1,
 			// IdleTimeout:               badoption.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
-			InterruptExistConnections:        false,
+			InterruptExistConnections:        true,
 			SmartActiveDebugForceStatus:      opt.SmartActiveDebugForceStatus,
 			SmartActiveDebugForceError:       opt.SmartActiveDebugForceError,
 			SmartActiveDebugForceDegradation: opt.SmartActiveDebugForceDegradation,
@@ -419,7 +413,7 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 		Options: &option.SelectorOutboundOptions{
 			Outbounds:                 selectorTags,
 			Default:                   defaultSelect,
-			InterruptExistConnections: false,
+			InterruptExistConnections: true,
 		},
 	}
 	outbounds = append([]option.Outbound{selector}, outbounds...)
@@ -498,21 +492,19 @@ func setExperimental(options *option.Options, hopt *HiddifyOptions) {
 			},
 
 			Monitoring: &option.MonitoringOptions{
-				URLs:                hopt.ConnectionTestUrls,
-				Interval:            badoption.Duration(hopt.URLTestInterval.Duration()),
-				DebounceWindow:      badoption.Duration(time.Millisecond * 500),
-				IdleTimeout:         badoption.Duration(hopt.URLTestInterval.Duration().Nanoseconds() * 3),
-				UDPProbeEnabled:     hopt.UDPProbeEnabled,
-				UDPProbeEndpoint:    hopt.UDPProbeEndpoint,
-				UDPProbeSecret:      hopt.UDPProbeSecret,
-				UDPProbeCount:       hopt.UDPProbeCount,
-				UDPProbeSize:        hopt.UDPProbeSize,
-				UDPProbeInterval:    badoption.Duration(time.Duration(hopt.UDPProbeIntervalMs) * time.Millisecond),
-				UDPProbeTimeout:     badoption.Duration(time.Duration(hopt.UDPProbeTimeoutMs) * time.Millisecond),
-				UDPProbeCooldown:    badoption.Duration(time.Duration(hopt.UDPProbeCooldownSec) * time.Second),
-				UDPProbeTopN:        hopt.UDPProbeTopN,
-				DisableTrafficHooks: hopt.DebugDisableTrafficHooks,
-				TraceTrafficRoute:   hopt.DebugTraceTrafficRoute,
+				URLs:             hopt.ConnectionTestUrls,
+				Interval:         badoption.Duration(hopt.URLTestInterval.Duration()),
+				DebounceWindow:   badoption.Duration(time.Millisecond * 500),
+				IdleTimeout:      badoption.Duration(hopt.URLTestInterval.Duration().Nanoseconds() * 3),
+				UDPProbeEnabled:  hopt.UDPProbeEnabled || parseEnvBool("ZEON_UDP_PROBE_ENABLED"),
+				UDPProbeEndpoint: envOrDefault("ZEON_UDP_PROBE_ENDPOINT", hopt.UDPProbeEndpoint),
+				UDPProbeSecret:   envOrDefault("ZEON_UDP_PROBE_SECRET", hopt.UDPProbeSecret),
+				UDPProbeCount:    hopt.UDPProbeCount,
+				UDPProbeSize:     hopt.UDPProbeSize,
+				UDPProbeInterval: badoption.Duration(time.Duration(hopt.UDPProbeIntervalMs) * time.Millisecond),
+				UDPProbeTimeout:  badoption.Duration(time.Duration(hopt.UDPProbeTimeoutMs) * time.Millisecond),
+				UDPProbeCooldown: badoption.Duration(time.Duration(hopt.UDPProbeCooldownSec) * time.Second),
+				UDPProbeTopN:     hopt.UDPProbeTopN,
 			},
 		}
 	}
@@ -548,74 +540,6 @@ func isIPv6Supported() bool {
 	return err == nil
 }
 
-func applyHiddifyCompatibleNetworkBaseline(hopt *HiddifyOptions) {
-	if hopt == nil {
-		return
-	}
-	if C.DomainStrategy(hopt.IPv6Mode) == C.DomainStrategyAsIS {
-		hopt.IPv6Mode = option.DomainStrategy(C.DomainStrategyPreferIPv4)
-	}
-	if C.DomainStrategy(hopt.RemoteDnsDomainStrategy) == C.DomainStrategyAsIS {
-		hopt.RemoteDnsDomainStrategy = option.DomainStrategy(C.DomainStrategyPreferIPv4)
-	}
-	if C.DomainStrategy(hopt.DirectDnsDomainStrategy) == C.DomainStrategyAsIS {
-		hopt.DirectDnsDomainStrategy = option.DomainStrategy(C.DomainStrategyPreferIPv4)
-	}
-}
-
-func currentPlatformName() string {
-	switch {
-	case C.IsAndroid:
-		return "android"
-	case C.IsIos:
-		return "ios"
-	case C.IsDarwin:
-		return "darwin"
-	case C.IsWindows:
-		return "windows"
-	case C.IsLinux:
-		return "linux"
-	default:
-		return "unknown"
-	}
-}
-
-func mobileMTUBaseline(platform string) (int, bool) {
-	switch strings.ToLower(strings.TrimSpace(platform)) {
-	case "android", "ios", "darwin":
-		return 1400, true
-	default:
-		return 0, false
-	}
-}
-
-func validTunMTU(mtu int, ipMode string) bool {
-	if mtu <= 0 {
-		return false
-	}
-	minimum := 576
-	if ipMode != "ipv4_only" {
-		minimum = 1280
-	}
-	return mtu >= minimum && mtu <= 9000
-}
-
-func resolveEffectiveMTU(platform string, userOverride *int, upstreamDefault *int, ipMode string) int {
-	if userOverride != nil && validTunMTU(*userOverride, ipMode) {
-		return *userOverride
-	}
-	if upstreamDefault != nil && validTunMTU(*upstreamDefault, ipMode) {
-		return *upstreamDefault
-	}
-	if baseline, ok := mobileMTUBaseline(platform); ok {
-		return baseline
-	}
-	if ipMode != "ipv4_only" {
-		return 1400
-	}
-	return 1500
-}
-
 func dynamicMTUForTransport(transport string) uint32 {
 	switch strings.ToLower(strings.TrimSpace(transport)) {
 	case "cellular":
@@ -643,54 +567,33 @@ func resolveEffectiveTunMTU(hopt *HiddifyOptions) uint32 {
 		mode = "dynamic"
 	}
 
-	platform := currentPlatformName()
-	ipMode := hopt.IPv6Mode.String()
-	source := "hiddify_compatible_default"
-	var userOverride *int
-	var upstreamDefault *int
+	effective := hopt.MTU
 	switch mode {
 	case "dynamic":
-		if _, mobile := mobileMTUBaseline(platform); !mobile {
-			effective := int(dynamicMTUForTransport(hopt.NetworkTransportType))
-			upstreamDefault = &effective
-			source = "dynamic_transport"
-			if hopt.NetworkInterfaceMTU > 0 {
-				effective = hopt.NetworkInterfaceMTU
-				upstreamDefault = &effective
-				source = "interface_mtu"
-			}
+		effective = dynamicMTUForTransport(hopt.NetworkTransportType)
+		if hopt.NetworkInterfaceMTU > 0 {
+			effective = uint32(hopt.NetworkInterfaceMTU)
 		}
 	case "fixed", "manual", "static":
-		if hopt.MTU > 0 {
-			effective := int(hopt.MTU)
-			userOverride = &effective
-			source = "user_override"
+		if effective == 0 {
+			effective = 1500
 		}
 	default:
-		if _, mobile := mobileMTUBaseline(platform); !mobile {
-			effective := int(dynamicMTUForTransport(hopt.NetworkTransportType))
-			upstreamDefault = &effective
-			source = "dynamic_transport"
+		if effective == 0 {
+			effective = dynamicMTUForTransport(hopt.NetworkTransportType)
 		}
 	}
 
-	effective := resolveEffectiveMTU(platform, userOverride, upstreamDefault, ipMode)
-	if userOverride != nil && !validTunMTU(*userOverride, ipMode) {
-		source = "invalid_user_override_fallback"
-	} else if upstreamDefault != nil && !validTunMTU(*upstreamDefault, ipMode) {
-		source = "invalid_upstream_fallback"
-	}
-	fmt.Printf("[EffectiveMTU] platform=%s source=%s value=%d mode=%s transport=%s iface_mtu=%d configured=%d ip_mode=%s\n",
-		platform,
-		source,
-		effective,
+	effective = clampMTU(effective)
+	fmt.Printf(
+		"Effective MTU selected: mode=%s transport=%s iface_mtu=%d configured=%d effective=%d\n",
 		mode,
 		hopt.NetworkTransportType,
 		hopt.NetworkInterfaceMTU,
 		hopt.MTU,
-		ipMode,
+		effective,
 	)
-	return uint32(effective)
+	return effective
 }
 
 func toRouteActionForUserRule(outbound Outbound) option.RuleAction {
@@ -818,7 +721,7 @@ func setInbound(options *option.Options, hopt *HiddifyOptions) {
 	// } else {
 	// 	inboundDomainStrategy = opt.IPv6Mode
 	// }
-	ipv6Enable := isIPv6Supported() && C.DomainStrategy(hopt.IPv6Mode) != C.DomainStrategyIPv4Only
+	ipv6Enable := isIPv6Supported()
 	if hopt.EnableTun {
 		effectiveMTU := resolveEffectiveTunMTU(hopt)
 
@@ -1431,8 +1334,8 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 		Final:               OutboundMainDetour,
 		AutoDetectInterface: (!C.IsAndroid && !C.IsIos) && (hopt.EnableTun || hopt.EnableTunService),
 		DefaultDomainResolver: &option.DomainResolveOptions{
-			Server:   DNSMultiRemoteTag,
-			Strategy: hopt.RemoteDnsDomainStrategy,
+			Server:   DNSMultiDirectTag,
+			Strategy: hopt.DirectDnsDomainStrategy,
 		},
 		// OverrideAndroidVPN: hopt.EnableTun && C.IsAndroid,
 		RuleSet:     rulesets,

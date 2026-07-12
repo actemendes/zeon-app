@@ -32,10 +32,9 @@ import (
 var _ adapter.ConnectionManager = (*ConnectionManager)(nil)
 
 type ConnectionManager struct {
-	logger           logger.ContextLogger
-	access           sync.Mutex
-	connections      list.List[io.Closer]
-	nextConnectionID atomic.Uint64
+	logger      logger.ContextLogger
+	access      sync.Mutex
+	connections list.List[io.Closer]
 }
 
 func NewConnectionManager(logger logger.ContextLogger) *ConnectionManager {
@@ -59,21 +58,11 @@ func (m *ConnectionManager) Close() error {
 }
 
 func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
-	connectionID := m.nextConnectionID.Add(1)
 	metadata.Network = N.NetworkTCP
 	if metadata.GetRealOutbound() == "" {
 		metadata.SetRealOutbound(zeonOutboundTag(this))
 	}
-	zeonApplyIPFamilyFallback(m.logger, ctx, &metadata)
 	ctx = adapter.WithContext(ctx, &metadata)
-	connectStartedAt := time.Now()
-	zeonLogTrafficConnect(m.logger, ctx, zeonTrafficLogFields{
-		event:        "connect_start",
-		connectionID: connectionID,
-		metadata:     metadata,
-		selected:     zeonOutboundTag(this),
-		leaf:         metadata.GetRealOutbound(),
-	})
 	var (
 		remoteConn net.Conn
 		err        error
@@ -100,16 +89,6 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		err = E.Cause(err, "open connection to ", remoteString, dialerString)
 		N.CloseOnHandshakeFailure(conn, onClose, err)
 		m.logger.ErrorContext(ctx, err)
-		zeonLogTrafficConnect(m.logger, ctx, zeonTrafficLogFields{
-			event:           "connect_failure",
-			connectionID:    connectionID,
-			metadata:        metadata,
-			selected:        zeonOutboundTag(this),
-			leaf:            metadata.GetRealOutbound(),
-			connectDuration: time.Since(connectStartedAt),
-			err:             err,
-		})
-		zeonObserveConnectFailure(m.logger, ctx, metadata, err)
 		m.recordRuntimePenalty(ctx, err, false)
 		return
 	}
@@ -119,28 +98,10 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		remoteConn.Close()
 		N.CloseOnHandshakeFailure(conn, onClose, err)
 		m.logger.ErrorContext(ctx, err)
-		zeonLogTrafficConnect(m.logger, ctx, zeonTrafficLogFields{
-			event:           "handshake_report_failure",
-			connectionID:    connectionID,
-			metadata:        metadata,
-			selected:        zeonOutboundTag(this),
-			leaf:            metadata.GetRealOutbound(),
-			connectDuration: time.Since(connectStartedAt),
-			err:             err,
-		})
 		m.recordRuntimePenalty(ctx, err, true)
 		return
 	}
 	m.recordRuntimeSuccess(ctx)
-	zeonObserveConnectSuccess(m.logger, ctx, metadata)
-	zeonLogTrafficConnect(m.logger, ctx, zeonTrafficLogFields{
-		event:           "connect_success",
-		connectionID:    connectionID,
-		metadata:        metadata,
-		selected:        zeonOutboundTag(this),
-		leaf:            metadata.GetRealOutbound(),
-		connectDuration: time.Since(connectStartedAt),
-	})
 	if metadata.TLSFragment || metadata.TLSRecordFragment {
 		remoteConn = tf.NewConn(remoteConn, ctx, metadata.TLSFragment, metadata.TLSRecordFragment, metadata.TLSFragmentFallbackDelay)
 	}
@@ -153,29 +114,18 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		m.connections.Remove(element)
 	})
 	var done atomic.Bool
-	trafficTracker := zeonNewTrafficTracker(m.logger, ctx, connectionID, metadata)
 	m.preConnectionCopy(ctx, conn, remoteConn, false, &done, onClose)
 	m.preConnectionCopy(ctx, remoteConn, conn, true, &done, onClose)
-	go m.connectionCopy(ctx, conn, remoteConn, false, &done, onClose, connectionID, trafficTracker)
-	go m.connectionCopy(ctx, remoteConn, conn, true, &done, onClose, connectionID, trafficTracker)
+	go m.connectionCopy(ctx, conn, remoteConn, false, &done, onClose)
+	go m.connectionCopy(ctx, remoteConn, conn, true, &done, onClose)
 }
 
 func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dialer, conn N.PacketConn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
-	connectionID := m.nextConnectionID.Add(1)
 	metadata.Network = N.NetworkUDP
 	if metadata.GetRealOutbound() == "" {
 		metadata.SetRealOutbound(zeonOutboundTag(this))
 	}
-	zeonApplyIPFamilyFallback(m.logger, ctx, &metadata)
 	ctx = adapter.WithContext(ctx, &metadata)
-	connectStartedAt := time.Now()
-	zeonLogTrafficConnect(m.logger, ctx, zeonTrafficLogFields{
-		event:        "packet_connect_start",
-		connectionID: connectionID,
-		metadata:     metadata,
-		selected:     zeonOutboundTag(this),
-		leaf:         metadata.GetRealOutbound(),
-	})
 	var (
 		remotePacketConn   net.PacketConn
 		remoteConn         net.Conn
@@ -216,16 +166,6 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			err = E.Cause(err, "open packet connection to ", remoteString, dialerString)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
 			m.logger.ErrorContext(ctx, err)
-			zeonLogTrafficConnect(m.logger, ctx, zeonTrafficLogFields{
-				event:           "packet_connect_failure",
-				connectionID:    connectionID,
-				metadata:        metadata,
-				selected:        zeonOutboundTag(this),
-				leaf:            metadata.GetRealOutbound(),
-				connectDuration: time.Since(connectStartedAt),
-				err:             err,
-			})
-			zeonObserveConnectFailure(m.logger, ctx, metadata, err)
 			m.recordRuntimePenalty(ctx, err, false)
 			return
 		}
@@ -251,16 +191,6 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			err = E.Cause(err, "listen packet connection using ", dialerString)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
 			m.logger.ErrorContext(ctx, err)
-			zeonLogTrafficConnect(m.logger, ctx, zeonTrafficLogFields{
-				event:           "packet_listen_failure",
-				connectionID:    connectionID,
-				metadata:        metadata,
-				selected:        zeonOutboundTag(this),
-				leaf:            metadata.GetRealOutbound(),
-				connectDuration: time.Since(connectStartedAt),
-				err:             err,
-			})
-			zeonObserveConnectFailure(m.logger, ctx, metadata, err)
 			m.recordRuntimePenalty(ctx, err, false)
 			return
 		}
@@ -270,27 +200,9 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 		conn.Close()
 		remotePacketConn.Close()
 		m.logger.ErrorContext(ctx, "report handshake success: ", err)
-		zeonLogTrafficConnect(m.logger, ctx, zeonTrafficLogFields{
-			event:           "packet_handshake_report_failure",
-			connectionID:    connectionID,
-			metadata:        metadata,
-			selected:        zeonOutboundTag(this),
-			leaf:            metadata.GetRealOutbound(),
-			connectDuration: time.Since(connectStartedAt),
-			err:             err,
-		})
 		m.recordRuntimePenalty(ctx, err, true)
 		return
 	}
-	zeonLogTrafficConnect(m.logger, ctx, zeonTrafficLogFields{
-		event:           "packet_connect_success",
-		connectionID:    connectionID,
-		metadata:        metadata,
-		selected:        zeonOutboundTag(this),
-		leaf:            metadata.GetRealOutbound(),
-		connectDuration: time.Since(connectStartedAt),
-	})
-	zeonObserveConnectSuccess(m.logger, ctx, metadata)
 	if destinationAddress.IsValid() {
 		var originDestination M.Socksaddr
 		if metadata.RouteOriginalDestination.IsValid() {
@@ -335,9 +247,8 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 		m.connections.Remove(element)
 	})
 	var done atomic.Bool
-	trafficTracker := zeonNewTrafficTracker(m.logger, ctx, connectionID, metadata)
-	go m.packetConnectionCopy(ctx, conn, destination, false, &done, onClose, connectionID, trafficTracker)
-	go m.packetConnectionCopy(ctx, destination, conn, true, &done, onClose, connectionID, trafficTracker)
+	go m.packetConnectionCopy(ctx, conn, destination, false, &done, onClose)
+	go m.packetConnectionCopy(ctx, destination, conn, true, &done, onClose)
 }
 
 func (m *ConnectionManager) preConnectionCopy(ctx context.Context, source net.Conn, destination net.Conn, direction bool, done *atomic.Bool, onClose N.CloseHandlerFunc) {
@@ -370,14 +281,11 @@ func (m *ConnectionManager) preConnectionCopy(ctx context.Context, source net.Co
 	}
 }
 
-func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn, destination net.Conn, direction bool, done *atomic.Bool, onClose N.CloseHandlerFunc, connectionID uint64, trafficTracker *zeonTrafficTracker) {
+func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn, destination net.Conn, direction bool, done *atomic.Bool, onClose N.CloseHandlerFunc) {
 	var (
 		sourceReader      io.Reader = source
 		destinationWriter io.Writer = destination
 	)
-	if trafficTracker != nil {
-		sourceReader = zeonCountingReader{Reader: sourceReader, counter: trafficTracker.countFunc(direction)}
-	}
 	var readCounters, writeCounters []N.CountFunc
 	for {
 		sourceReader, readCounters = N.UnwrapCountReader(sourceReader, readCounters)
@@ -398,9 +306,6 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 					} else {
 						m.logger.ErrorContext(ctx, "connection download payload: ", err)
 					}
-					if trafficTracker != nil {
-						trafficTracker.closeDirection(direction, 0, err)
-					}
 					return
 				}
 				for _, counter := range readCounters {
@@ -417,9 +322,6 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 
 	bytes, err := bufio.CopyWithCounters(destinationWriter, sourceReader, source, readCounters, writeCounters, bufio.DefaultIncreaseBufferAfter, bufio.DefaultBatchSize)
 	m.recordRuntimeTraffic(ctx, bytes, direction)
-	if trafficTracker != nil {
-		trafficTracker.closeDirection(direction, bytes, err)
-	}
 	if err != nil {
 		common.Close(source, destination)
 	} else if duplexDst, isDuplex := destination.(N.WriteCloser); isDuplex {
@@ -497,9 +399,6 @@ func (m *ConnectionManager) connectionCopyEarlyWrite(source net.Conn, destinatio
 }
 
 func (m *ConnectionManager) recordRuntimePenalty(ctx context.Context, err error, strict bool) {
-	if zeonTrafficHooksDisabled(ctx) {
-		return
-	}
 	if err == nil {
 		return
 	}
@@ -517,9 +416,6 @@ func (m *ConnectionManager) recordRuntimePenalty(ctx context.Context, err error,
 }
 
 func (m *ConnectionManager) recordRuntimeSuccess(ctx context.Context) {
-	if zeonTrafficHooksDisabled(ctx) {
-		return
-	}
 	metadata := adapter.ContextFrom(ctx)
 	if metadata == nil || metadata.GetRealOutbound() == "" {
 		return
@@ -530,9 +426,6 @@ func (m *ConnectionManager) recordRuntimeSuccess(ctx context.Context) {
 }
 
 func (m *ConnectionManager) recordRuntimeTraffic(ctx context.Context, bytes int64, download bool) {
-	if zeonTrafficHooksDisabled(ctx) {
-		return
-	}
 	metadata := adapter.ContextFrom(ctx)
 	if metadata == nil || metadata.GetRealOutbound() == "" || bytes <= 0 {
 		return
@@ -542,15 +435,9 @@ func (m *ConnectionManager) recordRuntimeTraffic(ctx context.Context, bytes int6
 	}
 }
 
-func (m *ConnectionManager) packetConnectionCopy(ctx context.Context, source N.PacketReader, destination N.PacketWriter, direction bool, done *atomic.Bool, onClose N.CloseHandlerFunc, connectionID uint64, trafficTracker *zeonTrafficTracker) {
-	if trafficTracker != nil {
-		source = zeonCountingPacketReader{PacketReader: source, counter: trafficTracker.countFunc(direction)}
-	}
+func (m *ConnectionManager) packetConnectionCopy(ctx context.Context, source N.PacketReader, destination N.PacketWriter, direction bool, done *atomic.Bool, onClose N.CloseHandlerFunc) {
 	bytes, err := bufio.CopyPacket(destination, source)
 	m.recordRuntimeTraffic(ctx, int64(bytes), direction)
-	if trafficTracker != nil {
-		trafficTracker.closeDirection(direction, int64(bytes), err)
-	}
 	if !direction {
 		if err == nil {
 			m.logger.DebugContext(ctx, "packet upload finished")

@@ -35,7 +35,7 @@ abstract class ConfigOptions {
 
   static final region = PreferencesNotifier.create<Region, String>(
     "region",
-    Region.other,
+    Region.ru,
     mapFrom: Region.values.byName,
     mapTo: (value) => value.name,
   );
@@ -52,7 +52,7 @@ abstract class ConfigOptions {
 
   static final ipv6Mode = PreferencesNotifier.create<IPv6Mode, String>(
     "ipv6-mode",
-    IPv6Mode.enable,
+    IPv6Mode.disable,
     mapFrom: (value) => IPv6Mode.values.firstWhere((e) => e.key == value),
     mapTo: (value) => value.key,
   );
@@ -73,7 +73,7 @@ abstract class ConfigOptions {
 
   static final remoteDnsDomainStrategy = PreferencesNotifier.create<DomainStrategy, String>(
     "remote-dns-domain-strategy",
-    DomainStrategy.preferIpv4,
+    DomainStrategy.auto,
     mapFrom: (value) => DomainStrategy.values.firstWhere((e) => e.key == value),
     mapTo: (value) => value.key,
   );
@@ -104,7 +104,7 @@ abstract class ConfigOptions {
 
   static final directDnsDomainStrategy = PreferencesNotifier.create<DomainStrategy, String>(
     "direct-dns-domain-strategy",
-    DomainStrategy.preferIpv4,
+    DomainStrategy.auto,
     mapFrom: (value) => DomainStrategy.values.firstWhere((e) => e.key == value),
     mapTo: (value) => value.key,
   );

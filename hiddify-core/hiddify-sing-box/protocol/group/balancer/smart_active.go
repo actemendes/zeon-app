@@ -43,7 +43,7 @@ type smartDecision struct {
 
 const (
 	smartActiveMinimalDelayDelta     = 10
-	smartActiveSignificantDelayDelta = 80
+	smartActiveSignificantDelayDelta = 50
 	smartActiveScoreSwitchMargin     = 8
 	smartActiveComparableScoreDelta  = 5
 	smartActiveCleanEvidenceRequired = 2

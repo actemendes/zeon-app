@@ -153,7 +153,6 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 	for _, buffer := range buffers {
 		conn = bufio.NewCachedConn(conn, buffer)
 	}
-	zeonTraceRouteSelected(r.logger, ctx, metadata, selectedRule, selectedOutbound)
 	for _, tracker := range r.trackers {
 		conn = tracker.RoutedConnection(ctx, conn, metadata, selectedRule, selectedOutbound)
 	}
@@ -221,9 +220,6 @@ func (r *Router) routePacketConnection(ctx context.Context, conn N.PacketConn, m
 
 	// TODO: move to UoT
 	metadata.Network = N.NetworkUDP
-	if err := zeonRejectByAdaptiveQUICFallback(r.logger, ctx, metadata); err != nil {
-		return err
-	}
 
 	// Currently we don't have deadline usages for UDP connections
 	/*if deadline.NeedAdditionalReadDeadline(conn) {
@@ -285,7 +281,6 @@ func (r *Router) routePacketConnection(ctx context.Context, conn N.PacketConn, m
 		conn = bufio.NewCachedPacketConn(conn, buffer.Buffer, buffer.Destination)
 		N.PutPacketBuffer(buffer)
 	}
-	zeonTraceRouteSelected(r.logger, ctx, metadata, selectedRule, selectedOutbound)
 	for _, tracker := range r.trackers {
 		conn = tracker.RoutedPacketConnection(ctx, conn, metadata, selectedRule, selectedOutbound)
 	}

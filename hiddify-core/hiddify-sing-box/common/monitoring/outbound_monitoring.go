@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -53,24 +54,7 @@ const (
 	runtimeTrafficStallEvidenceThreshold  = 2
 	runtimeTrafficValidationProbeCooldown = 30 * time.Second
 	runtimeTrafficTTL                     = 10 * time.Minute
-	runtimeEventQueueSize                 = 4096
 )
-
-type runtimeEventKind int
-
-const (
-	runtimeEventError runtimeEventKind = iota
-	runtimeEventSuccess
-	runtimeEventTraffic
-)
-
-type runtimeEvent struct {
-	kind        runtimeEventKind
-	outboundTag string
-	err         error
-	bytes       int64
-	download    bool
-}
 
 // func RegisterService(registry *boxService.Registry) {
 // 	boxService.Register[option.MonitoringOptions](registry, C.TypeOutboundMonitor, func(ctx context.Context, logger log.ContextLogger, tag string, options option.MonitoringOptions) (adapter.Service, error) {
@@ -84,31 +68,28 @@ func Get(ctx context.Context) *OutboundMonitoring {
 
 // OutboundMonitoring orchestrates URL testing and traffic sampling for outbounds.
 type OutboundMonitoring struct {
-	endpointManager     adapter.EndpointManager
-	outboundManager     adapter.OutboundManager
-	logger              log.ContextLogger
-	cache               adapter.CacheFile
-	ctx                 context.Context
-	cancel              context.CancelFunc
-	tag                 string
-	pause               pause.Manager
-	pauseCallback       *list.Element[pause.Callback]
-	started             bool
-	urls                []string
-	currentLinkIndex    atomic.Uint32
-	access              sync.Mutex
-	idleTimeout         time.Duration
-	lastActive          common.TypedValue[time.Time]
-	workersRunning      atomic.Bool
-	mainInterval        time.Duration
-	debounceWindow      time.Duration
-	urlTestTimeout      time.Duration
-	workersCount        int
-	history             adapter.URLTestHistoryStorage
-	disableTrafficHooks bool
-	traceTrafficRoute   bool
-
-	mainTicker *time.Ticker
+	endpointManager  adapter.EndpointManager
+	outboundManager  adapter.OutboundManager
+	logger           log.ContextLogger
+	cache            adapter.CacheFile
+	ctx              context.Context
+	cancel           context.CancelFunc
+	tag              string
+	pause            pause.Manager
+	pauseCallback    *list.Element[pause.Callback]
+	started          bool
+	urls             []string
+	currentLinkIndex atomic.Uint32
+	access           sync.Mutex
+	idleTimeout      time.Duration
+	lastActive       common.TypedValue[time.Time]
+	workersRunning   atomic.Bool
+	mainInterval     time.Duration
+	debounceWindow   time.Duration
+	urlTestTimeout   time.Duration
+	workersCount     int
+	history          adapter.URLTestHistoryStorage
+	mainTicker       *time.Ticker
 
 	priorityQueue chan *testTask
 	normalQueue   chan *testTask
@@ -124,7 +105,6 @@ type OutboundMonitoring struct {
 	runtimeAccess  sync.Mutex
 	runtimeStats   map[string]*adapter.RuntimePenaltyStats
 	runtimeTraffic map[string]*adapter.RuntimeTrafficStats
-	runtimeEvents  chan runtimeEvent
 
 	manualRefreshAccess sync.Mutex
 	manualRefreshAt     map[string]time.Time
@@ -142,7 +122,6 @@ type OutboundMonitoring struct {
 	workerWG    sync.WaitGroup
 	udpProbeWG  sync.WaitGroup
 	schedulerWG sync.WaitGroup
-	runtimeWG   sync.WaitGroup
 	closerOnce  sync.Once
 }
 
@@ -297,13 +276,11 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 
 		history: history,
 
-		mainInterval:        options.Interval.Build(),
-		idleTimeout:         options.IdleTimeout.Build(),
-		workersCount:        options.Workers,
-		urlTestTimeout:      options.URLTestTimeout.Build(),
-		debounceWindow:      options.DebounceWindow.Build(),
-		disableTrafficHooks: options.DisableTrafficHooks,
-		traceTrafficRoute:   options.TraceTrafficRoute,
+		mainInterval:   options.Interval.Build(),
+		idleTimeout:    options.IdleTimeout.Build(),
+		workersCount:   options.Workers,
+		urlTestTimeout: options.URLTestTimeout.Build(),
+		debounceWindow: options.DebounceWindow.Build(),
 
 		priorityQueue:  make(chan *testTask, 1000),
 		normalQueue:    make(chan *testTask, 10000),
@@ -311,23 +288,12 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		groups:         make(map[string]*groupState),
 		runtimeStats:   make(map[string]*adapter.RuntimePenaltyStats),
 		runtimeTraffic: make(map[string]*adapter.RuntimeTrafficStats),
-		runtimeEvents:  make(chan runtimeEvent, runtimeEventQueueSize),
 
 		udpProbeQueued: make(map[string]bool),
 	}
 	m.configureUDPProbe(options)
-	m.runtimeWG.Add(1)
-	go m.runtimeEventLoop()
 
 	return m, nil
-}
-
-func (m *OutboundMonitoring) RuntimeTrafficHooksDisabled() bool {
-	return m != nil && m.disableTrafficHooks
-}
-
-func (m *OutboundMonitoring) TraceTrafficRouteEnabled() bool {
-	return m != nil && m.traceTrafficRoute
 }
 
 func (m *OutboundMonitoring) Start(stage adapter.StartStage) error {
@@ -1005,53 +971,7 @@ func (m *OutboundMonitoring) InvalidateTest(outboundTag string) error {
 	return nil
 }
 
-func (m *OutboundMonitoring) enqueueRuntimeEvent(event runtimeEvent, mustKeep bool) bool {
-	if m == nil || m.runtimeEvents == nil {
-		return false
-	}
-	select {
-	case <-m.ctx.Done():
-		return true
-	case m.runtimeEvents <- event:
-		return true
-	default:
-		if mustKeep {
-			return false
-		}
-		if m.logger != nil {
-			m.logger.Debug("[RuntimeTelemetry] dropped event=", int(event.kind), " tag=", event.outboundTag, " reason=queue_full")
-		}
-		return true
-	}
-}
-
-func (m *OutboundMonitoring) runtimeEventLoop() {
-	defer m.runtimeWG.Done()
-	for {
-		select {
-		case <-m.ctx.Done():
-			return
-		case event := <-m.runtimeEvents:
-			switch event.kind {
-			case runtimeEventError:
-				m.recordRuntimeErrorNow(event.outboundTag, event.err)
-			case runtimeEventSuccess:
-				m.recordRuntimeSuccessNow(event.outboundTag)
-			case runtimeEventTraffic:
-				m.recordRuntimeTrafficNow(event.outboundTag, event.bytes, event.download)
-			}
-		}
-	}
-}
-
 func (m *OutboundMonitoring) RecordRuntimeError(outboundTag string, err error) {
-	if m.enqueueRuntimeEvent(runtimeEvent{kind: runtimeEventError, outboundTag: outboundTag, err: err}, true) {
-		return
-	}
-	m.recordRuntimeErrorNow(outboundTag, err)
-}
-
-func (m *OutboundMonitoring) recordRuntimeErrorNow(outboundTag string, err error) {
 	if outboundTag == "" || err == nil {
 		return
 	}
@@ -1118,13 +1038,6 @@ func (m *OutboundMonitoring) recordRuntimeErrorNow(outboundTag string, err error
 // traffic contents.  Good sessions gradually forgive earlier transient
 // failures instead of making a server permanently sticky or permanently bad.
 func (m *OutboundMonitoring) RecordRuntimeSuccess(outboundTag string) {
-	if m.enqueueRuntimeEvent(runtimeEvent{kind: runtimeEventSuccess, outboundTag: outboundTag}, false) {
-		return
-	}
-	m.recordRuntimeSuccessNow(outboundTag)
-}
-
-func (m *OutboundMonitoring) recordRuntimeSuccessNow(outboundTag string) {
 	if outboundTag == "" {
 		return
 	}
@@ -1154,13 +1067,6 @@ func (m *OutboundMonitoring) recordRuntimeSuccessNow(outboundTag string) {
 // RecordRuntimeTraffic receives aggregate byte counts from the tunnel copy
 // loop. It never observes payloads, domains, URLs, or application data.
 func (m *OutboundMonitoring) RecordRuntimeTraffic(outboundTag string, bytes int64, download bool) {
-	if m.enqueueRuntimeEvent(runtimeEvent{kind: runtimeEventTraffic, outboundTag: outboundTag, bytes: bytes, download: download}, false) {
-		return
-	}
-	m.recordRuntimeTrafficNow(outboundTag, bytes, download)
-}
-
-func (m *OutboundMonitoring) recordRuntimeTrafficNow(outboundTag string, bytes int64, download bool) {
 	if outboundTag == "" || bytes <= 0 {
 		return
 	}
@@ -1316,8 +1222,11 @@ func getRuntimeHistoryScore(state *outboundState) int {
 }
 
 func (m *OutboundMonitoring) configureUDPProbe(options option.MonitoringOptions) {
-	enabled := options.UDPProbeEnabled
+	enabled := options.UDPProbeEnabled || parseBoolEnv("ZEON_UDP_PROBE_ENABLED")
 	secretText := strings.TrimSpace(options.UDPProbeSecret)
+	if secretText == "" {
+		secretText = strings.TrimSpace(os.Getenv("ZEON_UDP_PROBE_SECRET"))
+	}
 	endpoint := strings.TrimSpace(options.UDPProbeEndpoint)
 	if endpoint == "" {
 		endpoint = defaultUDPProbe
@@ -1366,6 +1275,11 @@ func (m *OutboundMonitoring) configureUDPProbe(options option.MonitoringOptions)
 	m.udpProbeSecret = secret
 	m.udpProbeEnabled = true
 	m.logger.Info("[UDPProbe] enabled endpoint=", endpoint, " count=", probeOptions.Count, " size=", probeOptions.Size, " cooldown=", cooldown, " top_n=", topN)
+}
+
+func parseBoolEnv(key string) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	return value == "1" || value == "true" || value == "yes" || value == "on"
 }
 
 func (m *OutboundMonitoring) scheduleUDPProbesFromOutcomes(outcomes []testOutcome) {
@@ -1571,7 +1485,6 @@ func (m *OutboundMonitoring) Close() error {
 		m.workerWG.Wait()
 		m.udpProbeWG.Wait()
 		m.schedulerWG.Wait()
-		m.runtimeWG.Wait()
 
 	})
 	return nil

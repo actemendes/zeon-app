@@ -226,23 +226,6 @@ func TestRuntimeDownloadTrafficClearsUploadOnlyEvidence(t *testing.T) {
 	}
 }
 
-func TestRuntimeTelemetryQueueDoesNotBlockTrafficSamples(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	monitor := &OutboundMonitoring{
-		ctx:           ctx,
-		logger:        log.StdLogger(),
-		runtimeEvents: make(chan runtimeEvent, 1),
-	}
-	monitor.runtimeEvents <- runtimeEvent{kind: runtimeEventTraffic, outboundTag: "active", bytes: 1}
-
-	started := time.Now()
-	monitor.RecordRuntimeTraffic("active", 4*1024, false)
-	if elapsed := time.Since(started); elapsed > 50*time.Millisecond {
-		t.Fatalf("traffic telemetry blocked for %s", elapsed)
-	}
-}
-
 func TestRuntimeOldErrorsStopContributingAfterTTL(t *testing.T) {
 	monitor := runtimeHealthMonitor("active", probeHistory(true, urltest.ErrorTypeNone))
 	monitor.runtimeStats["active"] = &adapter.RuntimePenaltyStats{
