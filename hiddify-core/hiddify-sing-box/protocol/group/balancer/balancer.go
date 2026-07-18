@@ -109,7 +109,7 @@ func (s *Balancer) Start() error {
 	case StrategySmartActiveAuto:
 		s.strategyFn = NewSmartActive(outbounds, s.options)
 		s.smartActiveDebugFault = newSmartActiveDebugFault(s.options)
-		s.logger.Info("[SmartActiveLifecycle] event=vpn_start group=", s.Tag(), " fallback_active=", s.strategyFn.Now(), " candidates=", len(outbounds))
+		s.logger.Info("[SmartActiveLifecycle] event=vpn_start group=", s.Tag(), " provisional_active=", s.strategyFn.Now(), " candidates=", len(outbounds))
 	default:
 		return E.New("unknown load balance strategy: ", s.options.Strategy)
 	}
@@ -246,6 +246,8 @@ func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHis
 		}
 		s.logger.Warn("[SmartActiveSwitch] from=", decision.from, " to=", decision.to, " reason=", decisionReason,
 			" activeConnections=", conntrack.Count(), " activeDownloadBps=unavailable videoLikeLongLivedConnections=unavailable")
+	} else if decision.action == "confirm" {
+		s.logger.Info("[SmartActiveConfirmed] tag=", decision.to, " reason=", decisionReason, " mode=", decision.mode)
 	} else if decision.action == "keep" {
 		s.logger.Info("[SmartActiveKeep] current=", current, " candidate=", comparisonTag, " reason=", decisionReason,
 			" currentDelay=", getTagDelay(current, history), " candidateDelay=", getTagDelay(comparisonTag, history),
@@ -378,14 +380,17 @@ func smartActiveExcludeReason(tag string, history *adapter.URLTestHistory) strin
 	if history == nil {
 		return "missing_history"
 	}
+	if history.CheckGeneration == 0 {
+		return "missing_generation"
+	}
+	if history.IsFromCache {
+		return "stale_cached"
+	}
 	if history.URLTestStatus == "checking" {
 		return "checking"
 	}
 	if history.CheckGeneration > 0 && !history.CombinedReady {
 		return "not_ready_current_generation"
-	}
-	if history.IsFromCache {
-		return "stale_cached"
 	}
 	if !history.Success {
 		if history.ErrorType == "" {
