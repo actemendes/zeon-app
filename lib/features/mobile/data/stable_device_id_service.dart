@@ -1,16 +1,22 @@
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:zeon/utils/platform_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:zeon/core/security/secure_storage_mutex.dart';
+import 'package:zeon/utils/platform_utils.dart';
 
 class StableDeviceIdService {
-  StableDeviceIdService({
-    required SharedPreferences preferences,
-    FlutterSecureStorage? secureStorage,
-  }) : _preferences = preferences,
-       _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  StableDeviceIdService({required SharedPreferences preferences, FlutterSecureStorage? secureStorage})
+    : _preferences = preferences,
+      _secureStorage =
+          secureStorage ??
+          const FlutterSecureStorage(
+            aOptions: AndroidOptions(
+              encryptedSharedPreferences: true,
+              storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
+            ),
+          );
 
   static const _prefKeyDeviceId = "mobile_auto_import_device_id";
   static const _secureKeyDeviceId = "stable_device_id_v1";
@@ -95,7 +101,7 @@ class StableDeviceIdService {
 
   Future<String?> _tryReadSecure() async {
     try {
-      final value = (await _secureStorage.read(key: _secureKeyDeviceId))?.trim();
+      final value = (await SecureStorageMutex.protect(() => _secureStorage.read(key: _secureKeyDeviceId)))?.trim();
       return (value == null || value.isEmpty) ? null : value;
     } catch (_) {
       return null;
@@ -104,7 +110,7 @@ class StableDeviceIdService {
 
   Future<void> _tryWriteSecure(String value) async {
     try {
-      await _secureStorage.write(key: _secureKeyDeviceId, value: value);
+      await SecureStorageMutex.protect(() => _secureStorage.write(key: _secureKeyDeviceId, value: value));
     } catch (_) {
       // Ignore secure storage failures and keep shared preferences fallback.
     }

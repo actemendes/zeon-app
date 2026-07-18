@@ -9,10 +9,7 @@ class SentryRiverpodObserver extends ProviderObserver {
   @override
   void didAddProvider(ProviderBase<Object?> provider, Object? value, ProviderContainer container) {
     super.didAddProvider(provider, value, container);
-    addBreadcrumb(
-      'Provider [${provider.name ?? provider.runtimeType}] was ADDED',
-      data: value != null ? {"initial-value": value} : null,
-    );
+    addBreadcrumb('Provider [${provider.name ?? provider.runtimeType}] was ADDED');
   }
 
   @override
@@ -23,9 +20,6 @@ class SentryRiverpodObserver extends ProviderObserver {
     ProviderContainer container,
   ) {
     super.didUpdateProvider(provider, previousValue, newValue, container);
-    addBreadcrumb(
-      'Provider [${provider.name ?? provider.runtimeType}] was UPDATED',
-      data: {"new-value": newValue, "old-value": previousValue},
-    );
+    addBreadcrumb('Provider [${provider.name ?? provider.runtimeType}] was UPDATED');
   }
 }

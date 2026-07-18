@@ -33,11 +33,7 @@ class AppUpdateRepositoryImpl with ExceptionHandler, InfraLogger implements AppU
       final response = await httpClient.get<dynamic>(Constants.githubReleasesApiUrl);
       if (response.statusCode != 200 || response.data == null) {
         loggy.warning("failed to fetch latest version info");
-        return left(
-          AppUpdateFailure.unexpected(
-            "failed to fetch latest version info: status=${response.statusCode}, data=${response.data}",
-          ),
-        );
+        return left(AppUpdateFailure.unexpected("failed to fetch latest version info: status=${response.statusCode}"));
       }
 
       final dynamic raw = response.data;

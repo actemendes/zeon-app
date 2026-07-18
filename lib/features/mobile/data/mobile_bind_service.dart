@@ -3,14 +3,16 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/mobile/data/mobile_sensitive_storage.dart';
 import 'package:zeon/features/mobile/data/stable_device_id_service.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 final mobileBindServiceProvider = Provider<MobileBindService>((ref) {
   return MobileBindService(
@@ -25,25 +27,27 @@ class MobileBindService with InfraLogger {
     required DioHttpClient httpClient,
     required MobileConnLinkImportService connLinkImportService,
     required SharedPreferences preferences,
+    MobileSensitiveStorage? sensitiveStorage,
   }) : _httpClient = httpClient,
        _connLinkImportService = connLinkImportService,
-       _preferences = preferences;
+       _preferences = preferences,
+       _sensitiveStorage = sensitiveStorage ?? MobileSensitiveStorage(preferences: preferences);
 
   static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://130.49.151.173");
   static const _mobileApiKey = String.fromEnvironment(
     "mobile_api_key",
     defaultValue: "mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7",
   );
-  static const _bindJwtEnv = String.fromEnvironment("mobile_bind_jwt");
-  static const _bindJwtPrefKey = "mobile_bind_jwt";
+  // Never compile a developer JWT into a production artifact.
+  static const _bindJwtEnv = kDebugMode ? String.fromEnvironment("mobile_bind_jwt") : "";
   static const _bindJwtExpiresPrefKey = "mobile_bind_jwt_expires_at";
   static const _prefUserId = MobileConnLinkImportService.prefUserId;
-  static const _prefConnLink = MobileConnLinkImportService.prefConnLink;
   static const _prefBindSessionCache = "mobile_bind_session_cache_v1";
 
   final DioHttpClient _httpClient;
   final MobileConnLinkImportService _connLinkImportService;
   final SharedPreferences _preferences;
+  final MobileSensitiveStorage _sensitiveStorage;
   StableDeviceIdService get _stableDeviceId => StableDeviceIdService(preferences: _preferences);
 
   Future<BindCreateResult> createSession() async {
@@ -124,13 +128,14 @@ class MobileBindService with InfraLogger {
         apiStatus: status,
         apiExpiresAt: expiresAt,
         clearUserIdWhenMissing: false,
+        mode: MobileConnLinkImportMode.postConnection,
       );
     } on MobileConnLinkImportException catch (e, st) {
       final fetchedConnLink = await _fetchMobileConnLinkByUserId(ownerUserId);
       if (fetchedConnLink != null && fetchedConnLink.isNotEmpty) {
         loggy.warning(
           "bind confirm: primary import failed, trying mobile link fallback "
-          "[owner_user_id=$ownerUserId, link=$fetchedConnLink]",
+          "[owner_user_id=$ownerUserId, link=${_maskLink(fetchedConnLink)}]",
         );
         try {
           importResult = await _connLinkImportService.importConnectionLink(
@@ -139,6 +144,7 @@ class MobileBindService with InfraLogger {
             apiStatus: status,
             apiExpiresAt: expiresAt,
             clearUserIdWhenMissing: false,
+            mode: MobileConnLinkImportMode.postConnection,
           );
         } on MobileConnLinkImportException catch (fallbackError, fallbackStack) {
           loggy.warning(
@@ -185,10 +191,10 @@ class MobileBindService with InfraLogger {
   }
 
   Future<String> _rotateBindDeviceIdForRebind() async {
-    await _preferences.remove(_bindJwtPrefKey);
+    await _sensitiveStorage.deleteDeviceJwt();
     await _preferences.remove(_bindJwtExpiresPrefKey);
     final rotated = await _stableDeviceId.rotateForRebind();
-    loggy.info("bind rebind device id rotated [device_id=$rotated]");
+    loggy.info("bind rebind device id rotated");
     return rotated;
   }
 
@@ -220,19 +226,32 @@ class MobileBindService with InfraLogger {
       path: "/ws/bind",
       queryParameters: {"bind_session_id": bindSessionId},
     );
-    Future<WebSocket> openSocket(String token) {
-      return WebSocket.connect(wsUri.toString(), headers: {"Authorization": "Bearer $token"});
+    Future<({WebSocket socket, HttpClient client})> openSocket(String token) async {
+      final client = _httpClient.createRequiredProxyHttpClient();
+      try {
+        final socket = await WebSocket.connect(
+          wsUri.toString(),
+          headers: {"Authorization": "Bearer $token"},
+          customClient: client,
+        );
+        return (socket: socket, client: client);
+      } catch (_) {
+        client.close(force: true);
+        rethrow;
+      }
     }
 
-    WebSocket socket;
+    ({WebSocket socket, HttpClient client}) connection;
     try {
-      socket = await openSocket(jwt);
+      connection = await openSocket(jwt);
     } catch (e, st) {
-      loggy.warning("bind ws connect failed, trying token refresh [session=$bindSessionId]", e, st);
+      loggy.warning("bind ws connect failed, trying token refresh", e, st);
       final refreshedJwt = await _bindJwt(forceRefresh: true);
       if (refreshedJwt.isEmpty) rethrow;
-      socket = await openSocket(refreshedJwt);
+      connection = await openSocket(refreshedJwt);
     }
+    final socket = connection.socket;
+    final socketClient = connection.client;
     socket.pingInterval = const Duration(seconds: 20);
 
     final controller = StreamController<BindWsEvent>.broadcast();
@@ -262,6 +281,7 @@ class MobileBindService with InfraLogger {
       },
       onError: controller.addError,
       onDone: () async {
+        socketClient.close(force: true);
         if (!controller.isClosed) {
           await controller.close();
         }
@@ -275,6 +295,7 @@ class MobileBindService with InfraLogger {
       } catch (_) {
         // ignore close race
       }
+      socketClient.close(force: true);
       if (!controller.isClosed) {
         await controller.close();
       }
@@ -296,7 +317,7 @@ class MobileBindService with InfraLogger {
 
     final base = Uri.parse(_apiBaseUrl);
     final uri = base.resolve(path).replace(queryParameters: query).toString();
-    loggy.info("bind request: $method $uri");
+    loggy.info("bind request: $method $path");
     Future<Response<Map<String, dynamic>>> send({required bool directOnly, required String jwt}) {
       final headers = {"Authorization": "Bearer $jwt", "Content-Type": "application/json"};
       return switch (method) {
@@ -314,9 +335,9 @@ class MobileBindService with InfraLogger {
     Future<Response<Map<String, dynamic>>> sendWithFallback(String jwt) async {
       try {
         return await send(directOnly: true, jwt: jwt);
-      } on DioException catch (e, st) {
+      } on DioException catch (e) {
         if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.connectionError) {
-          loggy.warning("bind request fallback to proxy-aware mode: $method $uri ${_dioDebug(e)}", e, st);
+          loggy.warning("bind request fallback to proxy-aware mode: $method $path ${_dioDebug(e)}");
           return await send(directOnly: false, jwt: jwt);
         }
         rethrow;
@@ -331,11 +352,11 @@ class MobileBindService with InfraLogger {
       try {
         final response = await sendWithFallback(jwt);
         final bodyMap = response.data;
-        loggy.info("bind response [$method $uri] status=${response.statusCode}");
+        loggy.info("bind response [$method $path] status=${response.statusCode}");
         if (bodyMap == null) throw const MobileBindException("empty_response");
         if (bodyMap["ok"] == false) {
           final serverError = _extractApiErrorFromBody(bodyMap) ?? "request_failed";
-          loggy.warning("bind server error [endpoint=$path status=${response.statusCode} error=$serverError]");
+          loggy.warning("bind server error [endpoint=$path status=${response.statusCode}]");
           throw MobileBindException(serverError);
         }
         if (bodyMap["ok"] != true) {
@@ -344,8 +365,8 @@ class MobileBindService with InfraLogger {
         final data = bodyMap["data"];
         if (data is Map<String, dynamic>) return data;
         return bodyMap;
-      } on DioException catch (e, st) {
-        loggy.warning("bind request failed (dio): $method $uri ${_dioDebug(e)}", e, st);
+      } on DioException catch (e) {
+        loggy.warning("bind request failed (dio): $method $path ${_dioDebug(e)}");
         final apiError = _extractApiErrorFromDio(e);
         if (allowRefresh && (apiError == "jwt_expired" || apiError == "unauthorized")) {
           await _bindJwt(forceRefresh: true);
@@ -355,16 +376,16 @@ class MobileBindService with InfraLogger {
           throw MobileBindException(apiError);
         }
         throw MobileBindException("network_${e.type.name}");
-      } on SocketException catch (e, st) {
-        loggy.warning("bind request failed (socket): $method $uri", e, st);
+      } on SocketException {
+        loggy.warning("bind request failed (socket): $method $path");
         throw const MobileBindException("network_socket");
-      } on HandshakeException catch (e, st) {
-        loggy.warning("bind request failed (tls): $method $uri", e, st);
+      } on HandshakeException {
+        loggy.warning("bind request failed (tls): $method $path");
         throw const MobileBindException("network_tls");
       } on MobileBindException {
         rethrow;
-      } catch (e, st) {
-        loggy.warning("bind request failed (unknown): $method $uri", e, st);
+      } catch (_) {
+        loggy.warning("bind request failed (unknown): $method $path");
         throw const MobileBindException("network_unknown");
       }
     }
@@ -382,18 +403,18 @@ class MobileBindService with InfraLogger {
   }
 
   Future<String> _bindJwt({bool forceRefresh = false}) async {
-    final prefToken = (_preferences.getString(_bindJwtPrefKey) ?? "").trim();
+    final storedToken = (await _sensitiveStorage.readDeviceJwt()).trim();
     final prefExpiresAt = _parseIso(_preferences.getString(_bindJwtExpiresPrefKey));
     final envToken = _bindJwtEnv.trim();
     final now = DateTime.now().toUtc();
 
-    final prefFresh =
-        prefToken.isNotEmpty &&
+    final storedFresh =
+        storedToken.isNotEmpty &&
         prefExpiresAt != null &&
         prefExpiresAt.isAfter(now.add(const Duration(seconds: 20))) &&
-        !_isJwtExpired(prefToken);
-    if (!forceRefresh && prefFresh) {
-      return prefToken;
+        !_isJwtExpired(storedToken);
+    if (!forceRefresh && storedFresh) {
+      return storedToken;
     }
 
     if (_apiBaseUrl.isNotEmpty && _mobileApiKey.isNotEmpty) {
@@ -405,7 +426,7 @@ class MobileBindService with InfraLogger {
         if (token != null && token.isNotEmpty) {
           return token;
         }
-      } on DioException catch (e, st) {
+      } on DioException catch (e) {
         final apiError = _extractApiErrorFromDio(e);
         if (apiError == "device_user_mismatch") {
           try {
@@ -414,7 +435,7 @@ class MobileBindService with InfraLogger {
             if (token != null && token.isNotEmpty) {
               return token;
             }
-          } on DioException catch (retryE, retrySt) {
+          } on DioException catch (retryE) {
             final retryError = _extractApiErrorFromDio(retryE);
             if (retryError == "device_not_registered") {
               try {
@@ -423,17 +444,13 @@ class MobileBindService with InfraLogger {
                 if (token != null && token.isNotEmpty) {
                   return token;
                 }
-              } catch (registerError, registerStack) {
-                loggy.warning("bind token refresh retry failed [after_register]", registerError, registerStack);
+              } catch (_) {
+                loggy.warning("bind token refresh retry failed [after_register]");
               }
             }
-            loggy.warning(
-              "bind token refresh retry failed [after_mismatch error=${retryError ?? retryE.type.name}]",
-              retryE,
-              retrySt,
-            );
-          } catch (retryError, retryStack) {
-            loggy.warning("bind token refresh retry failed [after_mismatch]", retryError, retryStack);
+            loggy.warning("bind token refresh retry failed [after_mismatch]");
+          } catch (_) {
+            loggy.warning("bind token refresh retry failed [after_mismatch]");
           }
         } else if (apiError == "device_not_registered" || apiError == "user_id_required") {
           try {
@@ -446,24 +463,24 @@ class MobileBindService with InfraLogger {
             if (token != null && token.isNotEmpty) {
               return token;
             }
-          } catch (retryError, retryStack) {
-            loggy.warning("bind token refresh retry failed [after_register]", retryError, retryStack);
+          } catch (_) {
+            loggy.warning("bind token refresh retry failed [after_register]");
           }
         }
-        loggy.warning("bind token refresh failed [error=${apiError ?? e.type.name}]", e, st);
-      } catch (e, st) {
-        loggy.warning("bind token refresh failed", e, st);
+        loggy.warning("bind token refresh failed");
+      } catch (_) {
+        loggy.warning("bind token refresh failed");
       }
     }
 
-    if (!forceRefresh && prefToken.isNotEmpty && !_isJwtExpired(prefToken)) {
-      return prefToken;
+    if (!forceRefresh && storedToken.isNotEmpty && !_isJwtExpired(storedToken)) {
+      return storedToken;
     }
     if (envToken.isNotEmpty && !_isJwtExpired(envToken)) {
       return envToken;
     }
-    if (prefToken.isNotEmpty) {
-      return prefToken;
+    if (storedToken.isNotEmpty) {
+      return storedToken;
     }
     return envToken;
   }
@@ -491,7 +508,7 @@ class MobileBindService with InfraLogger {
     final ownerUserId = _parseInt(data["user_id"]);
     if (token.isEmpty) return null;
 
-    await _preferences.setString(_bindJwtPrefKey, token);
+    await _sensitiveStorage.writeDeviceJwt(token);
     if (expiresAt != null) {
       await _preferences.setString(_bindJwtExpiresPrefKey, expiresAt.toIso8601String());
     }
@@ -532,12 +549,11 @@ class MobileBindService with InfraLogger {
     final connection = connectionMap is Map<String, dynamic> ? connectionMap : const <String, dynamic>{};
     final connLink = connection["raw_url"]?.toString().trim();
     if (connLink != null && connLink.isNotEmpty) {
-      await _preferences.setString(
-        _prefConnLink,
+      await _sensitiveStorage.writeConnectionLink(
         _connLinkImportService.normalizeConnectionLink(connLink).primaryConnLink,
       );
     }
-    loggy.info("bind token preflight: device registered [device_id=$deviceId user_id=${userId ?? "-"}]");
+    loggy.info("bind token preflight: device registered [user_id=${userId ?? "-"}]");
     return userId;
   }
 
@@ -715,28 +731,18 @@ String _normalizeErrorCode(String raw) {
 String _dioDebug(DioException e) {
   final status = e.response?.statusCode;
   final type = e.type.name;
-  final data = e.response?.data;
-  String body = "";
-  if (data is String) {
-    body = data;
-  } else if (data != null) {
-    body = jsonEncode(data);
-  }
-  if (body.length > 300) {
-    body = "${body.substring(0, 300)}...";
-  }
-  return "[type=$type status=${status ?? "-"} body=${body.isEmpty ? "-" : body}]";
+  return "[type=$type status=${status ?? "-"}]";
 }
 
 String _maskLink(String link) {
   if (link.isEmpty) return "-";
   try {
     final uri = Uri.parse(link);
-    final host = uri.host;
-    final path = uri.path;
-    return "$host$path";
+    if (uri.host.isEmpty) return "<redacted>";
+    final port = uri.hasPort ? ":${uri.port}" : "";
+    return "${uri.scheme}://${uri.host}$port/…";
   } catch (_) {
-    return link.length > 80 ? "${link.substring(0, 80)}..." : link;
+    return "<redacted>";
   }
 }
 

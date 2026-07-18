@@ -2,6 +2,7 @@ import 'package:dartx/dartx.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zeon/core/http_client/mobile_api_proxy_route.dart';
 import 'package:zeon/core/model/optional_range.dart';
 import 'package:zeon/core/model/region.dart';
 import 'package:zeon/core/utils/exception_handler.dart';
@@ -483,13 +484,15 @@ class ConfigOptionRepository with ExceptionHandler, InfraLogger {
   final SingboxConfigOption Function() _getConfigOptions;
 
   Either<ConfigOptionFailure, SingboxConfigOption> fullOptions() =>
-      Either.tryCatch(() => _getConfigOptions(), ConfigOptionFailure.unexpected);
+      Either.tryCatch(() => MobileApiProxyRoute.enforce(_getConfigOptions()), ConfigOptionFailure.unexpected);
 
   Either<ConfigOptionFailure, SingboxConfigOption> fullOptionsOverrided(String? profileOverride) =>
       Either.tryCatch(() => _getConfigOptions(), ConfigOptionFailure.unexpected).flatMap(
         (options) => Either.tryCatch(() {
           final json = ProfileParser.applyProfileOverride(options.toJson(), profileOverride);
-          return SingboxConfigOption.fromJson(json);
+          // Apply this after the profile override. The control-plane route must
+          // remain first even if a profile replaces the normal routing list.
+          return MobileApiProxyRoute.enforce(SingboxConfigOption.fromJson(json));
         }, ConfigOptionFailure.unexpected),
       );
 }

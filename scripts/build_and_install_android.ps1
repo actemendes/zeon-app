@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet("release", "debug", "profile")]
-    [string]$BuildMode = "debug",
+    [string]$BuildMode = "release",
 
     [string]$BuildTarget = "lib/main_prod.dart",
 
@@ -241,6 +241,13 @@ try {
     Write-Host "Build mode: $BuildMode"
     Write-Host "Build target: $BuildTarget"
     Write-Host ""
+
+    if ($BuildMode -ne "release") {
+        Write-Warning (
+            "The $BuildMode APK is debuggable and its private app data can be read with adb run-as. " +
+            "Never distribute it or use it on a device containing production credentials."
+        )
+    }
 
     Write-Host "Running: dart run slang"
     & dart run slang

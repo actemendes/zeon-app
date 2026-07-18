@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zeon/core/security/secure_storage_mutex.dart';
 import 'package:zeon/features/profile/data/profile_path_resolver.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 
@@ -49,6 +50,7 @@ class ProfileConfigStore with InfraLogger {
   final SharedPreferences _preferences;
   final FlutterSecureStorage _secureStorage;
   final AesGcm _cipher = AesGcm.with256bits();
+  List<int>? _cachedKeyBytes;
 
   bool get _allowInsecureFallback => kDebugMode;
 
@@ -292,12 +294,15 @@ class ProfileConfigStore with InfraLogger {
   }
 
   Future<List<int>> _getOrCreateKeyBytes() async {
+    final cached = _cachedKeyBytes;
+    if (cached != null) return cached;
+
     final secure = await _tryReadSecureKey();
-    if (secure != null) return secure;
+    if (secure != null) return _cacheKey(secure);
 
     if (_allowInsecureFallback) {
       final fallback = _readFallbackKey();
-      if (fallback != null) return fallback;
+      if (fallback != null) return _cacheKey(fallback);
     } else if (_hasFallbackKey()) {
       throw ProfileConfigStoreException(
         'secure profile key storage is unavailable; refusing insecure SharedPreferences fallback',
@@ -305,51 +310,79 @@ class ProfileConfigStore with InfraLogger {
     }
 
     final generated = _randomBytes(_keyLength);
-    if (await _tryWriteSecureKey(generated)) return generated;
+    if (await _tryWriteSecureKey(generated)) return _cacheKey(generated);
 
     if (!_allowInsecureFallback) {
       throw ProfileConfigStoreException('secure profile key storage is unavailable; profile config was not saved');
     }
 
     await _writeFallbackKey(generated);
-    return generated;
+    return _cacheKey(generated);
   }
 
   Future<List<int>> _getExistingKeyBytes() async {
+    final cached = _cachedKeyBytes;
+    if (cached != null) return cached;
+
     final secure = await _tryReadSecureKey();
-    if (secure != null) return secure;
+    if (secure != null) return _cacheKey(secure);
 
     if (_allowInsecureFallback) {
       final fallback = _readFallbackKey();
-      if (fallback != null) return fallback;
+      if (fallback != null) return _cacheKey(fallback);
     }
 
     throw ProfileConfigStoreException('secure profile key storage is unavailable; profile config was not decrypted');
   }
 
   Future<List<int>?> _tryReadSecureKey() async {
-    try {
-      final encoded = (await _secureStorage.read(key: _secureKeyName))?.trim();
-      if (encoded == null || encoded.isEmpty) return null;
-      final key = base64Decode(encoded);
-      return key.length == _keyLength ? key : null;
-    } catch (error, stackTrace) {
-      loggy.warning(
-        _allowInsecureFallback
-            ? 'secure profile key storage is unavailable; trying insecure debug fallback'
-            : 'secure profile key storage is unavailable; insecure fallback is disabled',
-        error,
-        stackTrace,
-      );
-      return null;
+    Object? lastError;
+    StackTrace? lastStackTrace;
+
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        final encoded = (await SecureStorageMutex.protect(() => _secureStorage.read(key: _secureKeyName)))?.trim();
+        if (encoded == null || encoded.isEmpty) return null;
+        final key = base64Decode(encoded);
+        if (key.length != _keyLength) {
+          throw ProfileConfigStoreException('secure profile key has an invalid length');
+        }
+        return key;
+      } catch (error, stackTrace) {
+        lastError = error;
+        lastStackTrace = stackTrace;
+        if (attempt < 3) {
+          await Future<void>.delayed(Duration(milliseconds: 50 * (attempt + 1)));
+        }
+      }
     }
+
+    loggy.warning(
+      _allowInsecureFallback
+          ? 'secure profile key storage is unavailable; trying insecure debug fallback'
+          : 'secure profile key storage is unavailable; insecure fallback is disabled',
+      lastError,
+      lastStackTrace,
+    );
+    if (!_allowInsecureFallback) {
+      throw ProfileConfigStoreException('secure profile key storage is unavailable', lastError);
+    }
+    return null;
+  }
+
+  List<int> _cacheKey(List<int> key) {
+    final cached = List<int>.unmodifiable(key);
+    _cachedKeyBytes = cached;
+    return cached;
   }
 
   Future<bool> _tryWriteSecureKey(List<int> keyBytes) async {
     try {
       final encoded = base64Encode(keyBytes);
-      await _secureStorage.write(key: _secureKeyName, value: encoded);
-      final verified = await _secureStorage.read(key: _secureKeyName);
+      final verified = await SecureStorageMutex.protect(() async {
+        await _secureStorage.write(key: _secureKeyName, value: encoded);
+        return _secureStorage.read(key: _secureKeyName);
+      });
       if (verified == encoded) {
         await _preferences.remove(_fallbackMarkerName);
         return true;

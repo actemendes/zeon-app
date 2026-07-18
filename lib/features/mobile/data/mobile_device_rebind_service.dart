@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
@@ -8,8 +10,6 @@ import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/mobile/data/stable_device_id_service.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 final mobileDeviceRebindServiceProvider = Provider<MobileDeviceRebindService>((ref) {
   final preferences = ref.read(sharedPreferencesProvider).requireValue;
@@ -52,7 +52,7 @@ class MobileDeviceRebindService with InfraLogger {
 
     final connLink = importResult.connLink.trim();
     if (connLink.isEmpty || Uri.tryParse(connLink) == null) {
-      loggy.warning("manual rebind skipped: invalid conn_link [conn_link=$connLink]");
+      loggy.warning("manual rebind skipped: invalid conn_link");
       return false;
     }
 
@@ -66,7 +66,7 @@ class MobileDeviceRebindService with InfraLogger {
 
       await _preferences.setBool(prefManualRebindDone, true);
       await _preferences.setString(prefManualRebindUserId, ownerUserId.toString());
-      await _preferences.setString(prefManualRebindConnLink, connLink);
+      await _preferences.remove(prefManualRebindConnLink);
 
       loggy.info(
         "manual rebind synced [owner_user_id=$ownerUserId, conn_link=${_maskLink(connLink)}, source=manual_import]",
@@ -148,9 +148,11 @@ String _maskLink(String link) {
   if (link.isEmpty) return "-";
   try {
     final uri = Uri.parse(link);
-    return "${uri.host}${uri.path}";
+    if (uri.host.isEmpty) return "<redacted>";
+    final port = uri.hasPort ? ":${uri.port}" : "";
+    return "${uri.scheme}://${uri.host}$port/…";
   } catch (_) {
-    return link.length > 80 ? "${link.substring(0, 80)}..." : link;
+    return "<redacted>";
   }
 }
 

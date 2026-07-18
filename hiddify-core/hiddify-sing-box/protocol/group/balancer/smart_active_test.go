@@ -379,6 +379,22 @@ func TestSmartActiveLateOldGenerationResultDoesNotSwitch(t *testing.T) {
 	}
 }
 
+func TestSmartActivePartialNewGenerationDoesNotInvalidateReadyCohort(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := failedHistory(urltest.ErrorTypeTimeout)
+	active.CheckGeneration = 2
+	candidate := currentGenerationHealthyHistory(1, 40)
+	history := histories(active, candidate)
+
+	if generation := strategy.currentGeneration(history); generation != 1 {
+		t.Fatalf("selected generation=%d, want ready cohort generation=1", generation)
+	}
+	if !strategy.UpdateOutboundsInfo(history) {
+		t.Fatal("expected fresh healthy cohort to replace failed partial-generation active")
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+}
+
 func TestSmartActiveGoodKeepsCurrentWhenRealUserHealthIsBetter(t *testing.T) {
 	strategy := newSmartActiveForTest()
 	active := healthyHistory(300)

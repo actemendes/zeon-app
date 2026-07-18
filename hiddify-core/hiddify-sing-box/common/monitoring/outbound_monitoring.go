@@ -644,14 +644,14 @@ func (m *OutboundMonitoring) prepareManualRefreshTarget(tag string, cycleID uint
 		return false
 	default:
 	}
-	if cycleID != atomic.LoadUint64(&m.cycleSeq) {
-		m.logger.Warn("[OutboundCheckIgnored] tag=", tag, " result_generation=", cycleID, " current_generation=", atomic.LoadUint64(&m.cycleSeq), " stage=prepare reason=stale_generation")
-		return false
-	}
 	state := m.getState(tag)
 	if state == nil {
 		return false
 	}
+	// cycleSeq is only an allocator. Partial refreshes intentionally advance it
+	// for a subset of outbounds while an older full-list cycle is still active.
+	// Freshness must therefore be checked against this outbound's generation,
+	// not against the latest globally allocated number.
 	state.mu.Lock()
 	if state.history.CheckGeneration != cycleID {
 		currentGeneration := state.history.CheckGeneration
@@ -909,7 +909,7 @@ func (m *OutboundMonitoring) ConsumeRecentManualRefresh(groupTag string) bool {
 }
 
 func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
-	return m.testNowWithGeneration(outboundTag, m.cycleSeq, priority)
+	return m.testNowWithGeneration(outboundTag, atomic.LoadUint64(&m.cycleSeq), priority)
 }
 
 func (m *OutboundMonitoring) testNowWithGeneration(outboundTag string, generation uint64, priority bool) error {
@@ -964,7 +964,7 @@ func (m *OutboundMonitoring) InvalidateTest(outboundTag string) error {
 
 	m.enqueueTask(&testTask{
 		outboundTag: outboundTag,
-		cycleID:     m.cycleSeq,
+		cycleID:     atomic.LoadUint64(&m.cycleSeq),
 		priority:    true,
 	})
 
@@ -1569,33 +1569,36 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 		m.finishTaskWithError(task, errors.New("outbound is not ready"))
 		return
 	}
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		delay, err := m.tester(m.ctx, task.outboundTag)
-
-		outcome := testOutcome{
-			outboundTag: task.outboundTag,
-			history:     delay,
-			err:         err,
-			cycleID:     task.cycleID,
-			priority:    task.priority,
-		}
-
-		m.applyResult(outcome)
-		if task.resultCh != nil {
-			select {
-			case task.resultCh <- outcome:
-			case <-m.ctx.Done():
-			default:
-			}
-
-		}
-	}()
-	select {
-	case <-m.ctx.Done():
+	// Some protocol dialers do not reliably return when their context expires.
+	// Without a hard boundary, enough such outbounds can occupy every worker and
+	// leave the rest of the server list in the checking state forever.
+	targetTimeout := m.urlTestTimeout
+	if targetTimeout <= 0 {
+		targetTimeout = defaultURLTestTimeout
+	}
+	history, err, timedOut := runURLTestWithHardTimeout(m.ctx, targetTimeout, func(ctx context.Context) (adapter.URLTestHistory, error) {
+		return m.tester(ctx, task.outboundTag)
+	})
+	if timedOut {
+		m.logger.Warn("[OutboundCheckStage] tag=", task.outboundTag, " generation=", task.cycleID, " stage=ping state=timeout duration=", targetTimeout)
+		m.finishTaskWithError(task, err)
 		return
-	case <-done:
+	}
+
+	outcome := testOutcome{
+		outboundTag: task.outboundTag,
+		history:     history,
+		err:         err,
+		cycleID:     task.cycleID,
+		priority:    task.priority,
+	}
+	m.applyResult(outcome)
+	if task.resultCh != nil {
+		select {
+		case task.resultCh <- outcome:
+		case <-m.ctx.Done():
+		default:
+		}
 	}
 
 }
@@ -1792,15 +1795,13 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 		return false
 	default:
 	}
-	currentGeneration := atomic.LoadUint64(&m.cycleSeq)
-	if task.cycleID != currentGeneration {
-		m.logger.Warn("[OutboundCheckIgnored] tag=", task.outboundTag, " result_generation=", task.cycleID, " current_generation=", currentGeneration, " stage=enqueue reason=stale_generation")
-		return false
-	}
 	state, ok := m.outbounds[task.outboundTag]
 	if !ok {
 		return false
 	}
+	// A newer generation for another outbound must not cancel this task. The
+	// per-outbound check below still prevents an old task from overwriting a
+	// newer result for the same server.
 	state.mu.Lock()
 	if state.history.CheckGeneration > 0 && state.history.CheckGeneration != task.cycleID {
 		currentGeneration := state.history.CheckGeneration

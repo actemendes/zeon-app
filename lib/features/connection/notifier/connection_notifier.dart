@@ -19,6 +19,8 @@ import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/diagnostics/data/diagnostics_providers.dart';
 import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/profile/data/profile_data_mapper.dart';
+import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/utils/utils.dart';
@@ -46,6 +48,8 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
   int _mockConnectAttempts = 0;
   Future<void>? _embeddedPromotionInFlight;
+  bool _embeddedPromotionControlsReconnect = false;
+  String? _connectedProfileId;
   ConnectionStatus? _lastObservedConnectionStatus;
   bool _connectionWasUp = false;
   bool _vpnExpectedRunning = false;
@@ -87,11 +91,15 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     });
 
     ref.listen(activeProfileProvider.select((value) => value.asData?.value), (previous, next) async {
-      if (previous == null) return;
-      final shouldReconnect = next == null || previous.id != next.id;
-      if (shouldReconnect) {
-        await reconnect(next);
+      if (_embeddedPromotionControlsReconnect) return;
+      if (!shouldReconnectForActiveProfileChange(
+        connected: _isConnected,
+        connectedProfileId: _connectedProfileId,
+        nextProfileId: next?.id,
+      )) {
+        return;
       }
+      await reconnect(next);
     });
     if (_useMockConnectionFlow) {
       yield const Disconnected();
@@ -196,6 +204,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   Future<void> reconnect(ProfileEntity? profile) async {
     if (state case AsyncData(:final value) when value == const Connected()) {
       if (profile == null) {
+        _connectedProfileId = null;
         loggy.info("no active profile, disconnecting");
         _markUserAction('no_active_profile_disconnect', expectsStop: true);
         return _disconnect();
@@ -207,7 +216,10 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       loggy.info("active profile changed, reconnecting");
       _markUserAction('profile_reconnect', expectsStop: true);
       await ref.read(Preferences.startedByUser.notifier).update(true);
+      final previousProfileId = _connectedProfileId;
+      _connectedProfileId = profile.id;
       await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit)).mapLeft((err) async {
+        _connectedProfileId = previousProfileId;
         loggy.warning("error reconnecting", err);
         unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(err, StackTrace.current));
         state = AsyncError(err, StackTrace.current);
@@ -279,6 +291,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     try {
       final service = ref.read(mobileBootstrapImportServiceProvider);
       if (!await service.hasActiveEmbeddedProfile()) return;
+      final embeddedProfileId = ref.read(activeProfileProvider).valueOrNull?.id;
       loggy.info("mobile embedded bootstrap promotion scheduled after CONNECTED");
       await Future<void>.delayed(const Duration(milliseconds: 300));
 
@@ -304,36 +317,57 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
           continue;
         }
 
-        final imported = await service
-            .run(skipIfAlreadyDone: false, mode: MobileConnLinkImportMode.postConnection)
-            .timeout(const Duration(seconds: 20), onTimeout: () => false);
-        if (!imported) {
+        _embeddedPromotionControlsReconnect = true;
+        try {
+          final imported = await service
+              .run(skipIfAlreadyDone: false, mode: MobileConnLinkImportMode.postConnection)
+              .timeout(const Duration(seconds: 20), onTimeout: () => false);
+          if (!imported) {
+            reachableImportFailures++;
+            loggy.warning("mobile embedded bootstrap promotion import failed [attempt=$attemptNo]");
+            if (reachableImportFailures >= _embeddedPromotionMaxReachableImportFailures) {
+              await _disconnectTemporaryEmbeddedProfileAfterReachableBackend();
+              return;
+            }
+            continue;
+          }
+
+          final promotedProfile = await _waitForPromotedProfile(embeddedProfileId);
+          if (promotedProfile != null && !await service.hasActiveEmbeddedProfile()) {
+            await reconnect(promotedProfile);
+            loggy.info("mobile embedded bootstrap profile promoted to device profile");
+            return;
+          }
           reachableImportFailures++;
-          loggy.warning("mobile embedded bootstrap promotion import failed [attempt=$attemptNo]");
+          loggy.warning(
+            "mobile embedded bootstrap promotion import did not switch active profile [attempt=$attemptNo]",
+          );
           if (reachableImportFailures >= _embeddedPromotionMaxReachableImportFailures) {
             await _disconnectTemporaryEmbeddedProfileAfterReachableBackend();
             return;
           }
-          continue;
-        }
-
-        for (var wait = 0; wait < 10; wait++) {
-          if (!await service.hasActiveEmbeddedProfile()) {
-            loggy.info("mobile embedded bootstrap profile promoted to device profile");
-            return;
-          }
-          await Future<void>.delayed(const Duration(milliseconds: 500));
-        }
-        reachableImportFailures++;
-        loggy.warning("mobile embedded bootstrap promotion import did not switch active profile [attempt=$attemptNo]");
-        if (reachableImportFailures >= _embeddedPromotionMaxReachableImportFailures) {
-          await _disconnectTemporaryEmbeddedProfileAfterReachableBackend();
-          return;
+        } finally {
+          _embeddedPromotionControlsReconnect = false;
         }
       }
     } catch (e, st) {
       loggy.warning("mobile embedded bootstrap promotion failed", e, st);
     }
+  }
+
+  Future<ProfileEntity?> _waitForPromotedProfile(String? embeddedProfileId) async {
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final active = await ref
+          .read(profileDataSourceProvider)
+          .watchActiveProfile()
+          .first
+          .timeout(const Duration(milliseconds: 500), onTimeout: () => null);
+      if (active != null && active.id != embeddedProfileId) {
+        return active.toEntity();
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    return null;
   }
 
   Future<void> _disconnectTemporaryEmbeddedProfileAfterReachableBackend() async {
@@ -385,9 +419,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       loggy.info("no active profile, not connecting");
       return;
     }
+    _connectedProfileId = activeProfile.id;
     await _connectionRepo.connect(activeProfile, ref.read(Preferences.disableMemoryLimit)).mapLeft((
       ConnectionFailure err,
     ) async {
+      _connectedProfileId = null;
       loggy.warning("error connecting", err);
       unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(err, StackTrace.current));
       final t = ref.read(translationsProvider).requireValue;
@@ -494,6 +530,15 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
     return true;
   }
+}
+
+@visibleForTesting
+bool shouldReconnectForActiveProfileChange({
+  required bool connected,
+  required String? connectedProfileId,
+  required String? nextProfileId,
+}) {
+  return connected && connectedProfileId != nextProfileId;
 }
 
 @Riverpod(keepAlive: true)

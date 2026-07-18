@@ -34,6 +34,22 @@ void main() {
     });
   });
 
+  test('redacts standalone credentials and legacy preference logs', () {
+    const redactor = ErrorReportRedactor();
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature_value';
+    const apiKey = 'mob_aabbccddeeff001122334455';
+    const input =
+        'jwt=$jwt api_key: "$apiKey"\n'
+        'updating preference [warp-access-token](String) to [cloudflare-secret]';
+
+    final redacted = redactor.redactText(input);
+
+    expect(redacted, isNot(contains(jwt)));
+    expect(redacted, isNot(contains(apiKey)));
+    expect(redacted, isNot(contains('cloudflare-secret')));
+    expect(redacted, contains('<redacted>'));
+  });
+
   test('preserves app version metadata even when it looks like an address', () {
     const redactor = ErrorReportRedactor();
 

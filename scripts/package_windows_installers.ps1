@@ -7,9 +7,21 @@ param(
 
     [string]$SentryDsn = "",
 
-    [string]$CertificatePassword = "zeon-local",
+    [string]$CertificatePassword = $env:ZEON_MSIX_CERTIFICATE_PASSWORD,
 
     [switch]$UseExistingCertificateOnly,
+
+    [switch]$AllowDevelopmentMsixCertificate,
+
+    [string]$CodeSigningCertificatePath = $env:ZEON_WINDOWS_SIGNING_PFX,
+
+    [string]$CodeSigningCertificatePassword = $env:ZEON_WINDOWS_SIGNING_PASSWORD,
+
+    [string]$CodeSigningCertificateThumbprint = $env:ZEON_WINDOWS_SIGNING_THUMBPRINT,
+
+    [string]$CodeSigningTimestampUrl = "http://timestamp.digicert.com",
+
+    [switch]$AllowUnsignedExe,
 
     [switch]$NoIsolatedWorkspace,
 
@@ -30,6 +42,103 @@ function Assert-Command {
 
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
         throw "Required command '$Name' was not found in PATH."
+    }
+}
+
+function Resolve-SignToolPath {
+    $command = Get-Command "signtool.exe" -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    $kitsRoot = ${env:ProgramFiles(x86)}
+    if ($kitsRoot) {
+        $sdkBin = Join-Path $kitsRoot "Windows Kits\10\bin"
+        if (Test-Path -LiteralPath $sdkBin) {
+            $candidate = Get-ChildItem -LiteralPath $sdkBin -Directory |
+                Sort-Object Name -Descending |
+                ForEach-Object { Join-Path $_.FullName "x64\signtool.exe" } |
+                Where-Object { Test-Path -LiteralPath $_ } |
+                Select-Object -First 1
+            if ($candidate) {
+                return $candidate
+            }
+        }
+    }
+
+    throw "signtool.exe was not found. Install the Windows SDK signing tools."
+}
+
+function Invoke-AuthenticodeSigning {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$SignToolPath,
+        [string]$CertificatePath,
+        [string]$CertificatePassword,
+        [string]$CertificateThumbprint,
+        [string]$TimestampUrl
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Signing target was not found: $Path"
+    }
+
+    $args = @("sign", "/fd", "SHA256")
+    if ($CertificateThumbprint) {
+        $args += @("/sha1", $CertificateThumbprint)
+    }
+    else {
+        if (-not $CertificatePath -or -not (Test-Path -LiteralPath $CertificatePath)) {
+            throw "Code-signing PFX was not found: $CertificatePath"
+        }
+        $args += @("/f", $CertificatePath)
+        if ($CertificatePassword) {
+            $args += @("/p", $CertificatePassword)
+        }
+    }
+    if ($TimestampUrl) {
+        $args += @("/tr", $TimestampUrl, "/td", "SHA256")
+    }
+    $args += $Path
+
+    Write-Host "Authenticode signing: $Path"
+    & $SignToolPath @args
+    if ($LASTEXITCODE -ne 0) {
+        throw "Authenticode signing failed: $Path"
+    }
+    & $SignToolPath verify /pa /q $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "Authenticode verification failed: $Path"
+    }
+}
+
+function Protect-WindowsReleasePayload {
+    param(
+        [Parameter(Mandatory = $true)][string]$ReleaseDir,
+        [Parameter(Mandatory = $true)][string]$SignToolPath,
+        [string]$CertificatePath,
+        [string]$CertificatePassword,
+        [string]$CertificateThumbprint,
+        [string]$TimestampUrl
+    )
+
+    $binaries = Get-ChildItem -LiteralPath $ReleaseDir -Recurse -File |
+        Where-Object { $_.Extension -in @(".exe", ".dll") }
+    foreach ($binary in $binaries) {
+        $signature = Get-AuthenticodeSignature -LiteralPath $binary.FullName
+        if ($signature.Status -eq "Valid") {
+            continue
+        }
+        if ($signature.Status -ne "NotSigned") {
+            throw "Refusing to package binary with invalid signature ($($signature.Status)): $($binary.FullName)"
+        }
+        Invoke-AuthenticodeSigning `
+            -Path $binary.FullName `
+            -SignToolPath $SignToolPath `
+            -CertificatePath $CertificatePath `
+            -CertificatePassword $CertificatePassword `
+            -CertificateThumbprint $CertificateThumbprint `
+            -TimestampUrl $TimestampUrl
     }
 }
 
@@ -462,8 +571,9 @@ function Get-YamlScalar {
 function Ensure-MsixCertificate {
     param(
         [Parameter(Mandatory = $true)][string]$WorkingRoot,
-        [Parameter(Mandatory = $true)][string]$Password,
-        [switch]$UseExistingOnly
+        [string]$Password,
+        [switch]$UseExistingOnly,
+        [switch]$AllowDevelopmentCertificate
     )
 
     $configPath = Join-Path $WorkingRoot "windows\packaging\msix\make_config.yaml"
@@ -478,8 +588,12 @@ function Ensure-MsixCertificate {
 
     $certPath = Join-Path $WorkingRoot $certRelative
     if (-not (Test-Path -LiteralPath $certPath)) {
-        if ($UseExistingOnly) {
-            throw "MSIX certificate was not found: $certPath"
+        if ($UseExistingOnly -or -not $AllowDevelopmentCertificate) {
+            throw "MSIX certificate was not found: $certPath. Provide the production certificate, or use -AllowDevelopmentMsixCertificate only for local testing."
+        }
+
+        if (-not $Password) {
+            throw "A non-empty MSIX certificate password is required for development certificate generation."
         }
 
         $publisher = Get-YamlScalar -Path $configPath -Key "publisher"
@@ -505,7 +619,12 @@ function Ensure-MsixCertificate {
         Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $securePassword | Out-Null
     }
 
+    if (-not $Password) {
+        throw "The MSIX certificate password is required. Prefer ZEON_MSIX_CERTIFICATE_PASSWORD over a command-line argument."
+    }
+
     Set-YamlScalar -Path $configPath -Key "certificate_password" -Value $Password -QuoteValue
+    return $configPath
 }
 
 function Patch-FlutterSecureStorageWindowsPlugin {
@@ -815,6 +934,8 @@ $repoRoot = Split-Path -Parent $scriptDir
 $workingRoot = $repoRoot
 $junctionPath = $null
 $isolatedWorkspace = $null
+$signToolPath = $null
+$msixConfigWithPassword = $null
 $startedAt = Get-Date
 
 Push-Location $repoRoot
@@ -834,6 +955,20 @@ try {
     }
 
     $targets = if ($Target -eq "all") { @("exe", "msix") } else { @($Target) }
+    if ($targets -contains "exe") {
+        if ($CodeSigningCertificatePath -and $CodeSigningCertificateThumbprint) {
+            throw "Specify either a code-signing PFX path or a certificate thumbprint, not both."
+        }
+        if (-not $AllowUnsignedExe -and -not $CodeSigningCertificatePath -and -not $CodeSigningCertificateThumbprint) {
+            throw "Release EXE packaging requires Authenticode signing. Set ZEON_WINDOWS_SIGNING_PFX (and ZEON_WINDOWS_SIGNING_PASSWORD) or ZEON_WINDOWS_SIGNING_THUMBPRINT. Use -AllowUnsignedExe only for local testing."
+        }
+        if (-not $AllowUnsignedExe) {
+            if ($CodeSigningCertificatePath -and -not [System.IO.Path]::IsPathRooted($CodeSigningCertificatePath)) {
+                $CodeSigningCertificatePath = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $CodeSigningCertificatePath))
+            }
+            $signToolPath = Resolve-SignToolPath
+        }
+    }
     if (($targets -contains "msix") -and ($workingRoot -ne $repoRoot)) {
         # Keep repository config aligned even when packaging in isolated workspace.
         Sync-MsixVersionWithPubspec -WorkingRoot $repoRoot
@@ -873,7 +1008,11 @@ try {
         if ($targets -contains "msix") {
             Sync-MsixVersionWithPubspec -WorkingRoot $workingRoot
             Ensure-Fastforge
-            Ensure-MsixCertificate -WorkingRoot $workingRoot -Password $CertificatePassword -UseExistingOnly:$UseExistingCertificateOnly
+            $msixConfigWithPassword = Ensure-MsixCertificate `
+                -WorkingRoot $workingRoot `
+                -Password $CertificatePassword `
+                -UseExistingOnly:$UseExistingCertificateOnly `
+                -AllowDevelopmentCertificate:$AllowDevelopmentMsixCertificate
         }
 
         foreach ($t in $targets) {
@@ -881,11 +1020,33 @@ try {
 
             if ($t -eq "exe") {
                 Build-WindowsRelease -BuildTarget $BuildTarget -SentryDsn $SentryDsn
+                $releaseDir = Join-Path $workingRoot "build\windows\x64\runner\Release"
+                if ($AllowUnsignedExe) {
+                    Write-Warning "Building an unsigned EXE payload. Do not distribute this local-test artifact."
+                }
+                else {
+                    Protect-WindowsReleasePayload `
+                        -ReleaseDir $releaseDir `
+                        -SignToolPath $signToolPath `
+                        -CertificatePath $CodeSigningCertificatePath `
+                        -CertificatePassword $CodeSigningCertificatePassword `
+                        -CertificateThumbprint $CodeSigningCertificateThumbprint `
+                        -TimestampUrl $CodeSigningTimestampUrl
+                }
                 Build-ExeInstaller -WorkingRoot $workingRoot -IsccPath $isccPath
 
                 $checkExe = Resolve-LatestArtifact -RootDir (Join-Path $workingRoot "dist") -Extension "exe" -NotOlderThan $targetStartedAt -NamePattern "ZEON-Windows-Setup-x64|setup|installer|windows"
                 if (-not $checkExe) {
                     throw "Installer .exe was not produced for target '$t'."
+                }
+                if (-not $AllowUnsignedExe) {
+                    Invoke-AuthenticodeSigning `
+                        -Path $checkExe.FullName `
+                        -SignToolPath $signToolPath `
+                        -CertificatePath $CodeSigningCertificatePath `
+                        -CertificatePassword $CodeSigningCertificatePassword `
+                        -CertificateThumbprint $CodeSigningCertificateThumbprint `
+                        -TimestampUrl $CodeSigningTimestampUrl
                 }
                 continue
             }
@@ -947,6 +1108,9 @@ try {
         }
     }
     finally {
+        if ($msixConfigWithPassword -and (Test-Path -LiteralPath $msixConfigWithPassword)) {
+            Set-YamlScalar -Path $msixConfigWithPassword -Key "certificate_password" -Value "" -QuoteValue
+        }
         Pop-Location
     }
 

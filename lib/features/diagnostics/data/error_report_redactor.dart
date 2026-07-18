@@ -1,24 +1,16 @@
 import 'dart:convert';
 
+import 'package:zeon/core/security/sensitive_text_redactor.dart';
+
 class ErrorReportRedactor {
   const ErrorReportRedactor();
 
-  static const _redacted = '<redacted>';
-  static const _maxStringLength = 12000;
+  static const _textRedactor = SensitiveTextRedactor();
 
   static final _sensitiveKeyPattern = RegExp(
-    '(authorization|password|passwd|secret|token|access[_-]?token|refresh[_-]?token|private[_-]?key|public[_-]?key|short[_-]?id|uuid)',
+    '(authorization|password|passwd|secret|token|access[_-]?token|refresh[_-]?token|private[_-]?key|public[_-]?key|short[_-]?id|uuid|device[_-]?id|conn(?:ection)?[_-]?link|url|uri)',
     caseSensitive: false,
   );
-
-  static final _textPatterns = <RegExp>[
-    RegExp(r'\b(vless|vmess|trojan|ss|hysteria2?)://\S+', caseSensitive: false),
-    RegExp(r'\bBearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false),
-    RegExp(r'\bBasic\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false),
-    RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}:\d{2,5}\b'),
-    RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}\b'),
-    RegExp(r'\b(public_key|short_id|uuid|password|token|access_token|secret)=([^&\s]+)', caseSensitive: false),
-  ];
 
   Object? redactJson(Object? value) => _redactJson(value, const []);
 
@@ -36,7 +28,7 @@ class ErrorReportRedactor {
           return MapEntry(safeKey, _sanitizeMetadataValue(entryValue));
         }
         if (_sensitiveKeyPattern.hasMatch(safeKey)) {
-          return MapEntry(safeKey, _redacted);
+          return MapEntry(safeKey, SensitiveTextRedactor.redacted);
         }
         return MapEntry(safeKey, _redactJson(entryValue, entryPath));
       });
@@ -54,7 +46,9 @@ class ErrorReportRedactor {
   }
 
   Object? _sanitizeMetadataValue(Object? value) {
-    if (value is String) return truncate(value.replaceAll('\u0000', '[NUL]'), _maxStringLength);
+    if (value is String) {
+      return _textRedactor.truncate(value.replaceAll('\u0000', '[NUL]'), SensitiveTextRedactor.defaultMaxLength);
+    }
     return value;
   }
 
@@ -65,22 +59,10 @@ class ErrorReportRedactor {
     return <String, dynamic>{};
   }
 
-  String redactText(String input, {int maxLength = _maxStringLength}) {
-    var safe = input.replaceAll('\u0000', '[NUL]');
-    for (final pattern in _textPatterns) {
-      if (pattern.pattern.contains('(public_key|short_id')) {
-        safe = safe.replaceAllMapped(pattern, (match) => '${match.group(1)}=$_redacted');
-      } else {
-        safe = safe.replaceAll(pattern, _redacted);
-      }
-    }
-    return truncate(safe, maxLength);
-  }
+  String redactText(String input, {int maxLength = SensitiveTextRedactor.defaultMaxLength}) =>
+      _textRedactor.redact(input, maxLength: maxLength);
 
-  String truncate(String input, int maxLength) {
-    if (input.length <= maxLength) return input;
-    return '${input.substring(0, maxLength)}...<truncated ${input.length - maxLength} chars>';
-  }
+  String truncate(String input, int maxLength) => _textRedactor.truncate(input, maxLength);
 
   String encodeJson(Object? value) {
     return jsonEncode(redactJson(value));

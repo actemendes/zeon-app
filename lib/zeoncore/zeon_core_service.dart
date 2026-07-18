@@ -44,9 +44,9 @@ class ZeonCoreService with InfraLogger {
   static const _debugFragmentMode = String.fromEnvironment("debug_fragment_mode");
   static const _debugProfileDnsStrategy = String.fromEnvironment("debug_profile_dns_strategy");
   static const _debugTunImplementation = String.fromEnvironment("debug_tun_implementation");
-  static const _debugUdpProbeEnabled = bool.fromEnvironment("debug_udp_probe_enabled");
+  static const _debugUdpProbeEnabled = kDebugMode && bool.fromEnvironment("debug_udp_probe_enabled");
   static const _debugUdpProbeEndpoint = String.fromEnvironment("debug_udp_probe_endpoint");
-  static const _debugUdpProbeSecret = String.fromEnvironment("debug_udp_probe_secret");
+  static const _debugUdpProbeSecret = kDebugMode ? String.fromEnvironment("debug_udp_probe_secret") : "";
   static const _debugUdpProbeCount = int.fromEnvironment("debug_udp_probe_count", defaultValue: 10);
   static const _debugUdpProbeSize = int.fromEnvironment("debug_udp_probe_size", defaultValue: 160);
   static const _debugUdpProbeIntervalMs = int.fromEnvironment("debug_udp_probe_interval_ms", defaultValue: 40);

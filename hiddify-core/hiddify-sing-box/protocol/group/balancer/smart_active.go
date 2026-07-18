@@ -657,14 +657,37 @@ type smartCandidateStatus struct {
 }
 
 func (s *SmartActive) currentGeneration(history map[string]*adapter.URLTestHistory) uint64 {
-	var generation uint64
+	readyByGeneration := make(map[uint64]int)
+	observedByGeneration := make(map[uint64]int)
 	for _, outbound := range s.outbounds {
 		h := history[outbound.Tag()]
-		if h != nil && h.CheckGeneration > generation && !h.Time.IsZero() && !h.Time.Before(s.startedAt) && !h.IsFromCache {
-			generation = h.CheckGeneration
+		if h == nil || h.CheckGeneration == 0 || h.Time.IsZero() || h.Time.Before(s.startedAt) || h.IsFromCache {
+			continue
+		}
+		observedByGeneration[h.CheckGeneration]++
+		if h.Success &&
+			(h.ErrorType == "" || h.ErrorType == urltest.ErrorTypeNone) &&
+			(h.URLTestStatus == "" || h.URLTestStatus == urltest.StatusSuccess) &&
+			h.CombinedReady {
+			readyByGeneration[h.CheckGeneration]++
 		}
 	}
-	return generation
+	if generation := largestGenerationCohort(readyByGeneration); generation != 0 {
+		return generation
+	}
+	return largestGenerationCohort(observedByGeneration)
+}
+
+func largestGenerationCohort(counts map[uint64]int) uint64 {
+	var selected uint64
+	selectedCount := 0
+	for generation, count := range counts {
+		if count > selectedCount || (count == selectedCount && generation > selected) {
+			selected = generation
+			selectedCount = count
+		}
+	}
+	return selected
 }
 
 func (s *SmartActive) hasOutbound(tag string) bool {

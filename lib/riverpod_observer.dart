@@ -1,16 +1,17 @@
 import 'dart:developer';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class RiverpodObserver extends ProviderObserver {
   @override
   void didAddProvider(ProviderBase<Object?> provider, Object? value, ProviderContainer container) {
-    log('didAddProvider : ${provider.name ?? provider.runtimeType} : $value');
+    if (kDebugMode) log('didAddProvider : ${provider.name ?? provider.runtimeType}');
   }
 
   @override
   void didDisposeProvider(ProviderBase<Object?> provider, ProviderContainer container) {
-    log('didDisposeProvider : ${provider.name ?? provider.runtimeType}');
+    if (kDebugMode) log('didDisposeProvider : ${provider.name ?? provider.runtimeType}');
   }
 
   @override
@@ -20,6 +21,6 @@ class RiverpodObserver extends ProviderObserver {
     Object? newValue,
     ProviderContainer container,
   ) {
-    log('didUpdateProvider : ${provider.name ?? provider.runtimeType} : $previousValue -> $newValue');
+    if (kDebugMode) log('didUpdateProvider : ${provider.name ?? provider.runtimeType}');
   }
 }

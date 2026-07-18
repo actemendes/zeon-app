@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:dio_smart_retry/dio_smart_retry.dart';
 
+import 'package:zeon/core/http_client/mobile_api_proxy_route.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 
 class DioHttpClient with InfraLogger {
@@ -83,6 +84,18 @@ class DioHttpClient with InfraLogger {
     loggy.debug("setting proxy port: [$port]");
   }
 
+  /// Creates a fail-closed client for control-plane WebSocket connections.
+  /// The returned client has no DIRECT fallback.
+  HttpClient createRequiredProxyHttpClient() {
+    final proxyPort = port;
+    if (proxyPort <= 0) {
+      throw const VpnProxyUnavailableException();
+    }
+    final client = HttpClient();
+    client.findProxy = (_) => "PROXY 127.0.0.1:$proxyPort";
+    return client;
+  }
+
   Future<Response<T>> get<T>(
     String url, {
     CancelToken? cancelToken,
@@ -93,7 +106,7 @@ class DioHttpClient with InfraLogger {
     bool directOnly = false,
     bool disableRetry = false,
   }) async {
-    final mode = await _resolveMode(directOnly: directOnly, proxyOnly: proxyOnly);
+    final mode = await _resolveMode(url: url, directOnly: directOnly, proxyOnly: proxyOnly);
     final dio = _dio[mode]!;
 
     return dio.get<T>(
@@ -120,7 +133,7 @@ class DioHttpClient with InfraLogger {
     bool directOnly = false,
     bool disableRetry = false,
   }) async {
-    final mode = await _resolveMode(directOnly: directOnly, proxyOnly: proxyOnly);
+    final mode = await _resolveMode(url: url, directOnly: directOnly, proxyOnly: proxyOnly);
     final dio = _dio[mode]!;
 
     return dio.post<T>(
@@ -148,7 +161,7 @@ class DioHttpClient with InfraLogger {
     bool directOnly = false,
     bool disableRetry = false,
   }) async {
-    final mode = await _resolveMode(directOnly: directOnly, proxyOnly: proxyOnly);
+    final mode = await _resolveMode(url: url, directOnly: directOnly, proxyOnly: proxyOnly);
     final dio = _dio[mode]!;
     return dio.download(
       url,
@@ -164,7 +177,15 @@ class DioHttpClient with InfraLogger {
     );
   }
 
-  Future<String> _resolveMode({required bool directOnly, required bool proxyOnly}) async {
+  Future<String> _resolveMode({required String url, required bool directOnly, required bool proxyOnly}) async {
+    if (MobileApiProxyRoute.requiresVpn(url)) {
+      if (port <= 0) {
+        loggy.warning("control-plane request blocked: VPN proxy is unavailable");
+        throw const VpnProxyUnavailableException();
+      }
+      loggy.debug("using required VPN proxy for control-plane request [port=$port]");
+      return "proxy";
+    }
     if (directOnly) return "direct";
     if (proxyOnly) {
       loggy.debug("using required local proxy [port=$port]");
@@ -211,4 +232,11 @@ class DioHttpClient with InfraLogger {
     }
     return options;
   }
+}
+
+class VpnProxyUnavailableException implements Exception {
+  const VpnProxyUnavailableException();
+
+  @override
+  String toString() => 'VPN proxy is unavailable';
 }

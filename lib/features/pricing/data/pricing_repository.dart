@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/pricing/model/pricing_models.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 abstract interface class PricingRemoteDataSource {
   Future<PricingData> getPublicPricing();
@@ -21,7 +21,7 @@ abstract interface class PricingCacheStore {
 }
 
 abstract interface class PricingDeviceAuth {
-  String peekCachedDeviceJwt();
+  Future<String> readCachedDeviceJwt();
   Future<String> resolveDeviceJwt({bool forceRefresh = false});
 }
 
@@ -79,7 +79,7 @@ class PricingRepository {
   }
 
   Future<PricingCatalog> refreshPricing({bool forcePersonalizedJwtRefresh = false}) async {
-    final cachedJwt = _deviceAuth.peekCachedDeviceJwt();
+    final cachedJwt = await _deviceAuth.readCachedDeviceJwt();
     if (cachedJwt.isEmpty && !forcePersonalizedJwtRefresh) {
       return getPublicPricing();
     }

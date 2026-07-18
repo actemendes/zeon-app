@@ -223,11 +223,16 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
       timeout: 5000,
     );
   }
-  final mobileAutoImportResult = await _safeInit(
-    "mobile auto import",
-    () => mobileBootstrapImportService.run(mode: MobileConnLinkImportMode.fast),
-    timeout: 18000,
-  );
+  // Mobile control-plane traffic is fail-closed through the embedded VPN.
+  // Do not probe the API before that VPN reaches CONNECTED; the connection
+  // notifier owns promotion from the anonymous profile to the device profile.
+  final mobileAutoImportResult = PlatformUtils.isMobile
+      ? false
+      : await _safeInit(
+          "mobile auto import",
+          () => mobileBootstrapImportService.run(mode: MobileConnLinkImportMode.postConnection),
+          timeout: 18000,
+        );
   if (mobileAutoImportResult == true) {
     await _safeInit(
       "wait active profile after mobile auto import",
@@ -257,7 +262,6 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
       }
     }
   }
-  unawaited(_retryMobileAutoImport(mobileBootstrapImportService));
   await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
   await _safeInit("error reports", () => container.read(errorReportControllerProvider).init(), timeout: 3000);
 
@@ -391,23 +395,6 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
     }
   }
   await prefs.setBool(seedKey, true);
-}
-
-Future<void> _retryMobileAutoImport(MobileBootstrapImportService service) async {
-  const retryDelays = <Duration>[
-    Duration(seconds: 5),
-    Duration(seconds: 10),
-    Duration(seconds: 20),
-    Duration(seconds: 40),
-  ];
-  for (final delay in retryDelays) {
-    await Future.delayed(delay);
-    try {
-      await service.run();
-    } catch (_) {
-      // Intentionally ignored: best-effort background retries.
-    }
-  }
 }
 
 void _initSystemTrayInBackground(ProviderContainer container) {

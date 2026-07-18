@@ -131,6 +131,16 @@ func (s *Balancer) worker() {
 	}
 	defer s.monitor.UnsubscribeGroup(s.Tag(), observer)
 
+	// SubscribeGroup intentionally has no replay buffer. A release build can
+	// finish the first monitoring cycle before this worker subscribes, leaving
+	// SmartActive on its provisional cold-start outbound until the next cycle.
+	// Always consume the current snapshot once after subscribing so startup is
+	// independent of scheduler timing.
+	if s.options.Strategy == StrategySmartActiveAuto {
+		s.logger.Info("[SmartActiveLifecycle] event=initial_snapshot group=", s.Tag())
+		s.applyMonitoringUpdate(false)
+	}
+
 	for {
 		select {
 		case <-s.close:
@@ -142,10 +152,6 @@ func (s *Balancer) worker() {
 			if !ok {
 				return
 			}
-			outbounds := s.monitor.OutboundsHistory(s.Tag())
-			if s.smartActiveDebugFault != nil && s.smartActiveDebugFault.Apply(s.strategyFn.Now(), outbounds) {
-				s.logger.Warn("[SmartActiveDebugFault] applied to active=", s.strategyFn.Now())
-			}
 			manualRefresh := false
 			if s.options.Strategy == StrategySmartActiveAuto && s.monitor != nil {
 				manualRefresh = s.monitor.ConsumeRecentManualRefresh(s.Tag())
@@ -153,26 +159,34 @@ func (s *Balancer) worker() {
 					s.logger.Info("[SmartActiveLifecycle] event=user_refresh group=", s.Tag())
 				}
 			}
-			changed := false
-			if manualRefresh {
-				if strategy, ok := s.strategyFn.(*SmartActive); ok {
-					changed = strategy.UpdateOutboundsInfoForManualRefresh(outbounds)
-				} else {
-					changed = s.strategyFn.UpdateOutboundsInfo(outbounds)
-				}
-			} else {
-				changed = s.strategyFn.UpdateOutboundsInfo(outbounds)
-			}
-			if s.options.Strategy == StrategySmartActiveAuto {
-				s.logSmartActiveDecision(outbounds)
-			}
-			if changed {
-				s.logAutoDecision(outbounds)
-				s.logger.Warn("[ActiveServerChanged] group=", s.Tag(), " active=", s.strategyFn.Now())
-				s.interruptGroup.Interrupt(s.interruptExternalConnections)
-			}
+			s.applyMonitoringUpdate(manualRefresh)
 
 		}
+	}
+}
+
+func (s *Balancer) applyMonitoringUpdate(manualRefresh bool) {
+	outbounds := s.monitor.OutboundsHistory(s.Tag())
+	if s.smartActiveDebugFault != nil && s.smartActiveDebugFault.Apply(s.strategyFn.Now(), outbounds) {
+		s.logger.Warn("[SmartActiveDebugFault] applied to active=", s.strategyFn.Now())
+	}
+	changed := false
+	if manualRefresh {
+		if strategy, ok := s.strategyFn.(*SmartActive); ok {
+			changed = strategy.UpdateOutboundsInfoForManualRefresh(outbounds)
+		} else {
+			changed = s.strategyFn.UpdateOutboundsInfo(outbounds)
+		}
+	} else {
+		changed = s.strategyFn.UpdateOutboundsInfo(outbounds)
+	}
+	if s.options.Strategy == StrategySmartActiveAuto {
+		s.logSmartActiveDecision(outbounds)
+	}
+	if changed {
+		s.logAutoDecision(outbounds)
+		s.logger.Warn("[ActiveServerChanged] group=", s.Tag(), " active=", s.strategyFn.Now())
+		s.interruptGroup.Interrupt(s.interruptExternalConnections)
 	}
 }
 

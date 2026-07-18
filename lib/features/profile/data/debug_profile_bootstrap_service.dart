@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/model/environment.dart';
 import 'package:zeon/features/profile/data/profile_data_mapper.dart';
@@ -8,8 +10,6 @@ import 'package:zeon/features/profile/data/profile_name_parser.dart';
 import 'package:zeon/features/profile/data/profile_repository.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/utils/custom_loggers.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 class DebugProfileBootstrapService with InfraLogger {
   DebugProfileBootstrapService({
@@ -24,7 +24,7 @@ class DebugProfileBootstrapService with InfraLogger {
 
   static const _defaultSeedName = "UI Debug Profile";
   static const _enabled = bool.fromEnvironment("debug_seed_profile_enabled");
-  static const _seedUrl = String.fromEnvironment("debug_seed_profile_url");
+  static const _seedUrl = kDebugMode ? String.fromEnvironment("debug_seed_profile_url") : "";
   static const _seedName = String.fromEnvironment("debug_seed_profile_name", defaultValue: _defaultSeedName);
   static const _prefDone = "debug_seed_profile_bootstrap_done";
 

@@ -46,13 +46,13 @@ abstract class UriUtils {
 
   static Future<bool> tryShareFile(Uri uri, {String? mimeType}) async {
     try {
-      loggy.debug("sharing [$uri]");
+      loggy.debug("sharing local file");
       final file = XFile(uri.path, mimeType: mimeType);
       final result = await Share.shareXFiles([file]);
       loggy.debug("share result: ${result.raw}");
       return result.status == ShareResultStatus.success;
     } catch (e, stackTrace) {
-      loggy.warning("error sharing file [$uri]", e, stackTrace);
+      loggy.warning("error sharing local file", e, stackTrace);
       return false;
     }
   }
@@ -77,7 +77,7 @@ abstract class UriUtils {
   static String _describeUri(Uri uri) {
     final scheme = uri.scheme.isEmpty ? "-" : uri.scheme;
     final host = uri.host.isEmpty ? "-" : uri.host;
-    final path = uri.path.isEmpty ? "/" : uri.path;
+    final path = uri.path.isEmpty ? "/" : "/…";
     final query = uri.hasQuery ? " queryKeys=${uri.queryParameters.keys.join(",")}" : "";
     return "scheme=$scheme host=$host path=$path$query";
   }

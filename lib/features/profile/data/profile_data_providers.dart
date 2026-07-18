@@ -34,7 +34,7 @@ ProfileDataSource profileDataSource(Ref ref) {
   return ProtectedProfileDataSource(
     delegate: ProfileDao(ref.watch(dbProvider)),
     configStore: ref.watch(profileConfigStoreProvider),
-    enabled: PlatformUtils.isApple,
+    enabled: PlatformUtils.isApple || PlatformUtils.isAndroid || PlatformUtils.isWindows,
   );
 }
 

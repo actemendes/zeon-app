@@ -20,6 +20,27 @@ add_executable(${BINARY_NAME} WIN32
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
 
+# Harden the Windows executable against memory-corruption exploitation. These
+# flags apply to the release artifacts distributed to users.
+target_compile_options(${BINARY_NAME} PRIVATE
+  $<$<CONFIG:Release>:/guard:cf>
+  $<$<CONFIG:Release>:/sdl>
+  $<$<CONFIG:Profile>:/guard:cf>
+  $<$<CONFIG:Profile>:/sdl>
+)
+target_link_options(${BINARY_NAME} PRIVATE
+  $<$<CONFIG:Release>:/DYNAMICBASE>
+  $<$<CONFIG:Release>:/NXCOMPAT>
+  $<$<CONFIG:Release>:/HIGHENTROPYVA>
+  $<$<CONFIG:Release>:/guard:cf>
+  $<$<CONFIG:Release>:/CETCOMPAT>
+  $<$<CONFIG:Profile>:/DYNAMICBASE>
+  $<$<CONFIG:Profile>:/NXCOMPAT>
+  $<$<CONFIG:Profile>:/HIGHENTROPYVA>
+  $<$<CONFIG:Profile>:/guard:cf>
+  $<$<CONFIG:Profile>:/CETCOMPAT>
+)
+
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MAJOR=${FLUTTER_VERSION_MAJOR}")

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -44,7 +45,7 @@ class LoggerController extends LoggyPrinter with InfraLogger {
     loggy.debug("removing [$name] printer");
     final printer = otherPrinters[name];
     if (printer case FileLogPrinter()) {
-      printer.dispose();
+      unawaited(printer.dispose());
     }
     otherPrinters.remove(name);
   }

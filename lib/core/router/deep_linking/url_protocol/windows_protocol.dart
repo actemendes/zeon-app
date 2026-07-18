@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
-import 'package:zeon/core/router/deep_linking/url_protocol/protocol.dart';
 import 'package:win32/win32.dart';
+import 'package:zeon/core/router/deep_linking/url_protocol/protocol.dart';
 
 const _hive = HKEY_CURRENT_USER;
 
@@ -50,7 +50,7 @@ class WindowsProtocolHandler extends ProtocolHandler {
   }
 
   String _sanitize(String value) {
-    value = value.replaceAll(r'%s', '%1').replaceAll(r'"', '\\"');
-    return '"$value"';
+    final sanitized = value.replaceAll('%s', '%1').replaceAll('"', '\\"');
+    return '"$sanitized"';
   }
 }

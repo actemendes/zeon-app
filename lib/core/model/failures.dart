@@ -84,9 +84,9 @@ extension ErrorPresenter on TranslationsEn {
             ..writeln('DioException:')
             ..writeln(message ?? value.toString());
           if (response != null) {
-            buffer
-              ..writeln('Status: ${response.statusCode}')
-              ..writeln('Response: ${response.data}');
+            // Response bodies may include bearer tokens, connection links or
+            // server-side identifiers. Keep only transport metadata.
+            buffer.writeln('Status: ${response.statusCode}');
           }
           if (fallbackStackTrace != null) {
             buffer

@@ -162,10 +162,6 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
         val currentOutbound = presentOutboundForNotification(status.current_outbound)
         val content = "${Libbox.formatBytes(uplink)}/s \u2191\t${Libbox.formatBytes(downlink)}/s \u2193 \n$currentOutbound"
         val title = "${status.current_profile}"
-        Log.i(
-            "NotificationUpdate",
-            "profile=$title rawOutbound=${redactSensitiveTag(status.current_outbound)} displayedOutbound=${redactSensitiveTag(currentOutbound)}"
-        )
         Application.notificationManager.notify(
                 notificationId,
                 notificationBuilder.setContentTitle(title).setContentText(content).build()
@@ -187,12 +183,6 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
             return service.getString(R.string.auto_selection)
         }
         return presentServerNameForNotification(normalized)
-    }
-
-    private fun redactSensitiveTag(value: String): String {
-        val normalized = value.trim()
-        if (normalized.length <= 8) return "<redacted>"
-        return "${normalized.take(3)}...${normalized.takeLast(3)}"
     }
 
     private fun presentServerNameForNotification(outbound: String): String {

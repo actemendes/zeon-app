@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/features/pricing/data/pricing_repository.dart';
 import 'package:zeon/features/pricing/model/pricing_models.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   test('ignores personalized cache after user change', () async {
@@ -128,7 +128,7 @@ class _Auth implements PricingDeviceAuth {
   int forceRefreshCalls = 0;
 
   @override
-  String peekCachedDeviceJwt() => peekJwt;
+  Future<String> readCachedDeviceJwt() async => peekJwt;
 
   @override
   Future<String> resolveDeviceJwt({bool forceRefresh = false}) async {

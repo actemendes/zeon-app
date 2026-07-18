@@ -2,13 +2,14 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:zeon/core/directories/android_working_directory_migration.dart';
 import 'package:zeon/core/model/directories.dart';
 import 'package:zeon/core/model/environment.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'directories_provider.g.dart';
 
@@ -37,7 +38,7 @@ class AppDirectories extends _$AppDirectories with InfraLogger {
       dirs = (baseDir: portableDir, workingDir: portableDir, tempDir: await getTemporaryDirectory());
     } else {
       final baseDir = await getApplicationSupportDirectory();
-      final workingDir = Platform.isAndroid ? await _getAndroidWorkingDirectory() : baseDir;
+      final workingDir = Platform.isAndroid ? await _getAndroidWorkingDirectory(baseDir) : baseDir;
       final tempDir = await getTemporaryDirectory();
       dirs = (baseDir: baseDir, workingDir: workingDir, tempDir: tempDir);
     }
@@ -52,15 +53,21 @@ class AppDirectories extends _$AppDirectories with InfraLogger {
     return dirs;
   }
 
-  static Future<Directory> _getAndroidWorkingDirectory() async {
+  Future<Directory> _getAndroidWorkingDirectory(Directory privateDirectory) async {
     try {
       final extDir = await getExternalStorageDirectory();
-      if (extDir == null) return getApplicationDocumentsDirectory();
-      if (extDir.existsSync()) return extDir;
-      await extDir.create(recursive: true);
-      return extDir;
-    } catch (_) {}
-    return getApplicationDocumentsDirectory();
+      if (extDir == null) return privateDirectory;
+
+      final migrated = await AndroidWorkingDirectoryMigration.migrate(source: extDir, destination: privateDirectory);
+      if (!migrated) {
+        loggy.warning('Could not migrate Android working data to private storage');
+        return extDir;
+      }
+      return privateDirectory;
+    } catch (_) {
+      loggy.warning('Could not inspect the legacy Android working directory');
+      return privateDirectory;
+    }
   }
 
   static Future<Directory> getDatabaseDirectory() async {

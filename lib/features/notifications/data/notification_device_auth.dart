@@ -1,38 +1,43 @@
 import 'dart:convert';
 
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/mobile/data/mobile_sensitive_storage.dart';
 import 'package:zeon/features/mobile/data/stable_device_id_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationDeviceAuth {
-  NotificationDeviceAuth({required DioHttpClient httpClient, required SharedPreferences preferences})
-    : _httpClient = httpClient,
-      _preferences = preferences,
-      _stableDeviceId = StableDeviceIdService(preferences: preferences);
+  NotificationDeviceAuth({
+    required DioHttpClient httpClient,
+    required SharedPreferences preferences,
+    MobileSensitiveStorage? sensitiveStorage,
+  }) : _httpClient = httpClient,
+       _preferences = preferences,
+       _sensitiveStorage = sensitiveStorage ?? MobileSensitiveStorage(preferences: preferences),
+       _stableDeviceId = StableDeviceIdService(preferences: preferences);
 
   static const apiBaseUrl = MobileConnLinkImportService.apiBaseUrl;
   static const _mobileApiKey = String.fromEnvironment(
     'mobile_api_key',
     defaultValue: 'mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7',
   );
-  static const _prefToken = 'mobile_bind_jwt';
   static const _prefExpiresAt = 'mobile_bind_jwt_expires_at';
   static const _prefUserId = MobileConnLinkImportService.prefUserId;
 
   final DioHttpClient _httpClient;
   final SharedPreferences _preferences;
+  final MobileSensitiveStorage _sensitiveStorage;
   final StableDeviceIdService _stableDeviceId;
 
-  String peekCachedDeviceJwt() {
-    final cached = (_preferences.getString(_prefToken) ?? '').trim();
+  Future<String> readCachedDeviceJwt() async {
+    final cached = (await _sensitiveStorage.readDeviceJwt()).trim();
     if (cached.isEmpty || _isJwtExpired(cached)) return '';
     return cached;
   }
 
   Future<String> resolveDeviceJwt({bool forceRefresh = false}) async {
     final now = DateTime.now().toUtc();
-    final cached = (_preferences.getString(_prefToken) ?? '').trim();
+    final cached = (await _sensitiveStorage.readDeviceJwt()).trim();
     final expiresAt = DateTime.tryParse((_preferences.getString(_prefExpiresAt) ?? '').trim())?.toUtc();
     if (!forceRefresh && cached.isNotEmpty && !_isJwtExpired(cached)) {
       if (expiresAt == null || expiresAt.isAfter(now.add(const Duration(seconds: 20)))) {
@@ -67,7 +72,7 @@ class NotificationDeviceAuth {
     final token = (data['token']?.toString() ?? '').trim();
     if (token.isEmpty) return null;
 
-    await _preferences.setString(_prefToken, token);
+    await _sensitiveStorage.writeDeviceJwt(token);
     final expiresAt = DateTime.tryParse((data['expires_at']?.toString() ?? '').trim())?.toUtc();
     if (expiresAt != null) {
       await _preferences.setString(_prefExpiresAt, expiresAt.toIso8601String());

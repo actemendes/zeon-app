@@ -36,7 +36,6 @@ import com.hiddify.core.libbox.CommandServerHandler
 import com.hiddify.core.libbox.Notification
 import com.hiddify.core.libbox.PlatformInterface
 import com.hiddify.core.libbox.SystemProxyStatus
-import com.zeon.zeon.BuildConfig
 import com.zeon.zeon.MainActivity
 import com.zeon.zeon.constant.Bugs
 import com.zeon.zeon.utils.GrpcClientProvider
@@ -73,7 +72,7 @@ class BoxService(
             val baseDir = Application.application.filesDir
 
             baseDir.mkdirs()
-            workingDir = Application.application.getExternalFilesDir(null) ?: return
+            workingDir = Application.application.filesDir
             workingDir.mkdirs()
             val tempDir = Application.application.cacheDir
             tempDir.mkdirs()
@@ -113,13 +112,6 @@ class BoxService(
                     )
             )
         }
-
-        private fun redactSensitiveTag(value: String): String {
-            val normalized = value.trim()
-            if (normalized.length <= 8) return "<redacted>"
-            return "${normalized.take(3)}...${normalized.takeLast(3)}"
-        }
-
 
     }
 
@@ -163,7 +155,7 @@ class BoxService(
                 Log.i(TAG, "[ManualRefresh] user_refresh_requested source=notification group=$OUTBOUND_SELECTOR_TAG")
                 val coreClient = GrpcClientProvider.grpcClient.create(CoreClient::class)
                 val currentOutbound = coreClient.GetSystemInfo().executeBlocking(Empty()).current_outbound
-                Log.i(TAG, "[ManualRefresh] current_outbound_before=${redactSensitiveTag(currentOutbound)}")
+                Log.i(TAG, "[ManualRefresh] current_outbound_checked")
 
                 // "balance" is the automatic balancer selected by the core. A
                 // manual server selection is reported as its server tag instead.
@@ -458,9 +450,9 @@ class BoxService(
     }
 
      fun writeDebugMessage(message: String?) {
-        Log.d("BoxService", message!!)
+        val safeMessage = message ?: return
         binder.broadcast {
-            it.onServiceWriteLog(message)
+            it.onServiceWriteLog(safeMessage)
         }
     }
 

@@ -1,10 +1,13 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/mobile/data/mobile_sensitive_storage.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/data/profile_data_source.dart';
 import 'package:zeon/features/profile/data/profile_name_parser.dart';
@@ -13,8 +16,6 @@ import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/model/profile_sort_enum.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/link_parsers.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 final mobileConnLinkImportServiceProvider = Provider<MobileConnLinkImportService>((ref) {
   return MobileConnLinkImportService(
@@ -33,10 +34,12 @@ class MobileConnLinkImportService with InfraLogger {
     required ProfileRepository profileRepository,
     required ProfileDataSource profileDataSource,
     required SharedPreferences preferences,
+    MobileSensitiveStorage? sensitiveStorage,
   }) : _httpClient = httpClient,
        _profileRepository = profileRepository,
        _profileDataSource = profileDataSource,
-       _preferences = preferences;
+       _preferences = preferences,
+       _sensitiveStorage = sensitiveStorage ?? MobileSensitiveStorage(preferences: preferences);
 
   static const apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://130.49.151.173");
   static const publicOpenBaseUrl = "https://zeon-vps.link";
@@ -54,6 +57,7 @@ class MobileConnLinkImportService with InfraLogger {
   final ProfileRepository _profileRepository;
   final ProfileDataSource _profileDataSource;
   final SharedPreferences _preferences;
+  final MobileSensitiveStorage _sensitiveStorage;
 
   MobileConnLinkInput normalizeConnectionLink(String rawInput) {
     final input = rawInput.trim();
@@ -167,7 +171,7 @@ class MobileConnLinkImportService with InfraLogger {
     );
 
     await _preferences.setBool(prefDone, true);
-    await _preferences.setString(prefConnLink, normalized.primaryConnLink);
+    await _sensitiveStorage.writeConnectionLink(normalized.primaryConnLink);
     final effectiveUserId = _resolveCanonicalUserId(userId: userId, openId: normalized.openId);
     if (effectiveUserId != null && effectiveUserId > 0) {
       await _preferences.setString(prefUserId, effectiveUserId.toString());
@@ -431,7 +435,7 @@ class MobileConnLinkImportService with InfraLogger {
       if (active == null || active.type != ProfileType.remote) return;
 
       final previousManagedId = (_preferences.getString(prefManagedProfileId) ?? "").trim();
-      final previousConnLink = (_preferences.getString(prefConnLink) ?? "").trim();
+      final previousConnLink = (await _sensitiveStorage.readConnectionLink()).trim();
 
       await _preferences.setString(prefManagedProfileId, active.id);
 
@@ -838,9 +842,11 @@ String _maskLink(String link) {
   if (link.isEmpty) return "-";
   try {
     final uri = Uri.parse(link);
-    return "${uri.host}${uri.path}";
+    if (uri.host.isEmpty) return "<redacted>";
+    final port = uri.hasPort ? ":${uri.port}" : "";
+    return "${uri.scheme}://${uri.host}$port/…";
   } catch (_) {
-    return link.length > 80 ? "${link.substring(0, 80)}..." : link;
+    return "<redacted>";
   }
 }
 

@@ -2,7 +2,9 @@
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:loggy/loggy.dart';
+import 'package:zeon/core/security/sensitive_text_redactor.dart';
 
 class ConsolePrinter extends LoggyPrinter {
   const ConsolePrinter({this.showColors = false});
@@ -18,6 +20,10 @@ class ConsolePrinter extends LoggyPrinter {
 
   @override
   void onLog(LogRecord record) {
+    // Production builds must not emit application data to logcat or an
+    // attached desktop console. Persistent logs use the redacting printer.
+    if (kReleaseMode) return;
+
     final colorize = showColors && stdout.supportsAnsiEscapes;
     final time = record.time.toIso8601String().split('T')[1];
     final callerFrame = record.callerFrame == null ? ' ' : ' (${record.callerFrame?.location}) ';
@@ -44,26 +50,32 @@ class ConsolePrinter extends LoggyPrinter {
 }
 
 class FileLogPrinter extends LoggyPrinter {
-  FileLogPrinter(String filePath, {this.minLevel = LogLevel.debug}) : _logFile = File(filePath);
+  FileLogPrinter(
+    String filePath, {
+    this.minLevel = LogLevel.debug,
+    SensitiveTextRedactor redactor = const SensitiveTextRedactor(),
+  }) : _logFile = File(filePath),
+       _redactor = redactor;
 
   final File _logFile;
   final LogLevel minLevel;
+  final SensitiveTextRedactor _redactor;
 
   late final _sink = _logFile.openWrite(mode: FileMode.writeOnly);
 
   @override
   void onLog(LogRecord record) {
+    if (record.level.priority < minLevel.priority) return;
+
     final time = record.time.toIso8601String().split('T')[1];
-    _sink.writeln("$time - $record");
+    _sink.writeln(_redactor.redact("$time - $record"));
     if (record.error != null) {
-      _sink.writeln(record.error);
+      _sink.writeln(_redactor.redact(record.error.toString()));
     }
     if (record.stackTrace != null) {
-      _sink.writeln(record.stackTrace);
+      _sink.writeln(_redactor.redact(record.stackTrace.toString()));
     }
   }
 
-  void dispose() {
-    _sink.close();
-  }
+  Future<void> dispose() => _sink.close();
 }

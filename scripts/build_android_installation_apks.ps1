@@ -243,6 +243,12 @@ $env:GRADLE_OPTS = (@($previousGradleOpts, $gradlePackagingOpts) | Where-Object 
 try {
     Assert-Command "flutter"
     Assert-Command "dart"
+    if ($BuildMode -ne "release") {
+        Write-Warning (
+            "The $BuildMode APK is debuggable and its private app data can be read with adb run-as. " +
+            "Never distribute these artifacts."
+        )
+    }
     if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $BuildTarget))) {
         throw "Build target not found: $BuildTarget"
     }

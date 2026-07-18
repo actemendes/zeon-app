@@ -1,10 +1,10 @@
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/notifications/data/notification_data_providers.dart';
 import 'package:zeon/features/notifications/data/notification_device_auth.dart';
 import 'package:zeon/features/pricing/data/pricing_repository.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 final pricingRemoteDataSourceProvider = Provider<PricingRemoteDataSource>((ref) {
   return PricingApiDataSource(httpClient: ref.watch(httpClientProvider));
@@ -30,7 +30,7 @@ class PricingNotificationDeviceAuth implements PricingDeviceAuth {
   final NotificationDeviceAuth _delegate;
 
   @override
-  String peekCachedDeviceJwt() => _delegate.peekCachedDeviceJwt();
+  Future<String> readCachedDeviceJwt() => _delegate.readCachedDeviceJwt();
 
   @override
   Future<String> resolveDeviceJwt({bool forceRefresh = false}) =>

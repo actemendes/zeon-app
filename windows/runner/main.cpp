@@ -10,6 +10,28 @@
 
 constexpr wchar_t kZeonAppUserModelId[] = L"ZEON.ZEON";
 
+void HardenDllSearchPath()
+{
+  // Keep application DLLs loadable while removing the current working
+  // directory from the process-wide search order. Resolve dynamically so the
+  // runner remains compatible with systems where the API is unavailable.
+  HMODULE kernel32 = ::GetModuleHandleW(L"kernel32.dll");
+  if (kernel32 != nullptr)
+  {
+    using SetDefaultDllDirectoriesFn = BOOL(WINAPI *)(DWORD);
+    auto set_default_dll_directories = reinterpret_cast<SetDefaultDllDirectoriesFn>(
+        ::GetProcAddress(kernel32, "SetDefaultDllDirectories"));
+    if (set_default_dll_directories != nullptr)
+    {
+      set_default_dll_directories(
+          LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
+          LOAD_LIBRARY_SEARCH_SYSTEM32 |
+          LOAD_LIBRARY_SEARCH_USER_DIRS);
+    }
+  }
+  ::SetDllDirectoryW(L"");
+}
+
 bool SendAppLinkToInstance(const std::wstring &title)
 {
   // Find our exact window
@@ -51,6 +73,7 @@ bool SendAppLinkToInstance(const std::wstring &title)
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command)
 {
+  HardenDllSearchPath();
   SetCurrentProcessExplicitAppUserModelID(kZeonAppUserModelId);
 
   // Replace "example" with the generated title found as parameter of `window.Create` in this file.

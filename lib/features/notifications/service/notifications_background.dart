@@ -45,6 +45,9 @@ Future<bool> runNotificationsBackgroundSync() async {
       userAgent: 'ZEON/${packageInfo.version} ($platform) like ClashMeta v2ray sing-box',
       debug: false,
     );
+    // The worker runs in a separate isolate, so it cannot reuse the provider's
+    // in-memory port. It must still fail closed through the same local VPN proxy.
+    httpClient.setProxyPort(preferences.getInt('mixed-port') ?? 12334);
     final local = NotificationDao(db);
     final api = NotificationApiDataSource(
       httpClient: httpClient,

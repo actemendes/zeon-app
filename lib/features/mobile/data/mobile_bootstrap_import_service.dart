@@ -1,19 +1,20 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_embedded_bootstrap_profile_service.dart';
+import 'package:zeon/features/mobile/data/mobile_sensitive_storage.dart';
 import 'package:zeon/features/mobile/data/stable_device_id_service.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/data/profile_data_source.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 final mobileBootstrapImportServiceProvider = Provider<MobileBootstrapImportService>((ref) {
   final preferences = ref.read(sharedPreferencesProvider).requireValue;
@@ -35,19 +36,20 @@ class MobileBootstrapImportService with InfraLogger {
     required MobileConnLinkImportService connLinkImportService,
     required MobileEmbeddedBootstrapProfileService embeddedProfileService,
     required SharedPreferences preferences,
+    MobileSensitiveStorage? sensitiveStorage,
   }) : _httpClient = httpClient,
        _stableDeviceId = stableDeviceIdService,
        _profileDataSource = profileDataSource,
        _connLinkImportService = connLinkImportService,
        _embeddedProfileService = embeddedProfileService,
-       _preferences = preferences;
+       _preferences = preferences,
+       _sensitiveStorage = sensitiveStorage ?? MobileSensitiveStorage(preferences: preferences);
 
   static const _apiBaseUrl = MobileConnLinkImportService.apiBaseUrl;
   static const _apiKey = String.fromEnvironment("mobile_api_key", defaultValue: "mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7");
 
   static const _prefDone = MobileConnLinkImportService.prefDone;
   static const _prefUserId = MobileConnLinkImportService.prefUserId;
-  static const _prefConnLink = MobileConnLinkImportService.prefConnLink;
   static const _prefManagedProfileId = MobileConnLinkImportService.prefManagedProfileId;
 
   final DioHttpClient _httpClient;
@@ -56,12 +58,13 @@ class MobileBootstrapImportService with InfraLogger {
   final MobileConnLinkImportService _connLinkImportService;
   final MobileEmbeddedBootstrapProfileService _embeddedProfileService;
   final SharedPreferences _preferences;
+  final MobileSensitiveStorage _sensitiveStorage;
   Future<bool>? _runInFlight;
   Future<bool>? _postConnectionRunInFlight;
 
   Future<bool> run({
     bool skipIfAlreadyDone = true,
-    MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard,
+    MobileConnLinkImportMode mode = MobileConnLinkImportMode.postConnection,
   }) async {
     try {
       return await runOrThrow(skipIfAlreadyDone: skipIfAlreadyDone, mode: mode);
@@ -72,7 +75,7 @@ class MobileBootstrapImportService with InfraLogger {
 
   Future<bool> runOrThrow({
     bool skipIfAlreadyDone = true,
-    MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard,
+    MobileConnLinkImportMode mode = MobileConnLinkImportMode.postConnection,
   }) async {
     if (mode == MobileConnLinkImportMode.postConnection) {
       final inFlight = _postConnectionRunInFlight;
@@ -138,7 +141,7 @@ class MobileBootstrapImportService with InfraLogger {
 
     try {
       final savedUserId = int.tryParse((_preferences.getString(_prefUserId) ?? "").trim());
-      final savedConnLink = (_preferences.getString(_prefConnLink) ?? "").trim();
+      final savedConnLink = (await _sensitiveStorage.readConnectionLink()).trim();
       var effectiveUserId = savedUserId;
       String? apiLogin;
       String? apiStatus;
@@ -214,7 +217,7 @@ class MobileBootstrapImportService with InfraLogger {
 
   Future<bool> hasActiveEmbeddedProfile() => _embeddedProfileService.hasActiveEmbeddedProfile();
 
-  Future<bool> canReachBackend({MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard}) async {
+  Future<bool> canReachBackend({MobileConnLinkImportMode mode = MobileConnLinkImportMode.postConnection}) async {
     if (_apiBaseUrl.isEmpty || _apiKey.isEmpty) return false;
 
     final uri = Uri.parse(
@@ -245,7 +248,15 @@ class MobileBootstrapImportService with InfraLogger {
   }
 
   void _refreshSavedConnLinkMetadataInBackground(ProfileEntry active) {
-    final savedConnLink = (_preferences.getString(_prefConnLink) ?? "").trim();
+    unawaited(
+      _refreshSavedConnLinkMetadata(active).catchError((Object e, StackTrace st) {
+        loggy.debug("mobile auto import: background metadata refresh skipped/failed", e, st);
+      }),
+    );
+  }
+
+  Future<void> _refreshSavedConnLinkMetadata(ProfileEntry active) async {
+    final savedConnLink = (await _sensitiveStorage.readConnectionLink()).trim();
     if (savedConnLink.isEmpty) return;
 
     final managedId = (_preferences.getString(_prefManagedProfileId) ?? "").trim();
@@ -256,13 +267,7 @@ class MobileBootstrapImportService with InfraLogger {
       return;
     }
 
-    unawaited(
-      _connLinkImportService.refreshActiveProfileMetadata(savedConnLink).timeout(const Duration(seconds: 5)).catchError(
-        (Object e, StackTrace st) {
-          loggy.debug("mobile auto import: background metadata refresh skipped/failed", e, st);
-        },
-      ),
-    );
+    await _connLinkImportService.refreshActiveProfileMetadata(savedConnLink).timeout(const Duration(seconds: 5));
   }
 
   Future<_LookupSummary?> _lookupSubscriptionByUserId(

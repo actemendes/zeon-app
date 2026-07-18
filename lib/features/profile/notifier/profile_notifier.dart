@@ -103,9 +103,7 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
   String _redactUrl(String value) {
     final uri = Uri.tryParse(value.trim());
     if (uri == null || uri.host.isEmpty) return '<redacted>';
-    final last = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '';
-    final suffix = last.length <= 4 ? '' : last.substring(last.length - 4);
-    return Uri(scheme: uri.scheme, host: uri.host, path: suffix.isEmpty ? '/...' : '/...$suffix').toString();
+    return Uri(scheme: uri.scheme, host: uri.host, port: uri.hasPort ? uri.port : null, path: '/…').toString();
   }
 
   Future<void> addManual({required String url, required UserOverride userOverride}) async {
