@@ -134,6 +134,9 @@ func (s *URLTest) DialContext(ctx context.Context, network string, destination M
 	if outbound == nil {
 		return nil, E.New("missing supported outbound")
 	}
+	if metadata := adapter.ContextFrom(ctx); metadata != nil && metadata.GetRealOutbound() == "" {
+		metadata.SetRealOutbound(RealTag(outbound))
+	}
 	conn, err := outbound.DialContext(ctx, network, destination)
 	if err == nil {
 		return s.group.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
@@ -151,6 +154,9 @@ func (s *URLTest) ListenPacket(ctx context.Context, destination M.Socksaddr) (ne
 	}
 	if outbound == nil {
 		return nil, E.New("missing supported outbound")
+	}
+	if metadata := adapter.ContextFrom(ctx); metadata != nil && metadata.GetRealOutbound() == "" {
+		metadata.SetRealOutbound(RealTag(outbound))
 	}
 	conn, err := outbound.ListenPacket(ctx, destination)
 	if err == nil {

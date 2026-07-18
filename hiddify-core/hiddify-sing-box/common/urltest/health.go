@@ -206,6 +206,10 @@ func NewURLTestHistory(delay uint16, err error, runtimePenalty int) *adapter.URL
 		HealthScore:      CalculateHealthScore(delay, success, errorType, false, now, runtimePenalty),
 		RuntimePenalty:   runtimePenalty,
 		FreshnessPenalty: CalculateFreshnessPenalty(false, now),
+		PingReady:        true,
+		QualityReady:     true,
+		SpeedReady:       true,
+		CombinedReady:    true,
 	}
 }
 

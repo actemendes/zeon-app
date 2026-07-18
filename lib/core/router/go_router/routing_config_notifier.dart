@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/adaptive_layout/my_adaptive_layout.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
@@ -26,7 +27,6 @@ import 'package:zeon/features/settings/overview/sections/tls_tricks_page.dart';
 import 'package:zeon/features/settings/overview/sections/warp_options_page.dart';
 import 'package:zeon/features/settings/overview/settings_page.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'routing_config_notifier.g.dart';
 

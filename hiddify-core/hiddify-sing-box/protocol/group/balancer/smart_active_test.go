@@ -15,6 +15,8 @@ import (
 	N "github.com/sagernet/sing/common/network"
 )
 
+const smartActiveTestGeneration uint64 = 1
+
 type smartActiveTestOutbound struct {
 	adapterOutbound.Adapter
 }
@@ -37,7 +39,16 @@ func newSmartActiveForTest() *SmartActive {
 		newSmartActiveTestOutbound("candidate"),
 	}, option.BalancerOutboundOptions{})
 	strategy.bootstrap = false
+	strategy.confirmed = true
 	return strategy
+}
+
+func newSmartActiveWithTags(tags ...string) *SmartActive {
+	outbounds := make([]adapter.Outbound, 0, len(tags))
+	for _, tag := range tags {
+		outbounds = append(outbounds, newSmartActiveTestOutbound(tag))
+	}
+	return NewSmartActive(outbounds, option.BalancerOutboundOptions{})
 }
 
 func TestSmartActiveColdStartPrefersForeignOutbound(t *testing.T) {
@@ -59,12 +70,154 @@ func TestSmartActiveColdStartFallsBackToRussiaWhenOnlyRussiaExists(t *testing.T)
 	}
 }
 
+func TestSmartActiveColdStartUsesSingleProvisionalUntilFirstReadyCandidate(t *testing.T) {
+	strategy := newSmartActiveWithTags("a", "b", "c")
+	if got := strategy.Now(); got != "a" {
+		t.Fatalf("initial provisional=%s, want a", got)
+	}
+	if strategy.confirmed {
+		t.Fatal("cold start provisional must not be confirmed")
+	}
+
+	untested := map[string]*adapter.URLTestHistory{
+		"a": {Delay: 300},
+		"b": {Delay: 100},
+		"c": {Delay: 50},
+	}
+	if strategy.UpdateOutboundsInfo(untested) {
+		t.Fatal("provisional switched while every server was untested")
+	}
+	if got := strategy.Now(); got != "a" {
+		t.Fatalf("provisional switched to %s", got)
+	}
+
+	untested["b"].Delay = 30
+	untested["c"].Delay = 20
+	if strategy.UpdateOutboundsInfo(untested) {
+		t.Fatal("provisional switched between untested servers")
+	}
+	if got := strategy.Now(); got != "a" {
+		t.Fatalf("provisional switched to %s", got)
+	}
+
+	ready := map[string]*adapter.URLTestHistory{
+		"a": currentGenerationCheckingHistory(11),
+		"b": currentGenerationHealthyHistory(11, 90),
+		"c": currentGenerationCheckingHistory(11),
+	}
+	if !strategy.UpdateOutboundsInfo(ready) {
+		t.Fatal("first current-generation ready server did not become confirmed active")
+	}
+	requireDecision(t, strategy, "switch", "b")
+	if !strategy.confirmed {
+		t.Fatal("first ready server must confirm active")
+	}
+}
+
+func TestSmartActiveStaleGenerationDoesNotConfirmAfterRestart(t *testing.T) {
+	strategy := newSmartActiveWithTags("active", "candidate")
+	old := histories(staleGenerationHistory(99, 40), nil)
+	if strategy.UpdateOutboundsInfo(old) {
+		t.Fatal("stale previous-run history changed provisional active")
+	}
+	requireDecision(t, strategy, "keep", "active")
+	if strategy.confirmed {
+		t.Fatal("stale previous-run history confirmed active")
+	}
+
+	current := histories(staleGenerationHistory(99, 40), currentGenerationHealthyHistory(1, 120))
+	if !strategy.UpdateOutboundsInfo(current) {
+		t.Fatal("current generation candidate did not replace stale previous active")
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+	if !strategy.confirmed {
+		t.Fatal("current generation candidate should confirm active")
+	}
+}
+
+func TestSmartActivePartialPingDoesNotBeatCombinedReady(t *testing.T) {
+	strategy := newSmartActiveWithTags("a", "b")
+	history := map[string]*adapter.URLTestHistory{
+		"a": partialPingHistory(3, 30),
+		"b": currentGenerationHealthyHistory(3, 120),
+	}
+	if !strategy.UpdateOutboundsInfo(history) {
+		t.Fatal("combined-ready server should become first confirmed active")
+	}
+	requireDecision(t, strategy, "switch", "b")
+}
+
+func TestSmartActiveOptionalSpeedAndUDPDisabledDoNotBlockConfirmed(t *testing.T) {
+	strategy := newSmartActiveWithTags("active", "candidate")
+	candidate := currentGenerationHealthyHistory(7, 90)
+	candidate.SpeedReady = false
+	candidate.UDPReady = false
+	candidate.UDPProbeAvailable = false
+	candidate.CombinedReady = true
+
+	if !strategy.UpdateOutboundsInfo(histories(nil, candidate)) {
+		t.Fatal("combined-ready candidate should confirm even when optional speed/udp flags are false")
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+	if !strategy.confirmed {
+		t.Fatal("combined-ready candidate should become confirmed active")
+	}
+}
+
+func TestSmartActiveDelayedSpeedWaitsOnlyUntilCombinedReady(t *testing.T) {
+	strategy := newSmartActiveWithTags("active", "candidate")
+	candidate := currentGenerationHealthyHistory(8, 90)
+	candidate.SpeedReady = false
+	candidate.CombinedReady = false
+
+	if strategy.UpdateOutboundsInfo(histories(nil, candidate)) {
+		t.Fatal("candidate should wait while combined readiness is incomplete")
+	}
+	requireDecision(t, strategy, "keep", "active")
+	if strategy.confirmed {
+		t.Fatal("candidate confirmed before combined readiness")
+	}
+
+	candidate.SpeedReady = true
+	candidate.CombinedReady = true
+	if !strategy.UpdateOutboundsInfo(histories(nil, candidate)) {
+		t.Fatal("candidate should confirm once combined readiness is complete")
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+}
+
 func healthyHistory(delay uint16) *adapter.URLTestHistory {
 	return &adapter.URLTestHistory{
 		Time:            time.Now(),
 		Delay:           delay,
 		Success:         true,
 		ErrorType:       urltest.ErrorTypeNone,
+		URLTestStatus:   urltest.StatusSuccess,
+		StabilityPoints: 40,
+		CheckGeneration: smartActiveTestGeneration,
+		PingReady:       true,
+		QualityReady:    true,
+		SpeedReady:      true,
+		CombinedReady:   true,
+	}
+}
+
+func currentGenerationHealthyHistory(generation uint64, delay uint16) *adapter.URLTestHistory {
+	history := healthyHistory(delay)
+	history.CheckGeneration = generation
+	history.PingReady = true
+	history.QualityReady = true
+	history.SpeedReady = true
+	history.CombinedReady = true
+	history.URLTestStatus = urltest.StatusSuccess
+	return history
+}
+
+func currentGenerationCheckingHistory(generation uint64) *adapter.URLTestHistory {
+	return &adapter.URLTestHistory{
+		Time:            time.Now(),
+		URLTestStatus:   urltest.StatusChecking,
+		CheckGeneration: generation,
 		StabilityPoints: 40,
 	}
 }
@@ -75,12 +228,37 @@ func failedHistory(errorType string) *adapter.URLTestHistory {
 		Delay:           65535,
 		Success:         false,
 		ErrorType:       errorType,
+		URLTestStatus:   urltest.StatusFailed,
 		StabilityPoints: 40,
+		CheckGeneration: smartActiveTestGeneration,
+		PingReady:       true,
+		QualityReady:    true,
+		SpeedReady:      true,
+		CombinedReady:   true,
 	}
 }
 
 func histories(active, candidate *adapter.URLTestHistory) map[string]*adapter.URLTestHistory {
 	return map[string]*adapter.URLTestHistory{"active": active, "candidate": candidate}
+}
+
+func staleGenerationHistory(generation uint64, delay uint16) *adapter.URLTestHistory {
+	history := currentGenerationHealthyHistory(generation, delay)
+	history.Time = time.Now().Add(-time.Hour)
+	return history
+}
+
+func partialPingHistory(generation uint64, delay uint16) *adapter.URLTestHistory {
+	return &adapter.URLTestHistory{
+		Time:            time.Now(),
+		Delay:           delay,
+		Success:         true,
+		ErrorType:       urltest.ErrorTypeNone,
+		URLTestStatus:   urltest.StatusChecking,
+		StabilityPoints: 40,
+		CheckGeneration: generation,
+		PingReady:       true,
+	}
 }
 
 func requireDecision(t *testing.T, strategy *SmartActive, action, active string) {
@@ -137,8 +315,121 @@ func TestSmartActiveGoodDoesNotSwitchOnScoreAlone(t *testing.T) {
 	strategy.UpdateOutboundsInfo(history)
 	strategy.UpdateOutboundsInfo(history)
 	requireDecision(t, strategy, "keep", "active")
-	if decision := strategy.LastDecision(); decision.reason != "active_good" {
+	if decision := strategy.LastDecision(); decision.reason != "candidate_runtime_or_udp_penalized" {
 		t.Fatalf("unexpected decision: %+v", decision)
+	}
+}
+
+func TestSmartActiveGoodSwitchesSameQualitySignificantlyLowerDelay(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := healthyHistory(300)
+	candidate := healthyHistory(100)
+	history := histories(active, candidate)
+	strategy.UpdateOutboundsInfo(history)
+	if strategy.Now() != "active" {
+		t.Fatal("candidate switched before two clean probes")
+	}
+	if !strategy.UpdateOutboundsInfo(history) {
+		t.Fatal("expected switch from 300 ms active to fresh 100 ms candidate")
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+	if decision := strategy.LastDecision(); decision.reason != "same_quality_significantly_lower_delay" {
+		t.Fatalf("unexpected decision: %+v", decision)
+	}
+}
+
+func TestSmartActiveKeepsCurrentWhileGenerationIsChecking(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := currentGenerationCheckingHistory(12)
+	candidate := currentGenerationHealthyHistory(12, 80)
+	history := histories(active, candidate)
+	strategy.UpdateOutboundsInfo(history)
+	strategy.UpdateOutboundsInfo(history)
+	requireDecision(t, strategy, "keep", "active")
+	if decision := strategy.LastDecision(); decision.reason != "current_temporarily_kept_during_refresh" {
+		t.Fatalf("unexpected decision during refresh: %+v", decision)
+	}
+}
+
+func TestSmartActiveDoesNotRankCheckingCandidateWithOldScore(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := currentGenerationHealthyHistory(12, 180)
+	candidate := currentGenerationCheckingHistory(12)
+	candidate.Delay = 40
+	candidate.HealthScore = 100
+	history := histories(active, candidate)
+	strategy.UpdateOutboundsInfo(history)
+	strategy.UpdateOutboundsInfo(history)
+	requireDecision(t, strategy, "keep", "active")
+	if strategy.Now() != "active" {
+		t.Fatal("checking candidate with stale score became active")
+	}
+}
+
+func TestSmartActiveLateOldGenerationResultDoesNotSwitch(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := currentGenerationHealthyHistory(2, 220)
+	candidate := currentGenerationHealthyHistory(1, 40)
+	history := histories(active, candidate)
+	strategy.UpdateOutboundsInfo(history)
+	strategy.UpdateOutboundsInfo(history)
+	requireDecision(t, strategy, "keep", "active")
+	if strategy.Now() != "active" {
+		t.Fatal("late old-generation candidate became active")
+	}
+}
+
+func TestSmartActiveGoodKeepsCurrentWhenRealUserHealthIsBetter(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := healthyHistory(300)
+	active.StabilityPoints = 90
+	candidate := healthyHistory(100)
+	candidate.RealUserPenalty = 12
+	candidate.DegradationPoints = 12
+	history := histories(active, candidate)
+	strategy.UpdateOutboundsInfo(history)
+	strategy.UpdateOutboundsInfo(history)
+	requireDecision(t, strategy, "keep", "active")
+	if decision := strategy.LastDecision(); decision.reason != "current_real_traffic_stable_and_candidate_advantage_insufficient" {
+		t.Fatalf("unexpected decision: %+v", decision)
+	}
+}
+
+func TestSmartActiveGoodDoesNotUseStaleBetterCandidate(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := healthyHistory(180)
+	candidate := healthyHistory(50)
+	candidate.IsFromCache = true
+	history := histories(active, candidate)
+	strategy.UpdateOutboundsInfo(history)
+	strategy.UpdateOutboundsInfo(history)
+	requireDecision(t, strategy, "keep", "active")
+	if decision := strategy.LastDecision(); decision.reason != "active_good_no_better_candidate" {
+		t.Fatalf("unexpected decision: %+v", decision)
+	}
+}
+
+func TestSmartActiveFailedCandidateDoesNotWin(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := healthyHistory(180)
+	candidate := failedHistory(urltest.ErrorTypeTimeout)
+	candidate.Delay = 50
+	history := histories(active, candidate)
+	strategy.UpdateOutboundsInfo(history)
+	strategy.UpdateOutboundsInfo(history)
+	requireDecision(t, strategy, "keep", "active")
+}
+
+func TestSmartActiveConfirmedActiveRejectsUntestedCandidate(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := healthyHistory(300)
+	candidate := &adapter.URLTestHistory{Delay: 40}
+	history := histories(active, candidate)
+	strategy.UpdateOutboundsInfo(history)
+	strategy.UpdateOutboundsInfo(history)
+	requireDecision(t, strategy, "keep", "active")
+	if strategy.Now() != "active" {
+		t.Fatal("untested candidate became active after confirmed active existed")
 	}
 }
 
@@ -154,7 +445,7 @@ func TestSmartActiveStartupReevaluatesFreshBestCandidate(t *testing.T) {
 		t.Fatal("expected startup fresh candidate to replace cached fallback active")
 	}
 	requireDecision(t, strategy, "switch", "candidate")
-	if decision := strategy.LastDecision(); decision.mode != "vpn_start" || decision.reason != "vpn_start_fresh_best_candidate" {
+	if decision := strategy.LastDecision(); decision.mode != "vpn_start" || decision.reason != "first_confirmed_current_generation_candidate" {
 		t.Fatalf("unexpected startup decision: %+v", decision)
 	}
 }
@@ -216,6 +507,23 @@ func TestSmartActiveManualRefreshKeepsCurrentWhenRankOneCandidatePenalized(t *te
 	if decision := strategy.LastDecision(); decision.mode != "user_refresh" || decision.reason != "user_refresh_candidate_penalized" {
 		t.Fatalf("unexpected manual refresh decision: %+v", decision)
 	}
+}
+
+func TestSmartActiveManualRefreshRejectsCachedOrUntestedCandidate(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	active := healthyHistory(250)
+	cached := healthyHistory(60)
+	cached.IsFromCache = true
+	if strategy.UpdateOutboundsInfoForManualRefresh(histories(active, cached)) {
+		t.Fatal("did not expect user refresh to switch to cached candidate")
+	}
+	requireDecision(t, strategy, "keep", "active")
+
+	untested := &adapter.URLTestHistory{Delay: 40}
+	if strategy.UpdateOutboundsInfoForManualRefresh(histories(active, untested)) {
+		t.Fatal("did not expect user refresh to switch to untested candidate")
+	}
+	requireDecision(t, strategy, "keep", "active")
 }
 
 func TestSmartActiveManualRefreshKeepsCurrentWhenStillBest(t *testing.T) {
@@ -339,25 +647,26 @@ func TestSmartActiveAllFailedFallsBackWithoutPanic(t *testing.T) {
 	active := failedHistory(urltest.ErrorTypeTimeout)
 	candidate := failedHistory(urltest.ErrorTypeEOF)
 	candidate.Delay = 500
-	if !strategy.UpdateOutboundsInfo(histories(active, candidate)) {
-		t.Fatal("expected delay fallback to the least-bad outbound")
+	if strategy.UpdateOutboundsInfo(histories(active, candidate)) {
+		t.Fatal("did not expect switch to another failed outbound")
 	}
-	requireDecision(t, strategy, "fallback", "candidate")
-	if decision := strategy.LastDecision(); decision.reason != "health_unavailable_delay_fallback" {
-		t.Fatalf("unexpected fallback decision: %+v", decision)
+	requireDecision(t, strategy, "fallback", "active")
+	if decision := strategy.LastDecision(); decision.reason != "critical_without_healthy_candidate" {
+		t.Fatalf("unexpected decision: %+v", decision)
 	}
 }
 
-func TestSmartActiveMissingHealthUsesLowestDelayFallback(t *testing.T) {
+func TestSmartActiveMissingHealthKeepsSingleProvisional(t *testing.T) {
 	strategy := newSmartActiveForTest()
+	strategy.confirmed = false
 	history := map[string]*adapter.URLTestHistory{
 		"active":    {Delay: 300},
 		"candidate": {Delay: 100},
 	}
-	if !strategy.UpdateOutboundsInfo(history) {
-		t.Fatal("expected lowest-delay fallback")
+	if strategy.UpdateOutboundsInfo(history) {
+		t.Fatal("did not expect provisional to switch on missing health")
 	}
-	requireDecision(t, strategy, "fallback", "candidate")
+	requireDecision(t, strategy, "keep", "active")
 }
 
 func TestSmartActiveSelectAlwaysReturnsSingleActive(t *testing.T) {
@@ -368,6 +677,10 @@ func TestSmartActiveSelectAlwaysReturnsSingleActive(t *testing.T) {
 		selected := strategy.Select(adapter.InboundContext{}, N.NetworkTCP, true)
 		if selected == nil || selected.Tag() != strategy.Now() || selected.Tag() != "active" {
 			t.Fatalf("selection %d returned %v while active=%s", i, selected, strategy.Now())
+		}
+		udpSelected := strategy.Select(adapter.InboundContext{}, N.NetworkUDP, true)
+		if udpSelected == nil || udpSelected.Tag() != strategy.Now() || udpSelected.Tag() != "active" {
+			t.Fatalf("udp selection %d returned %v while active=%s", i, udpSelected, strategy.Now())
 		}
 	}
 }
@@ -410,5 +723,21 @@ func TestSmartActiveRecoveryNeedsMultipleCleanProbes(t *testing.T) {
 	}
 	if strategy.Now() != "candidate" {
 		t.Fatal("recovered but worse server should not displace healthy active")
+	}
+}
+
+func TestSmartActiveAvoidsRecentlySwitchedServer(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	history := histories(failedHistory(urltest.ErrorTypeTimeout), healthyHistory(100))
+	if !strategy.UpdateOutboundsInfo(history) {
+		t.Fatal("expected switch away from failed active")
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+
+	history["active"] = healthyHistory(70)
+	history["candidate"] = healthyHistory(100)
+	strategy.UpdateOutboundsInfo(history)
+	if strategy.Now() != "candidate" {
+		t.Fatal("recently failed server returned before clean recovery evidence")
 	}
 }

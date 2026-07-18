@@ -96,6 +96,12 @@ func mergeURLTestHistory(old *adapter.URLTestHistory, history *adapter.URLTestHi
 	old.UDPPenalty = history.UDPPenalty
 	old.UDPLoss = history.UDPLoss
 	old.UDPJitterMs = history.UDPJitterMs
+	old.CheckGeneration = history.CheckGeneration
+	old.PingReady = history.PingReady
+	old.QualityReady = history.QualityReady
+	old.SpeedReady = history.SpeedReady
+	old.UDPReady = history.UDPReady
+	old.CombinedReady = history.CombinedReady
 }
 
 func (s *HistoryStorage) AddOnlyIpToHistory(tag string, history *adapter.URLTestHistory) {

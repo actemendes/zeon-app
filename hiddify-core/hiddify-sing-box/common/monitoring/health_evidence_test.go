@@ -88,8 +88,9 @@ func TestRuntimePenaltyWeightsAndCapsErrors(t *testing.T) {
 
 func runtimeHealthMonitor(tag string, history adapter.URLTestHistory) *OutboundMonitoring {
 	return &OutboundMonitoring{
-		logger:       log.StdLogger(),
-		runtimeStats: make(map[string]*adapter.RuntimePenaltyStats),
+		logger:         log.StdLogger(),
+		runtimeStats:   make(map[string]*adapter.RuntimePenaltyStats),
+		runtimeTraffic: make(map[string]*adapter.RuntimeTrafficStats),
 		outbounds: map[string]*outboundState{
 			tag: {history: history},
 		},
@@ -177,9 +178,182 @@ func TestRuntimeSuccessGraduallyRecoversPenalties(t *testing.T) {
 	}
 }
 
+func TestRuntimeDownloadTrafficRecoversGradually(t *testing.T) {
+	history := probeHistory(true, urltest.ErrorTypeNone)
+	history.DegradationPoints = 40
+	history.RealUserPenalty = 16
+	history.StabilityPoints = 10
+	monitor := runtimeHealthMonitor("active", history)
+	monitor.RecordRuntimeTraffic("active", 64*1024, true)
+	after := runtimeHistory(monitor, "active")
+	if after.DegradationPoints >= 40 || after.RealUserPenalty >= 16 || after.StabilityPoints <= 10 {
+		t.Fatalf("download traffic did not recover gradually: %+v", after)
+	}
+	if after.DegradationPoints == 0 || after.RealUserPenalty == 0 {
+		t.Fatalf("one traffic sample recovered too aggressively: %+v", after)
+	}
+}
+
+func TestRuntimeUploadOnlyDoesNotImmediatelyPenalize(t *testing.T) {
+	monitor := runtimeHealthMonitor("active", probeHistory(true, urltest.ErrorTypeNone))
+	monitor.RecordRuntimeTraffic("active", 4*1024, false)
+	after := runtimeHistory(monitor, "active")
+	if after.DegradationPoints != 0 || after.RealUserPenalty != 0 || after.RuntimePenalty != 0 {
+		t.Fatalf("single upload-only sample mutated health: %+v", after)
+	}
+}
+
+func TestRuntimeUploadOnlyWithRepeatedTimeoutMarksSuspect(t *testing.T) {
+	monitor := runtimeHealthMonitor("active", probeHistory(true, urltest.ErrorTypeNone))
+	monitor.RecordRuntimeTraffic("active", 4*1024, false)
+	monitor.RecordRuntimeTraffic("active", 4*1024, false)
+	monitor.RecordRuntimeError("active", errors.New("i/o timeout"))
+	monitor.RecordRuntimeError("active", errors.New("context deadline exceeded"))
+	after := runtimeHistory(monitor, "active")
+	if after.DegradationPoints < 55 || after.RealUserPenalty < 20 || after.RuntimePenalty < 14 {
+		t.Fatalf("upload-only timeout evidence did not degrade enough: %+v", after)
+	}
+}
+
+func TestRuntimeDownloadTrafficClearsUploadOnlyEvidence(t *testing.T) {
+	monitor := runtimeHealthMonitor("active", probeHistory(true, urltest.ErrorTypeNone))
+	monitor.RecordRuntimeTraffic("active", 4*1024, false)
+	monitor.RecordRuntimeTraffic("active", 128*1024, true)
+	monitor.RecordRuntimeTraffic("active", 4*1024, false)
+	after := runtimeHistory(monitor, "active")
+	if after.DegradationPoints != 0 || after.RealUserPenalty != 0 {
+		t.Fatalf("fresh download should prevent upload-only stall evidence: %+v", after)
+	}
+}
+
+func TestRuntimeOldErrorsStopContributingAfterTTL(t *testing.T) {
+	monitor := runtimeHealthMonitor("active", probeHistory(true, urltest.ErrorTypeNone))
+	monitor.runtimeStats["active"] = &adapter.RuntimePenaltyStats{
+		Tag:       "active",
+		UpdatedAt: time.Now().Add(-runtimePenaltyTTL - time.Second),
+		Penalty:   25,
+	}
+	if penalty := monitor.runtimePenaltyForTag("active"); penalty != 0 {
+		t.Fatalf("expired runtime penalty=%d, want 0", penalty)
+	}
+}
+
+func TestCheckGenerationResetClearsCurrentBarsAndScores(t *testing.T) {
+	history := probeHistory(true, urltest.ErrorTypeNone)
+	history.HealthScore = 95
+	history.UDPProbeAvailable = true
+	history.UDPPenalty = 7
+	history.UDPReady = true
+	history.CombinedReady = true
+	monitor := runtimeHealthMonitor("active", history)
+
+	monitor.beginCheckGeneration(12, []string{"active"}, "manual_refresh")
+
+	after := runtimeHistory(monitor, "active")
+	if after.URLTestStatus != urltest.StatusChecking || after.Delay != 0 || after.HealthScore != 0 || after.Success {
+		t.Fatalf("generation reset kept displayed health: %+v", after)
+	}
+	if after.UDPProbeAvailable || after.UDPPenalty != 0 || after.UDPReady || after.CombinedReady || after.PingReady {
+		t.Fatalf("generation reset kept stale readiness: %+v", after)
+	}
+	if after.CheckGeneration != 12 {
+		t.Fatalf("generation=%d, want 12", after.CheckGeneration)
+	}
+}
+
+func TestLateResultPreviousGenerationIsIgnored(t *testing.T) {
+	monitor := runtimeHealthMonitor("active", probeHistory(true, urltest.ErrorTypeNone))
+	monitor.beginCheckGeneration(11, []string{"active"}, "manual_refresh")
+
+	monitor.applyResult(testOutcome{
+		outboundTag: "active",
+		cycleID:     10,
+		history: adapter.URLTestHistory{
+			Time: time.Now(), Delay: 40, Success: true, ErrorType: urltest.ErrorTypeNone, HealthScore: 100,
+		},
+	})
+
+	after := runtimeHistory(monitor, "active")
+	if after.CheckGeneration != 11 || after.URLTestStatus != urltest.StatusChecking || after.HealthScore != 0 || after.Success {
+		t.Fatalf("late generation mutated current state: %+v", after)
+	}
+}
+
+func TestCurrentGenerationResultBecomesReady(t *testing.T) {
+	monitor := runtimeHealthMonitor("active", probeHistory(true, urltest.ErrorTypeNone))
+	monitor.beginCheckGeneration(11, []string{"active"}, "background_refresh")
+
+	monitor.applyResult(testOutcome{
+		outboundTag: "active",
+		cycleID:     11,
+		history: adapter.URLTestHistory{
+			Time: time.Now(), Delay: 42, Success: true, ErrorType: urltest.ErrorTypeNone, URLTestStatus: urltest.StatusSuccess, HealthScore: 98,
+		},
+	})
+
+	after := runtimeHistory(monitor, "active")
+	if after.CheckGeneration != 11 || !after.PingReady || !after.QualityReady || !after.SpeedReady || !after.CombinedReady {
+		t.Fatalf("current generation did not become ready: %+v", after)
+	}
+	if after.Delay != 42 || after.HealthScore != 100 || !after.Success {
+		t.Fatalf("current generation did not apply result: %+v", after)
+	}
+}
+
+func TestNewPingDoesNotReuseOldUDPFromPreviousGeneration(t *testing.T) {
+	history := probeHistory(true, urltest.ErrorTypeNone)
+	history.UDPProbeAvailable = true
+	history.UDPPenalty = 10
+	history.UDPReady = true
+	monitor := runtimeHealthMonitor("active", history)
+	monitor.beginCheckGeneration(21, []string{"active"}, "manual_refresh")
+
+	monitor.applyResult(testOutcome{
+		outboundTag: "active",
+		cycleID:     21,
+		history: adapter.URLTestHistory{
+			Time: time.Now(), Delay: 60, Success: true, ErrorType: urltest.ErrorTypeNone, URLTestStatus: urltest.StatusSuccess, HealthScore: 90,
+		},
+	})
+
+	after := runtimeHistory(monitor, "active")
+	if after.UDPProbeAvailable || after.UDPPenalty != 0 || after.UDPReady {
+		t.Fatalf("new generation reused old UDP result: %+v", after)
+	}
+}
+
+func TestTwoQuickRefreshesDoNotMixResults(t *testing.T) {
+	monitor := runtimeHealthMonitor("active", probeHistory(true, urltest.ErrorTypeNone))
+	monitor.beginCheckGeneration(30, []string{"active"}, "manual_refresh")
+	monitor.beginCheckGeneration(31, []string{"active"}, "manual_refresh")
+
+	monitor.applyResult(testOutcome{
+		outboundTag: "active",
+		cycleID:     30,
+		history: adapter.URLTestHistory{
+			Time: time.Now(), Delay: 35, Success: true, ErrorType: urltest.ErrorTypeNone, URLTestStatus: urltest.StatusSuccess, HealthScore: 100,
+		},
+	})
+	if after := runtimeHistory(monitor, "active"); after.CheckGeneration != 31 || after.CombinedReady {
+		t.Fatalf("older quick refresh result was accepted: %+v", after)
+	}
+
+	monitor.applyResult(testOutcome{
+		outboundTag: "active",
+		cycleID:     31,
+		history: adapter.URLTestHistory{
+			Time: time.Now(), Delay: 80, Success: true, ErrorType: urltest.ErrorTypeNone, URLTestStatus: urltest.StatusSuccess, HealthScore: 90,
+		},
+	})
+	if after := runtimeHistory(monitor, "active"); after.CheckGeneration != 31 || after.Delay != 80 || !after.CombinedReady {
+		t.Fatalf("newer quick refresh result was not accepted: %+v", after)
+	}
+}
+
 func TestURLTestStatusLifecycleCoversEveryCycledServer(t *testing.T) {
 	monitor := &OutboundMonitoring{
 		ctx:           context.Background(),
+		logger:        log.StdLogger(),
 		normalQueue:   make(chan *testTask, 2),
 		priorityQueue: make(chan *testTask, 2),
 		outbounds: map[string]*outboundState{
@@ -189,6 +363,7 @@ func TestURLTestStatusLifecycleCoversEveryCycledServer(t *testing.T) {
 		groups:  make(map[string]*groupState),
 		history: urltest.NewHistoryStorage(),
 	}
+	monitor.cycleSeq = 1
 
 	for _, tag := range []string{"success", "failed"} {
 		if !monitor.enqueueTask(&testTask{outboundTag: tag, cycleID: 1}) {
@@ -201,6 +376,7 @@ func TestURLTestStatusLifecycleCoversEveryCycledServer(t *testing.T) {
 
 	monitor.applyResult(testOutcome{
 		outboundTag: "success",
+		cycleID:     1,
 		history: adapter.URLTestHistory{
 			Time: time.Now(), Delay: 42, Success: true, ErrorType: urltest.ErrorTypeNone,
 		},
@@ -208,6 +384,7 @@ func TestURLTestStatusLifecycleCoversEveryCycledServer(t *testing.T) {
 	monitor.applyResult(testOutcome{
 		outboundTag: "failed",
 		err:         errors.New("timeout"),
+		cycleID:     1,
 		history: adapter.URLTestHistory{
 			Time: time.Now(), Delay: TimeoutDelay, Success: false, ErrorType: urltest.ErrorTypeTimeout,
 		},

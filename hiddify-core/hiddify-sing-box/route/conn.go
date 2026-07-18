@@ -58,6 +58,10 @@ func (m *ConnectionManager) Close() error {
 }
 
 func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
+	metadata.Network = N.NetworkTCP
+	if metadata.GetRealOutbound() == "" {
+		metadata.SetRealOutbound(zeonOutboundTag(this))
+	}
 	ctx = adapter.WithContext(ctx, &metadata)
 	var (
 		remoteConn net.Conn
@@ -117,6 +121,10 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 }
 
 func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dialer, conn N.PacketConn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
+	metadata.Network = N.NetworkUDP
+	if metadata.GetRealOutbound() == "" {
+		metadata.SetRealOutbound(zeonOutboundTag(this))
+	}
 	ctx = adapter.WithContext(ctx, &metadata)
 	var (
 		remotePacketConn   net.PacketConn
@@ -313,7 +321,7 @@ func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn,
 	}
 
 	bytes, err := bufio.CopyWithCounters(destinationWriter, sourceReader, source, readCounters, writeCounters, bufio.DefaultIncreaseBufferAfter, bufio.DefaultBatchSize)
-	m.recordRuntimeTraffic(ctx, bytes)
+	m.recordRuntimeTraffic(ctx, bytes, direction)
 	if err != nil {
 		common.Close(source, destination)
 	} else if duplexDst, isDuplex := destination.(N.WriteCloser); isDuplex {
@@ -417,18 +425,19 @@ func (m *ConnectionManager) recordRuntimeSuccess(ctx context.Context) {
 	}
 }
 
-func (m *ConnectionManager) recordRuntimeTraffic(ctx context.Context, bytes int64) {
+func (m *ConnectionManager) recordRuntimeTraffic(ctx context.Context, bytes int64, download bool) {
 	metadata := adapter.ContextFrom(ctx)
 	if metadata == nil || metadata.GetRealOutbound() == "" || bytes <= 0 {
 		return
 	}
 	if monitor := healthmonitoring.Get(ctx); monitor != nil {
-		monitor.RecordRuntimeTraffic(metadata.GetRealOutbound(), bytes)
+		monitor.RecordRuntimeTraffic(metadata.GetRealOutbound(), bytes, download)
 	}
 }
 
 func (m *ConnectionManager) packetConnectionCopy(ctx context.Context, source N.PacketReader, destination N.PacketWriter, direction bool, done *atomic.Bool, onClose N.CloseHandlerFunc) {
-	_, err := bufio.CopyPacket(destination, source)
+	bytes, err := bufio.CopyPacket(destination, source)
+	m.recordRuntimeTraffic(ctx, int64(bytes), direction)
 	if !direction {
 		if err == nil {
 			m.logger.DebugContext(ctx, "packet upload finished")
@@ -436,6 +445,7 @@ func (m *ConnectionManager) packetConnectionCopy(ctx context.Context, source N.P
 			m.logger.TraceContext(ctx, "packet upload closed")
 		} else {
 			m.logger.DebugContext(ctx, "packet upload closed: ", err)
+			m.recordRuntimePenalty(ctx, err, true)
 		}
 	} else {
 		if err == nil {
@@ -444,6 +454,7 @@ func (m *ConnectionManager) packetConnectionCopy(ctx context.Context, source N.P
 			m.logger.TraceContext(ctx, "packet download closed")
 		} else {
 			m.logger.DebugContext(ctx, "packet download closed: ", err)
+			m.recordRuntimePenalty(ctx, err, true)
 		}
 	}
 	if !done.Swap(true) {

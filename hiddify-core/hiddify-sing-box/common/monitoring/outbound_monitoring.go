@@ -48,6 +48,12 @@ const (
 	defaultUDPProbe       = "udp-probe.zeon-vps.link:8443"
 	defaultUDPProbeTopN   = 3
 	defaultUDPCooldown    = 60 * time.Second
+
+	runtimeTrafficStallMinUploadBytes     = 1024
+	runtimeTrafficStallNoDownloadWindow   = 8 * time.Second
+	runtimeTrafficStallEvidenceThreshold  = 2
+	runtimeTrafficValidationProbeCooldown = 30 * time.Second
+	runtimeTrafficTTL                     = 10 * time.Minute
 )
 
 // func RegisterService(registry *boxService.Registry) {
@@ -83,8 +89,7 @@ type OutboundMonitoring struct {
 	urlTestTimeout   time.Duration
 	workersCount     int
 	history          adapter.URLTestHistoryStorage
-
-	mainTicker *time.Ticker
+	mainTicker       *time.Ticker
 
 	priorityQueue chan *testTask
 	normalQueue   chan *testTask
@@ -97,8 +102,9 @@ type OutboundMonitoring struct {
 	cycleSeq     uint64
 	cycleRunning atomic.Bool
 
-	runtimeAccess sync.Mutex
-	runtimeStats  map[string]*adapter.RuntimePenaltyStats
+	runtimeAccess  sync.Mutex
+	runtimeStats   map[string]*adapter.RuntimePenaltyStats
+	runtimeTraffic map[string]*adapter.RuntimeTrafficStats
 
 	manualRefreshAccess sync.Mutex
 	manualRefreshAt     map[string]time.Time
@@ -109,7 +115,7 @@ type OutboundMonitoring struct {
 	udpProbeOptions  urltest.UDPProbeOptions
 	udpProbeCooldown time.Duration
 	udpProbeTopN     int
-	udpProbeQueue    chan string
+	udpProbeQueue    chan udpProbeTask
 	udpProbeAccess   sync.Mutex
 	udpProbeQueued   map[string]bool
 
@@ -276,11 +282,12 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		urlTestTimeout: options.URLTestTimeout.Build(),
 		debounceWindow: options.DebounceWindow.Build(),
 
-		priorityQueue: make(chan *testTask, 1000),
-		normalQueue:   make(chan *testTask, 10000),
-		outbounds:     make(map[string]*outboundState),
-		groups:        make(map[string]*groupState),
-		runtimeStats:  make(map[string]*adapter.RuntimePenaltyStats),
+		priorityQueue:  make(chan *testTask, 1000),
+		normalQueue:    make(chan *testTask, 10000),
+		outbounds:      make(map[string]*outboundState),
+		groups:         make(map[string]*groupState),
+		runtimeStats:   make(map[string]*adapter.RuntimePenaltyStats),
+		runtimeTraffic: make(map[string]*adapter.RuntimeTrafficStats),
 
 		udpProbeQueued: make(map[string]bool),
 	}
@@ -399,8 +406,16 @@ func (m *OutboundMonitoring) SignalChange(outboundTag string) error {
 
 }
 func (m *OutboundMonitoring) TestNow(outboundTag string) error {
-	m.testParents(outboundTag, true)
-	return m.testNow(outboundTag, true)
+	tags := m.collectManualRefreshTargets(outboundTag)
+	if len(tags) == 0 {
+		return errors.New("outbound not registered")
+	}
+	cycleID := atomic.AddUint64(&m.cycleSeq, 1)
+	m.beginCheckGeneration(cycleID, tags, "manual_refresh")
+	for _, tag := range tags {
+		m.testNowWithGeneration(tag, cycleID, true)
+	}
+	return nil
 }
 
 func (m *OutboundMonitoring) TestNowAndWait(outboundTag string, timeout time.Duration) error {
@@ -410,6 +425,7 @@ func (m *OutboundMonitoring) TestNowAndWait(outboundTag string, timeout time.Dur
 	}
 
 	cycleID := atomic.AddUint64(&m.cycleSeq, 1)
+	m.beginCheckGeneration(cycleID, tags, "manual_refresh")
 	if timeout <= 0 {
 		workers := m.workersCount
 		if workers <= 0 {
@@ -438,16 +454,98 @@ func (m *OutboundMonitoring) TestNowAndWait(outboundTag string, timeout time.Dur
 	m.logger.Info("[ManualRefresh] reselect_ready tag=", outboundTag, " groups=", strings.Join(refreshedGroups, ","))
 	m.emitGroupEvent(refreshedGroups)
 	if report.logged {
+		m.logCheckGenerationCompleted(cycleID, tags, "manual_refresh")
 		if report.timeout && report.completed() > 0 {
 			return nil
 		}
 		return err
 	}
 	m.logManualRefreshFinished(outboundTag, report)
+	m.logCheckGenerationCompleted(cycleID, tags, "manual_refresh")
 	if report.timeout && report.completed() > 0 {
 		return nil
 	}
 	return err
+}
+
+func (m *OutboundMonitoring) beginCheckGeneration(generation uint64, tags []string, trigger string) {
+	if len(tags) == 0 {
+		return
+	}
+	m.logger.Warn("[CheckGenerationStarted] generation=", generation, " trigger=", trigger, " servers=", len(tags))
+	for _, tag := range tags {
+		m.resetOutboundCheckState(tag, generation)
+	}
+}
+
+func (m *OutboundMonitoring) resetOutboundCheckState(tag string, generation uint64) {
+	state := m.getState(tag)
+	if state == nil {
+		return
+	}
+	now := time.Now()
+	state.mu.Lock()
+	previousGeneration := state.history.CheckGeneration
+	ipInfo := state.history.IpInfo
+	runtimePenalty := state.history.RuntimePenalty
+	realUserPenalty := state.history.RealUserPenalty
+	degradation := state.history.DegradationPoints
+	stability := state.history.StabilityPoints
+	volatility := state.history.VolatilityPenalty
+	policyPenalty := state.history.PolicyPenalty
+	groupTags := append([]string(nil), state.groupTags...)
+	state.history = adapter.URLTestHistory{
+		Time:              now,
+		IpInfo:            ipInfo,
+		URLTestStatus:     urltest.StatusChecking,
+		RuntimePenalty:    runtimePenalty,
+		RealUserPenalty:   realUserPenalty,
+		DegradationPoints: degradation,
+		StabilityPoints:   stability,
+		VolatilityPenalty: volatility,
+		PolicyPenalty:     policyPenalty,
+		CheckGeneration:   generation,
+	}
+	state.from_cache = false
+	state.invalid = false
+	state.queued = false
+	state.priorityQueued = false
+	state.enqueuedCycle = 0
+	state.udpProbeLast = time.Time{}
+	historySnapshot := state.history
+	state.mu.Unlock()
+
+	m.udpProbeAccess.Lock()
+	delete(m.udpProbeQueued, tag)
+	m.udpProbeAccess.Unlock()
+	m.history.StoreURLTestHistory(tag, &historySnapshot)
+	m.emitGroupEvent(groupTags)
+	m.logger.Info("[OutboundCheckReset] tag=", tag, " generation=", generation, " previous_generation=", previousGeneration, " bars=cleared")
+}
+
+func (m *OutboundMonitoring) logCheckGenerationCompleted(generation uint64, tags []string, trigger string) {
+	ready, failed := 0, 0
+	for _, tag := range tags {
+		state := m.getState(tag)
+		if state == nil {
+			continue
+		}
+		state.mu.Lock()
+		history := state.history
+		state.mu.Unlock()
+		if history.CheckGeneration != generation {
+			continue
+		}
+		switch history.URLTestStatus {
+		case urltest.StatusSuccess:
+			if history.CombinedReady {
+				ready++
+			}
+		case urltest.StatusFailed:
+			failed++
+		}
+	}
+	m.logger.Warn("[CheckGenerationCompleted] generation=", generation, " trigger=", trigger, " ready_servers=", ready, " failed_servers=", failed, " selected=deferred_to_smart_active")
 }
 
 func (m *OutboundMonitoring) logManualRefreshFinished(outboundTag string, report manualRefreshReport) {
@@ -546,18 +644,30 @@ func (m *OutboundMonitoring) prepareManualRefreshTarget(tag string, cycleID uint
 		return false
 	default:
 	}
+	if cycleID != atomic.LoadUint64(&m.cycleSeq) {
+		m.logger.Warn("[OutboundCheckIgnored] tag=", tag, " result_generation=", cycleID, " current_generation=", atomic.LoadUint64(&m.cycleSeq), " stage=prepare reason=stale_generation")
+		return false
+	}
 	state := m.getState(tag)
 	if state == nil {
 		return false
 	}
 	state.mu.Lock()
+	if state.history.CheckGeneration != cycleID {
+		currentGeneration := state.history.CheckGeneration
+		state.mu.Unlock()
+		m.logger.Warn("[OutboundCheckIgnored] tag=", tag, " result_generation=", cycleID, " current_generation=", currentGeneration, " stage=prepare reason=stale_generation")
+		return false
+	}
 	state.enqueuedCycle = cycleID
 	state.queued = true
 	state.history.URLTestStatus = urltest.StatusChecking
 	state.history.Time = time.Now()
+	state.history.CheckGeneration = cycleID
 	groupTags := append([]string(nil), state.groupTags...)
 	state.mu.Unlock()
-	m.logger.Info("[ManualRefreshTarget] tag=", tag, " status=queued")
+	m.logger.Info("[ManualRefreshTarget] tag=", tag, " status=queued generation=", cycleID)
+	m.logger.Info("[OutboundCheckStage] tag=", tag, " generation=", cycleID, " stage=ping state=checking")
 	m.emitGroupEvent(groupTags)
 	return true
 }
@@ -577,9 +687,16 @@ func (m *OutboundMonitoring) executeManualRefreshTarget(cycleID uint64, tag stri
 	m.logger.Info("[ManualRefreshTarget] tag=", tag, " status=started stage=urltest")
 	defer func() {
 		state.mu.Lock()
-		state.testing = false
+		if state.testingCycle == cycleID {
+			state.testing = false
+			state.testingCycle = 0
+		}
 		state.mu.Unlock()
 	}()
+	state.mu.Lock()
+	state.testing = true
+	state.testingCycle = cycleID
+	state.mu.Unlock()
 
 	if !state.outbound.IsReady() {
 		m.logger.Info("outbound ", tag, " is not ready, marking URL test failed")
@@ -792,10 +909,14 @@ func (m *OutboundMonitoring) ConsumeRecentManualRefresh(groupTag string) bool {
 }
 
 func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
+	return m.testNowWithGeneration(outboundTag, m.cycleSeq, priority)
+}
+
+func (m *OutboundMonitoring) testNowWithGeneration(outboundTag string, generation uint64, priority bool) error {
 	m.logger.Info("testing outbound ", outboundTag, " with priority: ", priority)
 	if grp, ok := m.groups[outboundTag]; ok {
 		for tag := range grp.outbounds {
-			m.testNow(tag, false)
+			m.testNowWithGeneration(tag, generation, false)
 		}
 	} else {
 		state := m.getState(outboundTag)
@@ -805,7 +926,7 @@ func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
 
 		task := &testTask{
 			outboundTag: outboundTag,
-			cycleID:     m.cycleSeq,
+			cycleID:     generation,
 			priority:    priority,
 		}
 
@@ -859,8 +980,16 @@ func (m *OutboundMonitoring) RecordRuntimeError(outboundTag string, err error) {
 		return
 	}
 
+	state := m.getState(outboundTag)
+	if state == nil {
+		return
+	}
+
 	now := time.Now()
 	m.runtimeAccess.Lock()
+	if m.runtimeStats == nil {
+		m.runtimeStats = make(map[string]*adapter.RuntimePenaltyStats)
+	}
 	stats := m.runtimeStats[outboundTag]
 	if stats == nil || now.Sub(stats.UpdatedAt) > runtimePenaltyTTL {
 		stats = &adapter.RuntimePenaltyStats{Tag: outboundTag}
@@ -874,26 +1003,23 @@ func (m *OutboundMonitoring) RecordRuntimeError(outboundTag string, err error) {
 	m.runtimeAccess.Unlock()
 
 	degradationPoints, realUserPenalty := 0, 0
-	state := m.getState(outboundTag)
-	if state != nil {
-		state.mu.Lock()
-		degradationDelta := runtimeDegradationForError(errorType) + runtimeBurstDegradationBoost(burstScore)
-		realUserDelta := runtimeRealUserPenaltyForError(errorType) + runtimeBurstRealUserBoost(burstScore)
-		state.history.DegradationPoints = clampHealthPoints(state.history.DegradationPoints + degradationDelta)
-		state.history.RealUserPenalty = clampHealthPenalty(state.history.RealUserPenalty + realUserDelta)
-		state.history.StabilityPoints = clampStability(state.history.StabilityPoints - runtimeStabilityLossForError(errorType))
-		state.history.VolatilityPenalty = clampHealthPenalty(state.history.VolatilityPenalty + 2)
-		state.history.RuntimePenalty = penalty
-		refreshHealthScore(outboundTag, &state.history, state.from_cache)
-		state.invalid = true
-		history := state.history
-		degradationPoints = state.history.DegradationPoints
-		realUserPenalty = state.history.RealUserPenalty
-		groupTags := append([]string(nil), state.groupTags...)
-		state.mu.Unlock()
-		m.history.StoreURLTestHistory(outboundTag, &history)
-		m.emitGroupEvent(groupTags)
-	}
+	state.mu.Lock()
+	degradationDelta := runtimeDegradationForError(errorType) + runtimeBurstDegradationBoost(burstScore)
+	realUserDelta := runtimeRealUserPenaltyForError(errorType) + runtimeBurstRealUserBoost(burstScore)
+	state.history.DegradationPoints = clampHealthPoints(state.history.DegradationPoints + degradationDelta)
+	state.history.RealUserPenalty = clampHealthPenalty(state.history.RealUserPenalty + realUserDelta)
+	state.history.StabilityPoints = clampStability(state.history.StabilityPoints - runtimeStabilityLossForError(errorType))
+	state.history.VolatilityPenalty = clampHealthPenalty(state.history.VolatilityPenalty + 2)
+	state.history.RuntimePenalty = penalty
+	refreshHealthScore(outboundTag, &state.history, state.from_cache)
+	state.invalid = true
+	history := state.history
+	degradationPoints = state.history.DegradationPoints
+	realUserPenalty = state.history.RealUserPenalty
+	groupTags := append([]string(nil), state.groupTags...)
+	state.mu.Unlock()
+	m.history.StoreURLTestHistory(outboundTag, &history)
+	m.emitGroupEvent(groupTags)
 
 	m.logger.Warn("[RuntimeHealth] tag=", outboundTag, " error_type=", errorType, " penalty=", penalty,
 		" degradation=", degradationPoints, " real_user_penalty=", realUserPenalty, " burst_score=", burstScore,
@@ -901,6 +1027,10 @@ func (m *OutboundMonitoring) RecordRuntimeError(outboundTag string, err error) {
 	m.logger.Warn("[RealUserHealth] tag=", outboundTag, " bytes=unavailable error=", errorType,
 		" runtime_penalty=", penalty, " real_user_penalty=", realUserPenalty, " degradation=", degradationPoints,
 		" score=", getRuntimeHistoryScore(state), " text=", errorText)
+	m.logger.Warn("[SmartActiveTrafficHealth] tag=", outboundTag, " event=runtime_error error_type=", errorType,
+		" runtime_penalty=", penalty, " real_user_penalty=", realUserPenalty, " degradation=", degradationPoints,
+		" score=", getRuntimeHistoryScore(state))
+	m.maybeQueueRuntimeValidationProbe(outboundTag, "runtime_error_"+errorType)
 }
 
 // RecordRuntimeSuccess is intentionally fed only by successful transport
@@ -936,7 +1066,7 @@ func (m *OutboundMonitoring) RecordRuntimeSuccess(outboundTag string) {
 
 // RecordRuntimeTraffic receives aggregate byte counts from the tunnel copy
 // loop. It never observes payloads, domains, URLs, or application data.
-func (m *OutboundMonitoring) RecordRuntimeTraffic(outboundTag string, bytes int64) {
+func (m *OutboundMonitoring) RecordRuntimeTraffic(outboundTag string, bytes int64, download bool) {
 	if outboundTag == "" || bytes <= 0 {
 		return
 	}
@@ -944,6 +1074,72 @@ func (m *OutboundMonitoring) RecordRuntimeTraffic(outboundTag string, bytes int6
 	if state == nil {
 		return
 	}
+	now := time.Now()
+	uploadOnlySamples := 0
+	cleanSamples := 0
+	shouldValidate := false
+	direction := "upload"
+	if download {
+		direction = "download"
+	}
+
+	m.runtimeAccess.Lock()
+	if m.runtimeTraffic == nil {
+		m.runtimeTraffic = make(map[string]*adapter.RuntimeTrafficStats)
+	}
+	m.pruneRuntimeTrafficLocked(now)
+	traffic := m.runtimeTraffic[outboundTag]
+	if traffic == nil {
+		traffic = &adapter.RuntimeTrafficStats{Tag: outboundTag}
+		m.runtimeTraffic[outboundTag] = traffic
+	}
+	traffic.UpdatedAt = now
+	if download {
+		traffic.DownloadBytes += bytes
+		traffic.LastDownloadAt = now
+		traffic.UploadOnlySamples = 0
+		traffic.CleanSamples++
+		cleanSamples = traffic.CleanSamples
+	} else {
+		traffic.UploadBytes += bytes
+		traffic.LastUploadAt = now
+		if bytes >= runtimeTrafficStallMinUploadBytes &&
+			(traffic.LastDownloadAt.IsZero() || now.Sub(traffic.LastDownloadAt) >= runtimeTrafficStallNoDownloadWindow) {
+			traffic.UploadOnlySamples++
+			uploadOnlySamples = traffic.UploadOnlySamples
+			shouldValidate = traffic.UploadOnlySamples >= runtimeTrafficStallEvidenceThreshold
+		} else {
+			uploadOnlySamples = traffic.UploadOnlySamples
+		}
+	}
+	m.runtimeAccess.Unlock()
+
+	if !download && shouldValidate {
+		state.mu.Lock()
+		state.history.DegradationPoints = clampHealthPoints(state.history.DegradationPoints + 12)
+		state.history.RealUserPenalty = clampHealthPenalty(state.history.RealUserPenalty + 6)
+		state.history.VolatilityPenalty = clampHealthPenalty(state.history.VolatilityPenalty + 2)
+		state.invalid = true
+		refreshHealthScore(outboundTag, &state.history, state.from_cache)
+		history := state.history
+		groupTags := append([]string(nil), state.groupTags...)
+		state.mu.Unlock()
+		m.history.StoreURLTestHistory(outboundTag, &history)
+		m.emitGroupEvent(groupTags)
+		m.logger.Warn("[SmartActiveTrafficHealth] tag=", outboundTag, " event=stalled_candidate direction=", direction,
+			" upload_bytes_delta=", bytes, " download_bytes_delta=0 upload_only_samples=", uploadOnlySamples,
+			" runtime_penalty=", history.RuntimePenalty, " real_user_penalty=", history.RealUserPenalty,
+			" degradation=", history.DegradationPoints, " score=", history.HealthScore)
+		m.maybeQueueRuntimeValidationProbe(outboundTag, "upload_without_recent_download")
+		return
+	}
+
+	if !download {
+		m.logger.Debug("[SmartActiveTrafficHealth] tag=", outboundTag, " event=traffic_sample direction=", direction,
+			" upload_bytes_delta=", bytes, " download_bytes_delta=0 upload_only_samples=", uploadOnlySamples)
+		return
+	}
+
 	state.mu.Lock()
 	previousRealUserPenalty := state.history.RealUserPenalty
 	previousDegradation := state.history.DegradationPoints
@@ -955,12 +1151,65 @@ func (m *OutboundMonitoring) RecordRuntimeTraffic(outboundTag string, bytes int6
 	groupTags := append([]string(nil), state.groupTags...)
 	state.mu.Unlock()
 	if previousRealUserPenalty == history.RealUserPenalty && previousDegradation == history.DegradationPoints {
-		m.logger.Debug("[RealUserHealth] tag=", outboundTag, " bytes=", bytes, " errors=0 penalty=", history.RealUserPenalty, " degradation=", history.DegradationPoints, " score=", history.HealthScore)
+		m.logger.Debug("[RealUserHealth] tag=", outboundTag, " bytes=", bytes, " direction=", direction, " errors=0 penalty=", history.RealUserPenalty, " degradation=", history.DegradationPoints, " score=", history.HealthScore)
+		m.logger.Debug("[SmartActiveTrafficHealth] tag=", outboundTag, " event=clean_download direction=", direction,
+			" download_bytes_delta=", bytes, " clean_samples=", cleanSamples, " real_user_penalty=", history.RealUserPenalty,
+			" degradation=", history.DegradationPoints, " score=", history.HealthScore)
 		return
 	}
 	m.history.StoreURLTestHistory(outboundTag, &history)
 	m.emitGroupEvent(groupTags)
-	m.logger.Debug("[RealUserHealth] tag=", outboundTag, " bytes=", bytes, " errors=0 penalty=", history.RealUserPenalty, " degradation=", history.DegradationPoints, " score=", history.HealthScore)
+	m.logger.Debug("[RealUserHealth] tag=", outboundTag, " bytes=", bytes, " direction=", direction, " errors=0 penalty=", history.RealUserPenalty, " degradation=", history.DegradationPoints, " score=", history.HealthScore)
+	m.logger.Debug("[SmartActiveRecovery] tag=", outboundTag, " event=clean_download direction=", direction,
+		" download_bytes_delta=", bytes, " clean_samples=", cleanSamples, " real_user_penalty=", history.RealUserPenalty,
+		" degradation=", history.DegradationPoints, " score=", history.HealthScore)
+}
+
+func (m *OutboundMonitoring) maybeQueueRuntimeValidationProbe(outboundTag string, reason string) {
+	if outboundTag == "" || m.ctx == nil || m.priorityQueue == nil {
+		return
+	}
+	select {
+	case <-m.ctx.Done():
+		return
+	default:
+	}
+	now := time.Now()
+	m.runtimeAccess.Lock()
+	if m.runtimeTraffic == nil {
+		m.runtimeTraffic = make(map[string]*adapter.RuntimeTrafficStats)
+	}
+	m.pruneRuntimeTrafficLocked(now)
+	traffic := m.runtimeTraffic[outboundTag]
+	if traffic == nil {
+		traffic = &adapter.RuntimeTrafficStats{Tag: outboundTag}
+		m.runtimeTraffic[outboundTag] = traffic
+	}
+	traffic.UpdatedAt = now
+	if !traffic.LastProbeAt.IsZero() && now.Sub(traffic.LastProbeAt) < runtimeTrafficValidationProbeCooldown {
+		m.runtimeAccess.Unlock()
+		m.logger.Debug("[SmartActiveProbe] tag=", outboundTag, " trigger=", reason, " decision=skip reason=probe_cooldown")
+		return
+	}
+	traffic.LastProbeAt = now
+	m.runtimeAccess.Unlock()
+	if err := m.InvalidateTest(outboundTag); err != nil {
+		m.logger.Debug("[SmartActiveProbe] tag=", outboundTag, " trigger=", reason, " decision=skip reason=", err)
+		return
+	}
+	m.logger.Warn("[SmartActiveProbe] tag=", outboundTag, " trigger=", reason, " decision=queued validation=bounded_urltest")
+}
+
+func (m *OutboundMonitoring) pruneRuntimeTrafficLocked(now time.Time) {
+	for tag, stats := range m.runtimeTraffic {
+		if stats == nil || now.Sub(stats.UpdatedAt) > runtimeTrafficTTL {
+			delete(m.runtimeTraffic, tag)
+			continue
+		}
+		if _, ok := m.outbounds[tag]; !ok {
+			delete(m.runtimeTraffic, tag)
+		}
+	}
 }
 
 func getRuntimeHistoryScore(state *outboundState) int {
@@ -1013,7 +1262,7 @@ func (m *OutboundMonitoring) configureUDPProbe(options option.MonitoringOptions)
 	m.udpProbeOptions = probeOptions
 	m.udpProbeCooldown = cooldown
 	m.udpProbeTopN = topN
-	m.udpProbeQueue = make(chan string, 64)
+	m.udpProbeQueue = make(chan udpProbeTask, 64)
 
 	if !enabled {
 		return
@@ -1046,6 +1295,14 @@ func (m *OutboundMonitoring) scheduleUDPProbesFromOutcomes(outcomes []testOutcom
 		if state == nil || !m.isUDPProbeCandidate(state.outbound) {
 			continue
 		}
+		state.mu.Lock()
+		currentGeneration := state.history.CheckGeneration
+		currentReady := state.history.CombinedReady
+		state.mu.Unlock()
+		if currentGeneration != outcome.cycleID || !currentReady {
+			m.logger.Warn("[OutboundCheckIgnored] tag=", outcome.outboundTag, " result_generation=", outcome.cycleID, " current_generation=", currentGeneration, " stage=udp_schedule reason=stale_generation")
+			continue
+		}
 		candidates = append(candidates, outcome)
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
@@ -1060,7 +1317,7 @@ func (m *OutboundMonitoring) scheduleUDPProbesFromOutcomes(outcomes []testOutcom
 		candidates = candidates[:m.udpProbeTopN]
 	}
 	for _, candidate := range candidates {
-		m.enqueueUDPProbe(candidate.outboundTag)
+		m.enqueueUDPProbe(candidate.outboundTag, candidate.cycleID)
 	}
 }
 
@@ -1075,13 +1332,19 @@ func (m *OutboundMonitoring) isUDPProbeCandidate(outbound adapter.Outbound) bool
 	return common.Contains(outbound.Network(), N.NetworkUDP)
 }
 
-func (m *OutboundMonitoring) enqueueUDPProbe(tag string) {
+func (m *OutboundMonitoring) enqueueUDPProbe(tag string, generation uint64) {
 	state := m.getState(tag)
 	if state == nil {
 		return
 	}
 	now := time.Now()
 	state.mu.Lock()
+	if state.history.CheckGeneration != generation {
+		currentGeneration := state.history.CheckGeneration
+		state.mu.Unlock()
+		m.logger.Warn("[OutboundCheckIgnored] tag=", tag, " result_generation=", generation, " current_generation=", currentGeneration, " stage=udp_enqueue reason=stale_generation")
+		return
+	}
 	if state.udpProbeRunning || (!state.udpProbeLast.IsZero() && now.Sub(state.udpProbeLast) < m.udpProbeCooldown) {
 		state.mu.Unlock()
 		return
@@ -1101,7 +1364,8 @@ func (m *OutboundMonitoring) enqueueUDPProbe(tag string) {
 	m.udpProbeAccess.Unlock()
 
 	select {
-	case m.udpProbeQueue <- tag:
+	case m.udpProbeQueue <- udpProbeTask{tag: tag, generation: generation}:
+		m.logger.Info("[OutboundCheckStage] tag=", tag, " generation=", generation, " stage=udp state=checking")
 	case <-m.ctx.Done():
 		m.clearUDPProbeQueued(tag)
 	default:
@@ -1127,21 +1391,29 @@ func (m *OutboundMonitoring) udpProbeLoop() {
 		select {
 		case <-m.ctx.Done():
 			return
-		case tag := <-m.udpProbeQueue:
+		case task := <-m.udpProbeQueue:
 			m.udpProbeAccess.Lock()
-			delete(m.udpProbeQueued, tag)
+			delete(m.udpProbeQueued, task.tag)
 			m.udpProbeAccess.Unlock()
-			m.runUDPProbe(tag)
+			m.runUDPProbe(task)
 		}
 	}
 }
 
-func (m *OutboundMonitoring) runUDPProbe(tag string) {
+func (m *OutboundMonitoring) runUDPProbe(task udpProbeTask) {
+	tag := task.tag
 	state := m.getState(tag)
 	if state == nil {
 		return
 	}
 	state.mu.Lock()
+	if state.history.CheckGeneration != task.generation {
+		currentGeneration := state.history.CheckGeneration
+		state.udpProbeRunning = false
+		state.mu.Unlock()
+		m.logger.Warn("[OutboundCheckIgnored] tag=", tag, " result_generation=", task.generation, " current_generation=", currentGeneration, " stage=udp reason=stale_generation")
+		return
+	}
 	outbound := state.outbound
 	groupTags := append([]string(nil), state.groupTags...)
 	state.mu.Unlock()
@@ -1153,12 +1425,20 @@ func (m *OutboundMonitoring) runUDPProbe(tag string) {
 	result := urltest.RunUDPProbeThroughOutbound(ctx, outbound, m.udpProbeEndpoint, m.udpProbeSecret, m.udpProbeOptions)
 
 	state.mu.Lock()
+	if state.history.CheckGeneration != task.generation {
+		currentGeneration := state.history.CheckGeneration
+		state.udpProbeRunning = false
+		state.mu.Unlock()
+		m.logger.Warn("[OutboundCheckIgnored] tag=", tag, " result_generation=", task.generation, " current_generation=", currentGeneration, " stage=udp reason=stale_generation")
+		return
+	}
 	state.udpProbeRunning = false
 	state.udpProbeLast = result.UpdatedAt
 	state.history.UDPProbeAvailable = result.Available
 	state.history.UDPPenalty = result.Penalty
 	state.history.UDPLoss = result.Loss
 	state.history.UDPJitterMs = result.JitterMs
+	state.history.UDPReady = true
 	refreshHealthScore(tag, &state.history, state.from_cache)
 	history := state.history
 	state.mu.Unlock()
@@ -1172,6 +1452,7 @@ func (m *OutboundMonitoring) runUDPProbe(tag string) {
 	} else {
 		m.logger.Warn("[UDPProbe] tag=", tag, " unavailable reason=", result.ErrorType, " text=", result.ErrorText)
 	}
+	m.logger.Info("[OutboundCheckStage] tag=", tag, " generation=", task.generation, " stage=udp state=completed available=", result.Available, " penalty=", result.Penalty)
 }
 
 func (m *OutboundMonitoring) SubscribeGroup(groupTag string) (observer <-chan GroupEvent, err error) {
@@ -1267,13 +1548,17 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 
 	state.mu.Lock()
 	state.testing = true
+	state.testingCycle = task.cycleID
 	state.mu.Unlock()
 	if task.manual {
 		m.logger.Info("[ManualRefreshTarget] tag=", task.outboundTag, " status=started")
 	}
 	defer func() {
 		state.mu.Lock()
-		state.testing = false
+		if state.testingCycle == task.cycleID {
+			state.testing = false
+			state.testingCycle = 0
+		}
 		state.mu.Unlock()
 	}()
 	state.mu.Lock()
@@ -1439,6 +1724,7 @@ func (m *OutboundMonitoring) runCycle() {
 	if len(tags) == 0 {
 		return
 	}
+	m.beginCheckGeneration(cycleID, tags, "background_refresh")
 	defer func() {
 		if m.cacheDirty.Swap(false) {
 			m.saveHistory()
@@ -1454,6 +1740,7 @@ func (m *OutboundMonitoring) runCycle() {
 			}
 		}
 		if success > 0 || idx == len(m.urls)-1 {
+			m.logCheckGenerationCompleted(cycleID, tags, "background_refresh")
 			return
 		}
 		m.currentLinkIndex.Store((m.currentLinkIndex.Load() + 1) % uint32(len(m.urls)))
@@ -1505,11 +1792,22 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 		return false
 	default:
 	}
+	currentGeneration := atomic.LoadUint64(&m.cycleSeq)
+	if task.cycleID != currentGeneration {
+		m.logger.Warn("[OutboundCheckIgnored] tag=", task.outboundTag, " result_generation=", task.cycleID, " current_generation=", currentGeneration, " stage=enqueue reason=stale_generation")
+		return false
+	}
 	state, ok := m.outbounds[task.outboundTag]
 	if !ok {
 		return false
 	}
 	state.mu.Lock()
+	if state.history.CheckGeneration > 0 && state.history.CheckGeneration != task.cycleID {
+		currentGeneration := state.history.CheckGeneration
+		state.mu.Unlock()
+		m.logger.Warn("[OutboundCheckIgnored] tag=", task.outboundTag, " result_generation=", task.cycleID, " current_generation=", currentGeneration, " stage=enqueue reason=stale_generation")
+		return false
+	}
 	if task.priority {
 		if state.priorityQueued {
 			state.mu.Unlock()
@@ -1528,6 +1826,7 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 	previousTime := state.history.Time
 	state.history.URLTestStatus = urltest.StatusChecking
 	state.history.Time = time.Now()
+	state.history.CheckGeneration = task.cycleID
 	groupTags := append([]string(nil), state.groupTags...)
 	state.mu.Unlock()
 
@@ -1560,14 +1859,17 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 		return false
 	}
 	m.emitGroupEvent(groupTags)
+	m.logger.Info("[OutboundCheckStage] tag=", task.outboundTag, " generation=", task.cycleID, " stage=ping state=checking")
 	return true
 }
 
 func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHistory {
-	select {
-	case <-m.ctx.Done():
-		return nil
-	default:
+	if m.ctx != nil {
+		select {
+		case <-m.ctx.Done():
+			return nil
+		default:
+		}
 	}
 	state, ok := m.outbounds[outcome.outboundTag]
 	if !ok {
@@ -1576,6 +1878,10 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
+	if state.history.CheckGeneration > 0 && outcome.cycleID != state.history.CheckGeneration {
+		m.logger.Warn("[OutboundCheckIgnored] tag=", outcome.outboundTag, " result_generation=", outcome.cycleID, " current_generation=", state.history.CheckGeneration, " stage=ping reason=stale_generation")
+		return nil
+	}
 	state.queued = false
 	state.priorityQueued = false
 	state.enqueuedCycle = 0
@@ -1600,17 +1906,24 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.history.RuntimePenalty = outcome.history.RuntimePenalty
 	state.history.FreshnessPenalty = outcome.history.FreshnessPenalty
 	state.history.PolicyPenalty = outcome.history.PolicyPenalty
+	state.history.CheckGeneration = outcome.cycleID
+	state.history.PingReady = true
+	state.history.QualityReady = true
+	state.history.SpeedReady = true
+	state.history.CombinedReady = true
 	applyProbeEvidence(outcome.outboundTag, &state.history, previousHistory)
 	if state.udpProbeLast.IsZero() || time.Since(state.udpProbeLast) > m.udpProbeCooldown*3 {
 		state.history.UDPProbeAvailable = false
 		state.history.UDPPenalty = 0
 		state.history.UDPLoss = 0
 		state.history.UDPJitterMs = 0
+		state.history.UDPReady = false
 	} else {
 		state.history.UDPProbeAvailable = udpAvailable
 		state.history.UDPPenalty = udpPenalty
 		state.history.UDPLoss = udpLoss
 		state.history.UDPJitterMs = udpJitter
+		state.history.UDPReady = true
 		refreshHealthScore(outcome.outboundTag, &state.history, false)
 	}
 	state.from_cache = false
@@ -1620,6 +1933,16 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	m.history.StoreURLTestHistory(outcome.outboundTag, &state.history)
 
 	m.emitGroupEvent(state.groupTags)
+	stageState := "completed"
+	if !outcome.history.Success {
+		stageState = "failed"
+	}
+	m.logger.Info("[OutboundCheckStage] tag=", outcome.outboundTag, " generation=", outcome.cycleID, " stage=ping state=", stageState, " delay=", state.history.Delay)
+	m.logger.Info("[OutboundCheckStage] tag=", outcome.outboundTag, " generation=", outcome.cycleID, " stage=quality state=", stageState, " score=", state.history.HealthScore)
+	m.logger.Info("[SmartActiveFreshness] tag=", outcome.outboundTag, " generation=", outcome.cycleID,
+		" ping_ready=", state.history.PingReady, " quality_ready=", state.history.QualityReady,
+		" speed_ready=", state.history.SpeedReady, " udp_ready=", state.history.UDPReady,
+		" ranking_eligible=", state.history.Success && state.history.CombinedReady)
 	return &state.history
 }
 
@@ -1859,6 +2182,18 @@ func preferHistory(candidate, current *adapter.URLTestHistory) bool {
 
 func (m *OutboundMonitoring) applyDynamicHealth(tag string, his *adapter.URLTestHistory) {
 	if his == nil {
+		return
+	}
+	if his.CheckGeneration > 0 && !his.CombinedReady {
+		his.Delay = 0
+		his.Success = false
+		his.ErrorType = ""
+		his.ErrorText = ""
+		his.HealthScore = 0
+		his.UDPProbeAvailable = false
+		his.UDPPenalty = 0
+		his.UDPLoss = 0
+		his.UDPJitterMs = 0
 		return
 	}
 	if his.Delay > 0 && his.Delay < TimeoutDelay && his.ErrorType == "" {
@@ -2114,6 +2449,11 @@ type testOutcome struct {
 	priority    bool
 }
 
+type udpProbeTask struct {
+	tag        string
+	generation uint64
+}
+
 type outboundState struct {
 	mu sync.Mutex
 
@@ -2127,6 +2467,7 @@ type outboundState struct {
 	queued         bool
 	priorityQueued bool
 	testing        bool
+	testingCycle   uint64
 	enqueuedCycle  uint64
 	from_cache     bool
 
@@ -2202,23 +2543,28 @@ func (m *OutboundMonitoring) loadHistory() *History {
 			if his.Delay >= TimeoutDelay {
 				his.Delay = 0
 			}
+			his.Delay = 0
+			his.Success = false
+			his.ErrorType = ""
+			his.ErrorText = ""
+			his.URLTestStatus = urltest.StatusNotTested
+			his.HealthScore = 0
 			his.RuntimePenalty = 0
+			his.RealUserPenalty = 0
+			his.FreshnessPenalty = 0
+			his.VolatilityPenalty = 0
+			his.StabilityPoints = 0
+			his.DegradationPoints = 0
 			his.UDPProbeAvailable = false
 			his.UDPPenalty = 0
 			his.UDPLoss = 0
 			his.UDPJitterMs = 0
-			if his.Delay > 0 && his.ErrorType == "" {
-				his.Success = true
-				his.ErrorType = urltest.ErrorTypeNone
-				his.ErrorText = ""
-			}
-			if his.ErrorType == "" {
-				his.ErrorType = urltest.ErrorTypeUnknown
-			}
-			if his.URLTestStatus == "" {
-				his.URLTestStatus = inferURLTestStatus(his)
-			}
-			refreshHealthScore(tag, his, true)
+			his.CheckGeneration = 0
+			his.PingReady = false
+			his.QualityReady = false
+			his.SpeedReady = false
+			his.UDPReady = false
+			his.CombinedReady = false
 			state.mu.Lock()
 			state.history = *his
 			state.from_cache = true

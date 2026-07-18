@@ -5,8 +5,13 @@ import (
 	"testing"
 
 	"github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
 )
+
+func testConfigContext() context.Context {
+	return include.Context(context.Background())
+}
 
 func TestResolveEffectiveTunMTUDynamicByTransport(t *testing.T) {
 	hopt := DefaultHiddifyOptions()
@@ -201,7 +206,7 @@ func containsString(items []string, target string) bool {
 }
 
 func TestParseConfigUsesFullConfigFlag(t *testing.T) {
-	ctx := context.Background()
+	ctx := testConfigContext()
 	raw := `{
   "outbounds":[{"type":"direct","tag":"d1"}],
   "route":{"final":"d1"}
@@ -224,7 +229,7 @@ func TestParseConfigUsesFullConfigFlag(t *testing.T) {
 }
 
 func TestParseConfigWrapsSingleOutboundObject(t *testing.T) {
-	ctx := context.Background()
+	ctx := testConfigContext()
 	raw := `{"type":"direct","tag":"d1"}`
 	parsed, err := ParseConfig(ctx, &ReadOptions{Content: raw}, false, DefaultHiddifyOptions(), false)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
+	"github.com/sagernet/sing-box/common/conntrack"
 	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/common/monitoring"
 	C "github.com/sagernet/sing-box/constant"
@@ -108,7 +109,7 @@ func (s *Balancer) Start() error {
 	case StrategySmartActiveAuto:
 		s.strategyFn = NewSmartActive(outbounds, s.options)
 		s.smartActiveDebugFault = newSmartActiveDebugFault(s.options)
-		s.logger.Info("[SmartActiveLifecycle] event=vpn_start group=", s.Tag(), " fallback_active=", s.strategyFn.Now(), " candidates=", len(outbounds))
+		s.logger.Info("[SmartActiveLifecycle] event=vpn_start group=", s.Tag(), " provisional_active=", s.strategyFn.Now(), " candidates=", len(outbounds))
 	default:
 		return E.New("unknown load balance strategy: ", s.options.Strategy)
 	}
@@ -194,7 +195,17 @@ func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHis
 		" real_user_penalty=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.RealUserPenalty }),
 		" stability=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.StabilityPoints }))
 	s.logger.Info("[SmartActiveDecision] action=", decision.action, " reason=", decisionReason, " from=", decision.from, " to=", decision.to, " current=", current, " mode=", decision.mode)
-	for rank, tag := range s.topSmartActiveCandidates(history, 5) {
+	comparisonTag := decision.to
+	if comparisonTag == "" {
+		for _, tag := range s.topSmartActiveCandidates(history, 0) {
+			if tag != current {
+				comparisonTag = tag
+				break
+			}
+		}
+	}
+	s.logSmartActiveComparison(history, decision, current, comparisonTag, decisionReason)
+	for rank, tag := range s.topSmartActiveCandidates(history, 0) {
 		historyItem := history[tag]
 		s.logger.Info("[SmartActiveRanking] rank=", rank+1, " tag=", tag, " score=", getTagHealthScore(tag, history),
 			" delay=", getTagDelay(tag, history), " success=", getTagSuccess(tag, history),
@@ -205,12 +216,42 @@ func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHis
 			" real_user_penalty=", historyValue(historyItem, func(h *adapter.URLTestHistory) int { return h.RealUserPenalty }),
 			" volatility=", historyValue(historyItem, func(h *adapter.URLTestHistory) int { return h.VolatilityPenalty }),
 			" selected=", tag == current)
+		s.logger.Info("[SmartActiveCandidate] rank=", rank+1,
+			" real_outbound_tag=", tag,
+			" display_tag=", tag,
+			" delay=", getTagDelay(tag, history),
+			" quality_score=", smartActiveQualityScore(tag, historyItem),
+			" speed_score=unavailable",
+			" combined_score=", getTagHealthScore(tag, history),
+			" external_score=unavailable",
+			" udp_health=", smartActiveUDPHealth(historyItem),
+			" runtime_penalty=", historyValue(historyItem, func(h *adapter.URLTestHistory) int { return h.RuntimePenalty }),
+			" real_user_score=", smartActiveRealUserScore(historyItem),
+			" freshness=", smartActiveFreshness(historyItem),
+			" generation=", historyValue64(historyItem, func(h *adapter.URLTestHistory) uint64 { return h.CheckGeneration }),
+			" ping_ready=", historyBool(historyItem, func(h *adapter.URLTestHistory) bool { return h.PingReady }),
+			" quality_ready=", historyBool(historyItem, func(h *adapter.URLTestHistory) bool { return h.QualityReady }),
+			" speed_ready=", historyBool(historyItem, func(h *adapter.URLTestHistory) bool { return h.SpeedReady }),
+			" udp_ready=", historyBool(historyItem, func(h *adapter.URLTestHistory) bool { return h.UDPReady }),
+			" combined_ready=", historyBool(historyItem, func(h *adapter.URLTestHistory) bool { return h.CombinedReady }),
+			" health_state=", smartActiveState(historyItem),
+			" bucket=", smartActiveBucket(tag, historyItem),
+			" final_ranking_score=", smartActiveFinalRankingScore(tag, historyItem),
+			" exclude_reason=", smartActiveExcludeReason(tag, historyItem),
+			" selected=", tag == current)
 	}
 	if decision.action == "switch" {
 		if decision.state == "CRITICAL" {
 			s.logger.Warn("[SmartActiveEmergency] from=", decision.from, " to=", decision.to, " error=", errorTypeOf(history[decision.from]))
 		}
-		s.logger.Warn("[SmartActiveSwitch] from=", decision.from, " to=", decision.to, " reason=", decisionReason)
+		s.logger.Warn("[SmartActiveSwitch] from=", decision.from, " to=", decision.to, " reason=", decisionReason,
+			" activeConnections=", conntrack.Count(), " activeDownloadBps=unavailable videoLikeLongLivedConnections=unavailable")
+	} else if decision.action == "confirm" {
+		s.logger.Info("[SmartActiveConfirmed] tag=", decision.to, " reason=", decisionReason, " mode=", decision.mode)
+	} else if decision.action == "keep" {
+		s.logger.Info("[SmartActiveKeep] current=", current, " candidate=", comparisonTag, " reason=", decisionReason,
+			" currentDelay=", getTagDelay(current, history), " candidateDelay=", getTagDelay(comparisonTag, history),
+			" currentScore=", getTagHealthScore(current, history), " candidateScore=", getTagHealthScore(comparisonTag, history))
 	}
 	for _, tag := range recovered {
 		s.logger.Info("[SmartActiveRecovery] tag=", tag, " restored=true score=", getTagHealthScore(tag, history), " clean_probes=2")
@@ -237,11 +278,154 @@ func (s *Balancer) topSmartActiveCandidates(history map[string]*adapter.URLTestH
 	return tags
 }
 
+func (s *Balancer) logSmartActiveComparison(history map[string]*adapter.URLTestHistory, decision smartDecision, current, candidate, decisionReason string) {
+	if current == "" || candidate == "" {
+		return
+	}
+	currentDelay := getTagDelay(current, history)
+	candidateDelay := getTagDelay(candidate, history)
+	delayDelta := int(currentDelay) - int(candidateDelay)
+	s.logger.Info("[SmartActiveComparison]",
+		" current=", current,
+		" currentDelay=", currentDelay,
+		" currentQuality=", smartActiveQualityScore(current, history[current]),
+		" currentScore=", getTagHealthScore(current, history),
+		" currentState=", smartActiveState(history[current]),
+		" currentBucket=", smartActiveBucket(current, history[current]),
+		" candidate=", candidate,
+		" candidateDelay=", candidateDelay,
+		" candidateQuality=", smartActiveQualityScore(candidate, history[candidate]),
+		" candidateScore=", getTagHealthScore(candidate, history),
+		" candidateState=", smartActiveState(history[candidate]),
+		" candidateBucket=", smartActiveBucket(candidate, history[candidate]),
+		" delayDelta=", delayDelta,
+		" decision=", decision.action,
+		" reason=", decisionReason)
+}
+
+func smartActiveQualityScore(tag string, history *adapter.URLTestHistory) int {
+	return getHealthScore(tag, history)
+}
+
+func smartActiveRealUserScore(history *adapter.URLTestHistory) int {
+	if history == nil {
+		return 0
+	}
+	score := 100 - history.RealUserPenalty - history.DegradationPoints/2
+	if score < 0 {
+		return 0
+	}
+	return score
+}
+
+func smartActiveFreshness(history *adapter.URLTestHistory) string {
+	if history == nil {
+		return "missing"
+	}
+	if history.IsFromCache {
+		return "cached"
+	}
+	if history.Time.IsZero() {
+		return "unknown"
+	}
+	return "fresh"
+}
+
+func smartActiveBucket(tag string, history *adapter.URLTestHistory) string {
+	if history == nil {
+		return "unknown"
+	}
+	if !history.Success {
+		if history.ErrorType == "" {
+			return "unknown"
+		}
+		return "bad"
+	}
+	score := getHealthScore(tag, history)
+	switch {
+	case score >= 90:
+		return "excellent"
+	case score >= 75:
+		return "good"
+	case score >= 60:
+		return "medium"
+	case score >= 35:
+		return "weak"
+	default:
+		return "bad"
+	}
+}
+
+func smartActiveUDPHealth(history *adapter.URLTestHistory) string {
+	if history == nil {
+		return "unknown"
+	}
+	if !history.UDPProbeAvailable {
+		return "unknown"
+	}
+	if history.UDPPenalty > 0 {
+		return "penalized"
+	}
+	return "ok"
+}
+
+func smartActiveFinalRankingScore(tag string, history *adapter.URLTestHistory) int {
+	if reason := smartActiveExcludeReason(tag, history); reason != "" {
+		return 0
+	}
+	return getHealthScore(tag, history)
+}
+
+func smartActiveExcludeReason(tag string, history *adapter.URLTestHistory) string {
+	if history == nil {
+		return "missing_history"
+	}
+	if history.CheckGeneration == 0 {
+		return "missing_generation"
+	}
+	if history.IsFromCache {
+		return "stale_cached"
+	}
+	if history.URLTestStatus == "checking" {
+		return "checking"
+	}
+	if history.CheckGeneration > 0 && !history.CombinedReady {
+		return "not_ready_current_generation"
+	}
+	if !history.Success {
+		if history.ErrorType == "" {
+			return "failed_unknown"
+		}
+		return "failed_" + history.ErrorType
+	}
+	if smartActiveState(history) == "BAD" || smartActiveState(history) == "CRITICAL" {
+		return "bad_health_state"
+	}
+	if history.RuntimePenalty > 0 || history.RealUserPenalty > 0 || history.DegradationPoints > 0 || history.UDPPenalty > 0 {
+		return "penalized"
+	}
+	if getHealthScore(tag, history) < 35 {
+		return "score_below_minimum"
+	}
+	return ""
+}
+
 func historyValue(history *adapter.URLTestHistory, get func(*adapter.URLTestHistory) int) int {
 	if history == nil {
 		return 0
 	}
 	return get(history)
+}
+
+func historyValue64(history *adapter.URLTestHistory, get func(*adapter.URLTestHistory) uint64) uint64 {
+	if history == nil {
+		return 0
+	}
+	return get(history)
+}
+
+func historyBool(history *adapter.URLTestHistory, get func(*adapter.URLTestHistory) bool) bool {
+	return history != nil && get(history)
 }
 
 func errorTypeOf(history *adapter.URLTestHistory) string {

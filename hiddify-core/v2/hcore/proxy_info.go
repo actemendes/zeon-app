@@ -52,30 +52,42 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 	}
 	if url_test_history != nil {
 		out.UrlTestTime = timestamppb.New(url_test_history.Time)
-		out.UrlTestDelay = int32(url_test_history.Delay)
-		if url_test_history.IsFromCache {
+		currentCombinedReady := url_test_history.CheckGeneration == 0 || url_test_history.CombinedReady
+		if currentCombinedReady {
+			out.UrlTestDelay = int32(url_test_history.Delay)
+		}
+		if url_test_history.IsFromCache || !currentCombinedReady {
 			out.UrlTestDelay = 0
 		}
-		out.Success = url_test_history.Success
-		out.ErrorType = url_test_history.ErrorType
-		out.ErrorText = url_test_history.ErrorText
+		out.Success = currentCombinedReady && url_test_history.Success
+		if currentCombinedReady {
+			out.ErrorType = url_test_history.ErrorType
+			out.ErrorText = url_test_history.ErrorText
+		}
 		out.UrlTestStatus = url_test_history.URLTestStatus
 		if out.UrlTestStatus == "" {
-			if url_test_history.Success && url_test_history.Delay > 0 && url_test_history.Delay < monitoring.TimeoutDelay {
+			if currentCombinedReady && url_test_history.Success && url_test_history.Delay > 0 && url_test_history.Delay < monitoring.TimeoutDelay {
 				out.UrlTestStatus = urltest.StatusSuccess
-			} else if !url_test_history.Time.IsZero() || url_test_history.ErrorType != "" {
+			} else if currentCombinedReady && (!url_test_history.Time.IsZero() || url_test_history.ErrorType != "") {
 				out.UrlTestStatus = urltest.StatusFailed
 			} else {
 				out.UrlTestStatus = urltest.StatusNotTested
 			}
 		}
-		out.HealthScore = int32(url_test_history.HealthScore)
+		if !currentCombinedReady && out.UrlTestStatus != urltest.StatusChecking {
+			out.UrlTestStatus = urltest.StatusChecking
+		}
+		if currentCombinedReady {
+			out.HealthScore = int32(url_test_history.HealthScore)
+		}
 		out.RuntimePenalty = int32(url_test_history.RuntimePenalty)
 		out.FreshnessPenalty = int32(url_test_history.FreshnessPenalty)
-		out.UdpProbeAvailable = url_test_history.UDPProbeAvailable
-		out.UdpLoss = url_test_history.UDPLoss
-		out.UdpJitterMs = int32(url_test_history.UDPJitterMs)
-		out.UdpPenalty = int32(url_test_history.UDPPenalty)
+		if url_test_history.CheckGeneration == 0 || url_test_history.UDPReady {
+			out.UdpProbeAvailable = url_test_history.UDPProbeAvailable
+			out.UdpLoss = url_test_history.UDPLoss
+			out.UdpJitterMs = int32(url_test_history.UDPJitterMs)
+			out.UdpPenalty = int32(url_test_history.UDPPenalty)
+		}
 		if url_test_history.IpInfo != nil {
 			out.Ipinfo = &IpInfo{
 				Ip:          url_test_history.IpInfo.IP,
