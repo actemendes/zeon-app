@@ -18,7 +18,6 @@ abstract final class UiNames {
   static const screenProfileDetails = 'screen_profile_details';
   static const screenProfileLinkAccount = 'screen_profile_link_account';
   static const screenProfileMenu = 'screen_profile_menu';
-  static const screenProfilePayment = 'screen_profile_payment';
   static const screenProfiles = 'screen_profiles';
   static const screenProxiesOverview = 'screen_proxies_overview';
   static const screenAndroidApps = 'screen_android_apps';

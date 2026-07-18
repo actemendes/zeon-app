@@ -10,13 +10,11 @@ import 'package:zeon/features/about/widget/about_page.dart';
 import 'package:zeon/features/home/widget/home_page.dart';
 import 'package:zeon/features/intro/widget/intro_page.dart';
 import 'package:zeon/features/log/overview/logs_page.dart';
-import 'package:zeon/features/mobile/data/mobile_payment_deep_link.dart';
 import 'package:zeon/features/per_app_proxy/overview/per_app_proxy_page.dart';
 import 'package:zeon/features/profile/details/profile_details_page.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/profile/overview/profile_link_account_page.dart';
 import 'package:zeon/features/profile/overview/profile_menu_page.dart';
-import 'package:zeon/features/profile/overview/profile_payment_page.dart';
 import 'package:zeon/features/profile/overview/profiles_page.dart';
 import 'package:zeon/features/proxy/overview/proxies_overview_page.dart';
 import 'package:zeon/features/settings/overview/sections/dns_options_page.dart';
@@ -79,12 +77,8 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
         } else if (state.uri.queryParameters['url'] != null) {
           url = state.uri.queryParameters['url'];
         }
-        final sid = url == null ? null : extractPaymentSessionIdFromDeepLink(url);
-
         if (!introCompleted) {
           return url != null ? '/intro?url=$url' : '/intro';
-        } else if (sid != null) {
-          return '/profile-payment?sid=$sid';
         } else if (isIntro) {
           return '/home';
         } else if (url != null) {
@@ -251,12 +245,6 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                   path: '/profile-menu',
                   builder: (_, _) => FocusScope(node: branchesScope['profileMenu'], child: const ProfileMenuPage()),
                   routes: <GoRoute>[
-                    GoRoute(
-                      name: 'profilePayment',
-                      path: '/profile-payment',
-                      pageBuilder: (_, state) =>
-                          customTransition(TransitionType.slide, state.pageKey, const ProfilePaymentPage()),
-                    ),
                     GoRoute(
                       name: 'profileLinkAccount',
                       path: '/link-account',

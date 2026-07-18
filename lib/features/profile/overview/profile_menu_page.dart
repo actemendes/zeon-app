@@ -1,7 +1,10 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
@@ -9,9 +12,8 @@ import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/features/profile/data/profile_name_parser.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
+import 'package:zeon/features/profile/overview/external_subscription_account.dart';
 import 'package:zeon/features/profile/overview/profiles_notifier.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 const _avatarEmojiAssetDir = 'assets/images/emoji/apple/64';
 const _debugSeedProfileEnabled = bool.fromEnvironment('debug_seed_profile_enabled');
@@ -266,7 +268,8 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
           image: const DecorationImage(image: AssetImage(_backgroundAsset), fit: BoxFit.cover),
         ),
         child: InkWell(
-          onTap: () => context.pushNamed('profilePayment'),
+          onTap: () =>
+              unawaited(openExternalSubscriptionAccount(context, ref, profile is RemoteProfileEntity ? profile : null)),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: _textHorizontalPadding),
             child: Row(
@@ -308,13 +311,10 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
   const _ProfileSummaryBlock();
 
   static const double height = 65;
-  static const double _rightSegmentWidth = 65;
   static const double _textHorizontalPadding = 20;
   static const double _textVerticalPadding = 12;
   static const double _avatarSize = 36;
   static const double _avatarGap = 20;
-  static const double _crownPadding = 18;
-  static const double _crownSize = 29;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -338,7 +338,6 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
     final effectiveDays = (kDebugMode && _debugSeedProfileEnabled && _debugSeedProfileRemainingDays >= 0)
         ? _debugSeedProfileRemainingDays
         : normalizedDays;
-    final isPremiumActive = subInfo != null && !subInfo.isExpired && subInfo.ratio < 1 && effectiveDays > 0;
     final profileName = rawProfileName.isNotEmpty ? rawProfileName : t.common.unknown;
     final avatarEmoji = pickAvatarEmoji(avatarSeedName);
     final avatarEmojiAsset = pickAvatarEmojiAsset(avatarSeedName);
@@ -347,10 +346,6 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
         : '${t.components.subscriptionInfo.remainingUsage} ${t.common.interval.day(n: effectiveDays)}';
     final surfaceColor = theme.colorScheme.secondaryContainer;
     final subtitleColor = theme.brightness == Brightness.dark ? const Color(0xFF8B8B8B) : const Color(0xFF969696);
-    final crownColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3A444D);
-    final inactiveBackgroundColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF2E3136)
-        : const Color(0xFFE4ECCB);
 
     return Container(
       height: height,
@@ -401,80 +396,10 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
               ),
             ),
           ),
-          // Container(
-          //   width: _rightSegmentWidth,
-          //   height: height,
-          //   decoration: BoxDecoration(
-          //     gradient: isPremiumActive ? const LinearGradient(colors: [Color(0xFFBFDD71), Color(0xFF3CE74F)]) : null,
-          //     color: isPremiumActive ? null : inactiveBackgroundColor,
-          //     borderRadius: BorderRadius.circular(16),
-          //   ),
-          //   padding: const EdgeInsets.all(_crownPadding),
-          //   child: _ProfileCrownIcon(size: _crownSize, color: crownColor),
-          // ),
         ],
       ),
     );
   }
-}
-
-class _ProfileCrownIcon extends StatelessWidget {
-  const _ProfileCrownIcon({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(painter: _ProfileCrownPainter(color)),
-    );
-  }
-}
-
-class _ProfileCrownPainter extends CustomPainter {
-  const _ProfileCrownPainter(this.color);
-
-  static const _viewBox = 31.15;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final scale = size.shortestSide / _viewBox;
-    final dx = (size.width - (_viewBox * scale)) / 2;
-    final dy = (size.height - (_viewBox * scale)) / 2;
-
-    canvas.save();
-    canvas.translate(dx, dy);
-    canvas.scale(scale);
-
-    final crownPath = Path()
-      ..moveTo(1, 30.15)
-      ..lineTo(30.15, 30.15)
-      ..moveTo(1, 1)
-      ..lineTo(1, 23.9)
-      ..lineTo(30.15, 23.9)
-      ..lineTo(30.15, 1)
-      ..lineTo(22.86, 9.33)
-      ..lineTo(15.57, 1)
-      ..lineTo(8.28, 9.33)
-      ..close();
-
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = color;
-
-    canvas.drawPath(crownPath, paint);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _ProfileCrownPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class _ProfileMenuSection extends StatelessWidget {

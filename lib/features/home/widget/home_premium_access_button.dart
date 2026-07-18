@@ -1,10 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
-import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/features/profile/overview/external_subscription_account.dart';
 
 const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
 const _debugSeedProfileRemainingDays = int.fromEnvironment("debug_seed_profile_remaining_days", defaultValue: -1);
@@ -40,7 +42,9 @@ class HomePremiumAccessButton extends ConsumerWidget {
           ? _ActivePremiumState(
               textColor: iconAndTextColor,
               backgroundAsset: '$_activeBackgroundPrefix${rawRemainingDays.clamp(0, _activeBackgroundMaxDay)}.png',
-              onPressed: () => context.pushNamed('profilePayment'),
+              onPressed: () => unawaited(
+                openExternalSubscriptionAccount(context, ref, profile is RemoteProfileEntity ? profile : null),
+              ),
               label: _buildPremiumLabel(context, t, rawRemainingDays),
             )
           : _InactivePremiumState(
@@ -48,7 +52,9 @@ class HomePremiumAccessButton extends ConsumerWidget {
               subtitle: _localizedInternetEverywhere(context),
               textColor: iconAndTextColor,
               backgroundAsset: _inactiveBackgroundAsset,
-              onPressed: () => context.pushNamed('profilePayment'),
+              onPressed: () => unawaited(
+                openExternalSubscriptionAccount(context, ref, profile is RemoteProfileEntity ? profile : null),
+              ),
             ),
     );
   }

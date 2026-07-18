@@ -126,7 +126,8 @@
 - заголовок special servers (`t.pages.profileDetails.specialServers.headerLineOne`)
 - подзаголовок "internet everywhere" (локализованный)
 
-Переход по тапу в обоих состояниях: `profilePayment`.
+Тап в обоих состояниях открывает публичную ссылку активного аккаунта во внешнем
+браузере: `https://zeon-vps.link/open/<user_id>#profile`.
 
 ## 3.2 Профиль (ProfileMenuPage)
 
@@ -160,7 +161,7 @@
 Привязка:
 - если `remainingDays > 0` -> `t.pages.profileDetails.cta.renew`
 - иначе -> `t.pages.profileDetails.cta.updatePlan`
-- тап -> `profilePayment`
+- тап -> публичная страница активного аккаунта во внешнем браузере
 
 ### E) Аватар-эмодзи (детерминированный)
 

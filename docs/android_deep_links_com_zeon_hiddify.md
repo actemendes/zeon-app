@@ -35,47 +35,12 @@ Android App Link автоматически.
 
 Источник: `android/app/src/main/AndroidManifest.xml`.
 
-## 2. Рабочий deep link оплаты
+## 2. Оплата не использует deep link
 
-Канонический callback после оплаты:
-
-```text
-zeon://payment-result?sid=<payment_session_id>
-```
-
-Пример:
-
-```text
-zeon://payment-result?sid=pay_123456
-```
-
-Обязательный параметр:
-
-| Параметр | Описание |
-| --- | --- |
-| `sid` | непустой идентификатор payment session |
-
-После получения ссылки приложение:
-
-1. извлекает `sid`;
-2. перенаправляет пользователя на `/profile-payment?sid=<sid>`;
-3. запускает проверку статуса оплаты и обновление managed-профиля.
-
-Для обратной совместимости принимается legacy-вариант:
-
-```text
-zeon://payment-result?sid=<payment_session_id>
-```
-
-Парсер также технически допускает `payment-result` первым сегментом пути,
-например `zeon://callback/payment-result?sid=...`. Для новых интеграций нужно
-использовать только канонический формат `zeon://payment-result?sid=...`.
-
-Источники:
-
-- `lib/features/mobile/data/mobile_payment_deep_link.dart`
-- `lib/core/router/go_router/routing_config_notifier.dart`
-- `lib/core/router/go_router/refresh_listenable.dart`
+Оплата выполняется во внешнем браузере на странице
+`https://zeon-vps.link/open/<openId>#profile`. Приложение не создаёт платёжную
+сессию, не принимает callback с `sid` и не опрашивает статус платежа. После
+возврата оно перечитывает обычную subscription-ссылку активного профиля.
 
 ## 3. Legacy-схемы импорта профилей
 
@@ -150,14 +115,6 @@ https://zeon-vps.link/open/649669380
 
 ## 5. Проверка через ADB
 
-Проверка канонического callback оплаты:
-
-```powershell
-adb shell am start -a android.intent.action.VIEW `
-  -d "zeon://payment-result?sid=test-session" `
-  com.zeon.zeon
-```
-
 Проверка того, что Android передает зарегистрированную legacy-схему приложению:
 
 ```powershell
@@ -176,5 +133,4 @@ adb shell am start -a android.intent.action.VIEW `
 - `android/app/src/main/AndroidManifest.xml`
 - `android/app/build.gradle`
 - `lib/utils/link_parsers.dart`
-- `lib/features/mobile/data/mobile_payment_deep_link.dart`
 - этот документ

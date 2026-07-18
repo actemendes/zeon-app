@@ -1,28 +1,22 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:zeon/core/http_client/http_client_provider.dart';
-import 'package:zeon/core/localization/translations.dart';
-import 'package:zeon/core/notification/in_app_notification_controller.dart';
-import 'package:zeon/core/preferences/general_preferences.dart';
-import 'package:zeon/core/preferences/preferences_provider.dart';
-import 'package:zeon/core/router/deep_linking/my_app_links.dart';
-import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
-import 'package:zeon/features/mobile/data/mobile_payment_deep_link.dart';
-import 'package:zeon/features/mobile/data/mobile_payment_service.dart';
-import 'package:zeon/features/profile/model/profile_entity.dart';
-import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
-import 'package:zeon/features/profile/notifier/profile_notifier.dart';
-import 'package:zeon/utils/custom_loggers.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/router/deep_linking/my_app_links.dart';
+import 'package:zeon/features/mobile/data/external_subscription_sync_service.dart';
+import 'package:zeon/utils/custom_loggers.dart';
 
 // For temporary storage of the link received from AppLinks.
 String newUrlFromAppLink = '';
-String? _lastProcessedPaymentSid;
 
 class RefreshListenable extends ChangeNotifier with InfraLogger, WidgetsBindingObserver {
-  static const _backgroundRecoveryInterval = Duration(seconds: 45);
-  static const _backgroundRecoveryMaxAttempts = 20;
+  static const _externalSubscriptionRetryDelays = <Duration>[
+    Duration(seconds: 1),
+    Duration(seconds: 15),
+    Duration(seconds: 45),
+    Duration(seconds: 90),
+  ];
 
   RefreshListenable(this.ref) {
     WidgetsBinding.instance.addObserver(this);
@@ -31,189 +25,75 @@ class RefreshListenable extends ChangeNotifier with InfraLogger, WidgetsBindingO
       if (url == null || url.trim().isEmpty) return;
 
       newUrlFromAppLink = url;
-      _maybeHandlePaymentDeepLink(url);
       notifyListeners();
     });
     ref.listen(Preferences.introCompleted, (_, _) => notifyListeners());
-    unawaited(_recoverPendingPaymentSession(trigger: "init", immediate: false));
+    _startExternalSubscriptionRefresh(trigger: 'init', resetAttempts: true);
   }
+
   final Ref ref;
-  Timer? _recoveryTimer;
-  bool _isRecoveryInFlight = false;
-  int _recoveryAttemptsLeft = 0;
-  String? _activeRecoverySid;
-  String? _lastSuccessToastSid;
-  String? _lastUpdateProfileRefreshSid;
+  Timer? _externalSubscriptionTimer;
+  bool _externalSubscriptionRefreshInFlight = false;
+  int _externalSubscriptionAttempt = 0;
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _stopRecoveryTimer();
+    _externalSubscriptionTimer?.cancel();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(_recoverPendingPaymentSession(trigger: "resume", immediate: true));
+      _startExternalSubscriptionRefresh(trigger: 'resume', resetAttempts: true);
     }
   }
 
-  void _maybeHandlePaymentDeepLink(String rawUrl) {
-    final sid = extractPaymentSessionIdFromDeepLink(rawUrl);
-    if (sid == null || sid == _lastProcessedPaymentSid) {
+  void _startExternalSubscriptionRefresh({required String trigger, required bool resetAttempts}) {
+    final syncService = ref.read(externalSubscriptionSyncServiceProvider);
+    if (!syncService.hasPendingExternalAccountReturn) return;
+    if (resetAttempts) {
+      _externalSubscriptionAttempt = 0;
+      _externalSubscriptionTimer?.cancel();
+    }
+    loggy.info('external subscription refresh scheduled [trigger=$trigger]');
+    _scheduleNextExternalSubscriptionAttempt(trigger: trigger);
+  }
+
+  void _scheduleNextExternalSubscriptionAttempt({required String trigger}) {
+    if (_externalSubscriptionAttempt >= _externalSubscriptionRetryDelays.length) {
+      loggy.info('external subscription refresh stopped [reason=attempts_exhausted]');
+      unawaited(ref.read(externalSubscriptionSyncServiceProvider).finishPendingCheck());
       return;
     }
-    _lastProcessedPaymentSid = sid;
-    loggy.info("mobile payment deep link captured in router listener [sid=$sid]");
-    unawaited(_startRecoveryForSid(sid, trigger: "deeplink", immediate: true, resetAttempts: true));
+
+    final delay = _externalSubscriptionRetryDelays[_externalSubscriptionAttempt];
+    _externalSubscriptionAttempt += 1;
+    _externalSubscriptionTimer?.cancel();
+    _externalSubscriptionTimer = Timer(delay, () => unawaited(_runExternalSubscriptionRefresh(trigger: trigger)));
   }
 
-  Future<void> _recoverPendingPaymentSession({required String trigger, required bool immediate}) async {
+  Future<void> _runExternalSubscriptionRefresh({required String trigger}) async {
+    if (_externalSubscriptionRefreshInFlight) return;
+    _externalSubscriptionRefreshInFlight = true;
     try {
-      final paymentService = _buildPaymentService();
-      final sid = await paymentService.getRecoverablePaymentSessionId();
-      if (sid == null) {
-        _activeRecoverySid = null;
-        _stopRecoveryTimer();
-        return;
-      }
-      await _startRecoveryForSid(sid, trigger: trigger, immediate: immediate, resetAttempts: _activeRecoverySid != sid);
-    } catch (e, st) {
-      loggy.warning("mobile payment recovery preload failed [trigger=$trigger]", e, st);
-    }
-  }
-
-  Future<void> _startRecoveryForSid(
-    String sid, {
-    required String trigger,
-    required bool immediate,
-    required bool resetAttempts,
-  }) async {
-    _activeRecoverySid = sid;
-    if (resetAttempts || _recoveryAttemptsLeft <= 0) {
-      _recoveryAttemptsLeft = _backgroundRecoveryMaxAttempts;
-    }
-    _ensureRecoveryTimer();
-    if (immediate) {
-      await _runSingleRecoveryAttempt(sid, trigger: trigger, maxStatusAttempts: 7);
-    }
-  }
-
-  MobilePaymentService _buildPaymentService() {
-    return MobilePaymentService(
-      httpClient: ref.read(httpClientProvider),
-      preferences: ref.read(sharedPreferencesProvider).requireValue,
-      connLinkImportService: ref.read(mobileConnLinkImportServiceProvider),
-    );
-  }
-
-  void _ensureRecoveryTimer() {
-    _recoveryTimer ??= Timer.periodic(_backgroundRecoveryInterval, (_) {
-      unawaited(_tickBackgroundRecovery());
-    });
-  }
-
-  void _stopRecoveryTimer() {
-    _recoveryTimer?.cancel();
-    _recoveryTimer = null;
-  }
-
-  Future<void> _tickBackgroundRecovery() async {
-    if (_recoveryAttemptsLeft <= 0) {
-      loggy.info("mobile payment background recovery stopped [reason=attempts_exhausted]");
-      _stopRecoveryTimer();
-      return;
-    }
-    final paymentService = _buildPaymentService();
-    final sid = await paymentService.getRecoverablePaymentSessionId();
-    if (sid == null) {
-      _activeRecoverySid = null;
-      _stopRecoveryTimer();
-      return;
-    }
-    if (_activeRecoverySid != sid) {
-      _activeRecoverySid = sid;
-      _recoveryAttemptsLeft = _backgroundRecoveryMaxAttempts;
-      loggy.info("mobile payment background recovery switched sid [sid=$sid]");
-    }
-    await _runSingleRecoveryAttempt(sid, trigger: "background_timer", maxStatusAttempts: 2);
-  }
-
-  Future<void> _runSingleRecoveryAttempt(String sid, {required String trigger, required int maxStatusAttempts}) async {
-    if (_isRecoveryInFlight) return;
-    if (_recoveryAttemptsLeft <= 0) return;
-    _isRecoveryInFlight = true;
-    _recoveryAttemptsLeft -= 1;
-    try {
-      final paymentService = _buildPaymentService();
-      final result = await paymentService.processPaymentSessionReturn(sid: sid, maxAttempts: maxStatusAttempts);
-      final remoteProfileRefreshed = await _maybeRefreshActiveRemoteProfileFromNotifier(
-        sid: sid,
-        result: result,
-        trigger: trigger,
-      );
+      final result = await ref.read(externalSubscriptionSyncServiceProvider).refreshPendingSubscription();
       loggy.info(
-        "mobile payment recovery attempt finished "
-        "[sid=$sid, trigger=$trigger, state=${result.state.name}, refresh_triggered=${result.refreshTriggered}, "
-        "active_profile_refreshed=$remoteProfileRefreshed, attempts_left=$_recoveryAttemptsLeft]",
+        'external subscription refresh attempt completed '
+        '[trigger=$trigger attempt=$_externalSubscriptionAttempt result=${result.name}]',
       );
-      _maybeShowPaymentSuccessToast(sid: sid, trigger: trigger, result: result);
-      if (result.state != PaymentSessionState.pending) {
-        _activeRecoverySid = null;
-        _stopRecoveryTimer();
+      switch (result) {
+        case ExternalSubscriptionSyncResult.changed || ExternalSubscriptionSyncResult.skipped:
+          _externalSubscriptionTimer?.cancel();
+        case ExternalSubscriptionSyncResult.unchanged || ExternalSubscriptionSyncResult.failed:
+          _scheduleNextExternalSubscriptionAttempt(trigger: trigger);
       }
-    } catch (e, st) {
-      loggy.warning("mobile payment recovery attempt failed [sid=$sid, trigger=$trigger]", e, st);
+    } catch (error, stackTrace) {
+      loggy.warning('external subscription refresh attempt failed [trigger=$trigger]', error, stackTrace);
+      _scheduleNextExternalSubscriptionAttempt(trigger: trigger);
     } finally {
-      _isRecoveryInFlight = false;
-    }
-  }
-
-  void _maybeShowPaymentSuccessToast({
-    required String sid,
-    required String trigger,
-    required PaymentSessionProcessResult result,
-  }) {
-    if (result.state != PaymentSessionState.succeeded || !result.refreshTriggered) return;
-    if (_lastSuccessToastSid == sid) return;
-    _lastSuccessToastSid = sid;
-
-    final t = ref.read(translationsProvider).valueOrNull;
-    final suffix = t?.pages.profiles.msg.update.success;
-    final message = (suffix == null || suffix.trim().isEmpty)
-        ? "Оплата прошла успешно, профиль обновлен"
-        : "Оплата прошла успешно. $suffix";
-    ref.read(inAppNotificationControllerProvider).showSuccessToast(message);
-    loggy.info("mobile payment success toast shown [sid=$sid, trigger=$trigger]");
-  }
-
-  Future<bool> _maybeRefreshActiveRemoteProfileFromNotifier({
-    required String sid,
-    required PaymentSessionProcessResult result,
-    required String trigger,
-  }) async {
-    if (result.state != PaymentSessionState.succeeded) return false;
-    if (_lastUpdateProfileRefreshSid == sid) return false;
-    try {
-      final active = await ref.read(activeProfileProvider.future);
-      if (active is! RemoteProfileEntity) {
-        loggy.warning(
-          "mobile payment success: skipped active profile refresh, active is not remote "
-          "[sid=$sid, trigger=$trigger, active_type=${active?.runtimeType}]",
-        );
-        return false;
-      }
-      await ref.read(updateProfileNotifierProvider(active.id).notifier).updateProfile(active);
-      _lastUpdateProfileRefreshSid = sid;
-      loggy.info(
-        "mobile payment success: active remote profile refreshed via update notifier "
-        "[sid=$sid, trigger=$trigger, profile_id=${active.id}]",
-      );
-      return true;
-    } catch (e, st) {
-      loggy.warning("mobile payment success: active profile refresh via update notifier failed [sid=$sid]", e, st);
-      return false;
+      _externalSubscriptionRefreshInFlight = false;
     }
   }
 }
