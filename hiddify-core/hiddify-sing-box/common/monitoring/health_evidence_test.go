@@ -441,6 +441,10 @@ func TestManualRefreshMarksNestedBalancerGroupForReselect(t *testing.T) {
 			"leaf-a": {groupTags: []string{"", "balance", "select"}},
 			"leaf-b": {groupTags: []string{"", "balance", "select"}},
 		},
+		groups: map[string]*groupState{
+			"select":  {outbounds: map[string]struct{}{"balance": {}}},
+			"balance": {outbounds: map[string]struct{}{"leaf-a": {}, "leaf-b": {}}},
+		},
 	}
 
 	groups := monitor.markManualRefreshForTargets("select", []string{"leaf-a", "leaf-b"}, time.Now())
@@ -452,6 +456,103 @@ func TestManualRefreshMarksNestedBalancerGroupForReselect(t *testing.T) {
 	}
 	if monitor.ConsumeRecentManualRefresh("balance") {
 		t.Fatal("manual refresh marker should be consumed once")
+	}
+}
+
+func TestPartialManualRefreshDoesNotMarkWholeBalancerForReselect(t *testing.T) {
+	monitor := &OutboundMonitoring{
+		outbounds: map[string]*outboundState{
+			"leaf-a": {groupTags: []string{"", "balance"}},
+			"leaf-b": {groupTags: []string{"", "balance"}},
+		},
+		groups: map[string]*groupState{
+			"balance": {outbounds: map[string]struct{}{"leaf-a": {}, "leaf-b": {}}},
+		},
+	}
+
+	groups := monitor.markManualRefreshForTargets("leaf-a", []string{"leaf-a"}, time.Now())
+	if len(groups) != 0 {
+		t.Fatalf("partial refresh marked groups=%v, want none", groups)
+	}
+	if monitor.ConsumeRecentManualRefresh("balance") {
+		t.Fatal("partial refresh enabled full-group user-refresh reselect")
+	}
+}
+
+func TestTimedOutManualRefreshMarksOnlyActuallyCompletedTargets(t *testing.T) {
+	monitor := &OutboundMonitoring{
+		outbounds: map[string]*outboundState{
+			"leaf-a": {groupTags: []string{"", "balance"}},
+			"leaf-b": {groupTags: []string{"", "balance"}},
+		},
+		groups: map[string]*groupState{
+			"balance": {outbounds: map[string]struct{}{"leaf-a": {}, "leaf-b": {}}},
+		},
+	}
+	report := manualRefreshReport{total: 2}
+	report.record(testOutcome{outboundTag: "leaf-a", history: adapter.URLTestHistory{Success: true}})
+	report.markTimeout(1)
+
+	groups := monitor.markManualRefreshForTargets("balance", report.completedTargets, time.Now())
+	if len(groups) != 0 {
+		t.Fatalf("timed-out partial refresh marked groups=%v, want none", groups)
+	}
+}
+
+func TestManualRefreshCallsAreSerialized(t *testing.T) {
+	monitor := &OutboundMonitoring{
+		outbounds: make(map[string]*outboundState),
+		groups:    make(map[string]*groupState),
+	}
+	monitor.manualRefreshRun.Lock()
+
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		close(started)
+		done <- monitor.TestNowAndWait("missing", time.Millisecond)
+	}()
+	<-started
+	select {
+	case err := <-done:
+		t.Fatalf("parallel refresh bypassed serialization lock: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	monitor.manualRefreshRun.Unlock()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("missing target unexpectedly succeeded")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("serialized refresh did not resume after predecessor completed")
+	}
+}
+
+func TestSignalChangeCoalescesPendingGroupNotification(t *testing.T) {
+	notifyCh := make(chan struct{}, 1)
+	notifyCh <- struct{}{}
+	monitor := &OutboundMonitoring{
+		groups: map[string]*groupState{
+			"balance": {notifyCh: notifyCh},
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- monitor.SignalChange("balance")
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("SignalChange returned error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("SignalChange blocked behind an already pending notification")
+	}
+	if len(notifyCh) != 1 {
+		t.Fatalf("pending notifications=%d, want one coalesced event", len(notifyCh))
 	}
 }
 

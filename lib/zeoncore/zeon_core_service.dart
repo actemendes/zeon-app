@@ -44,6 +44,11 @@ class ZeonCoreService with InfraLogger {
   static const _debugFragmentMode = String.fromEnvironment("debug_fragment_mode");
   static const _debugProfileDnsStrategy = String.fromEnvironment("debug_profile_dns_strategy");
   static const _debugTunImplementation = String.fromEnvironment("debug_tun_implementation");
+  // Release builds may receive the authenticated UDP probe settings from CI.
+  // The secret is never copied into diagnostic logs or the safe payload dump.
+  static const _udpProbeEnabled = bool.fromEnvironment("udp_probe_enabled");
+  static const _udpProbeEndpoint = String.fromEnvironment("udp_probe_endpoint");
+  static const _udpProbeSecret = String.fromEnvironment("udp_probe_secret");
   static const _debugUdpProbeEnabled = kDebugMode && bool.fromEnvironment("debug_udp_probe_enabled");
   static const _debugUdpProbeEndpoint = String.fromEnvironment("debug_udp_probe_endpoint");
   static const _debugUdpProbeSecret = kDebugMode ? String.fromEnvironment("debug_udp_probe_secret") : "";
@@ -759,22 +764,26 @@ class ZeonCoreService with InfraLogger {
       map["direct-dns-domain-strategy"] = DomainStrategy.ipv4Only.key;
       map["block-quic"] = true;
     }
-    if (_debugUdpProbeEnabled) {
-      if (_debugUdpProbeSecret.isEmpty) {
+    const udpProbeEnabled = _udpProbeEnabled || _debugUdpProbeEnabled;
+    const udpProbeSecret = _udpProbeSecret != "" ? _udpProbeSecret : _debugUdpProbeSecret;
+    if (udpProbeEnabled) {
+      if (udpProbeSecret.isEmpty) {
         map["udp-probe-enabled"] = false;
-        loggy.warning("debug UDP probe requested without secret; keeping probe disabled");
+        loggy.warning("UDP probe requested without secret; keeping probe disabled");
       } else {
         map["udp-probe-enabled"] = true;
-        map["udp-probe-endpoint"] = _debugUdpProbeEndpoint.isNotEmpty
+        map["udp-probe-endpoint"] = _udpProbeEndpoint.isNotEmpty
+            ? _udpProbeEndpoint
+            : _debugUdpProbeEndpoint.isNotEmpty
             ? _debugUdpProbeEndpoint
             : "udp-probe.zeon-vps.link:8443";
-        map["udp-probe-secret"] = _debugUdpProbeSecret;
-        map["udp-probe-count"] = _debugUdpProbeCount;
-        map["udp-probe-size"] = _debugUdpProbeSize;
-        map["udp-probe-interval-ms"] = _debugUdpProbeIntervalMs;
-        map["udp-probe-timeout-ms"] = _debugUdpProbeTimeoutMs;
-        map["udp-probe-cooldown-sec"] = _debugUdpProbeCooldownSec;
-        map["udp-probe-top-n"] = _debugUdpProbeTopN;
+        map["udp-probe-secret"] = udpProbeSecret;
+        map["udp-probe-count"] = _debugUdpProbeEnabled ? _debugUdpProbeCount : 3;
+        map["udp-probe-size"] = _debugUdpProbeEnabled ? _debugUdpProbeSize : 128;
+        map["udp-probe-interval-ms"] = _debugUdpProbeEnabled ? _debugUdpProbeIntervalMs : 40;
+        map["udp-probe-timeout-ms"] = _debugUdpProbeEnabled ? _debugUdpProbeTimeoutMs : 750;
+        map["udp-probe-cooldown-sec"] = _debugUdpProbeEnabled ? _debugUdpProbeCooldownSec : 60;
+        map["udp-probe-top-n"] = _debugUdpProbeEnabled ? _debugUdpProbeTopN : 3;
       }
     }
     final runtime = await _readRuntimeNetworkInfo();

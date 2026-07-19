@@ -41,7 +41,7 @@ const (
 	defaultDebounceWindow = 500 * time.Millisecond
 	defaultURLTestTimeout = 5 * time.Second
 	defaultIdleTimeout    = 10 * time.Minute
-	defaultInterval       = 5 * time.Minute
+	defaultInterval       = 3 * time.Minute
 	defaultURLTest        = "https://www.gstatic.com/generate_204"
 	runtimePenaltyTTL     = 90 * time.Second
 	runtimeBurstWindow    = 20 * time.Second
@@ -77,7 +77,7 @@ type OutboundMonitoring struct {
 	tag              string
 	pause            pause.Manager
 	pauseCallback    *list.Element[pause.Callback]
-	started          bool
+	started          atomic.Bool
 	urls             []string
 	currentLinkIndex atomic.Uint32
 	access           sync.Mutex
@@ -101,6 +101,10 @@ type OutboundMonitoring struct {
 
 	cycleSeq     uint64
 	cycleRunning atomic.Bool
+	// fullCycleRequested is set by Smart Active on every VPN start. Cached
+	// successes are useful for display, but they must not cause the startup
+	// monitor to probe only the previously invalid subset.
+	fullCycleRequested atomic.Bool
 
 	runtimeAccess  sync.Mutex
 	runtimeStats   map[string]*adapter.RuntimePenaltyStats
@@ -108,6 +112,7 @@ type OutboundMonitoring struct {
 
 	manualRefreshAccess sync.Mutex
 	manualRefreshAt     map[string]time.Time
+	manualRefreshRun    sync.Mutex
 
 	udpProbeEnabled  bool
 	udpProbeEndpoint string
@@ -269,7 +274,6 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 		cancel:          cancel,
 		urls:            cloned,
 		pause:           service.FromContext[pause.Manager](ctx),
-		started:         false,
 		logger:          logger,
 		outboundManager: service.FromContext[adapter.OutboundManager](ctx),
 		endpointManager: service.FromContext[adapter.EndpointManager](ctx),
@@ -358,7 +362,7 @@ func (m *OutboundMonitoring) Start(stage adapter.StartStage) error {
 			go m.groupNotifierLoop(m.groups[groupTag])
 		}
 
-		m.started = true
+		m.started.Store(true)
 		m.Touch()
 	}
 
@@ -366,40 +370,65 @@ func (m *OutboundMonitoring) Start(stage adapter.StartStage) error {
 }
 
 func (m *OutboundMonitoring) startTimerWorkers() {
+	m.access.Lock()
+	defer m.access.Unlock()
+	if !m.started.Load() {
+		return
+	}
 	if !m.workersRunning.CompareAndSwap(false, true) {
 		return
 	}
-	m.mainTicker = time.NewTicker(m.mainInterval)
+	ticker := time.NewTicker(m.mainInterval)
+	m.mainTicker = ticker
 
-	m.pauseCallback = pause.RegisterTicker(m.pause, m.mainTicker, m.mainInterval, nil)
+	m.pauseCallback = pause.RegisterTicker(m.pause, ticker, m.mainInterval, nil)
 	m.schedulerWG.Add(1)
-	go m.scheduleLoop()
+	go m.scheduleLoop(ticker)
 }
 func (m *OutboundMonitoring) stopTimerWorkers() {
+	m.access.Lock()
 	if !m.workersRunning.CompareAndSwap(true, false) {
+		m.access.Unlock()
 		return
 	}
-	m.mainTicker.Stop()
+	ticker := m.mainTicker
+	callback := m.pauseCallback
 	m.mainTicker = nil
+	m.pauseCallback = nil
+	m.access.Unlock()
+	if ticker != nil {
+		ticker.Stop()
+	}
 	if m.cacheDirty.Load() {
 		m.saveHistory()
 	}
 
-	m.pause.UnregisterCallback(m.pauseCallback)
+	if callback != nil {
+		m.pause.UnregisterCallback(callback)
+	}
 }
 
 func (m *OutboundMonitoring) SignalChange(outboundTag string) error {
 	if grp, ok := m.groups[outboundTag]; ok {
-		grp.notifyCh <- struct{}{}
+		select {
+		case grp.notifyCh <- struct{}{}:
+		default:
+		}
 		return nil
 	}
 	state := m.getState(outboundTag)
 	if state == nil {
 		return errors.New("outbound not registered")
 	}
-	for _, groupTag := range state.groupTags {
+	state.mu.Lock()
+	groupTags := append([]string(nil), state.groupTags...)
+	state.mu.Unlock()
+	for _, groupTag := range groupTags {
 		if grp, ok := m.groups[groupTag]; ok {
-			grp.notifyCh <- struct{}{}
+			select {
+			case grp.notifyCh <- struct{}{}:
+			default:
+			}
 		}
 	}
 	return nil
@@ -419,6 +448,9 @@ func (m *OutboundMonitoring) TestNow(outboundTag string) error {
 }
 
 func (m *OutboundMonitoring) TestNowAndWait(outboundTag string, timeout time.Duration) error {
+	m.manualRefreshRun.Lock()
+	defer m.manualRefreshRun.Unlock()
+
 	tags := m.collectManualRefreshTargets(outboundTag)
 	if len(tags) == 0 {
 		return errors.New("outbound not registered")
@@ -450,7 +482,7 @@ func (m *OutboundMonitoring) TestNowAndWait(outboundTag string, timeout time.Dur
 		" per_target_timeout=", m.manualRefreshTargetTimeout(), " timeout=", timeout)
 
 	report, err := m.runManualRefreshStage(outboundTag, cycleID, tags, timeout)
-	refreshedGroups := m.markManualRefreshForTargets(outboundTag, tags, time.Now())
+	refreshedGroups := m.markManualRefreshForTargets(outboundTag, report.completedTargets, time.Now())
 	m.logger.Info("[ManualRefresh] reselect_ready tag=", outboundTag, " groups=", strings.Join(refreshedGroups, ","))
 	m.emitGroupEvent(refreshedGroups)
 	if report.logged {
@@ -557,13 +589,26 @@ func (m *OutboundMonitoring) logManualRefreshFinished(outboundTag string, report
 }
 
 func (m *OutboundMonitoring) runManualRefreshStage(outboundTag string, cycleID uint64, tags []string, timeout time.Duration) (manualRefreshReport, error) {
+	stageCtx, cancelStage := context.WithCancel(m.ctx)
+	var stageWorkerWG sync.WaitGroup
+	var stopStageOnce sync.Once
+	stopStage := func() {
+		stopStageOnce.Do(func() {
+			cancelStage()
+			stageWorkerWG.Wait()
+		})
+	}
+	defer stopStage()
+
 	resultCh := make(chan testOutcome, len(tags))
 	pending := make(map[string]struct{}, len(tags))
+	prepared := make([]string, 0, len(tags))
 	report := manualRefreshReport{total: len(tags)}
 
 	for _, tag := range tags {
 		if m.prepareManualRefreshTarget(tag, cycleID) {
 			pending[tag] = struct{}{}
+			prepared = append(prepared, tag)
 		} else {
 			report.cancelled++
 			m.logger.Warn("[ManualRefreshTarget] tag=", tag, " status=cancelled reason=not_registered")
@@ -579,28 +624,6 @@ func (m *OutboundMonitoring) runManualRefreshStage(outboundTag string, cycleID u
 	if workers <= 0 {
 		workers = defaultWorkerCount
 	}
-	if workers > len(pending) {
-		workers = len(pending)
-	}
-	taskCh := make(chan string, len(pending))
-	for tag := range pending {
-		taskCh <- tag
-	}
-	close(taskCh)
-
-	for i := 0; i < workers; i++ {
-		go func() {
-			for tag := range taskCh {
-				outcome := m.executeManualRefreshTarget(cycleID, tag)
-				select {
-				case resultCh <- outcome:
-				case <-m.ctx.Done():
-				default:
-				}
-			}
-		}()
-	}
-
 	outcomes := make([]testOutcome, 0, len(pending))
 	defer func() {
 		m.scheduleUDPProbesFromOutcomes(outcomes)
@@ -609,29 +632,53 @@ func (m *OutboundMonitoring) runManualRefreshStage(outboundTag string, cycleID u
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
-	for len(pending) > 0 {
-		select {
-		case <-m.ctx.Done():
-			report.markTimeout(len(pending))
-			m.logManualRefreshFinished(outboundTag, report)
-			report.logged = true
-			m.logManualRefreshCancelledTargets(pending, "context_done")
-			return report, m.ctx.Err()
-		case outcome := <-resultCh:
-			if _, ok := pending[outcome.outboundTag]; !ok {
-				continue
-			}
-			delete(pending, outcome.outboundTag)
-			outcomes = append(outcomes, outcome)
-			report.record(outcome)
-			m.logManualRefreshOutcome(outcome)
-		case <-timer.C:
-			report.markTimeout(len(pending))
-			m.logManualRefreshFinished(outboundTag, report)
-			report.logged = true
-			m.logManualRefreshCancelledTargets(pending, "global_timeout")
-			return report, errors.New("manual refresh timed out")
+	for start, batchNumber := 0, 1; start < len(prepared); start, batchNumber = start+workers, batchNumber+1 {
+		end := min(start+workers, len(prepared))
+		batchTags := prepared[start:end]
+		batchPending := make(map[string]struct{}, len(batchTags))
+		for _, tag := range batchTags {
+			batchPending[tag] = struct{}{}
+			stageWorkerWG.Add(1)
+			go func(target string) {
+				defer stageWorkerWG.Done()
+				outcome := m.executeManualRefreshTarget(stageCtx, cycleID, target)
+				select {
+				case resultCh <- outcome:
+				case <-stageCtx.Done():
+				}
+			}(tag)
 		}
+
+		for len(batchPending) > 0 {
+			select {
+			case <-m.ctx.Done():
+				report.markTimeout(len(pending))
+				stopStage()
+				m.cancelManualRefreshTargets(cycleID, pending)
+				m.logManualRefreshFinished(outboundTag, report)
+				report.logged = true
+				m.logManualRefreshCancelledTargets(pending, "context_done")
+				return report, m.ctx.Err()
+			case outcome := <-resultCh:
+				if _, ok := batchPending[outcome.outboundTag]; !ok {
+					continue
+				}
+				delete(batchPending, outcome.outboundTag)
+				delete(pending, outcome.outboundTag)
+				outcomes = append(outcomes, outcome)
+				report.record(outcome)
+				m.logManualRefreshOutcome(outcome)
+			case <-timer.C:
+				report.markTimeout(len(pending))
+				stopStage()
+				m.cancelManualRefreshTargets(cycleID, pending)
+				m.logManualRefreshFinished(outboundTag, report)
+				report.logged = true
+				m.logManualRefreshCancelledTargets(pending, "global_timeout")
+				return report, errors.New("manual refresh timed out")
+			}
+		}
+		m.publishCompletedBatch(cycleID, batchNumber, batchTags)
 	}
 
 	report.pending = report.total - report.completed()
@@ -672,14 +719,17 @@ func (m *OutboundMonitoring) prepareManualRefreshTarget(tag string, cycleID uint
 	return true
 }
 
-func (m *OutboundMonitoring) executeManualRefreshTarget(cycleID uint64, tag string) testOutcome {
+func (m *OutboundMonitoring) executeManualRefreshTarget(parent context.Context, cycleID uint64, tag string) testOutcome {
 	state := m.getState(tag)
 	if state == nil {
-		return m.newTaskErrorOutcome(tag, cycleID, false, errors.New("outbound not registered"))
+		outcome := m.newTaskErrorOutcome(tag, cycleID, false, errors.New("outbound not registered"))
+		outcome.deferNotify = true
+		return outcome
 	}
 
 	state.mu.Lock()
 	state.testing = true
+	state.testingCycle = cycleID
 	state.queued = false
 	state.enqueuedCycle = 0
 	state.mu.Unlock()
@@ -693,25 +743,26 @@ func (m *OutboundMonitoring) executeManualRefreshTarget(cycleID uint64, tag stri
 		}
 		state.mu.Unlock()
 	}()
-	state.mu.Lock()
-	state.testing = true
-	state.testingCycle = cycleID
-	state.mu.Unlock()
 
 	if !state.outbound.IsReady() {
 		m.logger.Info("outbound ", tag, " is not ready, marking URL test failed")
 		outcome := m.newTaskErrorOutcome(tag, cycleID, false, errors.New("outbound is not ready"))
+		outcome.deferNotify = true
 		m.applyResult(outcome)
 		return outcome
 	}
 
 	targetTimeout := m.manualRefreshTargetTimeout()
-	history, err, timedOut := runURLTestWithHardTimeout(m.ctx, targetTimeout, func(ctx context.Context) (adapter.URLTestHistory, error) {
+	history, err, timedOut := runURLTestWithHardTimeout(parent, targetTimeout, func(ctx context.Context) (adapter.URLTestHistory, error) {
 		return m.tester(ctx, tag)
 	})
 	if timedOut {
 		m.logger.Warn("[ManualRefreshTarget] tag=", tag, " status=timeout stage=urltest duration=", time.Since(startedAt))
 		outcome := m.newTaskErrorOutcome(tag, cycleID, false, err)
+		outcome.deferNotify = true
+		if parent.Err() != nil {
+			return outcome
+		}
 		m.applyResult(outcome)
 		return outcome
 	}
@@ -721,6 +772,7 @@ func (m *OutboundMonitoring) executeManualRefreshTarget(cycleID uint64, tag stri
 		err:         err,
 		cycleID:     cycleID,
 		priority:    false,
+		deferNotify: true,
 	}
 	m.applyResult(outcome)
 	return outcome
@@ -796,17 +848,39 @@ func (m *OutboundMonitoring) logManualRefreshCancelledTargets(pending map[string
 	}
 }
 
+func (m *OutboundMonitoring) cancelManualRefreshTargets(cycleID uint64, pending map[string]struct{}) {
+	for tag := range pending {
+		state := m.getState(tag)
+		if state == nil {
+			continue
+		}
+		state.mu.Lock()
+		if state.history.CheckGeneration == cycleID {
+			state.queued = false
+			state.priorityQueued = false
+			state.enqueuedCycle = 0
+			if state.testingCycle == cycleID {
+				state.testing = false
+				state.testingCycle = 0
+			}
+		}
+		state.mu.Unlock()
+	}
+}
+
 type manualRefreshReport struct {
-	total     int
-	success   int
-	failed    int
-	pending   int
-	cancelled int
-	timeout   bool
-	logged    bool
+	total            int
+	success          int
+	failed           int
+	pending          int
+	cancelled        int
+	timeout          bool
+	logged           bool
+	completedTargets []string
 }
 
 func (r *manualRefreshReport) record(outcome testOutcome) {
+	r.completedTargets = append(r.completedTargets, outcome.outboundTag)
 	if outcome.err == nil && outcome.history.Success {
 		r.success++
 		return
@@ -858,8 +932,12 @@ func (m *OutboundMonitoring) markManualRefresh(groupTag string, at time.Time) {
 }
 
 func (m *OutboundMonitoring) markManualRefreshForTargets(requestedTag string, tags []string, at time.Time) []string {
+	refreshed := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		refreshed[tag] = struct{}{}
+	}
 	groups := make(map[string]struct{})
-	if requestedTag != "" {
+	if _, ok := m.groups[requestedTag]; ok {
 		groups[requestedTag] = struct{}{}
 	}
 	for _, tag := range tags {
@@ -877,6 +955,20 @@ func (m *OutboundMonitoring) markManualRefreshForTargets(requestedTag string, ta
 	}
 	result := make([]string, 0, len(groups))
 	for groupTag := range groups {
+		groupTargets := m.collectManualRefreshTargets(groupTag)
+		if len(groupTargets) == 0 {
+			continue
+		}
+		fullyRefreshed := true
+		for _, tag := range groupTargets {
+			if _, ok := refreshed[tag]; !ok {
+				fullyRefreshed = false
+				break
+			}
+		}
+		if !fullyRefreshed {
+			continue
+		}
 		m.markManualRefresh(groupTag, at)
 		result = append(result, groupTag)
 	}
@@ -1472,6 +1564,7 @@ func (m *OutboundMonitoring) UnsubscribeGroup(groupTag string, observer <-chan G
 
 func (m *OutboundMonitoring) Close() error {
 	m.closerOnce.Do(func() {
+		m.started.Store(false)
 		m.stopTimerWorkers()
 
 		// close(m.priorityQueue)
@@ -1490,10 +1583,9 @@ func (m *OutboundMonitoring) Close() error {
 	return nil
 }
 
-func (m *OutboundMonitoring) scheduleLoop() {
+func (m *OutboundMonitoring) scheduleLoop(ticker *time.Ticker) {
 	m.logger.Info("outbound monitoring schedule loop started")
 	m.startCycleOnce()
-	ticker := m.mainTicker
 	for {
 		select {
 		case <-m.ctx.Done():
@@ -1591,6 +1683,7 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 		err:         err,
 		cycleID:     task.cycleID,
 		priority:    task.priority,
+		deferNotify: task.deferNotify,
 	}
 	m.applyResult(outcome)
 	if task.resultCh != nil {
@@ -1605,6 +1698,7 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 
 func (m *OutboundMonitoring) finishTaskWithError(task *testTask, err error) {
 	outcome := m.newTaskErrorOutcome(task.outboundTag, task.cycleID, task.priority, err)
+	outcome.deferNotify = task.deferNotify
 	m.applyResult(outcome)
 	if task.resultCh != nil {
 		select {
@@ -1648,12 +1742,18 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 		return adapter.URLTestHistory{Delay: 0}, errors.New("outbound not registered")
 	}
 
+	out.mu.Lock()
+	previousIPInfo := out.history.IpInfo
+	fromCache := out.from_cache
+	testedOutbound := out.outbound
+	out.mu.Unlock()
+
 	idx := m.currentLinkIndex.Load()
 
 	ctx, cancel := context.WithTimeout(parent, m.urlTestTimeout)
 	defer cancel()
 
-	delay, err := urltest.URLTest(ctx, m.urls[idx], out.outbound)
+	delay, err := urltest.URLTest(ctx, m.urls[idx], testedOutbound)
 	if err == nil && delay == 0 {
 		err = errors.New("URL test returned empty delay")
 	}
@@ -1685,14 +1785,14 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 		return his, parent.Err()
 	default:
 	}
-	if out.history.IpInfo == nil || out.from_cache {
+	if previousIPInfo == nil || fromCache {
 
 		ctx, cancel2 := context.WithTimeout(parent, m.urlTestTimeout)
 		defer cancel2()
 
-		newip, t, err := ipinfo.GetIpInfo(m.logger, ctx, out.outbound)
+		newip, t, err := ipinfo.GetIpInfo(m.logger, ctx, testedOutbound)
 		if err == nil {
-			his.IpInfo = mergeIpInfo(out.history.IpInfo, newip)
+			his.IpInfo = mergeIpInfo(previousIPInfo, newip)
 			if t < his.Delay {
 				his.Delay = t
 			}
@@ -1713,16 +1813,32 @@ func (m *OutboundMonitoring) startCycleOnce() bool {
 		return false
 	}
 	go func() {
-		defer m.cycleRunning.Store(false)
-		m.logger.Info("starting regular outbound monitoring cycle")
-		m.runCycle()
+		for {
+			m.logger.Info("starting regular outbound monitoring cycle")
+			m.runCycle()
+			m.cycleRunning.Store(false)
+			// A full-cycle request may arrive while another cycle is finishing.
+			// Re-acquire ownership here so that request cannot be lost in the
+			// transition between runCycle and cycleRunning=false.
+			if !m.fullCycleRequested.Load() || !m.cycleRunning.CompareAndSwap(false, true) {
+				return
+			}
+		}
 	}()
 	return true
 }
 
+// RequestFullCycle makes the next monitoring cycle include every leaf
+// outbound, even when a recent cached result would normally skip it.
+func (m *OutboundMonitoring) RequestFullCycle() {
+	m.fullCycleRequested.Store(true)
+	m.startCycleOnce()
+}
+
 func (m *OutboundMonitoring) runCycle() {
 	cycleID := atomic.AddUint64(&m.cycleSeq, 1)
-	tags := m.collectCycleTargets()
+	forceAll := m.fullCycleRequested.Swap(false)
+	tags := m.collectCycleTargets(forceAll)
 
 	if len(tags) == 0 {
 		return
@@ -1744,6 +1860,10 @@ func (m *OutboundMonitoring) runCycle() {
 		}
 		if success > 0 || idx == len(m.urls)-1 {
 			m.logCheckGenerationCompleted(cycleID, tags, "background_refresh")
+			// Direct batch events are intentionally non-blocking. Publish one
+			// debounced final snapshot as a delivery backstop if a busy subscriber
+			// dropped the last completed-batch event.
+			m.emitGroupEventsForOutbounds(tags)
 			return
 		}
 		m.currentLinkIndex.Store((m.currentLinkIndex.Load() + 1) % uint32(len(m.urls)))
@@ -1751,39 +1871,45 @@ func (m *OutboundMonitoring) runCycle() {
 }
 
 func (m *OutboundMonitoring) runStage(cycleID uint64, tags []string) []testOutcome {
-	resultCh := make(chan testOutcome, len(tags))
-
-	expected := 0
-	for _, tag := range tags {
-		state := m.getState(tag)
-		if state == nil {
-			continue
-		}
-
-		task := &testTask{
-			outboundTag: tag,
-			cycleID:     cycleID,
-			priority:    false,
-			resultCh:    resultCh,
-		}
-		if m.enqueueTask(task) {
-			expected++
-		}
-
+	batchSize := m.workersCount
+	if batchSize <= 0 {
+		batchSize = defaultWorkerCount
 	}
-
-	results := make([]testOutcome, 0, expected)
-
-	for expected > 0 {
-		select {
-		case <-m.ctx.Done():
-			return results
-		case r := <-resultCh:
-			results = append(results, r)
-			expected--
+	results := make([]testOutcome, 0, len(tags))
+	for start, batchNumber := 0, 1; start < len(tags); start, batchNumber = start+batchSize, batchNumber+1 {
+		end := min(start+batchSize, len(tags))
+		batchTags := tags[start:end]
+		resultCh := make(chan testOutcome, len(batchTags))
+		expected := 0
+		for _, tag := range batchTags {
+			if m.getState(tag) == nil {
+				continue
+			}
+			task := &testTask{
+				outboundTag: tag,
+				cycleID:     cycleID,
+				priority:    false,
+				resultCh:    resultCh,
+				deferNotify: true,
+			}
+			if m.enqueueTask(task) {
+				expected++
+			}
 		}
-	}
 
+		batchResults := make([]testOutcome, 0, expected)
+		for expected > 0 {
+			select {
+			case <-m.ctx.Done():
+				return results
+			case result := <-resultCh:
+				batchResults = append(batchResults, result)
+				expected--
+			}
+		}
+		results = append(results, batchResults...)
+		m.publishCompletedBatch(cycleID, batchNumber, batchTags)
+	}
 	m.scheduleUDPProbesFromOutcomes(results)
 	return results
 }
@@ -1859,7 +1985,9 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 		state.mu.Unlock()
 		return false
 	}
-	m.emitGroupEvent(groupTags)
+	if !task.deferNotify {
+		m.emitGroupEvent(groupTags)
+	}
 	m.logger.Info("[OutboundCheckStage] tag=", task.outboundTag, " generation=", task.cycleID, " stage=ping state=checking")
 	return true
 }
@@ -1877,10 +2005,10 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 		return nil
 	}
 	state.mu.Lock()
-	defer state.mu.Unlock()
 
 	if state.history.CheckGeneration > 0 && outcome.cycleID != state.history.CheckGeneration {
 		m.logger.Warn("[OutboundCheckIgnored] tag=", outcome.outboundTag, " result_generation=", outcome.cycleID, " current_generation=", state.history.CheckGeneration, " stage=ping reason=stale_generation")
+		state.mu.Unlock()
 		return nil
 	}
 	state.queued = false
@@ -1931,20 +2059,25 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	if outcome.history.IpInfo != nil {
 		state.history.IpInfo = outcome.history.IpInfo
 	}
-	m.history.StoreURLTestHistory(outcome.outboundTag, &state.history)
+	historySnapshot := state.history
+	groupTags := append([]string(nil), state.groupTags...)
+	state.mu.Unlock()
+	m.history.StoreURLTestHistory(outcome.outboundTag, &historySnapshot)
 
-	m.emitGroupEvent(state.groupTags)
+	if !outcome.deferNotify {
+		m.emitGroupEvent(groupTags)
+	}
 	stageState := "completed"
 	if !outcome.history.Success {
 		stageState = "failed"
 	}
-	m.logger.Info("[OutboundCheckStage] tag=", outcome.outboundTag, " generation=", outcome.cycleID, " stage=ping state=", stageState, " delay=", state.history.Delay)
-	m.logger.Info("[OutboundCheckStage] tag=", outcome.outboundTag, " generation=", outcome.cycleID, " stage=quality state=", stageState, " score=", state.history.HealthScore)
+	m.logger.Info("[OutboundCheckStage] tag=", outcome.outboundTag, " generation=", outcome.cycleID, " stage=ping state=", stageState, " delay=", historySnapshot.Delay)
+	m.logger.Info("[OutboundCheckStage] tag=", outcome.outboundTag, " generation=", outcome.cycleID, " stage=quality state=", stageState, " score=", historySnapshot.HealthScore)
 	m.logger.Info("[SmartActiveFreshness] tag=", outcome.outboundTag, " generation=", outcome.cycleID,
-		" ping_ready=", state.history.PingReady, " quality_ready=", state.history.QualityReady,
-		" speed_ready=", state.history.SpeedReady, " udp_ready=", state.history.UDPReady,
-		" ranking_eligible=", state.history.Success && state.history.CombinedReady)
-	return &state.history
+		" ping_ready=", historySnapshot.PingReady, " quality_ready=", historySnapshot.QualityReady,
+		" speed_ready=", historySnapshot.SpeedReady, " udp_ready=", historySnapshot.UDPReady,
+		" ranking_eligible=", historySnapshot.Success && historySnapshot.CombinedReady)
+	return &historySnapshot
 }
 
 func mergeIpInfo(old, new *ipinfo.IpInfo) *ipinfo.IpInfo {
@@ -2270,7 +2403,7 @@ func calculateRuntimePenalty(stats *adapter.RuntimePenaltyStats) int {
 	return penalty
 }
 
-func (m *OutboundMonitoring) collectCycleTargets() []string {
+func (m *OutboundMonitoring) collectCycleTargets(forceAll bool) []string {
 
 	tags := make([]string, 0, len(m.outbounds))
 
@@ -2285,7 +2418,7 @@ func (m *OutboundMonitoring) collectCycleTargets() []string {
 			state.mu.Unlock()
 			continue
 		}
-		if state.invalid || time.Since(state.history.Time) >= m.mainInterval {
+		if forceAll || state.invalid || time.Since(state.history.Time) >= m.mainInterval {
 			tags = append(tags, tag)
 			delays[tag] = state.history.Delay
 		}
@@ -2315,17 +2448,11 @@ func (m *OutboundMonitoring) makeGroup(tag string) *groupState {
 }
 
 func (m *OutboundMonitoring) Touch() {
-	if !m.started {
+	if !m.started.Load() {
 		return
 	}
-	m.access.Lock()
-	defer m.access.Unlock()
-	if m.mainTicker != nil {
-		m.lastActive.Store(time.Now())
-		return
-	}
+	m.lastActive.Store(time.Now())
 	m.startTimerWorkers()
-
 }
 
 func (m *OutboundMonitoring) emitGroupEvent(groupTags []string) {
@@ -2340,6 +2467,65 @@ func (m *OutboundMonitoring) emitGroupEvent(groupTags []string) {
 		default:
 		}
 	}
+}
+
+func (m *OutboundMonitoring) publishCompletedBatch(generation uint64, batchNumber int, outboundTags []string) {
+	groups := make(map[string][]string)
+	for _, tag := range outboundTags {
+		state := m.getState(tag)
+		if state == nil {
+			continue
+		}
+		state.mu.Lock()
+		groupTags := append([]string(nil), state.groupTags...)
+		state.mu.Unlock()
+		for _, groupTag := range groupTags {
+			groups[groupTag] = append(groups[groupTag], tag)
+		}
+	}
+	now := time.Now()
+	for groupTag, tags := range groups {
+		grp := m.groups[groupTag]
+		if grp == nil || grp.observer == nil {
+			continue
+		}
+		grp.batchAccess.Lock()
+		if generation > grp.completedGeneration || (generation == grp.completedGeneration && batchNumber > grp.completedBatch) {
+			grp.completedGeneration = generation
+			grp.completedBatch = batchNumber
+		}
+		grp.batchAccess.Unlock()
+		grp.observer.Publish(GroupEvent{
+			GroupTag:       groupTag,
+			From:           now,
+			To:             now,
+			BatchCompleted: true,
+			Generation:     generation,
+			BatchNumber:    batchNumber,
+			tags:           tags,
+		})
+	}
+	m.logger.Info("[MonitoringBatchCompleted] generation=", generation, " batch=", batchNumber, " servers=", len(outboundTags))
+}
+
+func (m *OutboundMonitoring) emitGroupEventsForOutbounds(outboundTags []string) {
+	groupSet := make(map[string]struct{})
+	for _, tag := range outboundTags {
+		state := m.getState(tag)
+		if state == nil {
+			continue
+		}
+		state.mu.Lock()
+		for _, groupTag := range state.groupTags {
+			groupSet[groupTag] = struct{}{}
+		}
+		state.mu.Unlock()
+	}
+	groupTags := make([]string, 0, len(groupSet))
+	for groupTag := range groupSet {
+		groupTags = append(groupTags, groupTag)
+	}
+	m.emitGroupEvent(groupTags)
 }
 
 func (m *OutboundMonitoring) emitGroupEventThrottled(groupTag string, since time.Time) {
@@ -2360,11 +2546,18 @@ func (m *OutboundMonitoring) emitGroupEventThrottled(groupTag string, since time
 		}
 		state.mu.Unlock()
 	}
+	grp.batchAccess.Lock()
+	completedGeneration := grp.completedGeneration
+	completedBatch := grp.completedBatch
+	grp.batchAccess.Unlock()
 	grp.observer.Publish(GroupEvent{
-		GroupTag: groupTag,
-		From:     since,
-		To:       time.Now(),
-		tags:     tags,
+		GroupTag:       groupTag,
+		From:           since,
+		To:             time.Now(),
+		BatchCompleted: completedGeneration > 0,
+		Generation:     completedGeneration,
+		BatchNumber:    completedBatch,
+		tags:           tags,
 	})
 }
 
@@ -2439,6 +2632,7 @@ type testTask struct {
 	priority    bool
 	resultCh    chan<- testOutcome
 	manual      bool
+	deferNotify bool
 }
 
 type testOutcome struct {
@@ -2448,6 +2642,7 @@ type testOutcome struct {
 	err         error
 	cycleID     uint64
 	priority    bool
+	deferNotify bool
 }
 
 type udpProbeTask struct {
@@ -2472,26 +2667,33 @@ type outboundState struct {
 	enqueuedCycle  uint64
 	from_cache     bool
 
-	udpProbeRunning bool
-	udpProbeLast    time.Time
+	udpProbeRunning    bool
+	udpProbeLast       time.Time
+	activeProbeRunning bool
 
 	history adapter.URLTestHistory
 }
 
 type GroupEvent struct {
-	GroupTag string
-	From     time.Time
-	To       time.Time
-	tags     []string
+	GroupTag       string
+	From           time.Time
+	To             time.Time
+	BatchCompleted bool
+	Generation     uint64
+	BatchNumber    int
+	tags           []string
 }
 
 type groupState struct {
 	tag       string
 	outbounds map[string]struct{}
 
-	observer  *Broadcaster[GroupEvent]
-	notifyCh  chan struct{}
-	bestDelay uint16
+	observer            *Broadcaster[GroupEvent]
+	notifyCh            chan struct{}
+	bestDelay           uint16
+	batchAccess         sync.Mutex
+	completedGeneration uint64
+	completedBatch      int
 }
 
 type History struct {

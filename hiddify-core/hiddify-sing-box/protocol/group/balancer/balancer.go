@@ -5,6 +5,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -57,10 +58,17 @@ type Balancer struct {
 
 	availbleOutbounds []adapter.Outbound
 	close             chan struct{}
+	closeOnce         sync.Once
 	interruptGroup    *interrupt.Group
+	strategyUpdate    sync.Mutex
+	activeMonitorCtx  context.Context
+	activeMonitorStop context.CancelFunc
+	activeMonitorWake chan struct{}
+	activeMonitorWG   sync.WaitGroup
 }
 
 func NewLoadBalance(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.BalancerOutboundOptions) (adapter.Outbound, error) {
+	activeMonitorCtx, activeMonitorStop := context.WithCancel(ctx)
 	outbound := &Balancer{
 		Adapter:                      outbound.NewAdapter(C.TypeBalancer, tag, []string{N.NetworkTCP, N.NetworkUDP}, options.Outbounds),
 		ctx:                          ctx,
@@ -73,6 +81,10 @@ func NewLoadBalance(ctx context.Context, router adapter.Router, logger log.Conte
 		interruptExternalConnections: options.InterruptExistConnections,
 		options:                      options,
 		interruptGroup:               interrupt.NewGroup(),
+		close:                        make(chan struct{}),
+		activeMonitorCtx:             activeMonitorCtx,
+		activeMonitorStop:            activeMonitorStop,
+		activeMonitorWake:            make(chan struct{}, 1),
 	}
 	if len(outbound.tags) == 0 {
 		return nil, E.New("missing tags")
@@ -119,6 +131,14 @@ func (s *Balancer) Start() error {
 
 func (s *Balancer) PostStart() error {
 	go s.worker()
+	if s.options.Strategy == StrategySmartActiveAuto && s.monitor != nil {
+		// A new Smart Active instance must receive one coherent full generation.
+		// Otherwise recently cached successes are skipped by the normal interval
+		// filter and startup can remain on its provisional first-list server.
+		s.monitor.RequestFullCycle()
+		s.activeMonitorWG.Add(1)
+		go s.monitorActiveServer()
+	}
 
 	return nil
 }
@@ -138,7 +158,7 @@ func (s *Balancer) worker() {
 	// independent of scheduler timing.
 	if s.options.Strategy == StrategySmartActiveAuto {
 		s.logger.Info("[SmartActiveLifecycle] event=initial_snapshot group=", s.Tag())
-		s.applyMonitoringUpdate(false)
+		s.applyMonitoringUpdate(false, 0)
 	}
 
 	for {
@@ -148,7 +168,7 @@ func (s *Balancer) worker() {
 
 		case <-s.ctx.Done():
 			return
-		case _, ok := <-observer:
+		case event, ok := <-observer:
 			if !ok {
 				return
 			}
@@ -159,13 +179,20 @@ func (s *Balancer) worker() {
 					s.logger.Info("[SmartActiveLifecycle] event=user_refresh group=", s.Tag())
 				}
 			}
-			s.applyMonitoringUpdate(manualRefresh)
+			batchGeneration := uint64(0)
+			if event.BatchCompleted {
+				batchGeneration = event.Generation
+			}
+			s.applyMonitoringUpdate(manualRefresh, batchGeneration)
 
 		}
 	}
 }
 
-func (s *Balancer) applyMonitoringUpdate(manualRefresh bool) {
+func (s *Balancer) applyMonitoringUpdate(manualRefresh bool, batchGeneration uint64) {
+	s.strategyUpdate.Lock()
+	defer s.strategyUpdate.Unlock()
+
 	outbounds := s.monitor.OutboundsHistory(s.Tag())
 	if s.smartActiveDebugFault != nil && s.smartActiveDebugFault.Apply(s.strategyFn.Now(), outbounds) {
 		s.logger.Warn("[SmartActiveDebugFault] applied to active=", s.strategyFn.Now())
@@ -174,6 +201,12 @@ func (s *Balancer) applyMonitoringUpdate(manualRefresh bool) {
 	if manualRefresh {
 		if strategy, ok := s.strategyFn.(*SmartActive); ok {
 			changed = strategy.UpdateOutboundsInfoForManualRefresh(outbounds)
+		} else {
+			changed = s.strategyFn.UpdateOutboundsInfo(outbounds)
+		}
+	} else if batchGeneration > 0 {
+		if strategy, ok := s.strategyFn.(*SmartActive); ok {
+			changed = strategy.UpdateOutboundsInfoForCompletedBatch(outbounds, batchGeneration)
 		} else {
 			changed = s.strategyFn.UpdateOutboundsInfo(outbounds)
 		}
@@ -187,6 +220,7 @@ func (s *Balancer) applyMonitoringUpdate(manualRefresh bool) {
 		s.logAutoDecision(outbounds)
 		s.logger.Warn("[ActiveServerChanged] group=", s.Tag(), " active=", s.strategyFn.Now())
 		s.interruptGroup.Interrupt(s.interruptExternalConnections)
+		s.signalActiveMonitor()
 	}
 }
 
@@ -490,9 +524,13 @@ func (s *Balancer) logAutoDecision(history map[string]*adapter.URLTestHistory) {
 		" selected_score=", selectedScore, " selected_delay=", selectedDelay)
 }
 func (s *Balancer) Close() error {
-	if s.close != nil {
+	s.closeOnce.Do(func() {
 		close(s.close)
-	}
+		if s.activeMonitorStop != nil {
+			s.activeMonitorStop()
+		}
+	})
+	s.activeMonitorWG.Wait()
 	return nil
 }
 

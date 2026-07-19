@@ -16,22 +16,29 @@ import (
 type SmartActive struct {
 	outbounds []adapter.Outbound
 
-	mu         sync.Mutex
-	active     adapter.Outbound
-	bootstrap  bool
-	confirmed  bool
-	startedAt  time.Time
-	evidence   map[string]*smartEvidence
-	avoidUntil map[string]time.Time
-	decision   smartDecision
-	recovered  []string
+	mu        sync.Mutex
+	active    adapter.Outbound
+	bootstrap bool
+	// selectionGeneration is the full cohort currently being ranked. A newer
+	// one-server ping must not replace this with a partial generation.
+	selectionGeneration uint64
+	confirmed           bool
+	startedAt           time.Time
+	evidence            map[string]*smartEvidence
+	avoidUntil          map[string]time.Time
+	decision            smartDecision
+	recovered           []string
+	activeProbe         smartActiveProbeEvidence
 }
 
 type smartEvidence struct {
-	successStreak   int
-	failureStreak   int
-	lastScore       int
-	recoveryPending bool
+	successStreak       int
+	failureStreak       int
+	lastScore           int
+	recoveryPending     bool
+	lastProbeGeneration uint64
+	lastProbeTime       time.Time
+	hasCompletedProbe   bool
 }
 
 type smartDecision struct {
@@ -88,19 +95,27 @@ func (s *SmartActive) Select(_ adapter.InboundContext, _ string, _ bool) adapter
 }
 
 func (s *SmartActive) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
-	return s.updateOutboundsInfo(history, "")
+	return s.updateOutboundsInfo(history, "", 0)
 }
 
 func (s *SmartActive) UpdateOutboundsInfoForManualRefresh(history map[string]*adapter.URLTestHistory) bool {
-	return s.updateOutboundsInfo(history, "user_refresh")
+	return s.updateOutboundsInfo(history, "user_refresh", 0)
 }
 
-func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHistory, mode string) bool {
+func (s *SmartActive) UpdateOutboundsInfoForCompletedBatch(history map[string]*adapter.URLTestHistory, generation uint64) bool {
+	return s.updateOutboundsInfo(history, "completed_batch", generation)
+}
+
+func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHistory, mode string, batchGeneration uint64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	generation := s.currentGeneration(history)
-	s.updateEvidence(history, generation)
+	observedGeneration := s.currentGeneration(history)
+	if observedGeneration > s.selectionGeneration && s.generationCoversAll(history, observedGeneration) {
+		s.selectionGeneration = observedGeneration
+	}
+	generation := s.selectionGeneration
+	s.updateEvidence(history)
 	current := s.active
 
 	if current == nil {
@@ -114,11 +129,46 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		return true
 	}
 
-	if !s.confirmed {
-		candidate := s.bestCandidate(history, true, false, generation)
+	if s.bootstrap {
+		// beginCheckGeneration assigns the generation to every member before the
+		// workers start. That lets startup distinguish a full cohort (where we may
+		// improve the route as each result arrives) from a one-server/partial ping
+		// (which must never re-rank the group against older results).
+		if generation == 0 {
+			reason := "provisional_waiting_for_full_generation"
+			if observedGeneration != 0 {
+				reason = "partial_generation_ignored_during_startup"
+			}
+			s.decision = smartDecision{action: "keep", reason: reason, from: current.Tag(), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
+			return false
+		}
+		if mode == "completed_batch" && batchGeneration != generation {
+			s.decision = smartDecision{action: "keep", reason: "partial_batch_generation_ignored", from: current.Tag(), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
+			return false
+		}
+		if mode != "completed_batch" && mode != "user_refresh" && !s.bootstrapGenerationSettled(history, generation) {
+			s.decision = smartDecision{action: "keep", reason: "startup_waiting_for_completed_batch", from: current.Tag(), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
+			return false
+		}
+
+		candidate := s.bestBootstrapCandidate(history, generation)
 		if candidate != nil {
-			changed := s.confirmActive(current, candidate, "first_confirmed_current_generation_candidate", decisionMode(mode, s.bootstrap))
-			s.bootstrap = false
+			reason := "first_confirmed_current_generation_candidate"
+			if s.confirmed {
+				reason = "startup_progressively_better_candidate"
+			}
+			changed := false
+			if !s.confirmed || candidate.Tag() != current.Tag() {
+				// Startup switches intentionally do not populate avoidUntil. Every new
+				// result belongs to the same fresh cohort, so the best-so-far route is
+				// allowed to improve more than once before the cycle settles.
+				changed = s.confirmActive(current, candidate, reason, decisionMode(mode, s.bootstrap))
+			} else {
+				s.decision = smartDecision{action: "keep", reason: "startup_current_is_best_so_far", from: current.Tag(), to: candidate.Tag(), state: smartActiveState(history[current.Tag()]), mode: decisionMode(mode, s.bootstrap)}
+			}
+			if s.bootstrapGenerationSettled(history, generation) {
+				s.bootstrap = false
+			}
 			return changed
 		}
 		tag, reason := s.bestRejectedCandidate(history, generation)
@@ -135,8 +185,28 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		return false
 	}
 
+	if !s.confirmed {
+		candidate := s.bestCandidate(history, true, false, generation)
+		if candidate != nil {
+			return s.confirmActive(current, candidate, "first_confirmed_current_generation_candidate", decisionMode(mode, s.bootstrap))
+		}
+		s.decision = smartDecision{action: "keep", reason: "waiting_for_confirmed_candidate", from: current.Tag(), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
+		return false
+	}
+
 	currentHistory := history[current.Tag()]
 	state := smartActiveState(currentHistory)
+	if mode == "completed_batch" && batchGeneration != generation {
+		s.decision = smartDecision{action: "keep", reason: "partial_batch_generation_ignored", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
+		return false
+	}
+	if mode != "user_refresh" && mode != "completed_batch" && !s.generationSettled(history, generation) {
+		s.decision = smartDecision{action: "keep", reason: "current_generation_incomplete", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
+		return false
+	}
+	if changed, handled := s.handleConfirmedActiveProbe(current, history, generation); handled {
+		return changed
+	}
 	if mode == "user_refresh" {
 		candidate := s.bestCandidate(history, true, false, generation)
 		if candidate != nil {
@@ -150,6 +220,26 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		}
 		s.decision = smartDecision{action: "keep", reason: reason, from: current.Tag(), to: tag, state: state, mode: "user_refresh"}
 		return false
+	}
+	if mode == "completed_batch" {
+		requiredSuccesses := smartActiveCleanEvidenceRequired
+		if state == "BAD" || state == "CRITICAL" {
+			requiredSuccesses = 1
+		}
+		candidate := s.bestProgressiveBatchCandidate(history, generation, requiredSuccesses)
+		if candidate == nil {
+			s.decision = smartDecision{action: "keep", reason: "completed_batch_without_confirmed_candidate", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
+			return false
+		}
+		if candidate.Tag() == current.Tag() {
+			s.decision = smartDecision{action: "keep", reason: "completed_batch_current_is_best_so_far", from: current.Tag(), to: candidate.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
+			return false
+		}
+		// Completed batches are monotonic best-so-far comparisons inside one
+		// fresh full generation. Do not put the previous batch winner into the
+		// normal avoidance window: a later result from the same generation must
+		// still be allowed to prove that it is the better server.
+		return s.confirmActive(current, candidate, "completed_batch_better_candidate", decisionMode(mode, s.bootstrap))
 	}
 
 	candidate := s.bestCandidate(history, state == "BAD" || state == "CRITICAL", true, generation)
@@ -302,7 +392,7 @@ func (s *SmartActive) switchTo(from, to adapter.Outbound, reason, state string, 
 	return true
 }
 
-func (s *SmartActive) updateEvidence(history map[string]*adapter.URLTestHistory, generation uint64) {
+func (s *SmartActive) updateEvidence(history map[string]*adapter.URLTestHistory) {
 	s.recovered = s.recovered[:0]
 	now := time.Now()
 	for tag, until := range s.avoidUntil {
@@ -318,8 +408,18 @@ func (s *SmartActive) updateEvidence(history map[string]*adapter.URLTestHistory,
 			e = &smartEvidence{}
 			s.evidence[tag] = e
 		}
+		if h != nil {
+			e.lastScore = getHealthScore(tag, h)
+		}
+		if !s.isNewCompletedProbe(h, e) {
+			continue
+		}
+		e.lastProbeGeneration = h.CheckGeneration
+		e.lastProbeTime = h.Time
+		e.hasCompletedProbe = true
+
 		state := smartActiveState(h)
-		cleanSuccess := s.candidateStatus(tag, h, generation).ok
+		cleanSuccess := s.cleanCompletedProbe(tag, h)
 		if state == "BAD" || state == "CRITICAL" {
 			e.recoveryPending = true
 			e.failureStreak++
@@ -335,10 +435,43 @@ func (s *SmartActive) updateEvidence(history map[string]*adapter.URLTestHistory,
 			e.failureStreak++
 			e.successStreak = 0
 		}
-		if h != nil {
-			e.lastScore = getHealthScore(tag, h)
-		}
 	}
+}
+
+func (s *SmartActive) isNewCompletedProbe(h *adapter.URLTestHistory, evidence *smartEvidence) bool {
+	if h == nil || h.CheckGeneration == 0 || h.Time.IsZero() || h.Time.Before(s.startedAt) || h.IsFromCache || !h.CombinedReady {
+		return false
+	}
+	if h.URLTestStatus != "" && h.URLTestStatus != urltest.StatusSuccess && h.URLTestStatus != urltest.StatusFailed {
+		return false
+	}
+	if h.URLTestStatus == "" && !h.Success && (h.ErrorType == "" || h.ErrorType == urltest.ErrorTypeNone) {
+		return false
+	}
+	if !evidence.hasCompletedProbe {
+		return true
+	}
+	if h.CheckGeneration < evidence.lastProbeGeneration {
+		return false
+	}
+	if h.CheckGeneration == evidence.lastProbeGeneration && !h.Time.After(evidence.lastProbeTime) {
+		return false
+	}
+	return true
+}
+
+func (s *SmartActive) cleanCompletedProbe(tag string, h *adapter.URLTestHistory) bool {
+	if h == nil || !h.Success || (h.ErrorType != "" && h.ErrorType != urltest.ErrorTypeNone) {
+		return false
+	}
+	if h.URLTestStatus != "" && h.URLTestStatus != urltest.StatusSuccess {
+		return false
+	}
+	if getPolicyPenalty(tag, h) >= 50 || getHealthScore(tag, h) < 35 {
+		return false
+	}
+	state := smartActiveState(h)
+	return state != "BAD" && state != "CRITICAL"
 }
 
 func (s *SmartActive) bestCandidate(history map[string]*adapter.URLTestHistory, emergency bool, requireEvidence bool, generation uint64) adapter.Outbound {
@@ -372,6 +505,65 @@ func (s *SmartActive) bestCandidate(history map[string]*adapter.URLTestHistory, 
 		return candidate
 	}
 	return nil
+}
+
+func (s *SmartActive) bestBootstrapCandidate(history map[string]*adapter.URLTestHistory, generation uint64) adapter.Outbound {
+	return s.bestProgressiveBatchCandidate(history, generation, 0)
+}
+
+func (s *SmartActive) bestProgressiveBatchCandidate(history map[string]*adapter.URLTestHistory, generation uint64, requiredSuccesses int) adapter.Outbound {
+	eligible := make([]adapter.Outbound, 0, len(s.outbounds))
+	bestScore := 0
+	for _, candidate := range s.outbounds {
+		tag := candidate.Tag()
+		if !s.candidateStatus(tag, history[tag], generation).ok {
+			continue
+		}
+		if requiredSuccesses > 0 {
+			evidence := s.evidence[tag]
+			if evidence == nil || evidence.successStreak < requiredSuccesses || evidence.failureStreak > 0 {
+				continue
+			}
+		}
+		eligible = append(eligible, candidate)
+		bestScore = max(bestScore, getHealthScore(tag, history[tag]))
+	}
+	if len(eligible) == 0 {
+		return nil
+	}
+
+	// A small quality-score difference must not pin the route to a dramatically
+	// slower early-batch winner. Start with the highest-quality candidate, then
+	// allow a comparable-quality candidate to win only for a significant delay
+	// improvement. Policy and genuine health penalties are part of the score.
+	sort.SliceStable(eligible, func(i, j int) bool {
+		left, right := eligible[i], eligible[j]
+		leftScore := getHealthScore(left.Tag(), history[left.Tag()])
+		rightScore := getHealthScore(right.Tag(), history[right.Tag()])
+		if leftScore != rightScore {
+			return leftScore > rightScore
+		}
+		return getModifiedDelay(history[left.Tag()]) < getModifiedDelay(history[right.Tag()])
+	})
+	qualityWinner := eligible[0]
+	qualityWinnerDelay := getModifiedDelay(history[qualityWinner.Tag()])
+	selected := qualityWinner
+	selectedDelay := qualityWinnerDelay
+	for _, candidate := range eligible[1:] {
+		score := getHealthScore(candidate.Tag(), history[candidate.Tag()])
+		if score < bestScore-smartActiveComparableScoreDelta {
+			continue
+		}
+		delay := getModifiedDelay(history[candidate.Tag()])
+		if score < bestScore && int(qualityWinnerDelay)-int(delay) < smartActiveSignificantDelayDelta {
+			continue
+		}
+		if delay < selectedDelay {
+			selected = candidate
+			selectedDelay = delay
+		}
+	}
+	return selected
 }
 
 func (s *SmartActive) bestRejectedCandidate(history map[string]*adapter.URLTestHistory, generation uint64) (string, string) {
@@ -657,37 +849,77 @@ type smartCandidateStatus struct {
 }
 
 func (s *SmartActive) currentGeneration(history map[string]*adapter.URLTestHistory) uint64 {
-	readyByGeneration := make(map[uint64]int)
-	observedByGeneration := make(map[uint64]int)
+	var newest uint64
 	for _, outbound := range s.outbounds {
 		h := history[outbound.Tag()]
 		if h == nil || h.CheckGeneration == 0 || h.Time.IsZero() || h.Time.Before(s.startedAt) || h.IsFromCache {
 			continue
 		}
-		observedByGeneration[h.CheckGeneration]++
-		if h.Success &&
-			(h.ErrorType == "" || h.ErrorType == urltest.ErrorTypeNone) &&
-			(h.URLTestStatus == "" || h.URLTestStatus == urltest.StatusSuccess) &&
-			h.CombinedReady {
-			readyByGeneration[h.CheckGeneration]++
+		if h.CheckGeneration > newest {
+			newest = h.CheckGeneration
 		}
 	}
-	if generation := largestGenerationCohort(readyByGeneration); generation != 0 {
-		return generation
-	}
-	return largestGenerationCohort(observedByGeneration)
+	return newest
 }
 
-func largestGenerationCohort(counts map[uint64]int) uint64 {
-	var selected uint64
-	selectedCount := 0
-	for generation, count := range counts {
-		if count > selectedCount || (count == selectedCount && generation > selected) {
-			selected = generation
-			selectedCount = count
+func (s *SmartActive) generationSettled(history map[string]*adapter.URLTestHistory, generation uint64) bool {
+	if generation == 0 || len(s.outbounds) == 0 {
+		return false
+	}
+	for _, outbound := range s.outbounds {
+		h := history[outbound.Tag()]
+		if h == nil || h.CheckGeneration != generation || h.Time.IsZero() || h.Time.Before(s.startedAt) || h.IsFromCache || !h.CombinedReady {
+			return false
+		}
+		switch h.URLTestStatus {
+		case urltest.StatusSuccess, urltest.StatusFailed:
+		case "":
+			if !h.Success && (h.ErrorType == "" || h.ErrorType == urltest.ErrorTypeNone) {
+				return false
+			}
+		default:
+			return false
 		}
 	}
-	return selected
+	return true
+}
+
+func (s *SmartActive) generationCoversAll(history map[string]*adapter.URLTestHistory, generation uint64) bool {
+	if generation == 0 || len(s.outbounds) == 0 {
+		return false
+	}
+	for _, outbound := range s.outbounds {
+		h := history[outbound.Tag()]
+		if h == nil || h.CheckGeneration != generation || h.Time.IsZero() || h.Time.Before(s.startedAt) || h.IsFromCache {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *SmartActive) bootstrapGenerationSettled(history map[string]*adapter.URLTestHistory, generation uint64) bool {
+	if generation == 0 || len(s.outbounds) == 0 {
+		return false
+	}
+	for _, outbound := range s.outbounds {
+		h := history[outbound.Tag()]
+		// A partial probe may supersede this outbound's task after the full
+		// cohort started. Its newer terminal result closes the pending slot, but
+		// bestBootstrapCandidate still excludes it from generation's ranking.
+		if h == nil || h.CheckGeneration < generation || h.Time.IsZero() || h.Time.Before(s.startedAt) || h.IsFromCache || !h.CombinedReady {
+			return false
+		}
+		switch h.URLTestStatus {
+		case urltest.StatusSuccess, urltest.StatusFailed:
+		case "":
+			if !h.Success && (h.ErrorType == "" || h.ErrorType == urltest.ErrorTypeNone) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (s *SmartActive) hasOutbound(tag string) bool {
