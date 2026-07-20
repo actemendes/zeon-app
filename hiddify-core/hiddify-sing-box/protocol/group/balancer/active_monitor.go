@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/monitoring"
 )
 
@@ -144,8 +145,26 @@ func (s *Balancer) applyActiveProbe(result monitoring.ActiveProbeResult) smartAc
 	if !ok || strategy.Now() != result.OutboundTag {
 		return smartActiveProbeUpdate{}
 	}
-	history := s.monitor.OutboundsHistory(s.Tag())
-	update := strategy.UpdateActiveProbe(result.OutboundTag, &result.History, history)
+	if !s.monitor.PublishActiveProbePresentation(result) {
+		s.logger.Debug(fmt.Sprintf(
+			"[SmartActiveProbe] tag=%s decision=skip reason=stale_presentation_revision",
+			result.OutboundTag,
+		))
+		return smartActiveProbeUpdate{}
+	}
+	rankingHistory := s.monitor.OutboundsRankingHistory(s.Tag())
+	if activeProbeSupersededByRanking(&result.History, rankingHistory[result.OutboundTag]) {
+		s.logger.Debug(fmt.Sprintf(
+			"[SmartActiveProbe] tag=%s decision=skip reason=newer_ranking_evidence",
+			result.OutboundTag,
+		))
+		return smartActiveProbeUpdate{}
+	}
+	// Use the exact sample whose ranking revision was just accepted. Reading the
+	// presentation map again here would race with a new full cycle invalidating
+	// the overlay and could turn a successful probe into a synthetic failure.
+	probe := cloneSmartActiveHistory(&result.History)
+	update := strategy.UpdateActiveProbe(result.OutboundTag, probe, rankingHistory)
 	decision := strategy.LastDecision()
 	s.logger.Info(fmt.Sprintf(
 		"[SmartActiveDecision] action=%s reason=%s from=%s to=%s current=%s mode=active_probe delay=%d score=%d udp_ready=%t udp_loss=%.4f",
@@ -154,7 +173,12 @@ func (s *Balancer) applyActiveProbe(result monitoring.ActiveProbeResult) smartAc
 	))
 
 	if update.changed {
-		s.logAutoDecision(history)
+		decisionHistory := make(map[string]*adapter.URLTestHistory, len(rankingHistory))
+		for tag, item := range rankingHistory {
+			decisionHistory[tag] = item
+		}
+		decisionHistory[result.OutboundTag] = probe
+		s.logAutoDecision(decisionHistory)
 		s.logger.Warn(fmt.Sprintf(
 			"[ActiveServerChanged] group=%s active=%s",
 			s.Tag(), s.strategyFn.Now(),
@@ -164,12 +188,20 @@ func (s *Balancer) applyActiveProbe(result monitoring.ActiveProbeResult) smartAc
 	}
 	if update.refreshCandidates {
 		s.logger.Warn(fmt.Sprintf(
-			"[SmartActiveProbe] tag=%s decision=request_candidate_refresh reason=confirmed_active_failure",
-			result.OutboundTag,
+			"[SmartActiveProbe] tag=%s decision=request_candidate_refresh reason=%s",
+			result.OutboundTag, decision.reason,
 		))
 		s.monitor.RequestFullCycle()
 	}
 	return update
+}
+
+func activeProbeSupersededByRanking(probe, ranking *adapter.URLTestHistory) bool {
+	if probe == nil || ranking == nil {
+		return false
+	}
+	return ranking.Time.After(probe.Time) ||
+		(probe.CheckGeneration > 0 && ranking.CheckGeneration > probe.CheckGeneration)
 }
 
 func (s *Balancer) signalActiveMonitor() {

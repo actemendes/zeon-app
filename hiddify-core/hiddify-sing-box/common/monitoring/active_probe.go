@@ -28,6 +28,12 @@ type ActiveProbeResult struct {
 	History      adapter.URLTestHistory
 	UDPAttempted bool
 	UDPErrorType string
+
+	// rankingRevision binds this isolated result to the coherent monitoring
+	// snapshot that existed when the probe started. It is deliberately private:
+	// selection code consumes History, while monitoring uses the revision only
+	// to prevent a late probe from covering a newer generation/full result.
+	rankingRevision uint64
 }
 
 // ProbeActiveOutbound sends one tiny HTTP probe and, when the authenticated UDP
@@ -52,6 +58,7 @@ func (m *OutboundMonitoring) ProbeActiveOutbound(parent context.Context, tag str
 	state.activeProbeRunning = true
 	outbound := state.outbound
 	previous := state.history
+	result.rankingRevision = state.rankingRevision
 	state.mu.Unlock()
 	defer func() {
 		state.mu.Lock()
@@ -145,6 +152,76 @@ func (m *OutboundMonitoring) ProbeActiveOutbound(parent context.Context, tag str
 		tag, history.Delay, history.HealthScore, result.UDPAttempted, history.UDPReady, history.UDPLoss,
 	))
 	return result, nil
+}
+
+// PublishActiveProbePresentation exposes a completed active-only sample to
+// history consumers and group subscribers without mutating state.history.
+// The caller must first verify that OutboundTag is still the live active
+// outbound; keeping that validation at the balancer avoids committing a probe
+// that raced with an active-server switch. state.history remains the coherent
+// full-generation ranking source.
+func (m *OutboundMonitoring) PublishActiveProbePresentation(result ActiveProbeResult) bool {
+	if result.OutboundTag == "" || result.History.Time.IsZero() {
+		return false
+	}
+	state := m.getState(result.OutboundTag)
+	if state == nil {
+		return false
+	}
+
+	state.historyPublish.Lock()
+	state.mu.Lock()
+	if result.rankingRevision != state.rankingRevision {
+		state.mu.Unlock()
+		state.historyPublish.Unlock()
+		return false
+	}
+	if current := state.activeProbePresentation; current != nil &&
+		!result.History.Time.After(current.history.Time) {
+		state.mu.Unlock()
+		state.historyPublish.Unlock()
+		return false
+	}
+	state.activeProbePresentation = &activeProbePresentation{
+		history:         result.History,
+		rankingRevision: result.rankingRevision,
+	}
+	presentation := mergeActiveProbePresentation(result.History, state.history)
+	groupTags := append([]string(nil), state.groupTags...)
+	state.mu.Unlock()
+
+	// Recalculate dynamic runtime/freshness health at publication time. The
+	// stored snapshot feeds existing history observers (for example Clash API),
+	// while the group event wakes the existing gRPC outbounds streams.
+	m.applyDynamicHealth(result.OutboundTag, &presentation)
+	if m.history != nil {
+		m.history.StoreURLTestHistory(result.OutboundTag, &presentation)
+	}
+	state.historyPublish.Unlock()
+	m.emitGroupEvent(groupTags)
+	return true
+}
+
+// mergeActiveProbePresentation combines the newest isolated transport sample
+// with accumulated real-user evidence from the ranking state. Generation and
+// readiness metadata are reset so this presentation value cannot masquerade
+// as a completed member of a full monitoring generation.
+func mergeActiveProbePresentation(probe, ranking adapter.URLTestHistory) adapter.URLTestHistory {
+	presentation := probe
+	if presentation.IpInfo == nil {
+		presentation.IpInfo = ranking.IpInfo
+	}
+	presentation.IsFromCache = false
+	presentation.RealUserPenalty = ranking.RealUserPenalty
+	presentation.VolatilityPenalty = ranking.VolatilityPenalty
+	presentation.StabilityPoints = ranking.StabilityPoints
+	presentation.DegradationPoints = ranking.DegradationPoints
+	presentation.CheckGeneration = 0
+	presentation.PingReady = true
+	presentation.QualityReady = true
+	presentation.SpeedReady = true
+	presentation.CombinedReady = true
+	return presentation
 }
 
 func (m *OutboundMonitoring) newActiveProbeFailure(tag string, previous adapter.URLTestHistory, err error) adapter.URLTestHistory {

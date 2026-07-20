@@ -74,6 +74,9 @@ func TestSmartActiveDebugForcedStatusesDriveExpectedDecisions(t *testing.T) {
 			for i := 0; i < tt.updates; i++ {
 				history := histories(healthyHistory(90), healthyHistory(80))
 				fault.Apply(strategy.Now(), history)
+				for _, item := range history {
+					item.CheckGeneration = smartActiveTestGeneration + uint64(i)
+				}
 				strategy.UpdateOutboundsInfo(history)
 			}
 			requireDecision(t, strategy, tt.action, tt.active)

@@ -65,6 +65,9 @@ type Balancer struct {
 	activeMonitorStop context.CancelFunc
 	activeMonitorWake chan struct{}
 	activeMonitorWG   sync.WaitGroup
+
+	lastHandledBatchGeneration uint64
+	lastHandledBatchNumber     int
 }
 
 func NewLoadBalance(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.BalancerOutboundOptions) (adapter.Outbound, error) {
@@ -121,7 +124,7 @@ func (s *Balancer) Start() error {
 	case StrategySmartActiveAuto:
 		s.strategyFn = NewSmartActive(outbounds, s.options)
 		s.smartActiveDebugFault = newSmartActiveDebugFault(s.options)
-		s.logger.Info("[SmartActiveLifecycle] event=vpn_start group=", s.Tag(), " provisional_active=", s.strategyFn.Now(), " candidates=", len(outbounds))
+		s.logger.Info("[SmartActiveLifecycle] event=vpn_start group=", s.Tag(), " active=pending_verified_batch candidates=", len(outbounds))
 	default:
 		return E.New("unknown load balance strategy: ", s.options.Strategy)
 	}
@@ -134,7 +137,7 @@ func (s *Balancer) PostStart() error {
 	if s.options.Strategy == StrategySmartActiveAuto && s.monitor != nil {
 		// A new Smart Active instance must receive one coherent full generation.
 		// Otherwise recently cached successes are skipped by the normal interval
-		// filter and startup can remain on its provisional first-list server.
+		// filter and startup cannot make a fresh, evidence-based selection.
 		s.monitor.RequestFullCycle()
 		s.activeMonitorWG.Add(1)
 		go s.monitorActiveServer()
@@ -152,10 +155,9 @@ func (s *Balancer) worker() {
 	defer s.monitor.UnsubscribeGroup(s.Tag(), observer)
 
 	// SubscribeGroup intentionally has no replay buffer. A release build can
-	// finish the first monitoring cycle before this worker subscribes, leaving
-	// SmartActive on its provisional cold-start outbound until the next cycle.
-	// Always consume the current snapshot once after subscribing so startup is
-	// independent of scheduler timing.
+	// finish the first monitoring cycle before this worker subscribes. Always
+	// consume the current snapshot once after subscribing so a fully completed
+	// fresh generation can still establish the first active server.
 	if s.options.Strategy == StrategySmartActiveAuto {
 		s.logger.Info("[SmartActiveLifecycle] event=initial_snapshot group=", s.Tag())
 		s.applyMonitoringUpdate(false, 0)
@@ -180,7 +182,7 @@ func (s *Balancer) worker() {
 				}
 			}
 			batchGeneration := uint64(0)
-			if event.BatchCompleted {
+			if event.BatchCompleted && s.consumeCompletedBatch(event.Generation, event.BatchNumber) {
 				batchGeneration = event.Generation
 			}
 			s.applyMonitoringUpdate(manualRefresh, batchGeneration)
@@ -193,7 +195,7 @@ func (s *Balancer) applyMonitoringUpdate(manualRefresh bool, batchGeneration uin
 	s.strategyUpdate.Lock()
 	defer s.strategyUpdate.Unlock()
 
-	outbounds := s.monitor.OutboundsHistory(s.Tag())
+	outbounds := s.monitor.OutboundsRankingHistory(s.Tag())
 	if s.smartActiveDebugFault != nil && s.smartActiveDebugFault.Apply(s.strategyFn.Now(), outbounds) {
 		s.logger.Warn("[SmartActiveDebugFault] applied to active=", s.strategyFn.Now())
 	}
@@ -222,6 +224,22 @@ func (s *Balancer) applyMonitoringUpdate(manualRefresh bool, batchGeneration uin
 		s.interruptGroup.Interrupt(s.interruptExternalConnections)
 		s.signalActiveMonitor()
 	}
+}
+
+// consumeCompletedBatch preserves the throttled delivery backstop while
+// preventing ordinary runtime, UDP and active-presentation events from
+// repeatedly re-entering the completed-batch fast path with old metadata.
+func (s *Balancer) consumeCompletedBatch(generation uint64, batch int) bool {
+	if generation == 0 {
+		return false
+	}
+	if generation < s.lastHandledBatchGeneration ||
+		generation == s.lastHandledBatchGeneration && batch <= s.lastHandledBatchNumber {
+		return false
+	}
+	s.lastHandledBatchGeneration = generation
+	s.lastHandledBatchNumber = batch
+	return true
 }
 
 func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHistory) {

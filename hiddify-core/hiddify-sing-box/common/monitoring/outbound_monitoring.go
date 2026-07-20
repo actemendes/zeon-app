@@ -140,8 +140,21 @@ func (m *OutboundMonitoring) Name() string {
 	return "outbound-monitoring"
 }
 
+// OutboundsHistory returns the presentation view consumed by APIs and UI.
+// A fresh active-server probe may overlay its transport result here without
+// changing the coherent full-generation history used for ranking.
 func (m *OutboundMonitoring) OutboundsHistory(groupTag string) map[string]*adapter.URLTestHistory {
+	return m.outboundsHistory(groupTag, true)
+}
 
+// OutboundsRankingHistory returns only coherent monitoring-cycle results.
+// Selection algorithms must use this view so an isolated active-server probe
+// cannot complete or otherwise alter a full generation.
+func (m *OutboundMonitoring) OutboundsRankingHistory(groupTag string) map[string]*adapter.URLTestHistory {
+	return m.outboundsHistory(groupTag, false)
+}
+
+func (m *OutboundMonitoring) outboundsHistory(groupTag string, includeActiveProbe bool) map[string]*adapter.URLTestHistory {
 	histories := make(map[string]*adapter.URLTestHistory)
 
 	grp, ok := m.groups[groupTag]
@@ -150,7 +163,7 @@ func (m *OutboundMonitoring) OutboundsHistory(groupTag string) map[string]*adapt
 	}
 	//m.logger.Debug("collecting history for group ", groupTag, " with ", len(grp.outbounds), " outbounds")
 	for outboundTag := range grp.outbounds {
-		histories[outboundTag] = m.getUrlTest(outboundTag)
+		histories[outboundTag] = m.getURLTest(outboundTag, includeActiveProbe)
 		// m.logger.Error("checking history for outbound ", outboundTag)
 
 	}
@@ -158,6 +171,10 @@ func (m *OutboundMonitoring) OutboundsHistory(groupTag string) map[string]*adapt
 }
 
 func (m *OutboundMonitoring) getUrlTest(outboundTag string) *adapter.URLTestHistory {
+	return m.getURLTest(outboundTag, true)
+}
+
+func (m *OutboundMonitoring) getURLTest(outboundTag string, includeActiveProbe bool) *adapter.URLTestHistory {
 	state, ok := m.outbounds[outboundTag]
 	if !ok {
 		return nil
@@ -167,25 +184,42 @@ func (m *OutboundMonitoring) getUrlTest(outboundTag string) *adapter.URLTestHist
 		realtag := RealTag(state.outbound)
 		//m.logger.Debug("outbound ", outboundTag, " is a group, checking group ", grp.tag, " with real tag ", realtag)
 		if realtag != "" && realtag != outboundTag {
-			return m.getUrlTest(realtag)
+			return m.getURLTest(realtag, includeActiveProbe)
 		}
 
-		return m.getMinGroupOutboundHistory(grp.tag)
+		return m.getMinGroupOutboundHistory(grp.tag, includeActiveProbe)
 
 	}
 	state.mu.Lock()
 	his := state.history
+	if !includeActiveProbe && state.lastResultSourceKnown && !state.lastResultFromFullGeneration && his.CheckGeneration > 0 {
+		// A priority/targeted retest is presentation and veto evidence only.
+		// It must not settle a full cohort before the member's normal/manual task
+		// commits. Keep explicit failures visible so Smart Active can invalidate
+		// an older success without promoting this partial result.
+		his.CombinedReady = false
+		if his.Success {
+			his.URLTestStatus = urltest.StatusChecking
+		}
+	}
+	if includeActiveProbe && state.activeProbePresentation != nil &&
+		state.activeProbePresentation.rankingRevision == state.rankingRevision {
+		his = mergeActiveProbePresentation(state.activeProbePresentation.history, his)
+	}
 	if his.URLTestStatus == "" {
 		his.URLTestStatus = inferURLTestStatus(&his)
 	}
-	his.IsFromCache = state.from_cache
+	if state.activeProbePresentation == nil || !includeActiveProbe ||
+		state.activeProbePresentation.rankingRevision != state.rankingRevision {
+		his.IsFromCache = state.from_cache
+	}
 	state.mu.Unlock()
 	m.applyDynamicHealth(outboundTag, &his)
 	return &his
 
 }
 
-func (m *OutboundMonitoring) getMinGroupOutboundHistory(groupTag string) *adapter.URLTestHistory {
+func (m *OutboundMonitoring) getMinGroupOutboundHistory(groupTag string, includeActiveProbe bool) *adapter.URLTestHistory {
 	grp, ok := m.groups[groupTag]
 	if !ok {
 		return nil
@@ -193,7 +227,7 @@ func (m *OutboundMonitoring) getMinGroupOutboundHistory(groupTag string) *adapte
 	var minHis *adapter.URLTestHistory
 	var minHisFromCache *adapter.URLTestHistory
 	for outboundTag := range grp.outbounds {
-		his := m.getUrlTest(outboundTag)
+		his := m.getURLTest(outboundTag, includeActiveProbe)
 		if his == nil || his.Delay == 0 {
 			continue
 		}
@@ -442,7 +476,7 @@ func (m *OutboundMonitoring) TestNow(outboundTag string) error {
 	cycleID := atomic.AddUint64(&m.cycleSeq, 1)
 	m.beginCheckGeneration(cycleID, tags, "manual_refresh")
 	for _, tag := range tags {
-		m.testNowWithGeneration(tag, cycleID, true)
+		m.testNowWithGenerationSource(tag, cycleID, true, true)
 	}
 	return nil
 }
@@ -516,6 +550,7 @@ func (m *OutboundMonitoring) resetOutboundCheckState(tag string, generation uint
 		return
 	}
 	now := time.Now()
+	state.historyPublish.Lock()
 	state.mu.Lock()
 	previousGeneration := state.history.CheckGeneration
 	ipInfo := state.history.IpInfo
@@ -538,6 +573,9 @@ func (m *OutboundMonitoring) resetOutboundCheckState(tag string, generation uint
 		PolicyPenalty:     policyPenalty,
 		CheckGeneration:   generation,
 	}
+	state.lastResultFromFullGeneration = false
+	state.lastResultSourceKnown = true
+	state.advanceRankingRevision()
 	state.from_cache = false
 	state.invalid = false
 	state.queued = false
@@ -551,6 +589,7 @@ func (m *OutboundMonitoring) resetOutboundCheckState(tag string, generation uint
 	delete(m.udpProbeQueued, tag)
 	m.udpProbeAccess.Unlock()
 	m.history.StoreURLTestHistory(tag, &historySnapshot)
+	state.historyPublish.Unlock()
 	m.emitGroupEvent(groupTags)
 	m.logger.Info("[OutboundCheckReset] tag=", tag, " generation=", generation, " previous_generation=", previousGeneration, " bars=cleared")
 }
@@ -722,7 +761,7 @@ func (m *OutboundMonitoring) prepareManualRefreshTarget(tag string, cycleID uint
 func (m *OutboundMonitoring) executeManualRefreshTarget(parent context.Context, cycleID uint64, tag string) testOutcome {
 	state := m.getState(tag)
 	if state == nil {
-		outcome := m.newTaskErrorOutcome(tag, cycleID, false, errors.New("outbound not registered"))
+		outcome := m.newTaskErrorOutcome(tag, cycleID, false, true, errors.New("outbound not registered"))
 		outcome.deferNotify = true
 		return outcome
 	}
@@ -746,7 +785,7 @@ func (m *OutboundMonitoring) executeManualRefreshTarget(parent context.Context, 
 
 	if !state.outbound.IsReady() {
 		m.logger.Info("outbound ", tag, " is not ready, marking URL test failed")
-		outcome := m.newTaskErrorOutcome(tag, cycleID, false, errors.New("outbound is not ready"))
+		outcome := m.newTaskErrorOutcome(tag, cycleID, false, true, errors.New("outbound is not ready"))
 		outcome.deferNotify = true
 		m.applyResult(outcome)
 		return outcome
@@ -758,7 +797,7 @@ func (m *OutboundMonitoring) executeManualRefreshTarget(parent context.Context, 
 	})
 	if timedOut {
 		m.logger.Warn("[ManualRefreshTarget] tag=", tag, " status=timeout stage=urltest duration=", time.Since(startedAt))
-		outcome := m.newTaskErrorOutcome(tag, cycleID, false, err)
+		outcome := m.newTaskErrorOutcome(tag, cycleID, false, true, err)
 		outcome.deferNotify = true
 		if parent.Err() != nil {
 			return outcome
@@ -767,12 +806,13 @@ func (m *OutboundMonitoring) executeManualRefreshTarget(parent context.Context, 
 		return outcome
 	}
 	outcome := testOutcome{
-		outboundTag: tag,
-		history:     history,
-		err:         err,
-		cycleID:     cycleID,
-		priority:    false,
-		deferNotify: true,
+		outboundTag:    tag,
+		history:        history,
+		err:            err,
+		cycleID:        cycleID,
+		priority:       false,
+		fullGeneration: true,
+		deferNotify:    true,
 	}
 	m.applyResult(outcome)
 	return outcome
@@ -1005,10 +1045,14 @@ func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
 }
 
 func (m *OutboundMonitoring) testNowWithGeneration(outboundTag string, generation uint64, priority bool) error {
+	return m.testNowWithGenerationSource(outboundTag, generation, priority, false)
+}
+
+func (m *OutboundMonitoring) testNowWithGenerationSource(outboundTag string, generation uint64, priority bool, fullGeneration bool) error {
 	m.logger.Info("testing outbound ", outboundTag, " with priority: ", priority)
 	if grp, ok := m.groups[outboundTag]; ok {
 		for tag := range grp.outbounds {
-			m.testNowWithGeneration(tag, generation, false)
+			m.testNowWithGenerationSource(tag, generation, false, fullGeneration)
 		}
 	} else {
 		state := m.getState(outboundTag)
@@ -1017,9 +1061,10 @@ func (m *OutboundMonitoring) testNowWithGeneration(outboundTag string, generatio
 		}
 
 		task := &testTask{
-			outboundTag: outboundTag,
-			cycleID:     generation,
-			priority:    priority,
+			outboundTag:    outboundTag,
+			cycleID:        generation,
+			priority:       priority,
+			fullGeneration: fullGeneration,
 		}
 
 		if !m.enqueueTask(task) {
@@ -1516,11 +1561,13 @@ func (m *OutboundMonitoring) runUDPProbe(task udpProbeTask) {
 
 	result := urltest.RunUDPProbeThroughOutbound(ctx, outbound, m.udpProbeEndpoint, m.udpProbeSecret, m.udpProbeOptions)
 
+	state.historyPublish.Lock()
 	state.mu.Lock()
 	if state.history.CheckGeneration != task.generation {
 		currentGeneration := state.history.CheckGeneration
 		state.udpProbeRunning = false
 		state.mu.Unlock()
+		state.historyPublish.Unlock()
 		m.logger.Warn("[OutboundCheckIgnored] tag=", tag, " result_generation=", task.generation, " current_generation=", currentGeneration, " stage=udp reason=stale_generation")
 		return
 	}
@@ -1532,10 +1579,12 @@ func (m *OutboundMonitoring) runUDPProbe(task udpProbeTask) {
 	state.history.UDPJitterMs = result.JitterMs
 	state.history.UDPReady = true
 	refreshHealthScore(tag, &state.history, state.from_cache)
+	state.advanceRankingRevision()
 	history := state.history
 	state.mu.Unlock()
 
 	m.history.StoreURLTestHistory(tag, &history)
+	state.historyPublish.Unlock()
 	m.cacheDirty.Store(true)
 	m.emitGroupEvent(groupTags)
 
@@ -1678,12 +1727,13 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 	}
 
 	outcome := testOutcome{
-		outboundTag: task.outboundTag,
-		history:     history,
-		err:         err,
-		cycleID:     task.cycleID,
-		priority:    task.priority,
-		deferNotify: task.deferNotify,
+		outboundTag:    task.outboundTag,
+		history:        history,
+		err:            err,
+		cycleID:        task.cycleID,
+		priority:       task.priority,
+		fullGeneration: task.fullGeneration,
+		deferNotify:    task.deferNotify,
 	}
 	m.applyResult(outcome)
 	if task.resultCh != nil {
@@ -1697,7 +1747,7 @@ func (m *OutboundMonitoring) executeTask(task *testTask) {
 }
 
 func (m *OutboundMonitoring) finishTaskWithError(task *testTask, err error) {
-	outcome := m.newTaskErrorOutcome(task.outboundTag, task.cycleID, task.priority, err)
+	outcome := m.newTaskErrorOutcome(task.outboundTag, task.cycleID, task.priority, task.fullGeneration, err)
 	outcome.deferNotify = task.deferNotify
 	m.applyResult(outcome)
 	if task.resultCh != nil {
@@ -1709,7 +1759,7 @@ func (m *OutboundMonitoring) finishTaskWithError(task *testTask, err error) {
 	}
 }
 
-func (m *OutboundMonitoring) newTaskErrorOutcome(outboundTag string, cycleID uint64, priority bool, err error) testOutcome {
+func (m *OutboundMonitoring) newTaskErrorOutcome(outboundTag string, cycleID uint64, priority bool, fullGeneration bool, err error) testOutcome {
 	if err == nil {
 		err = errors.New("URL test failed")
 	}
@@ -1728,11 +1778,12 @@ func (m *OutboundMonitoring) newTaskErrorOutcome(outboundTag string, cycleID uin
 	}
 	refreshHealthScore(outboundTag, &history, false)
 	return testOutcome{
-		outboundTag: outboundTag,
-		history:     history,
-		err:         err,
-		cycleID:     cycleID,
-		priority:    priority,
+		outboundTag:    outboundTag,
+		history:        history,
+		err:            err,
+		cycleID:        cycleID,
+		priority:       priority,
+		fullGeneration: fullGeneration,
 	}
 }
 
@@ -1867,6 +1918,12 @@ func (m *OutboundMonitoring) runCycle() {
 			return
 		}
 		m.currentLinkIndex.Store((m.currentLinkIndex.Load() + 1) % uint32(len(m.urls)))
+		// A retry against another URL is a new complete cohort. Reusing the
+		// generation would make its successful ping indistinguishable from a
+		// one-server priority retest and could let partial evidence replace the
+		// last coherent Smart Active ranking.
+		cycleID = atomic.AddUint64(&m.cycleSeq, 1)
+		m.beginCheckGeneration(cycleID, tags, "background_retry")
 	}
 }
 
@@ -1886,11 +1943,12 @@ func (m *OutboundMonitoring) runStage(cycleID uint64, tags []string) []testOutco
 				continue
 			}
 			task := &testTask{
-				outboundTag: tag,
-				cycleID:     cycleID,
-				priority:    false,
-				resultCh:    resultCh,
-				deferNotify: true,
+				outboundTag:    tag,
+				cycleID:        cycleID,
+				priority:       false,
+				fullGeneration: true,
+				resultCh:       resultCh,
+				deferNotify:    true,
 			}
 			if m.enqueueTask(task) {
 				expected++
@@ -1951,11 +2009,15 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 	}
 	previousStatus := state.history.URLTestStatus
 	previousTime := state.history.Time
-	state.history.URLTestStatus = urltest.StatusChecking
-	state.history.Time = time.Now()
-	state.history.CheckGeneration = task.cycleID
+	previousGeneration := state.history.CheckGeneration
+	preserveTerminalEvidence := state.history.URLTestStatus == urltest.StatusFailed ||
+		(!task.fullGeneration && state.lastResultSourceKnown && state.lastResultFromFullGeneration)
+	if !preserveTerminalEvidence {
+		state.history.URLTestStatus = urltest.StatusChecking
+		state.history.Time = time.Now()
+		state.history.CheckGeneration = task.cycleID
+	}
 	groupTags := append([]string(nil), state.groupTags...)
-	state.mu.Unlock()
 
 	enqueued := false
 	if task.priority {
@@ -1973,9 +2035,9 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 	}
 
 	if !enqueued {
-		state.mu.Lock()
 		state.history.URLTestStatus = previousStatus
 		state.history.Time = previousTime
+		state.history.CheckGeneration = previousGeneration
 		if task.priority {
 			state.priorityQueued = false
 		} else {
@@ -1985,6 +2047,7 @@ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
 		state.mu.Unlock()
 		return false
 	}
+	state.mu.Unlock()
 	if !task.deferNotify {
 		m.emitGroupEvent(groupTags)
 	}
@@ -2004,12 +2067,31 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	if !ok {
 		return nil
 	}
+	state.historyPublish.Lock()
 	state.mu.Lock()
 
 	if state.history.CheckGeneration > 0 && outcome.cycleID != state.history.CheckGeneration {
 		m.logger.Warn("[OutboundCheckIgnored] tag=", outcome.outboundTag, " result_generation=", outcome.cycleID, " current_generation=", state.history.CheckGeneration, " stage=ping reason=stale_generation")
 		state.mu.Unlock()
+		state.historyPublish.Unlock()
 		return nil
+	}
+	if !outcome.fullGeneration && outcome.history.Success &&
+		(state.lastResultFromFullGeneration || state.history.URLTestStatus == urltest.StatusFailed) {
+		// A late targeted success must not replace a normal full result (or erase
+		// a targeted failure) from the same generation. Only a new full-cohort
+		// result may improve that terminal ranking evidence.
+		if outcome.priority {
+			state.priorityQueued = false
+		} else {
+			state.queued = false
+			state.enqueuedCycle = 0
+		}
+		historySnapshot := state.history
+		state.mu.Unlock()
+		state.historyPublish.Unlock()
+		m.logger.Info("[OutboundCheckIgnored] tag=", outcome.outboundTag, " generation=", outcome.cycleID, " stage=ping reason=partial_success_after_terminal_full")
+		return &historySnapshot
 	}
 	state.queued = false
 	state.priorityQueued = false
@@ -2040,7 +2122,9 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.history.QualityReady = true
 	state.history.SpeedReady = true
 	state.history.CombinedReady = true
-	applyProbeEvidence(outcome.outboundTag, &state.history, previousHistory)
+	state.lastResultFromFullGeneration = outcome.fullGeneration
+	state.lastResultSourceKnown = true
+	applyProbeEvidenceWithRecovery(outcome.outboundTag, &state.history, previousHistory, outcome.fullGeneration)
 	if state.udpProbeLast.IsZero() || time.Since(state.udpProbeLast) > m.udpProbeCooldown*3 {
 		state.history.UDPProbeAvailable = false
 		state.history.UDPPenalty = 0
@@ -2059,10 +2143,12 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	if outcome.history.IpInfo != nil {
 		state.history.IpInfo = outcome.history.IpInfo
 	}
+	state.advanceRankingRevision()
 	historySnapshot := state.history
 	groupTags := append([]string(nil), state.groupTags...)
 	state.mu.Unlock()
 	m.history.StoreURLTestHistory(outcome.outboundTag, &historySnapshot)
+	state.historyPublish.Unlock()
 
 	if !outcome.deferNotify {
 		m.emitGroupEvent(groupTags)
@@ -2122,6 +2208,10 @@ func refreshHealthScore(tag string, history *adapter.URLTestHistory, isFromCache
 }
 
 func applyProbeEvidence(tag string, history *adapter.URLTestHistory, previous adapter.URLTestHistory) {
+	applyProbeEvidenceWithRecovery(tag, history, previous, true)
+}
+
+func applyProbeEvidenceWithRecovery(tag string, history *adapter.URLTestHistory, previous adapter.URLTestHistory, allowRealUserRecovery bool) {
 	if history == nil {
 		return
 	}
@@ -2140,6 +2230,13 @@ func applyProbeEvidence(tag string, history *adapter.URLTestHistory, previous ad
 
 	history.DegradationPoints = clampHealthPoints(history.DegradationPoints - 6)
 	history.VolatilityPenalty = clampHealthPenalty(history.VolatilityPenalty - 2)
+	// An inactive server cannot earn runtime-success evidence because it carries
+	// no user traffic. Let fresh successful full probes decay the accumulated
+	// real-user penalty slowly, using the same small step as one runtime success,
+	// so a recovered route is not quarantined forever. Failures never forgive it.
+	if allowRealUserRecovery {
+		history.RealUserPenalty = clampHealthPenalty(history.RealUserPenalty - 2)
+	}
 	if previous.Success && previous.Delay > 0 && previous.Delay < TimeoutDelay {
 		delta := absInt(int(history.Delay) - int(previous.Delay))
 		stableLimit := max(25, int(previous.Delay)/3)
@@ -2627,22 +2724,24 @@ func (m *OutboundMonitoring) getState(tag string) *outboundState {
 }
 
 type testTask struct {
-	outboundTag string
-	cycleID     uint64
-	priority    bool
-	resultCh    chan<- testOutcome
-	manual      bool
-	deferNotify bool
+	outboundTag    string
+	cycleID        uint64
+	priority       bool
+	fullGeneration bool
+	resultCh       chan<- testOutcome
+	manual         bool
+	deferNotify    bool
 }
 
 type testOutcome struct {
-	outboundTag string
-	url         string
-	history     adapter.URLTestHistory
-	err         error
-	cycleID     uint64
-	priority    bool
-	deferNotify bool
+	outboundTag    string
+	url            string
+	history        adapter.URLTestHistory
+	err            error
+	cycleID        uint64
+	priority       bool
+	fullGeneration bool
+	deferNotify    bool
 }
 
 type udpProbeTask struct {
@@ -2653,25 +2752,48 @@ type udpProbeTask struct {
 type outboundState struct {
 	mu sync.Mutex
 
+	// historyPublish serializes a ranking revision commit with its storage
+	// write against an isolated active-presentation publication. state.mu is
+	// never held while storage hooks run; the lock order is historyPublish,
+	// then state.mu.
+	historyPublish sync.Mutex
+
 	outbound            adapter.Outbound
 	groupTags           []string
 	dependenciesInverse []string
 	dependencies        []string
 	lastURL             string
 
-	invalid        bool
-	queued         bool
-	priorityQueued bool
-	testing        bool
-	testingCycle   uint64
-	enqueuedCycle  uint64
-	from_cache     bool
+	invalid                      bool
+	queued                       bool
+	priorityQueued               bool
+	testing                      bool
+	testingCycle                 uint64
+	enqueuedCycle                uint64
+	from_cache                   bool
+	lastResultFromFullGeneration bool
+	lastResultSourceKnown        bool
 
 	udpProbeRunning    bool
 	udpProbeLast       time.Time
 	activeProbeRunning bool
 
-	history adapter.URLTestHistory
+	history                 adapter.URLTestHistory
+	rankingRevision         uint64
+	activeProbePresentation *activeProbePresentation
+}
+
+type activeProbePresentation struct {
+	history         adapter.URLTestHistory
+	rankingRevision uint64
+}
+
+// advanceRankingRevision invalidates any isolated presentation sample. The
+// caller must hold outboundState.mu and invoke this whenever a new generation
+// starts or a newer full monitoring result is committed.
+func (s *outboundState) advanceRankingRevision() {
+	s.rankingRevision++
+	s.activeProbePresentation = nil
 }
 
 type GroupEvent struct {

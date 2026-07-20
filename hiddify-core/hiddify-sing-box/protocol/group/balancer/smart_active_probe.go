@@ -12,6 +12,7 @@ const (
 	smartActiveProbeConfirmations = 2
 	smartActiveUnusableDelay      = 1500
 	smartActiveSevereUDPLoss      = 80
+	smartActiveCandidateMaxAge    = 10 * time.Minute
 )
 
 type smartActiveProbeEvidence struct {
@@ -20,6 +21,8 @@ type smartActiveProbeEvidence struct {
 	hardFailureStreak  int
 	poorQualityStreak  int
 	confirmedUnhealthy bool
+	betterCandidate    string
+	betterStreak       int
 }
 
 type smartActiveProbeUpdate struct {
@@ -46,6 +49,17 @@ func (s *SmartActive) UpdateActiveProbe(tag string, probe *adapter.URLTestHistor
 		return smartActiveProbeUpdate{}
 	}
 	s.activeProbe.lastProbeAt = probe.Time
+	decisionHistory, generation := s.activeProbeDecisionHistory(tag, probe, history)
+	if decisionHistory == nil {
+		// Without a coherent completed generation there are no eligible
+		// comparison/failover candidates. In particular, never promote a lone
+		// completed member from an in-progress or standalone partial generation.
+		decisionHistory = make(map[string]*adapter.URLTestHistory, 1)
+		decisionHistory[tag] = cloneSmartActiveHistory(probe)
+		generation = 0
+	}
+	activeHistory := decisionHistory[tag]
+	activeState := smartActiveState(activeHistory)
 
 	hardFailure := activeProbeHardFailure(probe)
 	poorQuality := !hardFailure && activeProbePoorQuality(probe)
@@ -53,12 +67,42 @@ func (s *SmartActive) UpdateActiveProbe(tag string, probe *adapter.URLTestHistor
 		s.activeProbe.hardFailureStreak = 0
 		s.activeProbe.poorQualityStreak = 0
 		s.activeProbe.confirmedUnhealthy = false
-		s.decision = smartDecision{
-			action: "keep", reason: "active_probe_healthy", from: tag,
-			state: "GOOD", mode: "active_probe",
+		candidate, comparisonTag, refreshCandidates := s.bestActiveProbeUpgradeCandidate(tag, decisionHistory, generation, activeState)
+		if candidate == nil {
+			s.resetActiveProbeAdvantage()
+			reason := "active_probe_candidate_advantage_insufficient"
+			if generation == 0 {
+				reason = "active_probe_waiting_for_full_generation"
+			}
+			s.decision = smartDecision{
+				action: "keep", reason: reason, from: tag, to: comparisonTag,
+				state: activeState, mode: "active_probe",
+			}
+			return smartActiveProbeUpdate{refreshCandidates: refreshCandidates}
 		}
-		return smartActiveProbeUpdate{}
+
+		if s.activeProbe.betterCandidate == candidate.Tag() {
+			s.activeProbe.betterStreak++
+		} else {
+			s.activeProbe.betterCandidate = candidate.Tag()
+			s.activeProbe.betterStreak = 1
+		}
+		if s.activeProbe.betterStreak < smartActiveProbeConfirmations {
+			s.decision = smartDecision{
+				action: "keep", reason: "active_probe_waiting_better_candidate_confirmation", from: tag, to: candidate.Tag(),
+				state: activeState, mode: "active_probe",
+			}
+			return smartActiveProbeUpdate{}
+		}
+
+		changed := s.switchTo(current, candidate, "active_probe_stably_better_candidate", activeState, decisionHistory, generation)
+		s.decision.mode = "active_probe"
+		if changed {
+			s.activeProbe = smartActiveProbeEvidence{tag: candidate.Tag()}
+		}
+		return smartActiveProbeUpdate{changed: changed}
 	}
+	s.resetActiveProbeAdvantage()
 
 	state := "DEGRADED"
 	reason := "active_probe_waiting_quality_confirmation"
@@ -84,7 +128,8 @@ func (s *SmartActive) UpdateActiveProbe(tag string, probe *adapter.URLTestHistor
 	}
 
 	s.activeProbe.confirmedUnhealthy = true
-	candidate := s.bestActiveFailoverCandidate(tag, history, s.selectionGeneration)
+	s.markActiveProbeUnhealthy(tag)
+	candidate := s.bestActiveFailoverCandidate(tag, decisionHistory, generation)
 	if candidate == nil {
 		s.decision = smartDecision{
 			action: "keep", reason: "active_probe_confirmed_without_fresh_candidate", from: tag,
@@ -97,12 +142,41 @@ func (s *SmartActive) UpdateActiveProbe(tag string, probe *adapter.URLTestHistor
 	if hardFailure {
 		switchReason = "active_probe_confirmed_connection_failure"
 	}
-	changed := s.switchTo(current, candidate, switchReason, state, history, s.selectionGeneration)
+	changed := s.switchTo(current, candidate, switchReason, state, decisionHistory, generation)
 	s.decision.mode = "active_probe"
 	if changed {
 		s.activeProbe = smartActiveProbeEvidence{tag: candidate.Tag()}
 	}
 	return smartActiveProbeUpdate{changed: changed}
+}
+
+func (s *SmartActive) resetActiveProbeAdvantage() {
+	s.activeProbe.betterCandidate = ""
+	s.activeProbe.betterStreak = 0
+}
+
+func (s *SmartActive) markActiveProbeUnhealthy(tag string) {
+	evidence := s.evidence[tag]
+	if evidence == nil {
+		evidence = &smartEvidence{}
+		s.evidence[tag] = evidence
+	}
+	evidence.recoveryPending = true
+	evidence.successStreak = 0
+	evidence.failureStreak = max(evidence.failureStreak, smartActiveProbeConfirmations)
+}
+
+func (s *SmartActive) bestActiveProbeUpgradeCandidate(currentTag string, history map[string]*adapter.URLTestHistory, generation uint64, currentState string) (adapter.Outbound, string, bool) {
+	candidate, comparisonTag, _, stale := s.bestSignificantCandidate(
+		currentTag,
+		history,
+		generation,
+		currentState,
+		1,
+		true,
+		smartActiveCandidateMaxAge,
+	)
+	return candidate, comparisonTag, stale
 }
 
 func activeProbeHardFailure(probe *adapter.URLTestHistory) bool {
@@ -134,11 +208,20 @@ func (s *SmartActive) bestActiveFailoverCandidate(currentTag string, history map
 		if leftScore != rightScore {
 			return leftScore > rightScore
 		}
-		return getModifiedDelay(history[left.Tag()]) < getModifiedDelay(history[right.Tag()])
+		leftDelay := getModifiedDelay(history[left.Tag()])
+		rightDelay := getModifiedDelay(history[right.Tag()])
+		if leftDelay != rightDelay {
+			return leftDelay < rightDelay
+		}
+		return left.Tag() < right.Tag()
 	})
+	var avoidedFallback adapter.Outbound
 	for _, candidate := range candidates {
 		tag := candidate.Tag()
 		if tag == currentTag || !s.candidateStatus(tag, history[tag], generation).ok {
+			continue
+		}
+		if time.Since(history[tag].Time) > smartActiveCandidateMaxAge {
 			continue
 		}
 		evidence := s.evidence[tag]
@@ -146,11 +229,17 @@ func (s *SmartActive) bestActiveFailoverCandidate(currentTag string, history map
 			continue
 		}
 		if s.isAvoidedCandidate(tag, history[tag], evidence) {
+			if avoidedFallback == nil {
+				avoidedFallback = candidate
+			}
 			continue
 		}
 		return candidate
 	}
-	return nil
+	// A confirmed live failure is an emergency. Prefer a non-avoided server,
+	// but reuse a recently active verified server rather than leaving traffic on
+	// the failed one when no other candidate exists.
+	return avoidedFallback
 }
 
 // handleConfirmedActiveProbe lets a recovery full cycle finish finding a

@@ -63,15 +63,36 @@ func TestProbeEvidenceCriticalErrorsAreHeavier(t *testing.T) {
 func TestSuccessfulProbeRecoversGradually(t *testing.T) {
 	previous := probeHistory(false, urltest.ErrorTypeTimeout)
 	previous.DegradationPoints = 64
+	previous.RealUserPenalty = 20
 	previous.VolatilityPenalty = 16
 	previous.StabilityPoints = 4
 	next := probeHistory(true, urltest.ErrorTypeNone)
 	applyProbeEvidence("server", &next, previous)
-	if next.DegradationPoints != 58 || next.VolatilityPenalty != 14 || next.StabilityPoints != 8 {
+	if next.DegradationPoints != 58 || next.RealUserPenalty != 18 || next.VolatilityPenalty != 14 || next.StabilityPoints != 8 {
 		t.Fatalf("unexpected gradual recovery: %+v", next)
 	}
-	if next.DegradationPoints == 0 {
+	if next.DegradationPoints == 0 || next.RealUserPenalty == 0 {
 		t.Fatal("one successful probe must not erase degradation")
+	}
+}
+
+func TestFailedProbeDoesNotForgiveRealUserPenalty(t *testing.T) {
+	previous := probeHistory(true, urltest.ErrorTypeNone)
+	previous.RealUserPenalty = 20
+	next := probeHistory(false, urltest.ErrorTypeTimeout)
+	applyProbeEvidence("server", &next, previous)
+	if next.RealUserPenalty != 20 {
+		t.Fatalf("failed probe decayed real-user penalty to %d", next.RealUserPenalty)
+	}
+}
+
+func TestPriorityPartialProbeDoesNotForgiveRealUserPenalty(t *testing.T) {
+	previous := probeHistory(true, urltest.ErrorTypeNone)
+	previous.RealUserPenalty = 20
+	next := probeHistory(true, urltest.ErrorTypeNone)
+	applyProbeEvidenceWithRecovery("server", &next, previous, false)
+	if next.RealUserPenalty != 20 {
+		t.Fatalf("priority partial probe decayed real-user penalty to %d", next.RealUserPenalty)
 	}
 }
 

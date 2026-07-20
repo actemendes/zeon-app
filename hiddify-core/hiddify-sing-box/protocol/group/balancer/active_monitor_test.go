@@ -48,6 +48,40 @@ func TestSmartActiveProbeScheduleResetsForNewServer(t *testing.T) {
 	}
 }
 
+func TestCompletedBatchMetadataIsHandledOnceButAllowsBackstop(t *testing.T) {
+	var balancer Balancer
+	if !balancer.consumeCompletedBatch(7, 1) {
+		t.Fatal("first direct batch event was not handled")
+	}
+	if balancer.consumeCompletedBatch(7, 1) {
+		t.Fatal("debounced event replayed an already handled batch")
+	}
+	if !balancer.consumeCompletedBatch(7, 2) {
+		t.Fatal("next batch in the generation was rejected")
+	}
+	if !balancer.consumeCompletedBatch(8, 1) {
+		t.Fatal("first batch of a newer generation was rejected")
+	}
+
+	var backstopOnly Balancer
+	if !backstopOnly.consumeCompletedBatch(7, 1) {
+		t.Fatal("backstop metadata could not deliver a dropped direct event")
+	}
+}
+
+func TestActiveProbeDecisionSkipsNewerRankingEvidence(t *testing.T) {
+	probe := &adapter.URLTestHistory{Time: time.Now(), CheckGeneration: 7}
+	if activeProbeSupersededByRanking(probe, &adapter.URLTestHistory{Time: probe.Time.Add(time.Millisecond), CheckGeneration: 7}) != true {
+		t.Fatal("newer same-generation ranking did not supersede active probe")
+	}
+	if activeProbeSupersededByRanking(probe, &adapter.URLTestHistory{Time: probe.Time.Add(-time.Millisecond), CheckGeneration: 8}) != true {
+		t.Fatal("newer ranking generation did not supersede active probe")
+	}
+	if activeProbeSupersededByRanking(probe, &adapter.URLTestHistory{Time: probe.Time.Add(-time.Millisecond), CheckGeneration: 7}) {
+		t.Fatal("older ranking evidence superseded active probe")
+	}
+}
+
 func primedActiveProbeStrategy() (*SmartActive, map[string]*adapter.URLTestHistory) {
 	strategy := newSmartActiveForTest()
 	history := histories(healthyHistory(80), healthyHistory(100))

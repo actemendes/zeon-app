@@ -22,13 +22,19 @@ type SmartActive struct {
 	// selectionGeneration is the full cohort currently being ranked. A newer
 	// one-server ping must not replace this with a partial generation.
 	selectionGeneration uint64
-	confirmed           bool
-	startedAt           time.Time
-	evidence            map[string]*smartEvidence
-	avoidUntil          map[string]time.Time
-	decision            smartDecision
-	recovered           []string
-	activeProbe         smartActiveProbeEvidence
+	// lastFullHistory is the last coherently completed full generation. The
+	// monitoring state is reset in-place when a new cycle starts, so keeping the
+	// snapshot here lets an active-only probe compare its live result with the
+	// last verified candidates without treating a partial generation as ready.
+	lastFullGeneration uint64
+	lastFullHistory    map[string]*adapter.URLTestHistory
+	confirmed          bool
+	startedAt          time.Time
+	evidence           map[string]*smartEvidence
+	avoidUntil         map[string]time.Time
+	decision           smartDecision
+	recovered          []string
+	activeProbe        smartActiveProbeEvidence
 }
 
 type smartEvidence struct {
@@ -62,21 +68,20 @@ const (
 var _ Strategy = (*SmartActive)(nil)
 
 func NewSmartActive(outbounds []adapter.Outbound, _ option.BalancerOutboundOptions) *SmartActive {
-	strategy := &SmartActive{
-		outbounds:  outbounds,
-		bootstrap:  true,
-		startedAt:  time.Now(),
-		evidence:   make(map[string]*smartEvidence),
-		avoidUntil: make(map[string]time.Time),
+	return &SmartActive{
+		outbounds:       outbounds,
+		bootstrap:       true,
+		startedAt:       time.Now(),
+		evidence:        make(map[string]*smartEvidence),
+		avoidUntil:      make(map[string]time.Time),
+		lastFullHistory: make(map[string]*adapter.URLTestHistory),
+		decision: smartDecision{
+			action: "wait",
+			reason: "startup_waiting_for_verified_batch",
+			state:  "SUSPECT",
+			mode:   "vpn_start",
+		},
 	}
-	// Before the first monitoring cycle there is no evidence. Keep the legacy
-	// fallback available so a cold start can still connect, but prefer a
-	// non-policy-penalized outbound when the profile starts with RU servers.
-	if len(outbounds) > 0 {
-		strategy.active = firstPolicyPreferredOutbound(outbounds)
-		strategy.decision = smartDecision{action: "keep", reason: "provisional_cold_start_no_health", from: strategy.active.Tag(), state: "SUSPECT", mode: "vpn_start"}
-	}
-	return strategy
 }
 
 func (s *SmartActive) Now() string {
@@ -115,39 +120,39 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		s.selectionGeneration = observedGeneration
 	}
 	generation := s.selectionGeneration
+	fullGenerationChanged := false
+	if generation != 0 && s.generationSettled(history, generation) {
+		fullGenerationChanged = s.rememberFullGeneration(history, generation)
+	}
 	s.updateEvidence(history)
 	current := s.active
-
-	if current == nil {
-		current = firstPolicyPreferredOutbound(s.outbounds)
-		if current == nil {
-			s.decision = smartDecision{action: "fallback", reason: "no_outbound", mode: decisionMode(mode, s.bootstrap)}
-			return false
-		}
-		s.active = current
-		s.decision = smartDecision{action: "keep", reason: "provisional_selected", from: current.Tag(), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
-		return true
+	decisionHistory := history
+	if !s.bootstrap && generation != 0 && generation == s.lastFullGeneration {
+		decisionHistory = s.fullGenerationDecisionHistory(candidateTag(current), history)
+	}
+	if fullGenerationChanged {
+		s.reconcileActiveProbeAdvantage(decisionHistory, generation)
 	}
 
 	if s.bootstrap {
 		// beginCheckGeneration assigns the generation to every member before the
 		// workers start. That lets startup distinguish a full cohort (where we may
-		// improve the route as each result arrives) from a one-server/partial ping
+		// select from completed batches) from a one-server/partial ping
 		// (which must never re-rank the group against older results).
 		if generation == 0 {
-			reason := "provisional_waiting_for_full_generation"
+			reason := "startup_waiting_for_full_generation"
 			if observedGeneration != 0 {
 				reason = "partial_generation_ignored_during_startup"
 			}
-			s.decision = smartDecision{action: "keep", reason: reason, from: current.Tag(), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
+			s.decision = smartDecision{action: pendingAction(current), reason: reason, from: candidateTag(current), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
 			return false
 		}
 		if mode == "completed_batch" && batchGeneration != generation {
-			s.decision = smartDecision{action: "keep", reason: "partial_batch_generation_ignored", from: current.Tag(), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
+			s.decision = smartDecision{action: pendingAction(current), reason: "partial_batch_generation_ignored", from: candidateTag(current), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
 			return false
 		}
 		if mode != "completed_batch" && mode != "user_refresh" && !s.bootstrapGenerationSettled(history, generation) {
-			s.decision = smartDecision{action: "keep", reason: "startup_waiting_for_completed_batch", from: current.Tag(), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
+			s.decision = smartDecision{action: pendingAction(current), reason: "startup_waiting_for_completed_batch", from: candidateTag(current), state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
 			return false
 		}
 
@@ -158,7 +163,7 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 				reason = "startup_progressively_better_candidate"
 			}
 			changed := false
-			if !s.confirmed || candidate.Tag() != current.Tag() {
+			if !s.confirmed || current == nil || candidate.Tag() != current.Tag() {
 				// Startup switches intentionally do not populate avoidUntil. Every new
 				// result belongs to the same fresh cohort, so the best-so-far route is
 				// allowed to improve more than once before the cycle settles.
@@ -174,14 +179,18 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		tag, reason := s.bestRejectedCandidate(history, generation)
 		if reason == "" {
 			if generation == 0 {
-				reason = "provisional_waiting_for_first_generation"
+				reason = "startup_waiting_for_first_generation"
 			} else {
-				reason = "provisional_waiting_for_current_generation_ready"
+				reason = "startup_waiting_for_current_generation_ready"
 			}
 		} else {
 			reason = "candidate_rejected_" + reason
 		}
-		s.decision = smartDecision{action: "keep", reason: reason, from: current.Tag(), to: tag, state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
+		s.decision = smartDecision{action: pendingAction(current), reason: reason, from: candidateTag(current), to: tag, state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
+		return false
+	}
+	if current == nil {
+		s.decision = smartDecision{action: "wait", reason: "waiting_for_verified_candidate", state: "SUSPECT", mode: decisionMode(mode, s.bootstrap)}
 		return false
 	}
 
@@ -201,9 +210,14 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		return false
 	}
 	if mode != "user_refresh" && mode != "completed_batch" && !s.generationSettled(history, generation) {
-		s.decision = smartDecision{action: "keep", reason: "current_generation_incomplete", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
-		return false
+		if generation != s.lastFullGeneration || len(s.lastFullHistory) == 0 {
+			s.decision = smartDecision{action: "keep", reason: "current_generation_incomplete", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
+			return false
+		}
 	}
+	history = decisionHistory
+	currentHistory = history[current.Tag()]
+	state = smartActiveState(currentHistory)
 	if changed, handled := s.handleConfirmedActiveProbe(current, history, generation); handled {
 		return changed
 	}
@@ -226,35 +240,38 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		if state == "BAD" || state == "CRITICAL" {
 			requiredSuccesses = 1
 		}
-		candidate := s.bestProgressiveBatchCandidate(history, generation, requiredSuccesses)
+		var candidate adapter.Outbound
+		comparisonTag := ""
+		reason := "completed_batch_without_confirmed_candidate"
+		if state == "BAD" || state == "CRITICAL" {
+			candidate = s.bestCandidate(history, true, true, generation)
+		} else {
+			candidate, comparisonTag, reason, _ = s.bestSignificantCandidate(
+				current.Tag(), history, generation, state, requiredSuccesses, state != "GOOD", smartActiveCandidateMaxAge,
+			)
+		}
 		if candidate == nil {
-			s.decision = smartDecision{action: "keep", reason: "completed_batch_without_confirmed_candidate", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
+			s.decision = smartDecision{action: "keep", reason: reason, from: current.Tag(), to: comparisonTag, state: state, mode: decisionMode(mode, s.bootstrap)}
 			return false
 		}
-		if candidate.Tag() == current.Tag() {
-			s.decision = smartDecision{action: "keep", reason: "completed_batch_current_is_best_so_far", from: current.Tag(), to: candidate.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
-			return false
-		}
-		// Completed batches are monotonic best-so-far comparisons inside one
-		// fresh full generation. Do not put the previous batch winner into the
-		// normal avoidance window: a later result from the same generation must
-		// still be allowed to prove that it is the better server.
-		return s.confirmActive(current, candidate, "completed_batch_better_candidate", decisionMode(mode, s.bootstrap))
+		changed := s.switchTo(current, candidate, "completed_batch_better_candidate", state, history, generation)
+		s.decision.mode = decisionMode(mode, s.bootstrap)
+		return changed
 	}
 
-	candidate := s.bestCandidate(history, state == "BAD" || state == "CRITICAL", true, generation)
+	emergencyCandidate := s.bestCandidate(history, state == "BAD" || state == "CRITICAL", true, generation)
 	if currentCheckInProgress(currentHistory) && !runtimeCriticalActiveIssue(currentHistory) {
-		s.decision = smartDecision{action: "keep", reason: "current_temporarily_kept_during_refresh", from: current.Tag(), to: candidateTag(candidate), state: state, mode: decisionMode(mode, s.bootstrap)}
+		s.decision = smartDecision{action: "keep", reason: "current_temporarily_kept_during_refresh", from: current.Tag(), to: candidateTag(emergencyCandidate), state: state, mode: decisionMode(mode, s.bootstrap)}
 		return false
 	}
 
 	if state == "CRITICAL" {
-		if candidate != nil && candidate.Tag() != current.Tag() {
+		if emergencyCandidate != nil && emergencyCandidate.Tag() != current.Tag() {
 			reason := "critical_active_failure"
 			if runtimeDrivenActiveIssue(currentHistory) {
 				reason = "runtime_errors_current_critical"
 			}
-			if s.switchTo(current, candidate, reason, state, history, generation) {
+			if s.switchTo(current, emergencyCandidate, reason, state, history, generation) {
 				s.decision.mode = decisionMode(mode, s.bootstrap)
 				return true
 			}
@@ -265,12 +282,12 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		return false
 	}
 	if state == "BAD" {
-		if candidate != nil && candidate.Tag() != current.Tag() {
+		if emergencyCandidate != nil && emergencyCandidate.Tag() != current.Tag() {
 			reason := "bad_active_confirmed_candidate"
 			if runtimeDrivenActiveIssue(currentHistory) {
 				reason = "runtime_errors_current_bad"
 			}
-			if s.switchTo(current, candidate, reason, state, history, generation) {
+			if s.switchTo(current, emergencyCandidate, reason, state, history, generation) {
 				s.decision.mode = decisionMode(mode, s.bootstrap)
 				return true
 			}
@@ -280,8 +297,11 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		s.decision = smartDecision{action: "keep", reason: "bad_without_confirmed_candidate", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
 		return false
 	}
+	candidate, comparisonTag, assessmentReason, _ := s.bestSignificantCandidate(
+		current.Tag(), history, generation, state, smartActiveCleanEvidenceRequired, state != "GOOD", smartActiveCandidateMaxAge,
+	)
 	if state == "DEGRADED" {
-		if candidate != nil && candidate.Tag() != current.Tag() && s.betterEnough(current.Tag(), candidate.Tag(), history, generation, 8) {
+		if candidate != nil {
 			reason := "degraded_active_better_candidate"
 			if runtimeDrivenActiveIssue(currentHistory) {
 				reason = "runtime_errors_current_degraded"
@@ -297,7 +317,7 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		return false
 	}
 	if state == "SUSPECT" {
-		if candidate != nil && candidate.Tag() != current.Tag() && s.betterEnough(current.Tag(), candidate.Tag(), history, generation, 14) {
+		if candidate != nil {
 			if s.switchTo(current, candidate, "suspect_stably_better_candidate", state, history, generation) {
 				s.decision.mode = decisionMode(mode, s.bootstrap)
 				return true
@@ -308,25 +328,16 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		s.decision = smartDecision{action: "keep", reason: "suspect_collecting_evidence", from: current.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
 		return false
 	}
-	if candidate != nil && candidate.Tag() != current.Tag() && s.policyPreferredCandidate(current.Tag(), candidate.Tag(), history, generation) {
-		if s.switchTo(current, candidate, "policy_preferred_foreign_candidate", state, history, generation) {
+	if candidate != nil {
+		if s.switchTo(current, candidate, assessmentReason, state, history, generation) {
 			s.decision.mode = decisionMode(mode, s.bootstrap)
 			return true
 		}
 		s.decision.mode = decisionMode(mode, s.bootstrap)
 		return false
 	}
-	if candidate != nil && candidate.Tag() != current.Tag() {
-		shouldSwitch, reason := s.shouldSwitchHealthyActive(current.Tag(), candidate.Tag(), history, generation)
-		if shouldSwitch {
-			if s.switchTo(current, candidate, reason, state, history, generation) {
-				s.decision.mode = decisionMode(mode, s.bootstrap)
-				return true
-			}
-			s.decision.mode = decisionMode(mode, s.bootstrap)
-			return false
-		}
-		s.decision = smartDecision{action: "keep", reason: reason, from: current.Tag(), to: candidate.Tag(), state: state, mode: decisionMode(mode, s.bootstrap)}
+	if comparisonTag != "" {
+		s.decision = smartDecision{action: "keep", reason: assessmentReason, from: current.Tag(), to: comparisonTag, state: state, mode: decisionMode(mode, s.bootstrap)}
 		return false
 	}
 	// A healthy active is sticky by design, but only inside a narrow hysteresis
@@ -363,7 +374,7 @@ func (s *SmartActive) confirmActive(from, to adapter.Outbound, reason, mode stri
 	s.active = to
 	s.confirmed = true
 	action := "confirm"
-	if fromTag != toTag {
+	if fromTag != "" && fromTag != toTag {
 		action = "switch"
 	}
 	s.decision = smartDecision{action: action, reason: reason, from: fromTag, to: toTag, state: "GOOD", mode: mode}
@@ -385,6 +396,12 @@ func (s *SmartActive) switchTo(from, to adapter.Outbound, reason, state string, 
 	}
 	if fromTag != "" && toTag != "" && fromTag != toTag {
 		s.avoidUntil[fromTag] = time.Now().Add(smartActiveAvoidAfterSwitch)
+		if evidence := s.evidence[fromTag]; evidence != nil {
+			// Pre-switch successes must not count as recovery evidence. Once the
+			// cooldown expires, the old route needs a genuinely newer clean probe
+			// before it can participate again.
+			evidence.successStreak = 0
+		}
 	}
 	s.active = to
 	s.confirmed = true
@@ -414,6 +431,7 @@ func (s *SmartActive) updateEvidence(history map[string]*adapter.URLTestHistory)
 		if !s.isNewCompletedProbe(h, e) {
 			continue
 		}
+		newGeneration := !e.hasCompletedProbe || h.CheckGeneration > e.lastProbeGeneration
 		e.lastProbeGeneration = h.CheckGeneration
 		e.lastProbeTime = h.Time
 		e.hasCompletedProbe = true
@@ -422,9 +440,24 @@ func (s *SmartActive) updateEvidence(history map[string]*adapter.URLTestHistory)
 		cleanSuccess := s.cleanCompletedProbe(tag, h)
 		if state == "BAD" || state == "CRITICAL" {
 			e.recoveryPending = true
-			e.failureStreak++
+			if newGeneration {
+				e.failureStreak++
+			} else {
+				e.failureStreak = max(e.failureStreak, 1)
+			}
 			e.successStreak = 0
 		} else if cleanSuccess {
+			if e.recoveryPending && state != "GOOD" {
+				// Recovery quarantine is released only by consecutive fully GOOD
+				// generations. A merely successful but still penalized probe keeps
+				// the route out of proactive selection.
+				e.successStreak = 0
+				e.failureStreak = 0
+				continue
+			}
+			if !newGeneration {
+				continue
+			}
 			e.successStreak++
 			e.failureStreak = 0
 			if e.recoveryPending && e.successStreak >= 2 {
@@ -432,7 +465,11 @@ func (s *SmartActive) updateEvidence(history map[string]*adapter.URLTestHistory)
 				s.recovered = append(s.recovered, tag)
 			}
 		} else if h != nil {
-			e.failureStreak++
+			if newGeneration {
+				e.failureStreak++
+			} else {
+				e.failureStreak = max(e.failureStreak, 1)
+			}
 			e.successStreak = 0
 		}
 	}
@@ -482,13 +519,21 @@ func (s *SmartActive) bestCandidate(history map[string]*adapter.URLTestHistory, 
 		if leftScore != rightScore {
 			return leftScore > rightScore
 		}
-		return getModifiedDelay(left) < getModifiedDelay(right)
+		leftDelay, rightDelay := getModifiedDelay(left), getModifiedDelay(right)
+		if leftDelay != rightDelay {
+			return leftDelay < rightDelay
+		}
+		return candidates[i].Tag() < candidates[j].Tag()
 	})
+	var avoidedFallback adapter.Outbound
 	for _, candidate := range candidates {
 		tag := candidate.Tag()
 		h := history[tag]
 		e := s.evidence[tag]
 		if !s.candidateStatus(tag, h, generation).ok {
+			continue
+		}
+		if time.Since(h.Time) > smartActiveCandidateMaxAge {
 			continue
 		}
 		// A previously bad server must prove recovery with multiple clean probes.
@@ -500,11 +545,92 @@ func (s *SmartActive) bestCandidate(history map[string]*adapter.URLTestHistory, 
 			continue
 		}
 		if s.isAvoidedCandidate(tag, h, e) {
+			if emergency && avoidedFallback == nil {
+				avoidedFallback = candidate
+			}
 			continue
 		}
 		return candidate
 	}
-	return nil
+	// Avoidance prevents routine ping-pong, but it must not strand a failed
+	// active when the recently used server is the only verified recovery path.
+	return avoidedFallback
+}
+
+// bestSignificantCandidate walks the whole ranking instead of letting an
+// unsuitable score leader hide a lower-ranked candidate that has a material,
+// policy-aware advantage over the live active.
+func (s *SmartActive) bestSignificantCandidate(
+	currentTag string,
+	history map[string]*adapter.URLTestHistory,
+	generation uint64,
+	currentState string,
+	minimumSuccesses int,
+	requireGood bool,
+	maxAge time.Duration,
+) (adapter.Outbound, string, string, bool) {
+	if generation == 0 {
+		return nil, "", "missing_full_generation", false
+	}
+	candidates := append([]adapter.Outbound(nil), s.outbounds...)
+	sort.SliceStable(candidates, func(i, j int) bool {
+		left, right := candidates[i], candidates[j]
+		leftScore := getHealthScore(left.Tag(), history[left.Tag()])
+		rightScore := getHealthScore(right.Tag(), history[right.Tag()])
+		if leftScore != rightScore {
+			return leftScore > rightScore
+		}
+		leftDelay := getModifiedDelay(history[left.Tag()])
+		rightDelay := getModifiedDelay(history[right.Tag()])
+		if leftDelay != rightDelay {
+			return leftDelay < rightDelay
+		}
+		return left.Tag() < right.Tag()
+	})
+
+	comparisonTag := ""
+	rejectionReason := "candidate_advantage_insufficient"
+	staleCandidate := false
+	for _, candidate := range candidates {
+		candidateTag := candidate.Tag()
+		if candidateTag == currentTag {
+			continue
+		}
+		candidateHistory := history[candidateTag]
+		if !s.candidateStatus(candidateTag, candidateHistory, generation).ok {
+			continue
+		}
+		if maxAge > 0 && time.Since(candidateHistory.Time) > maxAge {
+			staleCandidate = true
+			continue
+		}
+		if comparisonTag == "" {
+			comparisonTag = candidateTag
+		}
+		if requireGood && smartActiveState(candidateHistory) != "GOOD" {
+			rejectionReason = "candidate_not_stably_good"
+			continue
+		}
+		evidence := s.evidence[candidateTag]
+		requiredSuccesses := minimumSuccesses
+		if evidence != nil && evidence.recoveryPending {
+			requiredSuccesses = max(requiredSuccesses, smartActiveCleanEvidenceRequired)
+		}
+		if evidence == nil || evidence.successStreak < requiredSuccesses || evidence.failureStreak > 0 {
+			rejectionReason = "candidate_waiting_for_clean_evidence"
+			continue
+		}
+		if s.isAvoidedCandidate(candidateTag, candidateHistory, evidence) {
+			rejectionReason = "candidate_recently_avoided_waiting_recovery"
+			continue
+		}
+		better, reason := significantSmartActiveAdvantage(currentTag, candidateTag, history, currentState)
+		if better {
+			return candidate, comparisonTag, reason, false
+		}
+		rejectionReason = reason
+	}
+	return nil, comparisonTag, rejectionReason, staleCandidate
 }
 
 func (s *SmartActive) bestBootstrapCandidate(history map[string]*adapter.URLTestHistory, generation uint64) adapter.Outbound {
@@ -536,6 +662,8 @@ func (s *SmartActive) bestProgressiveBatchCandidate(history map[string]*adapter.
 	// slower early-batch winner. Start with the highest-quality candidate, then
 	// allow a comparable-quality candidate to win only for a significant delay
 	// improvement. Policy and genuine health penalties are part of the score.
+	// Exact ties keep a confirmed active; before the first selection, the tag is
+	// the deterministic tie-breaker so profile list order has no effect.
 	sort.SliceStable(eligible, func(i, j int) bool {
 		left, right := eligible[i], eligible[j]
 		leftScore := getHealthScore(left.Tag(), history[left.Tag()])
@@ -543,7 +671,16 @@ func (s *SmartActive) bestProgressiveBatchCandidate(history map[string]*adapter.
 		if leftScore != rightScore {
 			return leftScore > rightScore
 		}
-		return getModifiedDelay(history[left.Tag()]) < getModifiedDelay(history[right.Tag()])
+		leftDelay := getModifiedDelay(history[left.Tag()])
+		rightDelay := getModifiedDelay(history[right.Tag()])
+		if leftDelay != rightDelay {
+			return leftDelay < rightDelay
+		}
+		activeTag := candidateTag(s.active)
+		if left.Tag() == activeTag || right.Tag() == activeTag {
+			return left.Tag() == activeTag
+		}
+		return left.Tag() < right.Tag()
 	})
 	qualityWinner := eligible[0]
 	qualityWinnerDelay := getModifiedDelay(history[qualityWinner.Tag()])
@@ -667,68 +804,85 @@ func preferFallbackOutbound(candidate, current adapter.Outbound, history map[str
 	return getModifiedDelay(candidateHistory) < getModifiedDelay(currentHistory)
 }
 
-func (s *SmartActive) betterEnough(currentTag, candidateTag string, history map[string]*adapter.URLTestHistory, generation uint64, margin int) bool {
+func significantSmartActiveAdvantage(currentTag, candidateTag string, history map[string]*adapter.URLTestHistory, currentState string) (bool, string) {
 	current, candidate := history[currentTag], history[candidateTag]
-	if !s.candidateStatus(candidateTag, candidate, generation).ok {
-		return false
-	}
-	if current == nil || !current.Success {
-		return true
-	}
-	return getHealthScore(candidateTag, candidate) >= getHealthScore(currentTag, current)+margin &&
-		candidate.StabilityPoints >= current.StabilityPoints-10 &&
-		candidate.VolatilityPenalty <= current.VolatilityPenalty+4
-}
-
-func (s *SmartActive) shouldSwitchHealthyActive(currentTag, candidateTag string, history map[string]*adapter.URLTestHistory, generation uint64) (bool, string) {
-	current, candidate := history[currentTag], history[candidateTag]
-	if status := s.candidateStatus(candidateTag, candidate, generation); !status.ok {
-		return false, "candidate_rejected_" + status.reason
-	}
-	if s.isAvoidedCandidate(candidateTag, candidate, s.evidence[candidateTag]) {
-		return false, "candidate_recently_avoided_waiting_recovery"
-	}
 	if current == nil || !current.Success {
 		return true, "current_unhealthy_candidate_fresh"
 	}
-	if currentRealUserAdvantage(current, candidate) {
-		return false, "current_real_traffic_stable_and_candidate_advantage_insufficient"
+	if candidate == nil {
+		return false, "candidate_missing"
 	}
-	if userRefreshCandidatePenalized(candidate) {
-		return false, "candidate_runtime_or_udp_penalized"
-	}
-	e := s.evidence[candidateTag]
-	if e == nil || e.successStreak < smartActiveCleanEvidenceRequired || e.failureStreak > 0 {
-		return false, "candidate_waiting_for_clean_evidence"
-	}
-
 	currentScore := getHealthScore(currentTag, current)
 	candidateScore := getHealthScore(candidateTag, candidate)
 	currentDelay := getModifiedDelay(current)
 	candidateDelay := getModifiedDelay(candidate)
 	delayDelta := int(currentDelay) - int(candidateDelay)
-	if delayDelta <= smartActiveMinimalDelayDelta {
-		return false, "delay_delta_minimal_current_stable"
+	scoreDelta := candidateScore - currentScore
+	penaltyAdvantage := smartActiveEvidencePenalty(current) - smartActiveEvidencePenalty(candidate)
+	currentPolicyPenalty := getPolicyPenalty(currentTag, current)
+	candidatePolicyPenalty := getPolicyPenalty(candidateTag, candidate)
+	if candidatePolicyPenalty > currentPolicyPenalty {
+		return false, "candidate_policy_worse_than_current"
+	}
+	if currentPolicyPenalty-candidatePolicyPenalty >= urltest.RussianServerPolicyPenalty && scoreDelta >= 4 {
+		return true, "policy_preferred_foreign_candidate"
+	}
+	if currentRealUserAdvantage(current, candidate, scoreDelta, delayDelta) {
+		return false, "current_real_traffic_stable_and_candidate_advantage_insufficient"
+	}
+
+	if currentState == "DEGRADED" {
+		if scoreDelta >= 4 || candidateScore >= currentScore-smartActiveComparableScoreDelta && delayDelta >= smartActiveSignificantDelayDelta ||
+			candidateScore >= currentScore-smartActiveComparableScoreDelta && int(candidateDelay) <= int(currentDelay)+smartActiveMinimalDelayDelta {
+			return true, "degraded_active_stable_good_candidate"
+		}
+		return false, "degraded_candidate_advantage_insufficient"
+	}
+	if currentState == "SUSPECT" {
+		if scoreDelta >= smartActiveScoreSwitchMargin || candidateScore >= currentScore-smartActiveComparableScoreDelta && delayDelta >= smartActiveSignificantDelayDelta ||
+			candidateScore >= currentScore && int(candidateDelay) <= int(currentDelay)+smartActiveMinimalDelayDelta {
+			return true, "suspect_active_stable_good_candidate"
+		}
+		return false, "suspect_candidate_advantage_insufficient"
 	}
 	if candidateScore >= currentScore-smartActiveComparableScoreDelta && delayDelta >= smartActiveSignificantDelayDelta {
 		return true, "same_quality_significantly_lower_delay"
 	}
-	if candidateScore >= currentScore+smartActiveScoreSwitchMargin {
+	if scoreDelta >= smartActiveScoreSwitchMargin &&
+		(delayDelta > smartActiveMinimalDelayDelta || penaltyAdvantage >= smartActiveScoreSwitchMargin) &&
+		int(candidateDelay) <= int(currentDelay)+smartActiveSignificantDelayDelta {
 		return true, "candidate_score_better_with_clean_evidence"
+	}
+	if delayDelta <= smartActiveMinimalDelayDelta {
+		return false, "delay_delta_minimal_current_stable"
 	}
 	return false, "candidate_advantage_insufficient"
 }
 
-func currentRealUserAdvantage(current, candidate *adapter.URLTestHistory) bool {
+func smartActiveEvidencePenalty(history *adapter.URLTestHistory) int {
+	if history == nil {
+		return 0
+	}
+	return history.RuntimePenalty + history.RealUserPenalty + history.VolatilityPenalty +
+		history.UDPPenalty + history.PolicyPenalty + history.DegradationPoints/2
+}
+
+func currentRealUserAdvantage(current, candidate *adapter.URLTestHistory, scoreDelta, delayDelta int) bool {
 	if current == nil || candidate == nil {
 		return false
 	}
 	currentPenalty := current.RuntimePenalty + current.RealUserPenalty + current.DegradationPoints + current.UDPPenalty
 	candidatePenalty := candidate.RuntimePenalty + candidate.RealUserPenalty + candidate.DegradationPoints + candidate.UDPPenalty
-	if candidatePenalty >= currentPenalty+8 {
+	// Small penalties are already priced into HealthScore and must not veto a
+	// large delay/quality win. Reserve this hard guard for materially worse
+	// real-traffic evidence.
+	if candidatePenalty >= currentPenalty+16 {
 		return true
 	}
-	return current.StabilityPoints >= candidate.StabilityPoints+30 && candidate.VolatilityPenalty >= current.VolatilityPenalty+4
+	// Relative stability is a tie-breaker inside the hysteresis window, not an
+	// absolute veto against an otherwise clearly healthier/faster candidate.
+	return scoreDelta < smartActiveScoreSwitchMargin && delayDelta < smartActiveSignificantDelayDelta &&
+		current.StabilityPoints >= candidate.StabilityPoints+30 && candidate.VolatilityPenalty >= current.VolatilityPenalty+4
 }
 
 func (s *SmartActive) isAvoidedCandidate(tag string, h *adapter.URLTestHistory, e *smartEvidence) bool {
@@ -739,21 +893,7 @@ func (s *SmartActive) isAvoidedCandidate(tag string, h *adapter.URLTestHistory, 
 		}
 		return false
 	}
-	if h == nil || h.IsFromCache || smartActiveState(h) != "GOOD" {
-		return true
-	}
-	return e == nil || e.successStreak < smartActiveCleanEvidenceRequired || e.failureStreak > 0
-}
-
-func (s *SmartActive) policyPreferredCandidate(currentTag, candidateTag string, history map[string]*adapter.URLTestHistory, generation uint64) bool {
-	current, candidate := history[currentTag], history[candidateTag]
-	if current == nil || !s.candidateStatus(candidateTag, candidate, generation).ok {
-		return false
-	}
-	if getPolicyPenalty(currentTag, current) == 0 || getPolicyPenalty(candidateTag, candidate) > 0 {
-		return false
-	}
-	return s.betterEnough(currentTag, candidateTag, history, generation, 4)
+	return true
 }
 
 func userRefreshCandidatePenalized(h *adapter.URLTestHistory) bool {
@@ -841,6 +981,234 @@ func candidateTag(candidate adapter.Outbound) string {
 		return ""
 	}
 	return candidate.Tag()
+}
+
+func pendingAction(current adapter.Outbound) string {
+	if current == nil {
+		return "wait"
+	}
+	return "keep"
+}
+
+func cloneSmartActiveHistory(history *adapter.URLTestHistory) *adapter.URLTestHistory {
+	if history == nil {
+		return nil
+	}
+	cloned := *history
+	if history.IpInfo != nil {
+		ipInfo := *history.IpInfo
+		cloned.IpInfo = &ipInfo
+	}
+	return &cloned
+}
+
+func (s *SmartActive) rememberFullGeneration(history map[string]*adapter.URLTestHistory, generation uint64) bool {
+	if generation == 0 || generation < s.lastFullGeneration {
+		return false
+	}
+	if generation == s.lastFullGeneration {
+		updated := make(map[string]*adapter.URLTestHistory, len(s.lastFullHistory))
+		for _, outbound := range s.outbounds {
+			tag := outbound.Tag()
+			saved := cloneSmartActiveHistory(s.lastFullHistory[tag])
+			incoming := history[tag]
+			if saved == nil || incoming == nil || incoming.CheckGeneration != generation {
+				return false
+			}
+			mergeSmartActiveWorseningEvidence(saved, incoming)
+			if newerSmartActiveFailure(incoming, saved) {
+				applySmartActiveFailure(saved, incoming)
+			}
+			updated[tag] = saved
+		}
+		if smartActiveSnapshotsEqual(updated, s.lastFullHistory) {
+			return false
+		}
+		s.lastFullHistory = updated
+		return true
+	}
+	snapshot := make(map[string]*adapter.URLTestHistory, len(s.outbounds))
+	for _, outbound := range s.outbounds {
+		tag := outbound.Tag()
+		item := history[tag]
+		if item == nil || item.CheckGeneration != generation {
+			return false
+		}
+		snapshot[tag] = cloneSmartActiveHistory(item)
+	}
+	s.lastFullGeneration = generation
+	s.lastFullHistory = snapshot
+	return true
+}
+
+// fullGenerationDecisionHistory keeps transport ranking anchored to the last
+// complete cohort. A same-generation targeted retest may veto/worsen a saved
+// candidate, but only a newer complete generation may improve its base ping or
+// terminal status. The active's runtime evidence is kept current because it is
+// backed by real traffic rather than candidate promotion.
+func (s *SmartActive) fullGenerationDecisionHistory(activeTag string, current map[string]*adapter.URLTestHistory) map[string]*adapter.URLTestHistory {
+	history := make(map[string]*adapter.URLTestHistory, len(s.lastFullHistory))
+	for tag, saved := range s.lastFullHistory {
+		item := cloneSmartActiveHistory(saved)
+		latest := current[tag]
+		mergeSmartActiveWorseningEvidence(item, latest)
+		if tag == activeTag {
+			mergeSmartActiveDynamicEvidence(item, latest)
+		}
+		if newerSmartActiveFailure(latest, saved) {
+			applySmartActiveFailure(item, latest)
+		}
+		history[tag] = item
+	}
+	return history
+}
+
+func smartActiveSnapshotsEqual(left, right map[string]*adapter.URLTestHistory) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for tag, leftHistory := range left {
+		rightHistory := right[tag]
+		if leftHistory == nil || rightHistory == nil {
+			if leftHistory != nil || rightHistory != nil {
+				return false
+			}
+			continue
+		}
+		leftValue, rightValue := *leftHistory, *rightHistory
+		// IpInfo is presentation metadata; PolicyPenalty already carries the only
+		// part of it that affects Smart Active ranking. Clone allocation alone
+		// must not make an otherwise identical snapshot look newer.
+		leftValue.IpInfo = nil
+		rightValue.IpInfo = nil
+		if leftValue != rightValue {
+			return false
+		}
+	}
+	return true
+}
+
+// activeProbeDecisionHistory combines the current active's isolated live
+// sample with candidates from the last coherent full generation. Dynamic
+// runtime/real-user evidence is overlaid on the saved candidates, while their
+// verified delay, readiness, timestamp and generation remain unchanged.
+func (s *SmartActive) activeProbeDecisionHistory(tag string, probe *adapter.URLTestHistory, current map[string]*adapter.URLTestHistory) (map[string]*adapter.URLTestHistory, uint64) {
+	// The throttled event is only a wake-up mechanism. If it was dropped or is
+	// still queued, recover the newest coherent generation directly from the
+	// ranking snapshot supplied by monitoring.
+	observedGeneration := s.currentGeneration(current)
+	if observedGeneration >= s.lastFullGeneration && observedGeneration != 0 && s.generationSettled(current, observedGeneration) {
+		s.selectionGeneration = max(s.selectionGeneration, observedGeneration)
+		if s.rememberFullGeneration(current, observedGeneration) {
+			s.updateEvidence(current)
+			s.reconcileActiveProbeAdvantage(s.fullGenerationDecisionHistory(tag, current), observedGeneration)
+		}
+	}
+	if s.lastFullGeneration == 0 || len(s.lastFullHistory) == 0 {
+		return nil, 0
+	}
+
+	decisionHistory := make(map[string]*adapter.URLTestHistory, len(s.lastFullHistory))
+	for candidateTag, saved := range s.lastFullHistory {
+		candidate := cloneSmartActiveHistory(saved)
+		latest := current[candidateTag]
+		mergeSmartActiveWorseningEvidence(candidate, latest)
+		// A newer partial success cannot promote a server, but a newer terminal
+		// failure must veto the older positive snapshot immediately. This closes
+		// the race where the active probe finishes before the normal observer has
+		// updated the candidate's failure streak.
+		if newerSmartActiveFailure(latest, saved) {
+			applySmartActiveFailure(candidate, latest)
+		}
+		decisionHistory[candidateTag] = candidate
+	}
+	active := cloneSmartActiveHistory(probe)
+	if active == nil {
+		return nil, 0
+	}
+	mergeSmartActiveDynamicEvidence(active, current[tag])
+	active.CheckGeneration = s.lastFullGeneration
+	active.IsFromCache = false
+	decisionHistory[tag] = active
+	return decisionHistory, s.lastFullGeneration
+}
+
+func (s *SmartActive) reconcileActiveProbeAdvantage(history map[string]*adapter.URLTestHistory, generation uint64) {
+	if s.activeProbe.betterCandidate == "" || s.active == nil || generation == 0 {
+		return
+	}
+	candidate, _, _, _ := s.bestSignificantCandidate(
+		s.active.Tag(),
+		history,
+		generation,
+		smartActiveState(history[s.active.Tag()]),
+		1,
+		true,
+		smartActiveCandidateMaxAge,
+	)
+	if candidate == nil || candidate.Tag() != s.activeProbe.betterCandidate {
+		s.resetActiveProbeAdvantage()
+	}
+}
+
+func newerSmartActiveFailure(latest, saved *adapter.URLTestHistory) bool {
+	if latest == nil || saved == nil || latest.CheckGeneration < saved.CheckGeneration {
+		return false
+	}
+	if latest.CheckGeneration == saved.CheckGeneration && !latest.Time.After(saved.Time) {
+		return false
+	}
+	if latest.URLTestStatus == urltest.StatusFailed {
+		return true
+	}
+	if !latest.CombinedReady {
+		return false
+	}
+	return !latest.Success && latest.ErrorType != "" && latest.ErrorType != urltest.ErrorTypeNone
+}
+
+func applySmartActiveFailure(target, latest *adapter.URLTestHistory) {
+	if target == nil || latest == nil {
+		return
+	}
+	target.Success = false
+	target.Delay = latest.Delay
+	target.ErrorType = latest.ErrorType
+	target.ErrorText = latest.ErrorText
+	target.URLTestStatus = urltest.StatusFailed
+}
+
+func mergeSmartActiveWorseningEvidence(target, latest *adapter.URLTestHistory) {
+	if target == nil || latest == nil {
+		return
+	}
+	target.RuntimePenalty = max(target.RuntimePenalty, latest.RuntimePenalty)
+	target.RealUserPenalty = max(target.RealUserPenalty, latest.RealUserPenalty)
+	target.VolatilityPenalty = max(target.VolatilityPenalty, latest.VolatilityPenalty)
+	target.DegradationPoints = max(target.DegradationPoints, latest.DegradationPoints)
+	target.StabilityPoints = min(target.StabilityPoints, latest.StabilityPoints)
+	target.PolicyPenalty = max(target.PolicyPenalty, latest.PolicyPenalty)
+	if latest.UDPReady && latest.UDPPenalty >= target.UDPPenalty {
+		target.UDPReady = true
+		target.UDPProbeAvailable = latest.UDPProbeAvailable
+		target.UDPPenalty = latest.UDPPenalty
+		target.UDPLoss = latest.UDPLoss
+		target.UDPJitterMs = latest.UDPJitterMs
+	}
+}
+
+func mergeSmartActiveDynamicEvidence(target, latest *adapter.URLTestHistory) {
+	if target == nil || latest == nil {
+		return
+	}
+	target.RuntimePenalty = latest.RuntimePenalty
+	target.RealUserPenalty = latest.RealUserPenalty
+	target.VolatilityPenalty = latest.VolatilityPenalty
+	target.StabilityPoints = latest.StabilityPoints
+	target.DegradationPoints = latest.DegradationPoints
+	if latest.PolicyPenalty > 0 {
+		target.PolicyPenalty = latest.PolicyPenalty
+	}
 }
 
 type smartCandidateStatus struct {
