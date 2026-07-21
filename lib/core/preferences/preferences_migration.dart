@@ -27,6 +27,7 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion13Migration(sharedPreferences),
       PreferencesVersion14Migration(sharedPreferences),
       PreferencesVersion15Migration(sharedPreferences, currentVersion),
+      PreferencesVersion16Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -410,6 +411,19 @@ class PreferencesVersion15Migration extends PreferencesMigrationStep with InfraL
     if (_currentVersion == 14 && balancerStrategy == "round-robin") {
       loggy.debug("v15: restoring balancer-strategy from [round-robin] to [smart-active-auto]");
       await sharedPreferences.setString("balancer-strategy", "smart-active-auto");
+    }
+  }
+}
+
+class PreferencesVersion16Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion16Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    final blockAds = sharedPreferences.getBool("block-ads");
+    if (blockAds != true) {
+      loggy.debug("v16: enabling block-ads (was [$blockAds])");
+      await sharedPreferences.setBool("block-ads", true);
     }
   }
 }

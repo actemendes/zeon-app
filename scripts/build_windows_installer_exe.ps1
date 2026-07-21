@@ -2,6 +2,7 @@
 param(
     [string]$BuildTarget = "lib/main_prod.dart",
     [string]$SentryDsn = "",
+    [switch]$AllowUnsignedExe,
     [switch]$UseExistingCertificateOnly,
     [switch]$SkipSecureStoragePatch,
     [switch]$SkipDependencyInstall,
@@ -48,6 +49,7 @@ $params = @{
 }
 
 if ($SentryDsn) { $params.SentryDsn = $SentryDsn }
+if ($AllowUnsignedExe) { $params.AllowUnsignedExe = $true }
 if ($UseExistingCertificateOnly) { $params.UseExistingCertificateOnly = $true }
 if ($SkipSecureStoragePatch) { $params.SkipSecureStoragePatch = $true }
 if ($SkipDependencyInstall) { $params.SkipDependencyInstall = $true }

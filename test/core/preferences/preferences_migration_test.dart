@@ -72,12 +72,22 @@ void main() {
     expect(prefs.getString("balancer-strategy"), "round-robin");
   });
 
-  test("latest migration version is 15", () async {
+  test("v16 enables ad blocking for existing installations", () async {
+    SharedPreferences.setMockInitialValues({PreferencesMigration.versionKey: 15, "block-ads": false});
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs).migrate();
+
+    expect(prefs.getBool("block-ads"), true);
+  });
+
+  test("latest migration version is 16", () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
 
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
-    expect(prefs.getInt(PreferencesMigration.versionKey), 15);
+    expect(prefs.getInt(PreferencesMigration.versionKey), 16);
+    expect(prefs.getBool("block-ads"), true);
   });
 }
