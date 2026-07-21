@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:dio/dio.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
@@ -25,13 +23,11 @@ class NotificationApiDataSource with InfraLogger implements NotificationRemoteDa
     required String appVersion,
     required String platform,
     required String locale,
-    Duration timeout = const Duration(seconds: 8),
   }) : _httpClient = httpClient,
        _deviceAuth = deviceAuth,
        _appVersion = appVersion,
        _platform = platform,
-       _locale = locale,
-       _timeout = timeout;
+       _locale = locale;
 
   static const apiBaseUrl = MobileConnLinkImportService.apiBaseUrl;
   static const defaultLimit = 50;
@@ -41,7 +37,6 @@ class NotificationApiDataSource with InfraLogger implements NotificationRemoteDa
   final String _appVersion;
   final String _platform;
   final String _locale;
-  final Duration _timeout;
 
   @override
   Future<NotificationFetchResult> fetch({String? cursor, String? eTag, int limit = defaultLimit}) async {
@@ -55,17 +50,15 @@ class NotificationApiDataSource with InfraLogger implements NotificationRemoteDa
         );
 
     final response = await _sendWithAuthRetry<Map<String, dynamic>>(
-      (headers) => _httpClient
-          .get<Map<String, dynamic>>(
-            uri.toString(),
-            headers: {
-              ...headers,
-              'Accept': 'application/json',
-              if (eTag != null && eTag.trim().isNotEmpty) 'If-None-Match': eTag.trim(),
-            },
-            disableRetry: true,
-          )
-          .timeout(_timeout),
+      (headers) => _httpClient.get<Map<String, dynamic>>(
+        uri.toString(),
+        headers: {
+          ...headers,
+          'Accept': 'application/json',
+          if (eTag != null && eTag.trim().isNotEmpty) 'If-None-Match': eTag.trim(),
+        },
+        disableRetry: true,
+      ),
     );
 
     if (response.statusCode == 304) {
@@ -84,14 +77,12 @@ class NotificationApiDataSource with InfraLogger implements NotificationRemoteDa
     final uri = Uri.parse(apiBaseUrl).resolve('/api/v1/notifications/receipts').toString();
     final body = {'receipts': receipts.take(100).map((receipt) => receipt.toJson()).toList(growable: false)};
     final response = await _sendWithAuthRetry<Map<String, dynamic>>(
-      (headers) => _httpClient
-          .post<Map<String, dynamic>>(
-            uri,
-            data: body,
-            headers: {...headers, 'Content-Type': 'application/json', 'Accept': 'application/json'},
-            disableRetry: true,
-          )
-          .timeout(_timeout),
+      (headers) => _httpClient.post<Map<String, dynamic>>(
+        uri,
+        data: body,
+        headers: {...headers, 'Content-Type': 'application/json', 'Accept': 'application/json'},
+        disableRetry: true,
+      ),
     );
     if (response.statusCode != 200) {
       throw NotificationApiException('receipts_status_${response.statusCode ?? 0}');

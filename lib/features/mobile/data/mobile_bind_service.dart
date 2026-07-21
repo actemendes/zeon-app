@@ -226,8 +226,9 @@ class MobileBindService with InfraLogger {
       path: "/ws/bind",
       queryParameters: {"bind_session_id": bindSessionId},
     );
-    Future<({WebSocket socket, HttpClient client})> openSocket(String token) async {
-      final client = _httpClient.createRequiredProxyHttpClient();
+    Future<({WebSocket socket, HttpClient client})> openSocket(String token, {bool allowVpnRecovery = true}) async {
+      final route = await _httpClient.createAdaptiveHttpClient(wsUri.toString());
+      final client = route.client;
       try {
         final socket = await WebSocket.connect(
           wsUri.toString(),
@@ -235,9 +236,15 @@ class MobileBindService with InfraLogger {
           customClient: client,
         );
         return (socket: socket, client: client);
-      } catch (_) {
+      } catch (error, stackTrace) {
         client.close(force: true);
-        rethrow;
+        if (allowVpnRecovery &&
+            !route.usesProxy &&
+            await _httpClient.recoverWithVpnAfterFailure(wsUri.toString(), error) &&
+            await _httpClient.waitForProxyAvailable()) {
+          return openSocket(token, allowVpnRecovery: false);
+        }
+        Error.throwWithStackTrace(error, stackTrace);
       }
     }
 
@@ -332,16 +339,10 @@ class MobileBindService with InfraLogger {
       };
     }
 
-    Future<Response<Map<String, dynamic>>> sendWithFallback(String jwt) async {
-      try {
-        return await send(directOnly: true, jwt: jwt);
-      } on DioException catch (e) {
-        if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.connectionError) {
-          loggy.warning("bind request fallback to proxy-aware mode: $method $path ${_dioDebug(e)}");
-          return await send(directOnly: false, jwt: jwt);
-        }
-        rethrow;
-      }
+    Future<Response<Map<String, dynamic>>> sendWithFallback(String jwt) {
+      // DioHttpClient selects DIRECT or the live VPN proxy and performs the
+      // single user-assisted recovery retry centrally.
+      return send(directOnly: true, jwt: jwt);
     }
 
     Future<Map<String, dynamic>> execute({required bool allowRefresh}) async {

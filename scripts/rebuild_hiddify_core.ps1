@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet("android", "windows", "linux")]
-    [string[]]$Platform = @("android"),
+    [string[]]$Platform = @("windows"),
 
     [string]$WslDistribution,
 

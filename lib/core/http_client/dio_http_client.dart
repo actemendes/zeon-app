@@ -10,8 +10,17 @@ import 'package:zeon/utils/custom_loggers.dart';
 
 class DioHttpClient with InfraLogger {
   final Map<String, Dio> _dio = {};
-  DioHttpClient({required Duration timeout, required this.userAgent, required bool debug}) {
-    for (final mode in ["proxy", "direct", "both"]) {
+  DioHttpClient({
+    required Duration timeout,
+    required this.userAgent,
+    required bool debug,
+    Future<bool> Function()? requestVpnRecovery,
+    Future<bool> Function(String host, int port)? proxyProbe,
+    bool Function(String url)? controlPlaneMatcher,
+  }) : _requestVpnRecovery = requestVpnRecovery,
+       _proxyProbe = proxyProbe,
+       _controlPlaneMatcher = controlPlaneMatcher ?? MobileApiProxyRoute.requiresVpn {
+    for (final mode in ["proxy", "direct"]) {
       _dio[mode] = Dio(
         BaseOptions(
           connectTimeout: timeout,
@@ -33,15 +42,7 @@ class DioHttpClient with InfraLogger {
       _dio[mode]!.httpClientAdapter = IOHttpClientAdapter(
         createHttpClient: () {
           final client = HttpClient();
-          client.findProxy = (url) {
-            if (mode == "proxy") {
-              return "PROXY localhost:$port";
-            } else if (mode == "direct") {
-              return "DIRECT";
-            } else {
-              return "PROXY localhost:$port; DIRECT";
-            }
-          };
+          client.findProxy = (_) => mode == "proxy" ? "PROXY localhost:$port" : "DIRECT";
           return client;
         },
       );
@@ -53,21 +54,14 @@ class DioHttpClient with InfraLogger {
   }
 
   int port = 0;
+  bool? _vpnActive;
 
   String userAgent;
-  // bool isPortOpen(String host, int port, {Duration timeout = const Duration(milliseconds: 200)}) async{
-  //   try {
-  //     Socket.connect(host, port, timeout: timeout).then((socket) {
-  //       socket.destroy();
-  //     });
-  //     return true;
-  //   } on SocketException catch (_) {
-  //     return false;
-  //   } catch (_) {
-  //     return false;
-  //   }
-  // }
-  Future<bool> isPortOpen(String host, int port, {Duration timeout = const Duration(seconds: 5)}) async {
+  final Future<bool> Function()? _requestVpnRecovery;
+  final Future<bool> Function(String host, int port)? _proxyProbe;
+  final bool Function(String url) _controlPlaneMatcher;
+
+  Future<bool> isPortOpen(String host, int port, {Duration timeout = const Duration(milliseconds: 300)}) async {
     try {
       final socket = await Socket.connect(host, port, timeout: timeout);
       await socket.close();
@@ -84,16 +78,22 @@ class DioHttpClient with InfraLogger {
     loggy.debug("setting proxy port: [$port]");
   }
 
-  /// Creates a fail-closed client for control-plane WebSocket connections.
-  /// The returned client has no DIRECT fallback.
-  HttpClient createRequiredProxyHttpClient() {
-    final proxyPort = port;
-    if (proxyPort <= 0) {
-      throw const VpnProxyUnavailableException();
-    }
+  /// Supplies the UI connection state. A null value (background isolate or
+  /// early bootstrap) falls back to probing the local proxy.
+  void setVpnActive(bool active) {
+    _vpnActive = active;
+    loggy.debug("setting VPN transport state: [$active]");
+  }
+
+  /// Creates a WebSocket client matching the current transport state.
+  ///
+  /// A running local VPN proxy is always used without a DIRECT fallback.
+  /// Otherwise the connection is made directly.
+  Future<AdaptiveHttpClientRoute> createAdaptiveHttpClient(String url) async {
+    final mode = await _resolveMode(url: url, directOnly: false, proxyOnly: false);
     final client = HttpClient();
-    client.findProxy = (_) => "PROXY 127.0.0.1:$proxyPort";
-    return client;
+    client.findProxy = (_) => mode == "proxy" ? "PROXY 127.0.0.1:$port" : "DIRECT";
+    return AdaptiveHttpClientRoute(client: client, usesProxy: mode == "proxy");
   }
 
   Future<Response<T>> get<T>(
@@ -105,19 +105,21 @@ class DioHttpClient with InfraLogger {
     bool proxyOnly = false,
     bool directOnly = false,
     bool disableRetry = false,
-  }) async {
-    final mode = await _resolveMode(url: url, directOnly: directOnly, proxyOnly: proxyOnly);
-    final dio = _dio[mode]!;
-
-    return dio.get<T>(
-      url,
-      cancelToken: cancelToken,
-      options: _options(
+  }) {
+    return _sendAdaptive(
+      url: url,
+      directOnly: directOnly,
+      proxyOnly: proxyOnly,
+      send: (mode) => _dio[mode]!.get<T>(
         url,
-        userAgent: userAgent,
-        credentials: credentials,
-        headers: headers,
-        disableRetry: disableRetry,
+        cancelToken: cancelToken,
+        options: _options(
+          url,
+          userAgent: userAgent,
+          credentials: credentials,
+          headers: headers,
+          disableRetry: disableRetry,
+        ),
       ),
     );
   }
@@ -132,20 +134,22 @@ class DioHttpClient with InfraLogger {
     bool proxyOnly = false,
     bool directOnly = false,
     bool disableRetry = false,
-  }) async {
-    final mode = await _resolveMode(url: url, directOnly: directOnly, proxyOnly: proxyOnly);
-    final dio = _dio[mode]!;
-
-    return dio.post<T>(
-      url,
-      data: data,
-      cancelToken: cancelToken,
-      options: _options(
+  }) {
+    return _sendAdaptive(
+      url: url,
+      directOnly: directOnly,
+      proxyOnly: proxyOnly,
+      send: (mode) => _dio[mode]!.post<T>(
         url,
-        userAgent: userAgent,
-        credentials: credentials,
-        headers: headers,
-        disableRetry: disableRetry,
+        data: data,
+        cancelToken: cancelToken,
+        options: _options(
+          url,
+          userAgent: userAgent,
+          credentials: credentials,
+          headers: headers,
+          disableRetry: disableRetry,
+        ),
       ),
     );
   }
@@ -160,41 +164,110 @@ class DioHttpClient with InfraLogger {
     bool proxyOnly = false,
     bool directOnly = false,
     bool disableRetry = false,
-  }) async {
-    final mode = await _resolveMode(url: url, directOnly: directOnly, proxyOnly: proxyOnly);
-    final dio = _dio[mode]!;
-    return dio.download(
-      url,
-      path,
-      cancelToken: cancelToken,
-      options: _options(
+  }) {
+    return _sendAdaptive(
+      url: url,
+      directOnly: directOnly,
+      proxyOnly: proxyOnly,
+      send: (mode) => _dio[mode]!.download(
         url,
-        userAgent: userAgent,
-        credentials: credentials,
-        headers: headers,
-        disableRetry: disableRetry,
+        path,
+        cancelToken: cancelToken,
+        options: _options(
+          url,
+          userAgent: userAgent,
+          credentials: credentials,
+          headers: headers,
+          disableRetry: disableRetry,
+        ),
       ),
     );
   }
 
-  Future<String> _resolveMode({required String url, required bool directOnly, required bool proxyOnly}) async {
-    if (MobileApiProxyRoute.requiresVpn(url)) {
-      if (port <= 0) {
-        loggy.warning("control-plane request blocked: VPN proxy is unavailable");
-        throw const VpnProxyUnavailableException();
+  Future<T> _sendAdaptive<T>({
+    required String url,
+    required bool directOnly,
+    required bool proxyOnly,
+    required Future<T> Function(String mode) send,
+  }) async {
+    final mode = await _resolveMode(url: url, directOnly: directOnly, proxyOnly: proxyOnly);
+    try {
+      return await send(mode);
+    } catch (error, stackTrace) {
+      final recovered = mode == "direct" && await recoverWithVpnAfterFailure(url, error);
+      if (recovered && await waitForProxyAvailable()) {
+        loggy.info("retrying control-plane request through VPN proxy");
+        return send("proxy");
       }
-      loggy.debug("using required VPN proxy for control-plane request [port=$port]");
-      return "proxy";
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  /// Requests user-assisted VPN recovery only for a real control-plane network
+  /// failure. HTTP responses (including 4xx/5xx) are not connectivity failures.
+  Future<bool> recoverWithVpnAfterFailure(String url, Object error) async {
+    final recovery = _requestVpnRecovery;
+    if (recovery == null || !_controlPlaneMatcher(url) || !_isNetworkFailure(error)) {
+      return false;
+    }
+    return recovery();
+  }
+
+  Future<bool> waitForProxyAvailable({Duration timeout = const Duration(seconds: 8)}) async {
+    final deadline = DateTime.now().add(timeout);
+    do {
+      if (await _isProxyAvailable()) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    } while (DateTime.now().isBefore(deadline));
+    return false;
+  }
+
+  Future<String> _resolveMode({required String url, required bool directOnly, required bool proxyOnly}) async {
+    if (_controlPlaneMatcher(url)) {
+      final mode = await _adaptiveMode();
+      loggy.debug("using adaptive control-plane mode [$mode, port=$port]");
+      return mode;
     }
     if (directOnly) return "direct";
     if (proxyOnly) {
+      if (!await _isProxyAvailable()) {
+        throw const VpnProxyUnavailableException();
+      }
       loggy.debug("using required local proxy [port=$port]");
       return "proxy";
     }
-    final proxyAvailable = await isPortOpen("127.0.0.1", port);
-    final mode = proxyAvailable ? "both" : "direct";
+    final mode = await _adaptiveMode();
     loggy.debug("using HTTP mode [$mode, port=$port]");
     return mode;
+  }
+
+  Future<String> _adaptiveMode() async {
+    if (_vpnActive == false) return "direct";
+    if (_vpnActive == true) {
+      if (await waitForProxyAvailable(timeout: const Duration(seconds: 3))) return "proxy";
+      throw const VpnProxyUnavailableException();
+    }
+    return await _isProxyAvailable() ? "proxy" : "direct";
+  }
+
+  Future<bool> _isProxyAvailable() async {
+    final proxyPort = port;
+    if (proxyPort <= 0) return false;
+    final probe = _proxyProbe;
+    return probe != null ? probe("127.0.0.1", proxyPort) : isPortOpen("127.0.0.1", proxyPort);
+  }
+
+  bool _isNetworkFailure(Object error) {
+    if (error is SocketException || error is HandshakeException) return true;
+    if (error is! DioException) return false;
+    return switch (error.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.connectionError => true,
+      DioExceptionType.unknown => error.error is SocketException || error.error is HandshakeException,
+      _ => false,
+    };
   }
 
   Options _options(
@@ -227,11 +300,20 @@ class DioHttpClient with InfraLogger {
         // "Content-Type": "application/json",
       },
     );
-    if (disableRetry) {
+    // A control-plane request gets one normal attempt followed by one explicit
+    // VPN recovery attempt. Hidden interceptor retries would delay the prompt.
+    if (disableRetry || _controlPlaneMatcher(url)) {
       options.disableRetry = true;
     }
     return options;
   }
+}
+
+class AdaptiveHttpClientRoute {
+  const AdaptiveHttpClientRoute({required this.client, required this.usesProxy});
+
+  final HttpClient client;
+  final bool usesProxy;
 }
 
 class VpnProxyUnavailableException implements Exception {

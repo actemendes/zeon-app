@@ -46,7 +46,8 @@ Future<bool> runNotificationsBackgroundSync() async {
       debug: false,
     );
     // The worker runs in a separate isolate, so it cannot reuse the provider's
-    // in-memory port. It must still fail closed through the same local VPN proxy.
+    // in-memory port. If the local VPN proxy is alive it is used exclusively;
+    // otherwise the worker uses the ordinary network and retries next cycle.
     httpClient.setProxyPort(preferences.getInt('mixed-port') ?? 12334);
     final local = NotificationDao(db);
     final api = NotificationApiDataSource(

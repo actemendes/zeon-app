@@ -177,6 +177,25 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }
   }
 
+  /// Starts the same connection flow as a user tap after an API request could
+  /// not reach the service over the ordinary network.
+  Future<bool> connectForApiRecovery() async {
+    if (state.asData?.value case Connected() || Connecting()) return true;
+    if (state.asData?.value case Disconnecting()) return false;
+
+    final activeProfile = await ref.read(activeProfileProvider.future);
+    if (activeProfile == null) {
+      loggy.warning("API VPN recovery skipped: no active profile");
+      await ref.read(dialogNotifierProvider.notifier).showNoActiveProfile();
+      return false;
+    }
+
+    _markUserAction('api_recovery_connect');
+    await ref.read(Preferences.startedByUser.notifier).update(true);
+    await _connect();
+    return true;
+  }
+
   Future<void> toggleConnection() async {
     final haptic = ref.read(hapticServiceProvider.notifier);
     if (state case AsyncError()) {

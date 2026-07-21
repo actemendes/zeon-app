@@ -223,16 +223,13 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
       timeout: 5000,
     );
   }
-  // Mobile control-plane traffic is fail-closed through the embedded VPN.
-  // Do not probe the API before that VPN reaches CONNECTED; the connection
-  // notifier owns promotion from the anonymous profile to the device profile.
-  final mobileAutoImportResult = PlatformUtils.isMobile
-      ? false
-      : await _safeInit(
-          "mobile auto import",
-          () => mobileBootstrapImportService.run(mode: MobileConnLinkImportMode.postConnection),
-          timeout: 18000,
-        );
+  // Try the ordinary network during startup. If it is blocked, the UI-level
+  // retry can ask the user to start VPN and transparently repeat through it.
+  final mobileAutoImportResult = await _safeInit(
+    "mobile auto import",
+    () => mobileBootstrapImportService.run(mode: MobileConnLinkImportMode.standard),
+    timeout: 18000,
+  );
   if (mobileAutoImportResult == true) {
     await _safeInit(
       "wait active profile after mobile auto import",

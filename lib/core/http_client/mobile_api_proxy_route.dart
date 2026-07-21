@@ -1,20 +1,20 @@
 import 'package:zeon/singbox/model/singbox_config_option.dart';
 import 'package:zeon/singbox/model/singbox_rule.dart';
 
-/// Keeps ZEON's control-plane API on the selected proxy path.
+/// Keeps ZEON's control-plane API on the selected proxy path while VPN runs.
 ///
 /// A local HTTP proxy alone is not sufficient: sing-box still applies its
 /// normal geo/site rules to requests received by the mixed inbound. This rule
 /// is prepended after profile overrides so regional or user `direct` rules
-/// cannot move control-plane requests outside the VPN.
+/// cannot move proxied control-plane requests outside the VPN. When the local
+/// VPN proxy is not running, DioHttpClient connects to this origin directly.
 abstract final class MobileApiProxyRoute {
   static const apiBaseUrl = String.fromEnvironment('mobile_api_base_url', defaultValue: 'https://130.49.151.173');
 
   /// Returns true only for requests to the configured control-plane origin.
   ///
-  /// Keeping this check next to the sing-box rule prevents an HTTP caller from
-  /// accidentally opting out with `directOnly`. Paths and query parameters do
-  /// not matter; a different host, port, or TLS mode is a different origin.
+  /// Paths and query parameters do not matter; a different host, port, or TLS
+  /// mode is a different origin.
   static bool requiresVpn(String requestUrl, {String baseUrl = apiBaseUrl}) {
     final api = Uri.tryParse(baseUrl.trim());
     final request = Uri.tryParse(requestUrl.trim());

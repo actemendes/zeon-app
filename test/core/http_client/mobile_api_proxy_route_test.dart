@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/core/http_client/mobile_api_proxy_route.dart';
@@ -78,14 +79,87 @@ void main() {
       }
     });
 
-    test('blocks direct-only control-plane requests when the VPN proxy is unavailable', () async {
-      final client = DioHttpClient(timeout: const Duration(milliseconds: 100), userAgent: 'test', debug: false);
+    test('uses the ordinary network for control-plane requests while VPN is unavailable', () async {
+      final client = DioHttpClient(
+        timeout: const Duration(milliseconds: 100),
+        userAgent: 'test',
+        debug: false,
+        // Even a stale listener must not override the explicit disconnected
+        // state supplied by the app.
+        proxyProbe: (_, _) async => true,
+      );
+      client.setProxyPort(12334);
+      client.setVpnActive(false);
       final url = Uri.parse(MobileApiProxyRoute.apiBaseUrl).resolve('/api/v1/test').toString();
 
-      await expectLater(
-        client.get<void>(url, directOnly: true, disableRetry: true),
-        throwsA(isA<VpnProxyUnavailableException>()),
+      final route = await client.createAdaptiveHttpClient(url);
+      expect(route.usesProxy, isFalse);
+      route.client.close(force: true);
+    });
+
+    test('uses only the VPN proxy for control-plane requests while it is available', () async {
+      final client = DioHttpClient(
+        timeout: const Duration(milliseconds: 100),
+        userAgent: 'test',
+        debug: false,
+        proxyProbe: (_, _) async => true,
       );
+      client.setProxyPort(12334);
+      client.setVpnActive(true);
+      final url = Uri.parse(MobileApiProxyRoute.apiBaseUrl).resolve('/api/v1/test').toString();
+
+      final route = await client.createAdaptiveHttpClient(url);
+      expect(route.usesProxy, isTrue);
+      route.client.close(force: true);
+    });
+
+    test('does not fall back to direct while VPN state is active but its proxy is unavailable', () async {
+      final client = DioHttpClient(
+        timeout: const Duration(milliseconds: 100),
+        userAgent: 'test',
+        debug: false,
+        proxyProbe: (_, _) async => false,
+      );
+      client.setProxyPort(12334);
+      client.setVpnActive(true);
+      final url = Uri.parse(MobileApiProxyRoute.apiBaseUrl).resolve('/api/v1/test').toString();
+
+      await expectLater(client.createAdaptiveHttpClient(url), throwsA(isA<VpnProxyUnavailableException>()));
+    });
+
+    test('offers VPN recovery for network failures but not HTTP responses', () async {
+      var recoveryCalls = 0;
+      final client = DioHttpClient(
+        timeout: const Duration(milliseconds: 100),
+        userAgent: 'test',
+        debug: false,
+        controlPlaneMatcher: (_) => true,
+        requestVpnRecovery: () async {
+          recoveryCalls++;
+          return true;
+        },
+      );
+      final request = RequestOptions(path: 'https://api.example.com/test');
+
+      expect(
+        await client.recoverWithVpnAfterFailure(
+          request.path,
+          DioException(requestOptions: request, type: DioExceptionType.connectionError),
+        ),
+        isTrue,
+      );
+      expect(
+        await client.recoverWithVpnAfterFailure(
+          request.path,
+          DioException(
+            requestOptions: request,
+            type: DioExceptionType.badResponse,
+            response: Response<void>(requestOptions: request, statusCode: 503),
+          ),
+        ),
+        isFalse,
+      );
+      expect(recoveryCalls, 1);
     });
   });
 }

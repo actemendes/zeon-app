@@ -15,8 +15,9 @@
 - `conn_link`: основной импортируемый URL профиля в формате `api_link/open/$openId`. Пример: `https://130.49.151.173/open/649669380`. В API рядом могут встречаться поля `connection_link`, `raw_url`, `conn_link` или технический `subscriptionUrl`; входные `/open/$openId` и публичные ссылки нормализуются к основному `conn_link`.
 - Публичная open-ссылка: `https://zeon-vps.link/open/$openId`. Это публичный alias для ввода; в open-сценарии сервис канонизирует его в primary `https://130.49.151.173/open/$openId` до сетевого импорта.
 - Режимы импорта `conn_link`:
-  - `fast`: короткий путь без long-tail ретраев/резолвов; используется на старте и в Intro.
+  - `fast`: короткий путь без long-tail ретраев/резолвов; используется при ручном импорте в Intro.
   - `standard`: расширенный путь с resolve/no-validate fallback; используется в фоновых повторах и при явном вызове.
+  - `postConnection`: короткий повтор после успешного подключения VPN для замены embedded-профиля реальным.
 - `subscriptionUrl`: технический URL из `<script id="zeon-data">`, который может указывать на фактическую подписку. Это не бизнес-термин и не заменяет `conn_link`.
 - `user_id`: id пользователя в мобильном API. Хранится в `mobile_auto_import_user_id`, если был получен через авто-импорт или bind confirm.
 - Каноническое правило (обновлено 11 мая 2026): при импорте `open/<id>` `MobileConnLinkImportService` извлекает numeric `openId` и сохраняет его в `mobile_auto_import_user_id`; далее этот же ключ должен использоваться в оплате.
@@ -76,13 +77,25 @@ flowchart TD
 1. Инициализируются директории, логгер, SharedPreferences, миграции prefs.
 2. Инициализируются defaults, профильный репозиторий, переводы, hiddify-core.
 3. На mobile вызывается `MobileBootstrapImportService.enforceSingleProfile()`.
-4. Вызывается `MobileBootstrapImportService.run(mode: MobileConnLinkImportMode.fast)` с timeout 18 секунд на чистом старте без профиля.
+4. Вызывается `MobileBootstrapImportService.run(mode: MobileConnLinkImportMode.standard)` с timeout 18 секунд на чистом старте без профиля. Пока VPN выключен, API и импорт профиля используют обычную сеть.
 5. Если после сетевого bootstrap на mobile активного профиля нет, `MobileEmbeddedBootstrapProfileService` ставит временный embedded bootstrap-профиль.
 6. После успешного сетевого импорта bootstrap ждёт активный профиль до 3 секунд; после embedded fallback ждёт активный embedded-профиль до 3 секунд.
-7. Запускаются фоновые повторы авто-импорта через 5, 10, 20 и 40 секунд.
+7. После первого UI-frame запускается ещё один `standard`-повтор. Если обычная сеть не достигает API, пользователь получает предложение включить VPN; после успешного подключения исходный запрос автоматически повторяется через VPN.
 
-Жесткая верхняя граница ожидания mobile auto import в прелоадере: 18 секунд. Ручной импорт в Intro ограничен 25 секундами. HTTP-клиент использует timeout 15 секунд и retry interceptor, но в `fast`-режиме ключевые запросы запускаются с `disableRetry=true` для срезания длинных хвостов ожидания.
-Фоновые повторы после прелоадера выполняются `service.run()` с параметрами по умолчанию, то есть в `standard`-режиме и уже без блокировки старта UI.
+Жесткая верхняя граница ожидания mobile auto import в прелоадере: 18 секунд. Ручной импорт в Intro ограничен 25 секундами. HTTP-клиент использует timeout 15 секунд. Для control-plane скрытые interceptor-retry отключены: вместо них выполняется одна попытка по текущему каналу и, при подтверждённом пользователем запуске VPN, один прозрачный повтор через VPN.
+
+### 2.1 Адаптивный транспорт API
+
+Общий `DioHttpClient` применяет единое правило к control-plane API, ценам, уведомлениям, bind-запросам и основному `conn_link`:
+
+1. `Disconnected` — запрос идёт только через `DIRECT`.
+2. `Connecting`, `Connected` или `Disconnecting` — запрос идёт только через локальный VPN proxy; `DIRECT` fallback запрещён.
+3. Если обычный запрос завершился сетевой ошибкой (connect/send/receive timeout, socket/TLS connection error), один общий диалог предлагает включить VPN. Ошибки HTTP 4xx/5xx не показывают этот диалог.
+4. После согласия приложение подключает текущий active-профиль, ждёт состояния `Connected` и готовности локального proxy, затем повторяет исходный запрос один раз.
+5. Одновременные ошибки объединяются в один диалог/одну попытку подключения. После отказа действует короткий cooldown, чтобы фоновые запросы не создавали каскад диалогов.
+6. Во время раннего bootstrap, когда Navigator ещё отсутствует, запрос просто завершается обычной ошибкой. Повтор после первого UI-frame уже может показать диалог.
+
+Внутри sing-box правило для host `mobile_api_base_url` остаётся первым и направляет такой трафик в proxy outbound. Поэтому при активном VPN пользовательские geo/direct rules не могут вывести control-plane запрос наружу. Смешанный режим `PROXY; DIRECT` не используется.
 
 Если `mobile_auto_import_done = true` и активный профиль есть, `MobileBootstrapImportService` быстро выходит без blocking API/import. Metadata refresh по сохраненному `conn_link` запускается best-effort в фоне с коротким timeout и не держит старт приложения.
 
@@ -136,7 +149,7 @@ flowchart TD
    - если оба отсутствуют и `clearUserIdWhenMissing=true`, ключ `mobile_auto_import_user_id` удаляется.
 
 В `mobile_auto_import_conn_link` сохраняется основной `conn_link` (`api_link/open/$openId`), даже если конкретный импорт прошел через public fallback.
-Важно: текущие пользовательские потоки (`bootstrap` и ручной импорт в Intro) вызывают сервис в `fast`-режиме, поэтому fallback-кандидат обычно не используется.
+Важно: bootstrap после запуска использует `standard`, post-connect promotion — `postConnection`, а ручной импорт в Intro сохраняет короткий `fast`-путь.
 
 ## 3.1 MobileDeviceRebindService
 

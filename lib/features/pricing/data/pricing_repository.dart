@@ -112,21 +112,20 @@ class PricingRepository {
 }
 
 class PricingApiDataSource implements PricingRemoteDataSource {
-  PricingApiDataSource({required DioHttpClient httpClient, Duration timeout = const Duration(seconds: 8)})
-    : _httpClient = httpClient,
-      _timeout = timeout;
+  PricingApiDataSource({required DioHttpClient httpClient}) : _httpClient = httpClient;
 
   static const apiBaseUrl = MobileConnLinkImportService.apiBaseUrl;
 
   final DioHttpClient _httpClient;
-  final Duration _timeout;
-
   @override
   Future<PricingData> getPublicPricing() async {
     final uri = Uri.parse(apiBaseUrl).resolve('/api/v1/pricing/public').toString();
-    final response = await _httpClient
-        .get<Map<String, dynamic>>(uri, headers: {'Accept': 'application/json'}, directOnly: true, disableRetry: true)
-        .timeout(_timeout);
+    final response = await _httpClient.get<Map<String, dynamic>>(
+      uri,
+      headers: {'Accept': 'application/json'},
+      directOnly: true,
+      disableRetry: true,
+    );
     return _parseResponse(response);
   }
 
@@ -135,14 +134,12 @@ class PricingApiDataSource implements PricingRemoteDataSource {
     final token = deviceJwt.trim();
     if (token.isEmpty) throw const PricingRemoteException(type: PricingFailureType.unauthorized);
     final uri = Uri.parse(apiBaseUrl).resolve('/api/v1/pricing').toString();
-    final response = await _httpClient
-        .get<Map<String, dynamic>>(
-          uri,
-          headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-          directOnly: true,
-          disableRetry: true,
-        )
-        .timeout(_timeout);
+    final response = await _httpClient.get<Map<String, dynamic>>(
+      uri,
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      directOnly: true,
+      disableRetry: true,
+    );
     return _parseResponse(response);
   }
 

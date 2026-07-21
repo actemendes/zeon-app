@@ -630,6 +630,11 @@
       "newVersion": "New version: ",
       "updateNow": "Update now"
     },
+    "apiVpnRecovery": {
+      "title": "Service unavailable",
+      "msg": "The service could not be reached over your current network. Turn on VPN and retry the request automatically?",
+      "connect": "Turn on VPN"
+    },
     "confirmation": {
       "settings": {
         "import": {
