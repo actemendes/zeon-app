@@ -298,6 +298,14 @@ Future<bool> _shouldShowNativeSplashOnThisRun() async {
 Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
   if (!PlatformUtils.isAndroid) return;
   final prefs = container.read(sharedPreferencesProvider).requireValue;
+
+  if (prefs.getBool(PreferencesMigration.v16RoutingCleanupPendingKey) ?? false) {
+    await container
+        .read(appProxyDataSourceProvider)
+        .removePkg(pkg: PreferencesMigration.v16RemovedRoutingPackage, mode: AppProxyMode.exclude);
+    await prefs.setBool(PreferencesMigration.v16RoutingCleanupPendingKey, false);
+  }
+
   const seedKey = "per_app_proxy_seed_v3_done";
   if (prefs.getBool(seedKey) ?? false) return;
 
@@ -339,7 +347,6 @@ Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
     "ru.pyaterochka.app.browser",
     "ru.qugo.mobile",
     "ru.rostel",
-    "ru.rutube.app",
     "ru.sbcs.store",
     "ru.sberbankmobile",
     "ru.tander.magnit",

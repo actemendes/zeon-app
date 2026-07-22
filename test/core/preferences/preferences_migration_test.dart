@@ -72,13 +72,21 @@ void main() {
     expect(prefs.getString("balancer-strategy"), "round-robin");
   });
 
-  test("v16 enables ad blocking for existing installations", () async {
-    SharedPreferences.setMockInitialValues({PreferencesMigration.versionKey: 15, "block-ads": false});
+  test("v16 enables ad blocking and removes Rutube from routing for existing installations", () async {
+    SharedPreferences.setMockInitialValues({
+      PreferencesMigration.versionKey: 15,
+      "block-ads": false,
+      "per_app_proxy_exclude_list": ["com.example.other", PreferencesMigration.v16RemovedRoutingPackage],
+      "per_app_proxy_seeded_exclude_list": [PreferencesMigration.v16RemovedRoutingPackage, "com.example.seeded"],
+    });
     final prefs = await SharedPreferences.getInstance();
 
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
     expect(prefs.getBool("block-ads"), true);
+    expect(prefs.getStringList("per_app_proxy_exclude_list"), ["com.example.other"]);
+    expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), ["com.example.seeded"]);
+    expect(prefs.getBool(PreferencesMigration.v16RoutingCleanupPendingKey), true);
   });
 
   test("latest migration version is 16", () async {

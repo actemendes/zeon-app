@@ -9,6 +9,7 @@ part 'app_proxy_data_source.g.dart';
 
 abstract interface class AppProxyDataSource {
   Future<void> updatePkg({required String pkg, required AppProxyMode mode});
+  Future<int> removePkg({required String pkg, required AppProxyMode mode});
   Stream<List<AppProxyEntry>> watchAll({required AppProxyMode mode});
   Stream<List<AppProxyEntry>> watchFilterForDisplay({required Set<String> phonePkgs, required AppProxyMode mode});
   Stream<List<String>> watchActivePackages({required Set<String> phonePkgs, required AppProxyMode mode});
@@ -23,6 +24,11 @@ abstract interface class AppProxyDataSource {
 @DriftAccessor(tables: [AppProxyEntries])
 class AppProxyDao extends DatabaseAccessor<Db> with _$AppProxyDaoMixin, InfraLogger implements AppProxyDataSource {
   AppProxyDao(super.db);
+
+  @override
+  Future<int> removePkg({required String pkg, required AppProxyMode mode}) {
+    return (delete(appProxyEntries)..where((tbl) => tbl.mode.equalsValue(mode) & tbl.pkgName.equals(pkg))).go();
+  }
 
   @override
   Future<void> updatePkg({required String pkg, required AppProxyMode mode}) {

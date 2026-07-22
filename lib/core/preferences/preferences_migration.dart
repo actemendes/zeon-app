@@ -7,6 +7,8 @@ class PreferencesMigration with InfraLogger {
   final SharedPreferences sharedPreferences;
 
   static const versionKey = "preferences_version";
+  static const v16RemovedRoutingPackage = "ru.rutube.app";
+  static const v16RoutingCleanupPendingKey = "per_app_proxy_v16_rutube_cleanup_pending";
 
   Future<void> migrate() async {
     final currentVersion = sharedPreferences.getInt(versionKey) ?? 0;
@@ -425,5 +427,16 @@ class PreferencesVersion16Migration extends PreferencesMigrationStep with InfraL
       loggy.debug("v16: enabling block-ads (was [$blockAds])");
       await sharedPreferences.setBool("block-ads", true);
     }
+
+    for (final key in const ["per_app_proxy_exclude_list", "per_app_proxy_seeded_exclude_list"]) {
+      final packages = sharedPreferences.getStringList(key);
+      if (packages != null && packages.contains(PreferencesMigration.v16RemovedRoutingPackage)) {
+        final updated = packages.where((pkg) => pkg != PreferencesMigration.v16RemovedRoutingPackage).toList();
+        loggy.debug("v16: removing [${PreferencesMigration.v16RemovedRoutingPackage}] from [$key]");
+        await sharedPreferences.setStringList(key, updated);
+      }
+    }
+
+    await sharedPreferences.setBool(PreferencesMigration.v16RoutingCleanupPendingKey, true);
   }
 }
