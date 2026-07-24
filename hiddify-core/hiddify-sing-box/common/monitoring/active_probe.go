@@ -148,8 +148,9 @@ func (m *OutboundMonitoring) ProbeActiveOutbound(parent context.Context, tag str
 	refreshHealthScore(tag, &history, false)
 	result.History = history
 	m.logger.Info(fmt.Sprintf(
-		"[SmartActiveProbe] tag=%s trigger=active_schedule status=completed delay=%d score=%d udp_attempted=%t udp_ready=%t udp_loss=%.4f",
-		tag, history.Delay, history.HealthScore, result.UDPAttempted, history.UDPReady, history.UDPLoss,
+		"[SmartActiveProbe] tag=%s trigger=active_schedule source=active_probe status=completed generation=%d success=%t delay=%d score=%d url_test_status=%s result_time=%s udp_attempted=%t udp_ready=%t udp_loss=%.4f",
+		tag, history.CheckGeneration, history.Success, history.Delay, history.HealthScore, history.URLTestStatus,
+		history.Time.Format(time.RFC3339Nano), result.UDPAttempted, history.UDPReady, history.UDPLoss,
 	))
 	return result, nil
 }
@@ -187,6 +188,7 @@ func (m *OutboundMonitoring) PublishActiveProbePresentation(result ActiveProbeRe
 		rankingRevision: result.rankingRevision,
 	}
 	presentation := mergeActiveProbePresentation(result.History, state.history)
+	ranking := state.history
 	groupTags := append([]string(nil), state.groupTags...)
 	state.mu.Unlock()
 
@@ -199,6 +201,13 @@ func (m *OutboundMonitoring) PublishActiveProbePresentation(result ActiveProbeRe
 	}
 	state.historyPublish.Unlock()
 	m.emitGroupEvent(groupTags)
+	m.logger.Info(fmt.Sprintf(
+		"[OutboundResultCommit] tag=%s generation=%d source=active_probe old_success=%t new_success=%t old_delay=%d new_delay=%d old_score=%d new_score=%d old_url_status=%s new_url_status=%s result_time=%s combined_ready=%t",
+		result.OutboundTag, ranking.CheckGeneration,
+		ranking.Success, presentation.Success, ranking.Delay, presentation.Delay,
+		ranking.HealthScore, presentation.HealthScore, ranking.URLTestStatus, presentation.URLTestStatus,
+		presentation.Time.Format(time.RFC3339Nano), presentation.CombinedReady,
+	))
 	return true
 }
 
@@ -251,8 +260,9 @@ func (m *OutboundMonitoring) newActiveProbeFailure(tag string, previous adapter.
 	}
 	refreshHealthScore(tag, &history, false)
 	m.logger.Warn(fmt.Sprintf(
-		"[SmartActiveProbe] tag=%s trigger=active_schedule status=failed error=%s",
-		tag, history.ErrorType,
+		"[SmartActiveProbe] tag=%s trigger=active_schedule source=active_probe status=failed generation=%d success=%t delay=%d score=%d url_test_status=%s result_time=%s error=%s",
+		tag, history.CheckGeneration, history.Success, history.Delay, history.HealthScore,
+		history.URLTestStatus, history.Time.Format(time.RFC3339Nano), history.ErrorType,
 	))
 	return history
 }

@@ -553,6 +553,7 @@ func (m *OutboundMonitoring) resetOutboundCheckState(tag string, generation uint
 	state.historyPublish.Lock()
 	state.mu.Lock()
 	previousGeneration := state.history.CheckGeneration
+	previousHistory := state.history
 	ipInfo := state.history.IpInfo
 	runtimePenalty := state.history.RuntimePenalty
 	realUserPenalty := state.history.RealUserPenalty
@@ -591,7 +592,15 @@ func (m *OutboundMonitoring) resetOutboundCheckState(tag string, generation uint
 	m.history.StoreURLTestHistory(tag, &historySnapshot)
 	state.historyPublish.Unlock()
 	m.emitGroupEvent(groupTags)
-	m.logger.Info("[OutboundCheckReset] tag=", tag, " generation=", generation, " previous_generation=", previousGeneration, " bars=cleared")
+	m.logger.Info("[OutboundCheckReset] tag=", tag,
+		" generation=", generation, " previous_generation=", previousGeneration,
+		" source=full_generation",
+		" old_success=", previousHistory.Success, " new_success=", historySnapshot.Success,
+		" old_delay=", previousHistory.Delay, " new_delay=", historySnapshot.Delay,
+		" old_score=", previousHistory.HealthScore, " new_score=", historySnapshot.HealthScore,
+		" old_url_status=", previousHistory.URLTestStatus, " new_url_status=", historySnapshot.URLTestStatus,
+		" old_time=", previousHistory.Time, " new_time=", historySnapshot.Time,
+		" bars=cleared")
 }
 
 func (m *OutboundMonitoring) logCheckGenerationCompleted(generation uint64, tags []string, trigger string) {
@@ -2093,6 +2102,7 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 		m.logger.Info("[OutboundCheckIgnored] tag=", outcome.outboundTag, " generation=", outcome.cycleID, " stage=ping reason=partial_success_after_terminal_full")
 		return &historySnapshot
 	}
+	outcome.history = normalizeTerminalHistory(outcome.outboundTag, outcome.history, outcome.err)
 	state.queued = false
 	state.priorityQueued = false
 	state.enqueuedCycle = 0
@@ -2163,7 +2173,51 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 		" ping_ready=", historySnapshot.PingReady, " quality_ready=", historySnapshot.QualityReady,
 		" speed_ready=", historySnapshot.SpeedReady, " udp_ready=", historySnapshot.UDPReady,
 		" ranking_eligible=", historySnapshot.Success && historySnapshot.CombinedReady)
+	m.logger.Info("[OutboundResultCommit] tag=", outcome.outboundTag,
+		" generation=", outcome.cycleID, " source=", monitoringResultSource(outcome),
+		" old_success=", previousHistory.Success, " new_success=", historySnapshot.Success,
+		" old_delay=", previousHistory.Delay, " new_delay=", historySnapshot.Delay,
+		" old_score=", previousHistory.HealthScore, " new_score=", historySnapshot.HealthScore,
+		" old_url_status=", previousHistory.URLTestStatus, " new_url_status=", historySnapshot.URLTestStatus,
+		" old_generation=", previousHistory.CheckGeneration, " new_generation=", historySnapshot.CheckGeneration,
+		" result_time=", historySnapshot.Time, " combined_ready=", historySnapshot.CombinedReady)
 	return &historySnapshot
+}
+
+func normalizeTerminalHistory(tag string, history adapter.URLTestHistory, resultErr error) adapter.URLTestHistory {
+	statusSuccess := history.URLTestStatus == "" || history.URLTestStatus == urltest.StatusSuccess
+	errorFree := history.ErrorType == "" || history.ErrorType == urltest.ErrorTypeNone
+	validDelay := history.Delay > 0 && history.Delay < TimeoutDelay
+	if resultErr == nil && history.Success && statusSuccess && errorFree && validDelay {
+		history.Success = true
+		history.ErrorType = urltest.ErrorTypeNone
+		history.ErrorText = ""
+		history.URLTestStatus = urltest.StatusSuccess
+		return history
+	}
+
+	history.Success = false
+	history.URLTestStatus = urltest.StatusFailed
+	history.Delay = TimeoutDelay
+	if history.ErrorType == "" || history.ErrorType == urltest.ErrorTypeNone {
+		errorType, errorText := urltest.ClassifyProbeError(resultErr)
+		if errorType == "" || errorType == urltest.ErrorTypeNone {
+			errorType = urltest.ErrorTypeUnknown
+		}
+		history.ErrorType = errorType
+		if history.ErrorText == "" {
+			history.ErrorText = errorText
+		}
+	}
+	refreshHealthScore(tag, &history, false)
+	return history
+}
+
+func monitoringResultSource(outcome testOutcome) string {
+	if outcome.fullGeneration {
+		return "full_generation"
+	}
+	return "targeted_retest"
 }
 
 func mergeIpInfo(old, new *ipinfo.IpInfo) *ipinfo.IpInfo {
@@ -2894,6 +2948,10 @@ func (m *OutboundMonitoring) loadHistory() *History {
 			state.history = *his
 			state.from_cache = true
 			state.mu.Unlock()
+			m.logger.Info("[OutboundResultLoaded] tag=", tag,
+				" source=cache generation=0 success=false delay=0 health_score=0",
+				" url_test_status=", his.URLTestStatus, " result_time=", his.Time,
+				" ranking_eligible=false")
 		}
 	}
 	return history

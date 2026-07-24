@@ -919,15 +919,169 @@ func TestSmartActiveSuspectObservesBetterCandidate(t *testing.T) {
 	}
 }
 
-func TestSmartActiveSingleEOFIsSuspectAndDoesNotSwitchImmediately(t *testing.T) {
+func TestSmartActiveCompletedEOFFailureSwitchesToFreshCandidate(t *testing.T) {
 	strategy := newSmartActiveForTest()
 	active := failedHistory(urltest.ErrorTypeEOF)
 	active.DegradationPoints = 5
 	history := histories(active, healthyHistory(80))
-	strategy.UpdateOutboundsInfo(history)
+	if !strategy.UpdateOutboundsInfo(history) {
+		t.Fatal("completed EOF result kept an ineligible active")
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+	if decision := strategy.LastDecision(); decision.reason != "current_terminal_result_ineligible" {
+		t.Fatalf("unexpected terminal failure decision: %+v", decision)
+	}
+}
+
+func TestSmartActiveOld50FailureCurrentGenerationSwitchesToFresh120(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	strategy.startedAt = time.Now().Add(-time.Hour)
+	const oldGeneration = uint64(40)
+	old := histories(
+		currentGenerationHealthyHistory(oldGeneration, 50),
+		currentGenerationHealthyHistory(oldGeneration, 240),
+	)
+	old["active"].HealthScore = 100
+	if !strategy.rememberFullGeneration(old, oldGeneration) {
+		t.Fatal("old coherent generation was not stored")
+	}
+	strategy.selectionGeneration = oldGeneration
+
+	const newGeneration = oldGeneration + 1
+	current := histories(
+		currentGenerationFailedHistory(newGeneration, urltest.ErrorTypeEOF),
+		currentGenerationHealthyHistory(newGeneration, 120),
+	)
+	current["active"].HealthScore = 0
+	current["candidate"].HealthScore = 95
+	if !strategy.UpdateOutboundsInfoForCompletedBatch(current, newGeneration) {
+		t.Fatalf("fresh successful candidate did not replace failed active: %+v", strategy.LastDecision())
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+}
+
+func TestSmartActiveComparesCurrent300ToCurrent120(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	strategy.startedAt = time.Now().Add(-time.Hour)
+	old := histories(
+		currentGenerationHealthyHistory(50, 50),
+		currentGenerationHealthyHistory(50, 260),
+	)
+	strategy.UpdateOutboundsInfo(old)
 	requireDecision(t, strategy, "keep", "active")
-	if decision := strategy.LastDecision(); decision.state != "SUSPECT" {
-		t.Fatalf("single EOF must be observed as SUSPECT: %+v", decision)
+
+	current := histories(
+		currentGenerationHealthyHistory(51, 300),
+		currentGenerationHealthyHistory(51, 120),
+	)
+	current["active"].HealthScore = 70
+	current["candidate"].HealthScore = 95
+	if !strategy.UpdateOutboundsInfoForCompletedBatch(current, 51) {
+		t.Fatalf("current 300ms active was compared using its old 50ms result: %+v", strategy.LastDecision())
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+	generation, decisionHistory, source := strategy.SelectionDiagnostics()
+	if generation != 51 || source != "full_generation" ||
+		decisionHistory["active"].Delay != 300 || decisionHistory["candidate"].Delay != 120 {
+		t.Fatalf("selection used incoherent data: generation=%d source=%s history=%+v", generation, source, decisionHistory)
+	}
+}
+
+func TestSmartActiveFailureOverlayReplacesWholeSuccessfulSnapshot(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	strategy.startedAt = time.Now().Add(-time.Hour)
+	const generation = uint64(60)
+	full := histories(
+		currentGenerationHealthyHistory(generation, 50),
+		currentGenerationHealthyHistory(generation, 120),
+	)
+	full["active"].HealthScore = 100
+	strategy.selectionGeneration = generation
+	if !strategy.rememberFullGeneration(full, generation) {
+		t.Fatal("full snapshot was not stored")
+	}
+
+	failedAt := full["active"].Time.Add(time.Second)
+	latest := cloneSmartActiveHistoryMap(full)
+	latest["active"] = currentGenerationFailedHistory(generation, urltest.ErrorTypeReset)
+	latest["active"].Time = failedAt
+	latest["active"].HealthScore = 0
+	strategy.UpdateOutboundsInfo(latest)
+
+	saved := strategy.lastFullHistory["active"]
+	if saved.Success || saved.Delay != 65535 || saved.HealthScore != 0 ||
+		saved.URLTestStatus != urltest.StatusFailed || !saved.Time.Equal(failedAt) ||
+		saved.CheckGeneration != generation || !saved.CombinedReady {
+		t.Fatalf("failure was layered over stale successful fields: %+v", saved)
+	}
+}
+
+func TestSmartActivePendingNewGenerationDoesNotRestoreOldSuccess(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	strategy.startedAt = time.Now().Add(-time.Hour)
+	const fullGeneration = uint64(70)
+	full := histories(
+		currentGenerationHealthyHistory(fullGeneration, 50),
+		currentGenerationHealthyHistory(fullGeneration, 120),
+	)
+	strategy.selectionGeneration = fullGeneration
+	strategy.rememberFullGeneration(full, fullGeneration)
+
+	partial := cloneSmartActiveHistoryMap(full)
+	partial["active"] = currentGenerationCheckingHistory(fullGeneration + 1)
+	if strategy.UpdateOutboundsInfo(partial) {
+		t.Fatal("in-progress partial generation switched active")
+	}
+	_, decisionHistory, _ := strategy.SelectionDiagnostics()
+	active := decisionHistory["active"]
+	if active == nil || active.Success || active.Delay != 0 || active.HealthScore != 0 ||
+		active.URLTestStatus != urltest.StatusChecking || active.CombinedReady {
+		t.Fatalf("old successful metrics resurfaced while active was checking: %+v", active)
+	}
+}
+
+func TestSmartActiveRetainsFailedRouteWithoutCandidateThenSwitchesNextBatch(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	strategy.startedAt = time.Now().Add(-time.Hour)
+
+	failedBatch := histories(
+		currentGenerationFailedHistory(80, urltest.ErrorTypeEOF),
+		currentGenerationFailedHistory(80, urltest.ErrorTypeTimeout),
+	)
+	if strategy.UpdateOutboundsInfoForCompletedBatch(failedBatch, 80) {
+		t.Fatal("all-failed batch switched to another failed server")
+	}
+	requireDecision(t, strategy, "keep", "active")
+	_, keptHistory, _ := strategy.SelectionDiagnostics()
+	kept := keptHistory["active"]
+	if kept.Success || kept.URLTestStatus != urltest.StatusFailed || kept.HealthScore != 0 ||
+		kept.Delay != 65535 || !kept.CombinedReady {
+		t.Fatalf("retained route recovered stale successful metrics: %+v", kept)
+	}
+
+	recoveryBatch := histories(
+		currentGenerationFailedHistory(81, urltest.ErrorTypeEOF),
+		currentGenerationHealthyHistory(81, 120),
+	)
+	if !strategy.UpdateOutboundsInfoForCompletedBatch(recoveryBatch, 81) {
+		t.Fatalf("next completed batch did not switch to fresh candidate: %+v", strategy.LastDecision())
+	}
+	requireDecision(t, strategy, "switch", "candidate")
+}
+
+func TestSmartActiveCacheFromPreviousRunCannotEnterCurrentComparison(t *testing.T) {
+	strategy := newSmartActiveForTest()
+	strategy.startedAt = time.Now().Add(-time.Hour)
+	cachedActive := currentGenerationHealthyHistory(90, 50)
+	cachedActive.IsFromCache = true
+	freshCandidate := currentGenerationHealthyHistory(91, 120)
+
+	if strategy.UpdateOutboundsInfo(histories(cachedActive, freshCandidate)) {
+		t.Fatal("partial current generation compared against cached active")
+	}
+	requireDecision(t, strategy, "keep", "active")
+	if strategy.selectionGeneration != 0 || strategy.LastDecision().reason != "current_generation_incomplete" {
+		t.Fatalf("cache affected selection generation or decision: generation=%d decision=%+v", strategy.selectionGeneration, strategy.LastDecision())
 	}
 }
 

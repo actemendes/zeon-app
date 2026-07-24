@@ -68,6 +68,7 @@ type Balancer struct {
 
 	lastHandledBatchGeneration uint64
 	lastHandledBatchNumber     int
+	failedActiveRefreshPending bool
 }
 
 func NewLoadBalance(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.BalancerOutboundOptions) (adapter.Outbound, error) {
@@ -217,6 +218,7 @@ func (s *Balancer) applyMonitoringUpdate(manualRefresh bool, batchGeneration uin
 	}
 	if s.options.Strategy == StrategySmartActiveAuto {
 		s.logSmartActiveDecision(outbounds)
+		s.requestFailedActiveRefresh()
 	}
 	if changed {
 		s.logAutoDecision(outbounds)
@@ -224,6 +226,33 @@ func (s *Balancer) applyMonitoringUpdate(manualRefresh bool, batchGeneration uin
 		s.interruptGroup.Interrupt(s.interruptExternalConnections)
 		s.signalActiveMonitor()
 	}
+}
+
+func (s *Balancer) requestFailedActiveRefresh() {
+	strategy, ok := s.strategyFn.(*SmartActive)
+	if !ok || s.monitor == nil {
+		return
+	}
+	generation, history, source := strategy.SelectionDiagnostics()
+	current := strategy.Now()
+	if current == "" {
+		return
+	}
+	currentHistory := history[current]
+	status := strategy.candidateStatus(current, currentHistory, generation)
+	if status.ok {
+		s.failedActiveRefreshPending = false
+		return
+	}
+	if currentCheckInProgress(currentHistory) || source == "cache" || s.failedActiveRefreshPending {
+		return
+	}
+	s.failedActiveRefreshPending = true
+	s.logger.Warn("[SmartActiveRefreshRequested] active=", current,
+		" selection_generation=", generation,
+		" history_generation=", historyValue64(currentHistory, func(h *adapter.URLTestHistory) uint64 { return h.CheckGeneration }),
+		" source=", source, " reason=", status.reason)
+	s.monitor.RequestFullCycle()
 }
 
 // consumeCompletedBatch preserves the throttled delivery backstop while
@@ -249,6 +278,10 @@ func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHis
 	}
 	decision := strategy.LastDecision()
 	recovered := strategy.LastRecoveries()
+	selectionGeneration, selectionHistory, resultSource := strategy.SelectionDiagnostics()
+	if len(selectionHistory) > 0 {
+		history = selectionHistory
+	}
 	current := strategy.Now()
 	currentHistory := history[current]
 	decisionReason := decision.reason
@@ -261,6 +294,18 @@ func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHis
 		" real_user_penalty=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.RealUserPenalty }),
 		" stability=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.StabilityPoints }))
 	s.logger.Info("[SmartActiveDecision] action=", decision.action, " reason=", decisionReason, " from=", decision.from, " to=", decision.to, " current=", current, " mode=", decision.mode)
+	s.logger.Info("[SmartActiveSelectionSnapshot] active=", current,
+		" selection_generation=", selectionGeneration,
+		" history_generation=", historyValue64(currentHistory, func(h *adapter.URLTestHistory) uint64 { return h.CheckGeneration }),
+		" success=", historyBool(currentHistory, func(h *adapter.URLTestHistory) bool { return h.Success }),
+		" delay=", getTagDelay(current, history),
+		" health_score=", getTagHealthScore(current, history),
+		" stored_health_score=", historyValue(currentHistory, func(h *adapter.URLTestHistory) int { return h.HealthScore }),
+		" url_test_status=", historyString(currentHistory, func(h *adapter.URLTestHistory) string { return h.URLTestStatus }),
+		" combined_ready=", historyBool(currentHistory, func(h *adapter.URLTestHistory) bool { return h.CombinedReady }),
+		" result_time=", historyTime(currentHistory),
+		" source=", resultSource,
+		" action=", decision.action, " reason=", decisionReason)
 	comparisonTag := decision.to
 	if comparisonTag == "" {
 		for _, tag := range s.topSmartActiveCandidates(history, 0) {
@@ -273,6 +318,7 @@ func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHis
 	s.logSmartActiveComparison(history, decision, current, comparisonTag, decisionReason)
 	for rank, tag := range s.topSmartActiveCandidates(history, 0) {
 		historyItem := history[tag]
+		candidateStatus := strategy.candidateStatus(tag, historyItem, selectionGeneration)
 		s.logger.Info("[SmartActiveRanking] rank=", rank+1, " tag=", tag, " score=", getTagHealthScore(tag, history),
 			" delay=", getTagDelay(tag, history), " success=", getTagSuccess(tag, history),
 			" fresh=", historyItem != nil && !historyItem.IsFromCache,
@@ -303,8 +349,18 @@ func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHis
 			" health_state=", smartActiveState(historyItem),
 			" bucket=", smartActiveBucket(tag, historyItem),
 			" final_ranking_score=", smartActiveFinalRankingScore(tag, historyItem),
-			" exclude_reason=", smartActiveExcludeReason(tag, historyItem),
+			" exclude_reason=", candidateStatus.reason,
 			" selected=", tag == current)
+		s.logger.Info("[SmartActiveSelectionCandidate] active=", current,
+			" tag=", tag, " selection_generation=", selectionGeneration,
+			" history_generation=", historyValue64(historyItem, func(h *adapter.URLTestHistory) uint64 { return h.CheckGeneration }),
+			" success=", historyBool(historyItem, func(h *adapter.URLTestHistory) bool { return h.Success }),
+			" delay=", getTagDelay(tag, history), " health_score=", getTagHealthScore(tag, history),
+			" stored_health_score=", historyValue(historyItem, func(h *adapter.URLTestHistory) int { return h.HealthScore }),
+			" url_test_status=", historyString(historyItem, func(h *adapter.URLTestHistory) string { return h.URLTestStatus }),
+			" combined_ready=", historyBool(historyItem, func(h *adapter.URLTestHistory) bool { return h.CombinedReady }),
+			" result_time=", historyTime(historyItem), " source=", resultSource,
+			" eligible=", candidateStatus.ok, " reject_reason=", candidateStatus.reason)
 	}
 	if decision.action == "switch" {
 		if decision.state == "CRITICAL" {
@@ -319,9 +375,33 @@ func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHis
 			" currentDelay=", getTagDelay(current, history), " candidateDelay=", getTagDelay(comparisonTag, history),
 			" currentScore=", getTagHealthScore(current, history), " candidateScore=", getTagHealthScore(comparisonTag, history))
 	}
+	if current != "" && decision.action != "switch" {
+		if status := strategy.candidateStatus(current, currentHistory, selectionGeneration); !status.ok && !currentCheckInProgress(currentHistory) {
+			s.logger.Warn("[SmartActiveFailedActiveKept] active=", current,
+				" selection_generation=", selectionGeneration,
+				" history_generation=", historyValue64(currentHistory, func(h *adapter.URLTestHistory) uint64 { return h.CheckGeneration }),
+				" source=", resultSource, " reject_reason=", status.reason,
+				" decision_reason=", decisionReason, " compared_candidate=", comparisonTag,
+				" request_full_cycle=pending_if_not_requested")
+		}
+	}
 	for _, tag := range recovered {
 		s.logger.Info("[SmartActiveRecovery] tag=", tag, " restored=true score=", getTagHealthScore(tag, history), " clean_probes=2")
 	}
+}
+
+func historyString(history *adapter.URLTestHistory, value func(*adapter.URLTestHistory) string) string {
+	if history == nil {
+		return ""
+	}
+	return value(history)
+}
+
+func historyTime(history *adapter.URLTestHistory) string {
+	if history == nil || history.Time.IsZero() {
+		return ""
+	}
+	return history.Time.Format(time.RFC3339Nano)
 }
 
 func (s *Balancer) topSmartActiveCandidates(history map[string]*adapter.URLTestHistory, limit int) []string {

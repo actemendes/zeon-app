@@ -60,6 +60,7 @@ func (s *SmartActive) UpdateActiveProbe(tag string, probe *adapter.URLTestHistor
 	}
 	activeHistory := decisionHistory[tag]
 	activeState := smartActiveState(activeHistory)
+	s.rememberDecisionDiagnostics(decisionHistory, generation, "active_probe")
 
 	hardFailure := activeProbeHardFailure(probe)
 	poorQuality := !hardFailure && activeProbePoorQuality(probe)
