@@ -29,6 +29,8 @@ sealed class CoreStatus with _$CoreStatus {
 
       case "Starting":
         return const CoreStarting();
+      case "CoreReady":
+        return const CoreStarting();
       case "Started":
         return const CoreStarted();
       case "Stopping":

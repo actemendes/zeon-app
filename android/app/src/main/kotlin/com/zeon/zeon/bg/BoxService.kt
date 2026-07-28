@@ -115,6 +115,14 @@ class BoxService(
             )
         }
 
+        fun markCoreStarted(generation: Long) {
+            Application.application.sendBroadcast(
+                Intent(Action.SERVICE_CORE_STARTED)
+                    .setPackage(Application.application.packageName)
+                    .putExtra(EXTRA_SESSION_GENERATION, generation),
+            )
+        }
+
     }
 
     var fileDescriptor: ParcelFileDescriptor? = null
@@ -139,6 +147,17 @@ class BoxService(
 
                 Action.SERVICE_REPING -> {
                     rePingServers()
+                }
+
+                Action.SERVICE_CORE_STARTED -> {
+                    val generation = intent.getLongExtra(EXTRA_SESSION_GENERATION, 0L)
+                    if (VpnSessionCoordinator.isCurrent(generation) && generation == sessionGeneration) {
+                        VpnSessionCoordinator.event("core_start_success", generation)
+                        VpnSessionCoordinator.event("command_endpoint_ready", generation)
+                        publishStatus(Status.Started, generation, "flutter_core_start_confirmed")
+                    } else {
+                        VpnSessionCoordinator.stale(generation, "core_started_broadcast")
+                    }
                 }
 
                 PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED -> {
@@ -241,11 +260,43 @@ class BoxService(
                 stopAndAlert(Alert.CreateService, e.message)
                 return
             }
-            publishStatus(Status.Started, generation, "core_setup_complete")
-
-            if (Settings.startCoreAfterStartingService){
-                Mobile.start("","")
+            val startsCoreHere = Settings.startCoreAfterStartingService
+            VpnSessionCoordinator.event("core_start_requested", generation, "owner=android starts_core=$startsCoreHere")
+            val readiness = CoreStartupGate.awaitReady(
+                generation = generation,
+                startCore = if (startsCoreHere) {
+                    { Mobile.start("", "") }
+                } else {
+                    null
+                },
+                endpointReady = ::isCommandEndpointReady,
+            )
+            when (readiness) {
+                CoreStartupGate.Result.Ready -> {
+                    VpnSessionCoordinator.event("command_endpoint_ready", generation)
+                    publishStatus(
+                        if (startsCoreHere) Status.Started else Status.CoreReady,
+                        generation,
+                        if (startsCoreHere) "mobile_start_complete" else "command_endpoint_ready",
+                    )
                 }
+                CoreStartupGate.Result.Superseded -> return
+                is CoreStartupGate.Result.Failed -> {
+                    VpnSessionCoordinator.event(
+                        "core_start_failure",
+                        generation,
+                        "error=${readiness.error.javaClass.simpleName}",
+                        Log.ERROR,
+                    )
+                    stopAndAlert(Alert.StartService, readiness.error.message)
+                    return
+                }
+                CoreStartupGate.Result.Timeout -> {
+                    VpnSessionCoordinator.event("core_start_failure", generation, "error=command_endpoint_timeout", Log.ERROR)
+                    stopAndAlert(Alert.StartService, "command endpoint readiness timeout")
+                    return
+                }
+            }
 //            if (delayStart) {
 //                delay(1000L)
 //            }
@@ -256,7 +307,10 @@ class BoxService(
 
 
             withContext(Dispatchers.Main) {
-                notification.show(activeProfileName, R.string.status_started)
+                notification.show(
+                    activeProfileName,
+                    if (startsCoreHere) R.string.status_started else R.string.status_starting,
+                )
             }
             notification.start()
         } catch (e: Exception) {
@@ -394,6 +448,7 @@ class BoxService(
             ContextCompat.registerReceiver(service, receiver, IntentFilter().apply {
                 addAction(Action.SERVICE_CLOSE)
                 addAction(Action.SERVICE_REPING)
+                addAction(Action.SERVICE_CORE_STARTED)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
                 }
@@ -441,6 +496,16 @@ class BoxService(
         )
         status.postValue(next)
         return true
+    }
+
+    private fun isCommandEndpointReady(): Boolean {
+        return try {
+            val client = GrpcClientProvider.grpcClient.create(CoreClient::class)
+            client.GetSystemInfo().executeBlocking(Empty())
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     internal fun sendNotification(notification: Notification) {

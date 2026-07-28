@@ -118,7 +118,7 @@ android {
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
-        testInstrumentationRunner "android.test.InstrumentationTestRunner"
+        testInstrumentationRunner "test.com.zeon.zeon.bg.VpnTestInstrumentation"
     }
 
     splits {

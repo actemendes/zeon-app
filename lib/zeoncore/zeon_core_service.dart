@@ -994,6 +994,7 @@ class ZeonCoreService with InfraLogger {
                   ConnectionFailure.unexpected("failed to start core ${res.messageType} ${res.message}"),
             );
           }
+          await core.markCoreStarted(generation);
         } on GrpcError catch (e) {
           ref.read(coreRestartSignalProvider.notifier).restart();
           if (isVpnPermissionDenied(e)) {
@@ -1010,6 +1011,7 @@ class ZeonCoreService with InfraLogger {
               await _isBackgroundCoreReachable()) {
             loggy.warning("start bg core transport closed after start, but background core is active: $e");
             _transitionLifecycle(_CoreLifecycleState.started, reason: "start transport closed with active bg");
+            await core.markCoreStarted(generation);
             statusController.add(currentState = const CoreStatus.started());
             return right(unit);
           }
@@ -1161,6 +1163,7 @@ class ZeonCoreService with InfraLogger {
             statusController.add(currentState = const CoreStatus.stopped());
             return left("${res.messageType} ${res.message}");
           }
+          await core.markCoreStarted(generation);
         } on GrpcError catch (e) {
           if (isTunInterfacePermissionDenied(e)) {
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "tun permission denied on restart");
@@ -1179,6 +1182,7 @@ class ZeonCoreService with InfraLogger {
             statusController.add(currentState = const CoreStatus.stopped());
             return left("background core command endpoint is not ready after restart");
           }
+          await core.markCoreStarted(generation);
         } finally {
           await _deleteCoreCurrentConfigSnapshot();
         }

@@ -32,6 +32,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             Stop("stop"),
             Restart("restart"),
             SetSessionGeneration("set_session_generation"),
+            MarkCoreStarted("mark_core_started"),
             AddGrpcClientPublicKey("add_grpc_client_public_key"),
             GetGrpcServerPublicKey("get_grpc_server_public_key"),
 
@@ -178,6 +179,21 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         val args = call.arguments as? Map<*, *>
                         val generation = (args?.get("generation") as Number?)?.toLong() ?: 0L
                         success(VpnSessionCoordinator.accept(generation, "flutter_generation_update"))
+                    }
+                }
+            }
+
+            Trigger.MarkCoreStarted.method -> {
+                scope.launch {
+                    result.runCatching {
+                        val args = call.arguments as? Map<*, *>
+                        val generation = (args?.get("generation") as Number?)?.toLong() ?: 0L
+                        if (!VpnSessionCoordinator.isCurrent(generation)) {
+                            VpnSessionCoordinator.stale(generation, "flutter_mark_core_started")
+                            return@runCatching error(IllegalStateException("stale VPN session generation"))
+                        }
+                        BoxService.markCoreStarted(generation)
+                        success(generation)
                     }
                 }
             }

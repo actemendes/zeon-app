@@ -12,6 +12,7 @@ import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/utils/utils.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface.dart';
 import 'package:zeon/zeoncore/core_interface/mtls_channel_cred.dart';
+import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/generated/v2/hello/hello.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hello/hello_service.pbgrpc.dart';
@@ -142,30 +143,6 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     });
 
     _isBgClientAvailable = true;
-    loggy.info("Waiting for starting core");
-    for (var i = 0; i < 20; i++) {
-      try {
-        final res = await _status.get(timeout: const Duration(seconds: 1));
-
-        switch (res) {
-          case CoreStarted():
-            break;
-          case CoreStopped():
-            if (res.alert != null) {
-              return res;
-            }
-
-          case CoreStopping():
-          // return res;
-          case CoreStarting():
-        }
-        await Future.delayed(const Duration(milliseconds: 200));
-      } on TimeoutException {
-        // just retry
-      }
-    }
-    loggy.info("Waiting for starting core finished");
-
     if (!await waitUntilPort(
       portBack,
       true,
@@ -176,6 +153,13 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     )) {
       await stopMethodChannel();
       return const CoreStatus.stopped(alert: CoreAlert.startService, message: "starting background core...");
+    }
+    if (!await _waitForBackgroundCommandEndpoint(generation)) {
+      await stopMethodChannel();
+      return const CoreStatus.stopped(
+        alert: CoreAlert.startService,
+        message: "background command endpoint readiness timeout",
+      );
     }
     return const CoreStarted();
   }
@@ -226,6 +210,31 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     if (accepted != null && accepted != generation) {
       throw StateError("stale VPN session generation: requested=$generation current=$accepted");
     }
+  }
+
+  @override
+  Future<void> markCoreStarted(int generation) async {
+    if (generation != _sessionGeneration) {
+      throw StateError("cannot mark stale VPN session ready");
+    }
+    await methodChannel.invokeMethod<int>("mark_core_started", {"generation": generation});
+  }
+
+  Future<bool> _waitForBackgroundCommandEndpoint(int generation) async {
+    const maxAttempts = 15;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (generation != _sessionGeneration) return false;
+      try {
+        await bgClient
+            .getSystemInfo(Empty(), options: CallOptions(timeout: const Duration(milliseconds: 800)))
+            .timeout(const Duration(seconds: 1));
+        return true;
+      } catch (error) {
+        if (attempt == maxAttempts) return false;
+        await Future<void>.delayed(Duration(milliseconds: min(1000, 100 + attempt * 80)));
+      }
+    }
+    return false;
   }
 
   bool _isCurrentEvent(dynamic event) {
