@@ -33,6 +33,7 @@ import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/zeoncore/session_generation.dart';
+import 'package:zeon/zeoncore/vpn_diagnostics.dart';
 
 enum _CoreLifecycleState { stopped, starting, started, stopping }
 
@@ -77,7 +78,13 @@ class ZeonCoreService with InfraLogger {
   int _stoppingStatusWatchdogGeneration = 0;
   late final SessionGenerationGate _sessionGeneration = SessionGenerationGate(
     onStale: (stale, current, source) {
-      loggy.warning("event=stale_callback_ignored generation=$stale current_generation=$current source=$source");
+      loggy.warning(
+        vpnDiagnosticEvent(
+          "stale_callback_ignored",
+          stale,
+          details: "current_generation=$current source=$source",
+        ),
+      );
     },
   );
   Future<void> _lifecycleQueueTail = Future<void>.value();
@@ -910,6 +917,7 @@ class ZeonCoreService with InfraLogger {
   TaskEither<ConnectionFailure, Unit> start(String path, String name, bool disableMemoryLimit) {
     return TaskEither(() {
       final generation = _sessionGeneration.next();
+      loggy.info(vpnDiagnosticEvent("vpn_session_start", generation));
       return _enqueueLifecycle("start", () async {
         await core.setSessionGeneration(generation);
         if (_useMockCore) {
@@ -974,6 +982,7 @@ class ZeonCoreService with InfraLogger {
         }
 
         try {
+          loggy.info(vpnDiagnosticEvent("core_start_requested", generation, details: "owner=flutter"));
           final res = await core.bgClient.start(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
           );
@@ -981,7 +990,21 @@ class ZeonCoreService with InfraLogger {
             return left(const ConnectionFailure.unexpected("start superseded by a newer VPN session"));
           }
           ref.read(coreRestartSignalProvider.notifier).restart();
-          if (res.messageType != MessageType.ALREADY_STARTED && res.messageType != MessageType.EMPTY) {
+          if (res.messageType == MessageType.ALREADY_STARTED) {
+            loggy.error(vpnDiagnosticEvent("core_already_started_conflict", generation));
+            await core.stop(generation: generation);
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "duplicate native core");
+            statusController.add(currentState = const CoreStatus.stopped());
+            return left(const ConnectionFailure.unexpected("core is already started by another session"));
+          }
+          if (res.messageType != MessageType.EMPTY) {
+            loggy.error(
+              vpnDiagnosticEvent(
+                "core_start_failure",
+                generation,
+                details: "error=core_response_${res.messageType.name}",
+              ),
+            );
             final alert = isVpnPermissionDenied(res.message) ? CoreAlert.requestVPNPermission : CoreAlert.startFailed;
             currentState = CoreStatus.stopped(
               alert: alert,
@@ -995,7 +1018,16 @@ class ZeonCoreService with InfraLogger {
             );
           }
           await core.markCoreStarted(generation);
+          loggy.info(vpnDiagnosticEvent("core_start_success", generation));
+          await _logRuntimeIndicators(generation, "core_start_success");
         } on GrpcError catch (e) {
+          loggy.error(
+            vpnDiagnosticEvent(
+              "grpc_disconnect",
+              generation,
+              details: "source=core_start code=${e.code}",
+            ),
+          );
           ref.read(coreRestartSignalProvider.notifier).restart();
           if (isVpnPermissionDenied(e)) {
             final message = e.message ?? e.toString();
@@ -1016,6 +1048,13 @@ class ZeonCoreService with InfraLogger {
             return right(unit);
           }
           _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc error on start");
+          loggy.error(
+            vpnDiagnosticEvent(
+              "terminal_failure",
+              generation,
+              details: "phase=core_start error=grpc_${e.code}",
+            ),
+          );
           if (_isMissingWindowsTunPrivilege()) {
             return left(const ConnectionFailure.missingPrivilege());
           }
@@ -1087,6 +1126,7 @@ class ZeonCoreService with InfraLogger {
 
         var errMsg = "";
         try {
+          await _logRuntimeIndicators(generation, "before_stop");
           await _closeSessionListeners(generation);
           await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
         } on GrpcError catch (e) {
@@ -1585,6 +1625,13 @@ class ZeonCoreService with InfraLogger {
           })
           .asyncMap((event) => _applyCoreStatusFromListener(key, CoreStatus.fromCoreInfo(event), listenerGeneration)),
       onDone: () {
+        loggy.warning(
+          vpnDiagnosticEvent(
+            "grpc_disconnect",
+            listenerGeneration,
+            details: "source=${key}_status outcome=done",
+          ),
+        );
         loggy.warning("status listener closed [$key], scheduling reconnect");
         _recoverStatusAfterListenerClose(key, null);
         if (_sessionGeneration.isCurrent(listenerGeneration, source: "status_listener_done[$key]")) {
@@ -1592,6 +1639,13 @@ class ZeonCoreService with InfraLogger {
         }
       },
       onError: (error) {
+        loggy.warning(
+          vpnDiagnosticEvent(
+            "grpc_disconnect",
+            listenerGeneration,
+            details: "source=${key}_status outcome=error",
+          ),
+        );
         if (_isExpectedLifecycleGrpcClose(error)) {
           loggy.warning("Stream closed in $listenKey during lifecycle transition: $error");
         } else {
@@ -1604,6 +1658,7 @@ class ZeonCoreService with InfraLogger {
   }
 
   Future<void> startListeningLogs(String key, CoreClient cc) async {
+    final listenerGeneration = _sessionGeneration.current;
     final coreLogLevel = getCoreLogLevel(config_log_level.LogLevel.warn);
     final listenKey = "${key}LogListener";
     await listenSingle<LogMessage>(
@@ -1621,15 +1676,44 @@ class ZeonCoreService with InfraLogger {
           final logLevel = _coreLogLevelForAppLog(safeEvent);
           safeEvent.message.split('\n').forEach((line) {
             loggy.log(logLevel, line);
+            if (line.contains("[SelectorSwitch]")) {
+              final details = selectorDiagnosticDetails(line);
+              loggy.info(vpnDiagnosticEvent("selector_switch", listenerGeneration, details: details));
+              if (details.contains("interrupt_external=true")) {
+                loggy.warning(vpnDiagnosticEvent("selector_interrupt", listenerGeneration, details: details));
+              }
+            } else if (line.contains("[SelectorStaleResult]")) {
+              loggy.warning(
+                vpnDiagnosticEvent(
+                  "stale_callback_ignored",
+                  listenerGeneration,
+                  details: "source=core_selector",
+                ),
+              );
+            }
           });
           return safeEvent;
         });
       },
       onDone: () {
+        loggy.warning(
+          vpnDiagnosticEvent(
+            "grpc_disconnect",
+            listenerGeneration,
+            details: "source=${key}_log outcome=done",
+          ),
+        );
         loggy.warning("log listener closed [$key], scheduling reconnect");
         _scheduleListenerReconnect(listenKey, () => startListeningLogs(key, cc));
       },
       onError: (error) {
+        loggy.warning(
+          vpnDiagnosticEvent(
+            "grpc_disconnect",
+            listenerGeneration,
+            details: "source=${key}_log outcome=error",
+          ),
+        );
         if (_isExpectedLifecycleGrpcClose(error)) {
           loggy.warning("Stream closed in $listenKey during lifecycle transition: $error");
         } else {
@@ -1697,7 +1781,7 @@ class ZeonCoreService with InfraLogger {
   }
 
   Future<void> _closeSessionListeners(int generation) async {
-    loggy.debug("session_close_requested generation=$generation owner=flutter_listeners");
+    loggy.debug(vpnDiagnosticEvent("session_close_requested", generation, details: "owner=flutter_listeners"));
     final keys = subscriptions.keys.toList(growable: false);
     for (final key in keys) {
       final subscription = subscriptions.remove(key);
@@ -1706,7 +1790,26 @@ class ZeonCoreService with InfraLogger {
     _listenerReconnectAttempt.clear();
     _statusListenerRecoveryByKey.clear();
     _stoppingStatusWatchdogGeneration++;
-    loggy.debug("session_close_completed generation=$generation owner=flutter_listeners");
+    loggy.debug(vpnDiagnosticEvent("session_close_completed", generation, details: "owner=flutter_listeners"));
+  }
+
+  Future<void> _logRuntimeIndicators(int generation, String source) async {
+    try {
+      final info = await core.bgClient
+          .getSystemInfo(Empty())
+          .timeout(const Duration(milliseconds: 800));
+      loggy.info(
+        vpnDiagnosticEvent(
+          "runtime_indicators",
+          generation,
+          details:
+              "source=$source memory_bytes=${info.memory} goroutines=${info.goroutines} "
+              "connections_out=${info.connectionsOut}",
+        ),
+      );
+    } catch (_) {
+      // Runtime indicators are diagnostic-only and must never block lifecycle.
+    }
   }
 
   Future<StreamSubscription<T>?> listenSingle<T>(

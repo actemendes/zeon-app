@@ -27,6 +27,14 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
 
     private val service = BoxService(this, this)
 
+    override fun onCreate() {
+        super.onCreate()
+        VpnSessionCoordinator.event(
+            "vpn_service_create",
+            VpnSessionCoordinator.current(),
+        )
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) =
         service.onStartCommand(intent)
 
@@ -39,6 +47,10 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     override fun onDestroy() {
+        VpnSessionCoordinator.event(
+            "vpn_service_destroy",
+            service.currentSessionGeneration(),
+        )
         try {
             service.onDestroy()
         } finally {

@@ -446,6 +446,7 @@ class BoxService(
         status.value = Status.Starting
         val session = ActiveSession(generation, platformInterface, tunOwner)
         activeSession = session
+        VpnSessionCoordinator.event("vpn_session_start", generation, "owner=android")
 
         if (!receiverRegistered) {
             ContextCompat.registerReceiver(service, receiver, IntentFilter().apply {
