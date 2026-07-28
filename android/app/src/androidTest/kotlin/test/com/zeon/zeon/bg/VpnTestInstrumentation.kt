@@ -18,6 +18,11 @@ class VpnTestInstrumentation : Instrumentation() {
         val body: suspend () -> Unit,
     )
 
+    override fun onCreate(arguments: Bundle?) {
+        super.onCreate(arguments)
+        start()
+    }
+
     override fun onStart() {
         val generationTests = VpnSessionCoordinatorInstrumentedTest()
         val startupTests = CoreStartupGateInstrumentedTest()
