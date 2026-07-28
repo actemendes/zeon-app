@@ -140,6 +140,10 @@ func (s *Balancer) runScheduledActiveProbe(tag string) {
 func (s *Balancer) applyActiveProbe(result monitoring.ActiveProbeResult) smartActiveProbeUpdate {
 	s.strategyUpdate.Lock()
 	defer s.strategyUpdate.Unlock()
+	if !sessionGenerationMatches(s.sessionGeneration) {
+		s.logger.Warn("[SelectorStaleResult] session_generation=", s.sessionGeneration, " source=active_probe action=ignored")
+		return smartActiveProbeUpdate{}
+	}
 
 	strategy, ok := s.strategyFn.(*SmartActive)
 	if !ok || strategy.Now() != result.OutboundTag {
@@ -210,7 +214,7 @@ func (s *Balancer) applyActiveProbe(result monitoring.ActiveProbeResult) smartAc
 			"[ActiveServerChanged] group=%s active=%s",
 			s.Tag(), s.strategyFn.Now(),
 		))
-		s.interruptGroup.Interrupt(s.interruptExternalConnections)
+		s.applySwitchInterruption(strategy.switchInterruptionPolicy(), decision.from, strategy.Now())
 		s.signalActiveMonitor()
 	}
 	if update.refreshCandidates {

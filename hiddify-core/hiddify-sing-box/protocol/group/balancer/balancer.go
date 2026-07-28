@@ -3,6 +3,7 @@ package balancer
 import (
 	"context"
 	"net"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -52,6 +53,7 @@ type Balancer struct {
 	strategyFn                   Strategy
 	options                      option.BalancerOutboundOptions
 	interruptExternalConnections bool
+	sessionGeneration            string
 
 	monitor               *monitoring.OutboundMonitoring
 	smartActiveDebugFault smartActiveHistoryFault
@@ -83,6 +85,7 @@ func NewLoadBalance(ctx context.Context, router adapter.Router, logger log.Conte
 		tags:                         options.Outbounds,
 		tolerance:                    options.Tolerance,
 		interruptExternalConnections: options.InterruptExistConnections,
+		sessionGeneration:            os.Getenv("ZEON_SESSION_GENERATION"),
 		options:                      options,
 		interruptGroup:               interrupt.NewGroup(),
 		close:                        make(chan struct{}),
@@ -195,11 +198,16 @@ func (s *Balancer) worker() {
 func (s *Balancer) applyMonitoringUpdate(manualRefresh bool, batchGeneration uint64) {
 	s.strategyUpdate.Lock()
 	defer s.strategyUpdate.Unlock()
+	if !sessionGenerationMatches(s.sessionGeneration) {
+		s.logger.Warn("[SelectorStaleResult] session_generation=", s.sessionGeneration, " source=monitoring_update action=ignored")
+		return
+	}
 
 	outbounds := s.monitor.OutboundsRankingHistory(s.Tag())
 	if s.smartActiveDebugFault != nil && s.smartActiveDebugFault.Apply(s.strategyFn.Now(), outbounds) {
 		s.logger.Warn("[SmartActiveDebugFault] applied to active=", s.strategyFn.Now())
 	}
+	previous := s.strategyFn.Now()
 	changed := false
 	if manualRefresh {
 		if strategy, ok := s.strategyFn.(*SmartActive); ok {
@@ -223,7 +231,13 @@ func (s *Balancer) applyMonitoringUpdate(manualRefresh bool, batchGeneration uin
 	if changed {
 		s.logAutoDecision(outbounds)
 		s.logger.Warn("[ActiveServerChanged] group=", s.Tag(), " active=", s.strategyFn.Now())
-		s.interruptGroup.Interrupt(s.interruptExternalConnections)
+		policy := preserveSwitchPolicy("regular", s.options.Strategy)
+		if strategy, ok := s.strategyFn.(*SmartActive); ok {
+			policy = strategy.switchInterruptionPolicy()
+		} else if s.options.Strategy == StrategyLowestDelay {
+			policy = preserveSwitchPolicy("better_score", "lowest_delay_update")
+		}
+		s.applySwitchInterruption(policy, previous, s.strategyFn.Now())
 		s.signalActiveMonitor()
 	}
 }

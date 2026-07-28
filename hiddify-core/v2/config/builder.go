@@ -56,6 +56,13 @@ const (
 	InboundDirectTag = "dns-in"
 
 	RUAdListHardcodedRuleSetTag = "ru-adlist-hardcoded"
+
+	// Group interruption is a capability, not a blanket switch behavior.
+	// Manual/metric switches preserve user TCP/UDP sessions. Smart Active is
+	// granted the capability only so its runtime policy can use it for a
+	// confirmed, outbound-specific emergency.
+	PreserveExistingUserConnections  = false
+	AllowConfirmedEmergencyInterrupt = true
 )
 
 var (
@@ -355,7 +362,7 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			// IdleTimeout: badoption.Duration(opt.URLTestIdleTimeout.Duration()),
 			Tolerance: 1,
 			// IdleTimeout:               badoption.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
-			InterruptExistConnections: true,
+			InterruptExistConnections: PreserveExistingUserConnections,
 		},
 	}
 
@@ -376,7 +383,7 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			// IdleTimeout: badoption.Duration(opt.URLTestIdleTimeout.Duration()),
 			Tolerance: 1,
 			// IdleTimeout:               badoption.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
-			InterruptExistConnections:        true,
+			InterruptExistConnections:        balancerStrategy == "smart-active-auto" && AllowConfirmedEmergencyInterrupt,
 			SmartActiveDebugForceStatus:      opt.SmartActiveDebugForceStatus,
 			SmartActiveDebugForceError:       opt.SmartActiveDebugForceError,
 			SmartActiveDebugForceDegradation: opt.SmartActiveDebugForceDegradation,
@@ -413,7 +420,7 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 		Options: &option.SelectorOutboundOptions{
 			Outbounds:                 selectorTags,
 			Default:                   defaultSelect,
-			InterruptExistConnections: true,
+			InterruptExistConnections: PreserveExistingUserConnections,
 		},
 	}
 	outbounds = append([]option.Outbound{selector}, outbounds...)

@@ -2,7 +2,10 @@ package group
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net"
+	"os"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -43,6 +46,7 @@ type Selector struct {
 	selected                     common.TypedValue[adapter.Outbound]
 	interruptGroup               *interrupt.Group
 	interruptExternalConnections bool
+	sessionGeneration            string
 }
 
 func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.SelectorOutboundOptions) (adapter.Outbound, error) {
@@ -57,6 +61,7 @@ func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextL
 		outbounds:                    make(map[string]adapter.Outbound),
 		interruptGroup:               interrupt.NewGroup(),
 		interruptExternalConnections: options.InterruptExistConnections,
+		sessionGeneration:            os.Getenv("ZEON_SESSION_GENERATION"),
 	}
 	if len(outbound.tags) == 0 {
 		return nil, E.New("missing tags")
@@ -126,12 +131,17 @@ func (s *Selector) All() []string {
 
 func (s *Selector) SelectOutbound(tag string) bool {
 	defer s.pingSelected()
+	if !selectorSessionGenerationMatches(s.sessionGeneration) {
+		s.logger.Warn("[SelectorStaleResult] session_generation=", s.sessionGeneration, " source=manual_select action=ignored")
+		return false
+	}
 	detour, loaded := s.outbounds[tag]
 	if !loaded {
 		return false
 	}
 
-	if s.selected.Swap(detour) == detour {
+	previous := s.selected.Swap(detour)
+	if previous == detour {
 		return true
 	}
 	if s.Tag() != "" {
@@ -144,8 +154,37 @@ func (s *Selector) SelectOutbound(tag string) bool {
 		}
 	}
 
-	s.interruptGroup.Interrupt(s.interruptExternalConnections)
+	result := s.interruptGroup.Interrupt(false)
+	previousTag := ""
+	if previous != nil {
+		previousTag = previous.Tag()
+	}
+	s.logger.Warn(
+		"[SelectorSwitch] session_generation=", s.sessionGeneration,
+		" type=manual reason=user_reselect",
+		" old_id=", selectorOpaqueOutboundID(previousTag),
+		" new_id=", selectorOpaqueOutboundID(detour.Tag()),
+		" interrupt_external=false",
+		" configured_interrupt_external=", s.interruptExternalConnections,
+		" closed_tcp=", result.ClosedTCP,
+		" closed_udp=", result.ClosedUDP,
+		" closed_external=", result.ClosedExternal,
+		" full_core_restart=false",
+	)
 	return true
+}
+
+func selectorOpaqueOutboundID(tag string) string {
+	if tag == "" {
+		return "none"
+	}
+	sum := sha256.Sum256([]byte(tag))
+	return hex.EncodeToString(sum[:6])
+}
+
+func selectorSessionGenerationMatches(captured string) bool {
+	current := os.Getenv("ZEON_SESSION_GENERATION")
+	return captured == "" || current == "" || captured == current
 }
 func (s *Selector) pingSelected() {
 	selected := s.selected.Load()

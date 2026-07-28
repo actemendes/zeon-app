@@ -2,6 +2,7 @@ package com.zeon.zeon.bg
 
 import android.os.Process
 import android.os.SystemClock
+import android.system.Os
 import android.util.Log
 import java.util.concurrent.atomic.AtomicLong
 
@@ -20,6 +21,7 @@ object VpnSessionCoordinator {
 
     fun next(reason: String): Long {
         val generation = sequence.incrementAndGet()
+        publishToNativeProcess(generation)
         event("vpn_session_generation", generation, "reason=$reason")
         return generation
     }
@@ -33,6 +35,7 @@ object VpnSessionCoordinator {
                 return current
             }
             if (requested == current || sequence.compareAndSet(current, requested)) {
+                publishToNativeProcess(requested)
                 event("vpn_session_generation", requested, "reason=$reason")
                 return requested
             }
@@ -57,5 +60,17 @@ object VpnSessionCoordinator {
             TAG,
             "event=$name monotonic_ms=${SystemClock.elapsedRealtime()} pid=${Process.myPid()} generation=$generation$suffix",
         )
+    }
+
+    private fun publishToNativeProcess(generation: Long) {
+        runCatching { Os.setenv("ZEON_SESSION_GENERATION", generation.toString(), true) }
+            .onFailure {
+                event(
+                    "terminal_failure",
+                    generation,
+                    "phase=session_generation_export error=${it.javaClass.simpleName}",
+                    Log.ERROR,
+                )
+            }
     }
 }
