@@ -13,7 +13,13 @@ class ProxyService :
 
     override fun onBind(intent: Intent) = service.onBind(intent)
 
-    override fun onDestroy() = service.onDestroy()
+    override fun onDestroy() {
+        try {
+            service.onDestroy()
+        } finally {
+            super.onDestroy()
+        }
+    }
 
     override fun sendNotification(notification: Notification) = service.sendNotification(notification)
 }

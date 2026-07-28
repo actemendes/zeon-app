@@ -22,6 +22,7 @@ class VpnTestInstrumentation : Instrumentation() {
         val generationTests = VpnSessionCoordinatorInstrumentedTest()
         val startupTests = CoreStartupGateInstrumentedTest()
         val tunTests = TunDescriptorOwnerInstrumentedTest()
+        val activeSessionTests = ActiveSessionInstrumentedTest()
         val tests = listOf(
             TestCase(generationTests.javaClass.name, "generationIsStrictlyMonotonic") {
                 generationTests.generationIsStrictlyMonotonic()
@@ -58,6 +59,9 @@ class VpnTestInstrumentation : Instrumentation() {
             },
             TestCase(tunTests.javaClass.name, "rapidRestartIsIdempotent") {
                 tunTests.rapidRestartIsIdempotent()
+            },
+            TestCase(activeSessionTests.javaClass.name, "teardownOrderIsStableAndCloseIsIdempotent") {
+                activeSessionTests.teardownOrderIsStableAndCloseIsIdempotent()
             },
         )
 

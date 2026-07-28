@@ -1087,6 +1087,7 @@ class ZeonCoreService with InfraLogger {
 
         var errMsg = "";
         try {
+          await _closeSessionListeners(generation);
           await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
         } on GrpcError catch (e) {
           if (!_isTransientGrpcTransportClose(e)) {
@@ -1145,6 +1146,7 @@ class ZeonCoreService with InfraLogger {
         statusController.add(currentState = const CoreStatus.stopping());
 
         try {
+          await _closeSessionListeners(generation);
           final optionsResult = await _applyLatestCoreOptionsToBackground("restart");
           if (optionsResult.isLeft()) {
             final error = optionsResult.getLeft().toNullable() ?? "failed to apply core options";
@@ -1189,6 +1191,8 @@ class ZeonCoreService with InfraLogger {
 
         _transitionLifecycle(_CoreLifecycleState.starting, reason: "restart in progress");
         statusController.add(currentState = const CoreStatus.starting());
+        await startListeningLogs("bg", core.bgClient);
+        await startListeningStatus("bg", core.bgClient, generation: generation);
         _transitionLifecycle(_CoreLifecycleState.started, reason: "restart complete");
         statusController.add(currentState = const CoreStatus.started());
         ref.read(coreRestartSignalProvider.notifier).restart();
@@ -1690,6 +1694,19 @@ class ZeonCoreService with InfraLogger {
       subscriptions.remove(k);
       _listenerReconnectAttempt.remove(k);
     }
+  }
+
+  Future<void> _closeSessionListeners(int generation) async {
+    loggy.debug("session_close_requested generation=$generation owner=flutter_listeners");
+    final keys = subscriptions.keys.toList(growable: false);
+    for (final key in keys) {
+      final subscription = subscriptions.remove(key);
+      await subscription?.cancel();
+    }
+    _listenerReconnectAttempt.clear();
+    _statusListenerRecoveryByKey.clear();
+    _stoppingStatusWatchdogGeneration++;
+    loggy.debug("session_close_completed generation=$generation owner=flutter_listeners");
   }
 
   Future<StreamSubscription<T>?> listenSingle<T>(

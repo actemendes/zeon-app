@@ -50,6 +50,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 class BoxService(
@@ -127,11 +128,12 @@ class BoxService(
     @Volatile
     private var sessionGeneration: Long = 0L
     private val tunOwner = TunDescriptorOwner()
+    @Volatile
+    private var activeSession: ActiveSession? = null
     private val status = MutableLiveData(Status.Stopped)
     private val binder = ServiceBinder(status) { sessionGeneration }
     private val notification = ServiceNotification(status, service)
 //    private var boxService: BoxService? = null
-    private var commandServer: CommandServer? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var receiverRegistered = false
@@ -173,7 +175,12 @@ class BoxService(
      */
     private fun rePingServers() {
         val generation = sessionGeneration
-        serviceScope.launch {
+        val session = activeSession
+        if (session == null || session.generation != generation || !session.acceptsOperations()) {
+            VpnSessionCoordinator.stale(generation, "manual_refresh_without_active_session")
+            return
+        }
+        session.scope.launch {
             if (!VpnSessionCoordinator.isCurrent(generation)) {
                 VpnSessionCoordinator.stale(generation, "manual_refresh_start")
                 return@launch
@@ -215,6 +222,11 @@ class BoxService(
     private var activeProfileName = ""
     private suspend fun startService(generation: Long) {
         try {
+            val session = activeSession
+            if (session == null || session.generation != generation || !session.acceptsOperations()) {
+                VpnSessionCoordinator.stale(generation, "start_service_without_active_session")
+                return
+            }
             if (!publishStatus(Status.Starting, generation, "start_service")) return
             Log.d(TAG, "starting service")
             withContext(Dispatchers.Main) {
@@ -324,12 +336,16 @@ class BoxService(
     }
 
     suspend fun serviceReload0() {
-        val previousGeneration = sessionGeneration
+        val previousSession = activeSession
         val generation = VpnSessionCoordinator.next("service_reload")
         sessionGeneration = generation
         notification.close()
+        if (previousSession != null) {
+            closeSession(previousSession, "service_reload")
+        }
+        val session = ActiveSession(generation, platformInterface, tunOwner)
+        activeSession = session
         publishStatus(Status.Starting, generation, "service_reload")
-        tunOwner.close(previousGeneration, "service_reload")
         
 //        boxService?.apply {
 //            runCatching {
@@ -339,10 +355,11 @@ class BoxService(
 //            }
 //            Seq.destroyRef(refnum)
 //        }
-        Mobile.stop()
 //        boxService = null
-        
+
+        session.scope.launch {
             startService(generation)
+        }
         
     }
 
@@ -371,9 +388,9 @@ class BoxService(
     }
 
     private fun stopService(generation: Long = VpnSessionCoordinator.next("box_service_stop_internal")) {
-        val closingGeneration = sessionGeneration
+        val closingSession = activeSession
         sessionGeneration = VpnSessionCoordinator.accept(generation, "stop_service")
-        if (status.value == Status.Stopped) return
+        if (status.value == Status.Stopped && closingSession == null) return
         status.value = Status.Stopping
         if (receiverRegistered) {
             service.unregisterReceiver(receiver)
@@ -381,29 +398,11 @@ class BoxService(
         }
         notification.close()
         serviceScope.launch {
-            tunOwner.close(closingGeneration, "stop")
-//            commandServer?.setService(null)
-//            boxService?.apply {
-//                runCatching {
-//                    close()
-//                }.onFailure {
-//                    writeLog("service: error when closing: $it")
-//                }
-//                //Seq.destroyRef(refnum)
-//            }
-
-//            boxService = null
-//            Libbox.registerLocalDNSTransport(null)
-            DefaultNetworkMonitor.stop()
-
-//            commandServer?.apply {
-//                close()
-//                Seq.destroyRef(refnum)
-//            }
-//            commandServer = null
+            if (closingSession != null) {
+                closeSession(closingSession, "stop")
+            }
             Settings.startedByUser = false
             withContext(Dispatchers.Main) {
-                Mobile.close(4L)
                 publishStatus(Status.Stopped, sessionGeneration, "stop_complete")
                 service.stopSelf()
             }
@@ -413,7 +412,7 @@ class BoxService(
 
     private suspend fun stopAndAlert(type: Alert, message: String? = null) {
         Settings.startedByUser = false
-        tunOwner.close(sessionGeneration, "failed_start")
+        activeSession?.let { closeSession(it, "failed_start") }
         withContext(Dispatchers.Main) {
             if (receiverRegistered) {
                 service.unregisterReceiver(receiver)
@@ -435,8 +434,18 @@ class BoxService(
             return Service.START_NOT_STICKY
         }
         sessionGeneration = generation
-        if (status.value != Status.Stopped) return Service.START_NOT_STICKY
+        if (status.value != Status.Stopped || activeSession?.acceptsOperations() == true) {
+            VpnSessionCoordinator.event(
+                "core_already_started_conflict",
+                generation,
+                "status=${status.value}",
+                Log.ERROR,
+            )
+            return Service.START_NOT_STICKY
+        }
         status.value = Status.Starting
+        val session = ActiveSession(generation, platformInterface, tunOwner)
+        activeSession = session
 
         if (!receiverRegistered) {
             ContextCompat.registerReceiver(service, receiver, IntentFilter().apply {
@@ -450,7 +459,7 @@ class BoxService(
             receiverRegistered = true
         }
 
-        serviceScope.launch {
+        session.scope.launch {
             Settings.startedByUser = true
             initialize()
 //            try {
@@ -469,6 +478,29 @@ class BoxService(
     }
 
     fun onDestroy() {
+        val closingSession = activeSession
+        if (closingSession != null) {
+            val destroyGeneration = VpnSessionCoordinator.next("service_destroy")
+            sessionGeneration = destroyGeneration
+            runBlocking {
+                val completed = withTimeoutOrNull(12_000) {
+                    closeSession(closingSession, "on_destroy")
+                    true
+                } ?: false
+                if (!completed) {
+                    VpnSessionCoordinator.event(
+                        "terminal_failure",
+                        closingSession.generation,
+                        "phase=on_destroy error=teardown_timeout",
+                        Log.ERROR,
+                    )
+                }
+            }
+        }
+        if (receiverRegistered) {
+            runCatching { service.unregisterReceiver(receiver) }
+            receiverRegistered = false
+        }
         binder.close()
         serviceScope.cancel()
         mainScope.cancel()
@@ -484,7 +516,46 @@ class BoxService(
         generation: Long,
         descriptor: android.os.ParcelFileDescriptor,
         validate: () -> Unit,
-    ): Int = tunOwner.open(generation, descriptor, validate)
+    ): Int {
+        val session = activeSession
+        if (session == null || session.generation != generation || !session.acceptsOperations()) {
+            descriptor.close()
+            VpnSessionCoordinator.stale(generation, "open_tun_without_active_session")
+            error("VPN session is not accepting TUN requests")
+        }
+        return tunOwner.open(generation, descriptor, validate)
+    }
+
+    private suspend fun closeSession(session: ActiveSession, reason: String) {
+        session.close(
+            reason = reason,
+            closeCommandClientsAndListeners = {
+                // Flutter owns gRPC client objects; Android owns the endpoint and
+                // removes all native callbacks before stopping it.
+                DefaultNetworkMonitor.setListener(null)
+            },
+            stopCore = {
+                withContext(Dispatchers.Main) {
+                    Mobile.close(4L)
+                }
+            },
+            closeCommandServer = { server ->
+                server?.let {
+                    runCatching { it.close() }
+                    runCatching { Seq.destroyRef(it.refnum) }
+                }
+            },
+            closePlatform = {
+                DefaultNetworkMonitor.setListener(null)
+            },
+            clearNetwork = {
+                DefaultNetworkMonitor.stop()
+                if (activeSession === session) {
+                    activeSession = null
+                }
+            },
+        )
+    }
 
     private fun publishStatus(next: Status, generation: Long, source: String): Boolean {
         if (!VpnSessionCoordinator.isCurrent(generation) || generation != sessionGeneration) {
