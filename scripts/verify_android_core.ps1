@@ -76,6 +76,11 @@ $resolvedManifest = if ([System.IO.Path]::IsPathRooted($ManifestPath)) {
     (Resolve-Path -LiteralPath (Join-Path $repoRoot $ManifestPath)).Path
 }
 $manifest = Get-Content -LiteralPath $resolvedManifest -Raw | ConvertFrom-Json
+$apkManifest = if ($null -ne $manifest.PSObject.Properties["apk"]) {
+    $manifest.apk
+} else {
+    $manifest.baseline_apk
+}
 $expectedByAbi = @{}
 foreach ($abi in $manifest.aar.abis) {
     $expectedByAbi[$abi.name] = $abi
@@ -106,10 +111,10 @@ foreach ($entry in $aarEntries) {
 }
 
 $resolvedApk = (Resolve-Path -LiteralPath $ApkPath).Path
-if (-not $SkipApkHash -and $manifest.baseline_apk.sha256) {
+if (-not $SkipApkHash -and $apkManifest.sha256) {
     $actualApkHash = Get-FileSha256Hex -Path $resolvedApk
-    if ($actualApkHash -ne $manifest.baseline_apk.sha256.ToUpperInvariant()) {
-        throw "APK SHA-256 mismatch: expected $($manifest.baseline_apk.sha256), got $actualApkHash"
+    if ($actualApkHash -ne $apkManifest.sha256.ToUpperInvariant()) {
+        throw "APK SHA-256 mismatch: expected $($apkManifest.sha256), got $actualApkHash"
     }
 }
 
@@ -117,7 +122,7 @@ $apkEntries = @(Get-CoreEntries -ArchivePath $resolvedApk -Kind apk)
 if ($apkEntries.Count -eq 0) {
     throw "APK does not contain libhiddify-core.so"
 }
-$requiredAbis = @($manifest.baseline_apk.abis)
+$requiredAbis = @($apkManifest.abis)
 foreach ($requiredAbi in $requiredAbis) {
     if ($requiredAbi -notin $apkEntries.Abi) {
         throw "APK is missing required ABI: $requiredAbi"

@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-07-28T20:30:00Z",
+  "purpose": "Stage-1 stabilization artifact. Core and dependency versions are unchanged from the pre-stabilization baseline.",
+  "application": {
+    "name": "zeon",
+    "version": "1.3.0+103001",
+    "apk_source_commit": "f6650c782c72d7e7260827b2f8f1eb9d3d95cd76",
+    "source_dirty": true,
+    "dirty_state": [
+      "untracked:android/app/src/main/assets/ (pre-existing user-owned file, excluded from all commits and artifacts)"
+    ]
+  },
+  "core_source": {
+    "build_source_commit": "31c5987477d3cd02a099c2c0c01c3a07da05ce69",
+    "hiddify_core_upstream_commit": "c9d6f0f00b2eda34e4fb71863e4e0a62b3e931a0",
+    "hiddify_core_tree": "2c50fe96981ba2e3bb6e2a2b71ddbe97b1ed354d",
+    "hiddify_sing_box_commit": "0a02b7729f6a211436bb8bdcd8696c283eb27767",
+    "hiddify_sing_box_tree": "70dc263d60846a4fc66f357b7b227941d4d54d2c",
+    "sing_box_module_version": "v1.13.0",
+    "sing_box_replace": "./hiddify-sing-box",
+    "dependency_files_changed_since_baseline": false
+  },
+  "toolchain": {
+    "go_version": "go1.25.6",
+    "gomobile_version": "v0.1.11",
+    "android_ndk": "28.2.13676358",
+    "android_compile_sdk": 36,
+    "android_target_sdk": 36,
+    "android_min_api_for_gomobile": 21,
+    "build_tags": [
+      "with_gvisor",
+      "with_quic",
+      "with_wireguard",
+      "with_utls",
+      "with_clash_api",
+      "with_grpc",
+      "with_awg",
+      "tfogo_checklinkname0",
+      "with_naive_outbound",
+      "with_conntrack"
+    ]
+  },
+  "embedded_metadata": {
+    "java_api": "com.hiddify.core.mobile.Mobile.getBuildMetadata()",
+    "zeon_revision": "31c5987477d3cd02a099c2c0c01c3a07da05ce69",
+    "hiddify_core_tree": "2c50fe96981ba2e3bb6e2a2b71ddbe97b1ed354d",
+    "hiddify_sing_box_tree": "70dc263d60846a4fc66f357b7b227941d4d54d2c",
+    "sing_box_version": "1.13.0-zeon-31c5987477d3cd02a099c2c0c01c3a07da05ce69"
+  },
+  "aar": {
+    "repository_path": "android/app/libs/hiddify-core.aar",
+    "artifact_path": "out/stabilization/31c5987477d3cd02a099c2c0c01c3a07da05ce69/hiddify-core.aar",
+    "sha256": "04453FE46DDEC27DB8A4B9F859FB084D19D5F9121E709D3457BD52BABD8359E5",
+    "size": 103233041,
+    "abis": [
+      {
+        "name": "arm64-v8a",
+        "so_sha256": "B98B2FB8D9758009F1D9C61887C43C9EB57AADE9950ED2843641E4D07DF8D8D9",
+        "apk_so_sha256": "44D3A957A0D574C1A4C98738A48FA3F989E5224EF709E270427D4CB0982DCD02",
+        "size": 69009224,
+        "build_info": {
+          "go": "go1.25.6",
+          "path": "github.com/hiddify/hiddify-core/build/arm64/libhiddify-core",
+          "module": "github.com/hiddify/hiddify-core (devel)",
+          "sing_box": "github.com/sagernet/sing-box v1.13.0 => ./hiddify-sing-box (devel)",
+          "goos": "android",
+          "goarch": "arm64"
+        }
+      },
+      {
+        "name": "armeabi-v7a",
+        "so_sha256": "FCC63DD32E0C8BD90DEC42044411EF300AB4BB615B020D0F7E43A64048A5722E",
+        "apk_so_sha256": "E2F2B262D162CF3C79ABE50E51004198F25CB3826C47BF518E046FC6AC0AC278",
+        "size": 62677000,
+        "build_info": {
+          "go": "go1.25.6",
+          "path": "github.com/hiddify/hiddify-core/build/arm/libhiddify-core",
+          "module": "github.com/hiddify/hiddify-core (devel)",
+          "sing_box": "github.com/sagernet/sing-box v1.13.0 => ./hiddify-sing-box (devel)",
+          "goos": "android",
+          "goarch": "arm",
+          "goarm": "7"
+        }
+      },
+      {
+        "name": "x86",
+        "so_sha256": "485BF2C522A369C3DAA22E0DE56AD1097EDFD8D279CC723BC33573491DB1C5D4",
+        "size": 67027352,
+        "build_info": {
+          "go": "go1.25.6",
+          "path": "github.com/hiddify/hiddify-core/build/386/libhiddify-core",
+          "module": "github.com/hiddify/hiddify-core (devel)",
+          "sing_box": "github.com/sagernet/sing-box v1.13.0 => ./hiddify-sing-box (devel)",
+          "goos": "android",
+          "goarch": "386"
+        }
+      },
+      {
+        "name": "x86_64",
+        "so_sha256": "D7C4E1A367DCC32DAE07CF74558B3970279BDC21BDC0B8432F30A8471A62F3EF",
+        "apk_so_sha256": "6322E58791DDF2EF67A74E9CE52215ACFA392AECF0C2A913902A27D595BC0222",
+        "size": 73398000,
+        "build_info": {
+          "go": "go1.25.6",
+          "path": "github.com/hiddify/hiddify-core/build/amd64/libhiddify-core",
+          "module": "github.com/hiddify/hiddify-core (devel)",
+          "sing_box": "github.com/sagernet/sing-box v1.13.0 => ./hiddify-sing-box (devel)",
+          "goos": "android",
+          "goarch": "amd64"
+        }
+      }
+    ]
+  },
+  "apk": {
+    "path": "out/stabilization/31c5987477d3cd02a099c2c0c01c3a07da05ce69/zeon-1.3.0+103001-stage1-release.apk",
+    "sha256": "2FA51176B2A7536C66FA73403D0ADAB15756FDC0B602813F4D6DC34DF7A55AAF",
+    "size": 314584074,
+    "abis": [
+      "arm64-v8a",
+      "armeabi-v7a",
+      "x86_64"
+    ]
+  }
+}
