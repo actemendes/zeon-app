@@ -12,6 +12,7 @@ import com.hiddify.core.libbox.Libbox
 import com.hiddify.core.mobile.Mobile
 import com.hiddify.core.mobile.SetupOptions
 import com.zeon.zeon.bg.Bugs
+import com.zeon.zeon.bg.VpnSessionCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.io.File
@@ -30,6 +31,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             Start("start"),
             Stop("stop"),
             Restart("restart"),
+            SetSessionGeneration("set_session_generation"),
             AddGrpcClientPublicKey("add_grpc_client_public_key"),
             GetGrpcServerPublicKey("get_grpc_server_public_key"),
 
@@ -116,6 +118,8 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         Settings.activeProfileName = args["name"] as String? ?: ""
                         Settings.grpcServiceModePort = args["grpcPort"] as Int
                         Settings.disableMemoryLimit = args["disableMemoryLimit"] as Boolean? ?: false
+                        val generation = (args["generation"] as Number?)?.toLong() ?: 0L
+                        VpnSessionCoordinator.accept(generation, "prepare_vpn")
 
                         MainActivity.instance.prepareVpn { prepared ->
                             result.success(prepared)
@@ -134,6 +138,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         Settings.activeProfileName = args["name"] as String? ?: ""
                         Settings.debugMode = args["debug"] as Boolean? ?: false
                         Settings.grpcServiceModePort = args["grpcPort"] as Int
+                        val generation = (args["generation"] as Number?)?.toLong() ?: 0L
 
                         val mainActivity = MainActivity.instance
 //                        val started = mainActivity.serviceStatus.value == Status.Started
@@ -143,8 +148,8 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
 //                        }
                         Settings.startCoreAfterStartingService = false
 
-                        mainActivity.startService()
-                        success(true)
+                        mainActivity.startService(generation)
+                        success(generation)
                     }
                 }
             }
@@ -158,8 +163,21 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                             Log.w(TAG, "service is not running")
                             //    return@launch success(true)
                         }
-                        BoxService.stop()
-                        success(true)
+                        val args = call.arguments as? Map<*, *>
+                        val generation = (args?.get("generation") as Number?)?.toLong() ?: 0L
+                        val acceptedGeneration = VpnSessionCoordinator.accept(generation, "flutter_stop")
+                        BoxService.stop(acceptedGeneration)
+                        success(acceptedGeneration)
+                    }
+                }
+            }
+
+            Trigger.SetSessionGeneration.method -> {
+                scope.launch {
+                    result.runCatching {
+                        val args = call.arguments as? Map<*, *>
+                        val generation = (args?.get("generation") as Number?)?.toLong() ?: 0L
+                        success(VpnSessionCoordinator.accept(generation, "flutter_generation_update"))
                     }
                 }
             }

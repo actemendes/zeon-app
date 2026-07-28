@@ -127,7 +127,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   }
 
   @override
-  Future<bool> stop() async {
+  Future<bool> stop({int generation = 0}) async {
     return false;
   }
 }

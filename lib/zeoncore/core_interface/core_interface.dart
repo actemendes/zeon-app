@@ -10,11 +10,11 @@ class CoreInterface {
     return "";
   }
 
-  Future<CoreStatus> setupBackground(String path, String name) async {
+  Future<CoreStatus> setupBackground(String path, String name, {int generation = 0}) async {
     return const CoreStarted();
   }
 
-  Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit) async {
+  Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit, {int generation = 0}) async {
     return true;
   }
 
@@ -22,13 +22,15 @@ class CoreInterface {
     return false;
   }
 
-  Future<bool> stop() async {
+  Future<bool> stop({int generation = 0}) async {
     return false;
   }
 
   Future<bool> isBgClientAvailable() async {
     return true;
   }
+
+  Future<void> setSessionGeneration(int generation) async {}
 
   bool isSingleChannel() {
     // return true;

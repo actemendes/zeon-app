@@ -31,6 +31,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
   bool _isBgClientAvailable = false;
   bool _debug = false;
+  int _sessionGeneration = 0;
 
   late LastStream<CoreStatus> _status;
   @override
@@ -46,8 +47,8 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
         options: ChannelOptions(credentials: channelOption),
       ),
     );
-    final status = statusChannel.receiveBroadcastStream().map(CoreStatus.fromEvent);
-    final alerts = alertsChannel.receiveBroadcastStream().map(CoreStatus.fromEvent);
+    final status = statusChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent);
+    final alerts = alertsChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent);
 
     _status = LastStream(ValueConnectableStream(Rx.merge([status, alerts])).autoConnect());
     try {
@@ -126,9 +127,10 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   @override
-  Future<CoreStatus> setupBackground(String path, String name) async {
+  Future<CoreStatus> setupBackground(String path, String name, {int generation = 0}) async {
+    await setSessionGeneration(generation);
     // if (!await waitUntilPort(portBack, false, stop)) return const CoreStatus.stopped(alert: CoreAlert.createService);
-    if (!await stop()) return const CoreStatus.stopped(alert: CoreAlert.createService);
+    if (!await stop(generation: generation)) return const CoreStatus.stopped(alert: CoreAlert.createService);
     _status.clean();
     await methodChannel.invokeMethod("start", {
       "path": path,
@@ -136,6 +138,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
       "grpcPort": portBack,
       "startBg": true,
       "debug": _debug,
+      "generation": generation,
     });
 
     _isBgClientAvailable = true;
@@ -178,18 +181,23 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   @override
-  Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit) async {
+  Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit, {int generation = 0}) async {
+    await setSessionGeneration(generation);
     await methodChannel.invokeMethod("prepare_vpn", {
       "path": path,
       "name": name,
       "grpcPort": portBack,
       "disableMemoryLimit": disableMemoryLimit,
+      "generation": generation,
     });
     return true;
   }
 
   @override
-  Future<bool> stop() async {
+  Future<bool> stop({int generation = 0}) async {
+    if (generation > 0) {
+      await setSessionGeneration(generation);
+    }
     await stopMethodChannel().timeout(const Duration(seconds: 3), onTimeout: () {});
     final stopped = await waitUntilPort(
       portBack,
@@ -207,7 +215,28 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   Future stopMethodChannel() async {
-    await methodChannel.invokeMethod("stop");
+    await methodChannel.invokeMethod("stop", {"generation": _sessionGeneration});
+  }
+
+  @override
+  Future<void> setSessionGeneration(int generation) async {
+    if (generation <= 0 || generation == _sessionGeneration) return;
+    _sessionGeneration = generation;
+    final accepted = await methodChannel.invokeMethod<int>("set_session_generation", {"generation": generation});
+    if (accepted != null && accepted != generation) {
+      throw StateError("stale VPN session generation: requested=$generation current=$accepted");
+    }
+  }
+
+  bool _isCurrentEvent(dynamic event) {
+    final map = event as Map<dynamic, dynamic>?;
+    final raw = map?["generation"];
+    final generation = raw is int ? raw : int.tryParse(raw?.toString() ?? "") ?? 0;
+    if (_sessionGeneration <= 0 || generation == _sessionGeneration) return true;
+    loggy.warning(
+      "event=stale_callback_ignored generation=$generation current_generation=$_sessionGeneration source=android_event_channel",
+    );
+    return false;
   }
 
   @override

@@ -11,8 +11,10 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
+import com.zeon.zeon.bg.BoxService
 import com.zeon.zeon.bg.ServiceConnection
 import com.zeon.zeon.bg.ServiceNotification
+import com.zeon.zeon.bg.VpnSessionCoordinator
 import com.zeon.zeon.constant.Alert
 import com.zeon.zeon.constant.ServiceMode
 import com.zeon.zeon.constant.Status
@@ -38,9 +40,11 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     val logList = LinkedList<String>()
     var logCallback: ((Boolean) -> Unit)? = null
     val serviceStatus = MutableLiveData(Status.Stopped)
+    val serviceGeneration = MutableLiveData(0L)
     val serviceAlerts = MutableLiveData<ServiceEvent?>(null)
     private val vpnPermissionCallbacks = ArrayDeque<(Boolean) -> Unit>()
     private var startServiceAfterVpnPermission = false
+    private var pendingStartGeneration = 0L
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -60,12 +64,13 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     }
 
     @SuppressLint("NewApi")
-    fun startService() {
+    fun startService(generation: Long = VpnSessionCoordinator.next("main_activity_start")) {
+        pendingStartGeneration = VpnSessionCoordinator.accept(generation, "main_activity_start")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !ServiceNotification.checkPermission()) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
-        startService0()
+        startService0(pendingStartGeneration)
     }
 
     fun prepareVpn(callback: (Boolean) -> Unit) {
@@ -81,7 +86,11 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         }
     }
 
-    private fun startService0() {
+    private fun startService0(
+        generation: Long = pendingStartGeneration.takeIf { it > 0 }
+            ?: VpnSessionCoordinator.next("main_activity_start_fallback"),
+    ) {
+        val acceptedGeneration = VpnSessionCoordinator.accept(generation, "main_activity_start_service")
         lifecycleScope.launch(Dispatchers.IO) {
             if (Settings.rebuildServiceMode()) {
                 connection.reconnect()
@@ -92,6 +101,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
                 }
             }
             val intent = Intent(Application.application, Settings.serviceClass())
+                .putExtra(BoxService.EXTRA_SESSION_GENERATION, acceptedGeneration)
             withContext(Dispatchers.Main) {
                 ContextCompat.startForegroundService(this@MainActivity, intent)
             }
@@ -137,7 +147,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
 
         callbacks.forEach { it(granted) }
         if (shouldStartService) {
-            startService0()
+            startService0(pendingStartGeneration)
         } else if (!granted) {
             onServiceAlert(Alert.RequestVPNPermission, null)
         }
@@ -150,7 +160,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
             if (Settings.dynamicNotification && !isGranted) {
                 onServiceAlert(Alert.RequestNotificationPermission, null)
             }
-            startService0()
+            startService0(pendingStartGeneration)
         }
 
     private val prepareLauncher =
@@ -160,8 +170,18 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
             completeVpnPermissionRequest(result.resultCode == RESULT_OK)
         }
 
-    override fun onServiceStatusChanged(status: Status) {
+    override fun onServiceStatusChanged(status: Status, generation: Long) {
+        serviceGeneration.postValue(generation)
         serviceStatus.postValue(status)
+    }
+
+    override fun onServiceDisconnected(generation: Long) {
+        if (generation == 0L || VpnSessionCoordinator.isCurrent(generation)) {
+            serviceGeneration.postValue(generation)
+            serviceStatus.postValue(Status.Stopped)
+        } else {
+            VpnSessionCoordinator.stale(generation, "main_activity_service_disconnect")
+        }
     }
 
     override fun onServiceAlert(type: Alert, message: String?) {
@@ -194,7 +214,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     ) {
         if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startService()
+                startService(pendingStartGeneration)
             } else {
                 onServiceAlert(Alert.RequestNotificationPermission, null)
                 startService0()

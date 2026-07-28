@@ -31,7 +31,8 @@ class EventHandler : FlutterPlugin {
                 statusObserver = Observer {
                     Log.d(TAG, "new status: $it")
                     val map = listOf(
-                        Pair("status", it.name)
+                        Pair("status", it.name),
+                        Pair("generation", MainActivity.instance.serviceGeneration.value ?: 0L),
                     )
                         .toMap()
                     events?.success(map)

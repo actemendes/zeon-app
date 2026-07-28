@@ -62,6 +62,7 @@ class BoxService(
         private const val TAG = "A/BoxService"
         private const val OUTBOUND_SELECTOR_TAG = "select"
         private const val AUTO_BALANCER_TAG = "balance"
+        const val EXTRA_SESSION_GENERATION = "com.zeon.zeon.extra.SESSION_GENERATION"
 
         private var initializeOnce = false
         private lateinit var workingDir: File
@@ -96,20 +97,21 @@ class BoxService(
             return
         }
 
-        fun start() {
+        fun start(generation: Long = VpnSessionCoordinator.next("box_service_start")) {
             val intent = runBlocking {
                 withContext(Dispatchers.IO) {
                     Intent(Application.application, Settings.serviceClass())
+                        .putExtra(EXTRA_SESSION_GENERATION, generation)
                 }
             }
             ContextCompat.startForegroundService(Application.application, intent)
         }
 
-        fun stop() {
+        fun stop(generation: Long = VpnSessionCoordinator.next("box_service_stop")) {
             Application.application.sendBroadcast(
-                    Intent(Action.SERVICE_CLOSE).setPackage(
-                            Application.application.packageName
-                    )
+                Intent(Action.SERVICE_CLOSE)
+                    .setPackage(Application.application.packageName)
+                    .putExtra(EXTRA_SESSION_GENERATION, generation),
             )
         }
 
@@ -117,8 +119,10 @@ class BoxService(
 
     var fileDescriptor: ParcelFileDescriptor? = null
 
+    @Volatile
+    private var sessionGeneration: Long = 0L
     private val status = MutableLiveData(Status.Stopped)
-    private val binder = ServiceBinder(status)
+    private val binder = ServiceBinder(status) { sessionGeneration }
     private val notification = ServiceNotification(status, service)
 //    private var boxService: BoxService? = null
     private var commandServer: CommandServer? = null
@@ -129,7 +133,8 @@ class BoxService(
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 Action.SERVICE_CLOSE -> {
-                    stopService()
+                    val generation = intent.getLongExtra(EXTRA_SESSION_GENERATION, 0L)
+                    stopService(VpnSessionCoordinator.accept(generation, "close_broadcast"))
                 }
 
                 Action.SERVICE_REPING -> {
@@ -150,7 +155,12 @@ class BoxService(
      * then immediately schedules URL tests for every server in the selector.
      */
     private fun rePingServers() {
+        val generation = sessionGeneration
         serviceScope.launch {
+            if (!VpnSessionCoordinator.isCurrent(generation)) {
+                VpnSessionCoordinator.stale(generation, "manual_refresh_start")
+                return@launch
+            }
             try {
                 Log.i(TAG, "[ManualRefresh] user_refresh_requested source=notification group=$OUTBOUND_SELECTOR_TAG")
                 val coreClient = GrpcClientProvider.grpcClient.create(CoreClient::class)
@@ -172,6 +182,10 @@ class BoxService(
                 // Testing the selector recursively schedules tests for all of
                 // its children, including the automatic balancer's servers.
                 coreClient.UrlTest().executeBlocking(UrlTestRequest(tag = OUTBOUND_SELECTOR_TAG))
+                if (!VpnSessionCoordinator.isCurrent(generation)) {
+                    VpnSessionCoordinator.stale(generation, "manual_refresh_result")
+                    return@launch
+                }
                 Log.i(TAG, "[ManualRefresh] user_refresh_submitted group=$OUTBOUND_SELECTOR_TAG")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to re-ping servers", e)
@@ -182,9 +196,9 @@ class BoxService(
 
 
     private var activeProfileName = ""
-    private suspend fun startService() {
+    private suspend fun startService(generation: Long) {
         try {
-            status.postValue(Status.Starting)
+            if (!publishStatus(Status.Starting, generation, "start_service")) return
             Log.d(TAG, "starting service")
             withContext(Dispatchers.Main) {
                 notification.show(activeProfileName, R.string.status_starting)
@@ -227,7 +241,7 @@ class BoxService(
                 stopAndAlert(Alert.CreateService, e.message)
                 return
             }
-            status.postValue(Status.Started)
+            publishStatus(Status.Started, generation, "core_setup_complete")
 
             if (Settings.startCoreAfterStartingService){
                 Mobile.start("","")
@@ -278,7 +292,7 @@ class BoxService(
         Mobile.stop()
 //        boxService = null
         
-            startService()
+            startService(sessionGeneration)
         
     }
 
@@ -306,7 +320,8 @@ class BoxService(
         }
     }
 
-    private fun stopService() {
+    private fun stopService(generation: Long = VpnSessionCoordinator.next("box_service_stop_internal")) {
+        sessionGeneration = VpnSessionCoordinator.accept(generation, "stop_service")
         if (status.value == Status.Stopped) return
         status.value = Status.Stopping
         if (receiverRegistered) {
@@ -342,7 +357,7 @@ class BoxService(
             Settings.startedByUser = false
             withContext(Dispatchers.Main) {
                 Mobile.close(4L)
-                status.value = Status.Stopped
+                publishStatus(Status.Stopped, sessionGeneration, "stop_complete")
                 service.stopSelf()
             }
             notification.close()
@@ -365,7 +380,13 @@ class BoxService(
     }
 
     @Suppress("SameReturnValue")
-    internal fun onStartCommand(): Int {
+    internal fun onStartCommand(intent: Intent?): Int {
+        val requestedGeneration = intent?.getLongExtra(EXTRA_SESSION_GENERATION, 0L) ?: 0L
+        val generation = VpnSessionCoordinator.accept(requestedGeneration, "service_start_command")
+        if (requestedGeneration > 0 && generation != requestedGeneration) {
+            return Service.START_NOT_STICKY
+        }
+        sessionGeneration = generation
         if (status.value != Status.Stopped) return Service.START_NOT_STICKY
         status.value = Status.Starting
 
@@ -389,7 +410,7 @@ class BoxService(
 //                stopAndAlert(Alert.StartCommandServer, e.message)
 //                return@launch
 //            }
-            startService()
+            startService(generation)
         }
         return Service.START_NOT_STICKY
     }
@@ -405,7 +426,21 @@ class BoxService(
     }
 
     fun onRevoke() {
-        stopService()
+        stopService(VpnSessionCoordinator.next("vpn_revoke"))
+    }
+
+    private fun publishStatus(next: Status, generation: Long, source: String): Boolean {
+        if (!VpnSessionCoordinator.isCurrent(generation) || generation != sessionGeneration) {
+            VpnSessionCoordinator.stale(generation, "status/$source")
+            return false
+        }
+        VpnSessionCoordinator.event(
+            "vpn_status",
+            generation,
+            "status=${next.name} source=$source",
+        )
+        status.postValue(next)
+        return true
     }
 
     internal fun sendNotification(notification: Notification) {

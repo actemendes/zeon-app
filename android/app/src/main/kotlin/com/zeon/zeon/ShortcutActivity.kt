@@ -50,7 +50,7 @@ class ShortcutActivity : Activity(), ServiceConnection.Callback {
         moveTaskToBack(true)
     }
 
-    override fun onServiceStatusChanged(status: Status) {
+    override fun onServiceStatusChanged(status: Status, generation: Long) {
         when (status) {
             Status.Started -> BoxService.stop()
             Status.Stopped -> BoxService.start()

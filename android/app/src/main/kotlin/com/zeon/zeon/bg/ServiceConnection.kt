@@ -28,6 +28,7 @@ class ServiceConnection(private val context: Context, callback: Callback, privat
     private var service: IService? = null
 
     val status get() = service?.status?.let { Status.values()[it] } ?: Status.Stopped
+    val generation get() = service?.generation ?: 0L
 
     fun connect() {
         val intent =
@@ -68,7 +69,7 @@ class ServiceConnection(private val context: Context, callback: Callback, privat
         this.service = service
         try {
             if (register) service.registerCallback(callback)
-            callback.onServiceStatusChanged(service.status)
+            callback.onServiceStatusChanged(service.status, service.generation)
         } catch (e: RemoteException) {
             Log.e(TAG, "initialize service connection", e)
         }
@@ -81,6 +82,9 @@ class ServiceConnection(private val context: Context, callback: Callback, privat
         } catch (e: RemoteException) {
             Log.e(TAG, "cleanup service connection", e)
         }
+        val disconnectedGeneration = service?.generation ?: 0L
+        service = null
+        callback.onServiceDisconnected(disconnectedGeneration)
         Log.d(TAG, "service disconnected")
     }
 
@@ -90,15 +94,18 @@ class ServiceConnection(private val context: Context, callback: Callback, privat
     }
 
     interface Callback {
-        fun onServiceStatusChanged(status: Status)
+        fun onServiceStatusChanged(status: Status, generation: Long)
+
+        fun onServiceDisconnected(generation: Long) {
+        }
 
         fun onServiceAlert(type: Alert, message: String?) {
         }
     }
 
     class ServiceCallback(private val callback: Callback) : IServiceCallback.Stub() {
-        override fun onServiceStatusChanged(status: Int) {
-            callback.onServiceStatusChanged(Status.values()[status])
+        override fun onServiceStatusChanged(status: Int, generation: Long) {
+            callback.onServiceStatusChanged(Status.values()[status], generation)
         }
 
         override fun onServiceAlert(type: Int, message: String?) {
@@ -111,6 +118,10 @@ class ServiceConnection(private val context: Context, callback: Callback, privat
 
         override fun onServiceResetLogs(messages: List<String?>?) {
             //TODO("Not yet implemented")
+        }
+
+        fun onServiceDisconnected(generation: Long) {
+            callback.onServiceDisconnected(generation)
         }
     }
 }
