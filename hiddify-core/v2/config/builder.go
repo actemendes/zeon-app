@@ -175,8 +175,40 @@ func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptio
 	if err := setRoutingOptions(&options, hopts); err != nil {
 		return nil, err
 	}
+	if err := validateAndroidProtectCompatibility(&options, C.IsAndroid); err != nil {
+		return nil, err
+	}
 
 	return &options, nil
+}
+
+func validateAndroidProtectCompatibility(options *option.Options, android bool) error {
+	if !android {
+		return nil
+	}
+	if options.Route != nil && options.Route.DefaultInterface != "" {
+		return fmt.Errorf("android VPN protect conflict: route.default_interface bypasses platform socket protection")
+	}
+	for _, outbound := range options.Outbounds {
+		dialer, ok := outbound.Options.(option.DialerOptionsWrapper)
+		if !ok {
+			continue
+		}
+		dialerOptions := dialer.TakeDialerOptions()
+		switch {
+		case dialerOptions.BindInterface != "":
+			return fmt.Errorf("android VPN protect conflict: outbound bind_interface bypasses platform socket protection")
+		case dialerOptions.Inet4BindAddress != nil:
+			return fmt.Errorf("android VPN protect conflict: outbound inet4_bind_address bypasses platform socket protection")
+		case dialerOptions.Inet6BindAddress != nil:
+			return fmt.Errorf("android VPN protect conflict: outbound inet6_bind_address bypasses platform socket protection")
+		case dialerOptions.RoutingMark != 0:
+			return fmt.Errorf("android VPN protect conflict: outbound routing_mark is unsupported")
+		case dialerOptions.NetNs != "":
+			return fmt.Errorf("android VPN protect conflict: outbound netns is unsupported")
+		}
+	}
+	return nil
 }
 
 func setNTP(options *option.Options) {
