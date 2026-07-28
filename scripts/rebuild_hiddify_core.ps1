@@ -9,6 +9,8 @@ param(
 
     [switch]$SkipGomobileInit,
 
+    [switch]$InstallPinnedMobileTools,
+
     [switch]$InstallWebDependencies,
 
     # Adds the smart_active_debug Go build tag. Never use this for releases.
@@ -107,6 +109,20 @@ function Assert-WslBash {
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
 $coreDir = Join-Path $repoRoot "hiddify-core"
+$zeonRevision = (& git -C $repoRoot rev-parse HEAD).Trim()
+$hiddifyCoreTree = (& git -C $repoRoot rev-parse "HEAD:hiddify-core").Trim()
+$hiddifySingBoxTree = (& git -C $repoRoot rev-parse "HEAD:hiddify-core/hiddify-sing-box").Trim()
+if ($LASTEXITCODE -ne 0 -or -not $zeonRevision -or -not $hiddifyCoreTree -or -not $hiddifySingBoxTree) {
+    throw "Failed to resolve ZEON/core source provenance from Git."
+}
+& git -C $repoRoot diff --quiet
+if ($LASTEXITCODE -ne 0) {
+    throw "Tracked worktree changes are present. Commit them before building the baseline core."
+}
+& git -C $repoRoot diff --cached --quiet
+if ($LASTEXITCODE -ne 0) {
+    throw "Staged worktree changes are present. Commit them before building the baseline core."
+}
 
 Assert-Command "wsl.exe"
 Assert-WslBash
@@ -123,6 +139,7 @@ if (-not $wslRepoRoot) {
 
 $skipGoModDownloadValue = if ($SkipGoModDownload) { "1" } else { "0" }
 $skipGomobileInitValue = if ($SkipGomobileInit) { "1" } else { "0" }
+$installPinnedMobileToolsValue = if ($InstallPinnedMobileTools) { "1" } else { "0" }
 $installWebDependenciesValue = if ($InstallWebDependencies) { "1" } else { "0" }
 $smartActiveDebugValue = if ($SmartActiveDebug) { "1" } else { "0" }
 $selectedPlatforms = @($Platform | Select-Object -Unique)
@@ -133,9 +150,13 @@ set -euo pipefail
 repo_root="$1"
 skip_go_mod_download="$2"
 skip_gomobile_init="$3"
-install_web_dependencies="$4"
-smart_active_debug="$5"
-shift 5
+install_pinned_mobile_tools="$4"
+install_web_dependencies="$5"
+smart_active_debug="$6"
+zeon_revision="$7"
+hiddify_core_tree="$8"
+hiddify_sing_box_tree="$9"
+shift 9
 platforms=("$@")
 
 core_dir="$repo_root/hiddify-core"
@@ -146,7 +167,9 @@ if [ "$smart_active_debug" = "1" ]; then
   echo "Building Smart Active debug fault injection support."
 fi
 
-export PATH="/usr/local/go/bin:/usr/local/bin:$PATH"
+export GOPATH="$HOME/go"
+export PATH="$GOPATH/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
+export GOFLAGS="-buildvcs=false"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -165,60 +188,16 @@ require_directory() {
 require_directory "$core_dir"
 
 required_go_version="$(awk '$1 == "go" { print $2; exit }' "$core_dir/go.mod")"
-install_go_toolchain() {
-  if command -v go >/dev/null 2>&1; then
-    return
-  fi
-
-  if [ -z "$required_go_version" ]; then
-    echo "Required command 'go' was not found inside WSL and $core_dir/go.mod does not declare a Go version." >&2
-    exit 1
-  fi
-
-  case "$(uname -m)" in
-    x86_64|amd64) go_arch="amd64" ;;
-    aarch64|arm64) go_arch="arm64" ;;
-    *)
-      echo "Required command 'go' was not found inside WSL and automatic install does not support architecture: $(uname -m)" >&2
-      exit 1
-      ;;
-  esac
-
-  go_url="https://go.dev/dl/go${required_go_version}.linux-${go_arch}.tar.gz"
-  go_archive="$(mktemp)"
-  echo "Go was not found inside WSL. Installing Go ${required_go_version} from ${go_url}..."
-  if command -v curl >/dev/null 2>&1; then
-    curl -fL "$go_url" -o "$go_archive"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -O "$go_archive" "$go_url"
-  else
-    echo "Required command 'go' was not found inside WSL. Install Go ${required_go_version}, or install curl/wget so this script can download it." >&2
-    exit 1
-  fi
-
-  if [ "$(id -u)" -ne 0 ] && ! command -v sudo >/dev/null 2>&1; then
-    echo "Required command 'go' was not found inside WSL and sudo is unavailable. Install Go ${required_go_version} into /usr/local/go." >&2
-    exit 1
-  fi
-
-  install_cmd='rm -rf /usr/local/go && tar -C /usr/local -xzf "$1"'
-  if [ "$(id -u)" -eq 0 ]; then
-    sh -c "$install_cmd" sh "$go_archive"
-  else
-    sudo sh -c "$install_cmd" sh "$go_archive"
-  fi
-  rm -f "$go_archive"
-}
-
-install_go_toolchain
-
-if [ -n "$required_go_version" ]; then
-  export GOTOOLCHAIN="go$required_go_version"
-fi
 require_command go
-export GOPATH="${GOPATH:-$(go env GOPATH 2>/dev/null || true)}"
-if [ -n "$GOPATH" ]; then
-  export PATH="$PATH:$GOPATH/bin"
+if [ -z "$required_go_version" ]; then
+  echo "$core_dir/go.mod does not declare a Go version." >&2
+  exit 1
+fi
+export GOTOOLCHAIN="go$required_go_version"
+actual_go_version="$(go env GOVERSION)"
+if [ "$actual_go_version" != "go$required_go_version" ]; then
+  echo "Go toolchain mismatch: expected go$required_go_version, got $actual_go_version" >&2
+  exit 1
 fi
 echo "Using Go toolchain: $(go version)"
 
@@ -245,10 +224,31 @@ for platform in "${platforms[@]}"; do
 
       require_directory "$ANDROID_HOME"
       require_directory "$ANDROID_NDK_HOME"
+      ndk_revision="$(sed -n 's/^Pkg\.Revision[[:space:]]*=[[:space:]]*//p' "$ANDROID_NDK_HOME/source.properties" | head -n 1)"
+      if [ "$ndk_revision" != "28.2.13676358" ]; then
+        echo "Android NDK mismatch: expected 28.2.13676358, got ${ndk_revision:-unknown}" >&2
+        exit 1
+      fi
 
-      echo "Installing pinned gomobile tools..."
-      go install -v github.com/sagernet/gomobile/cmd/gomobile@v0.1.11
-      go install -v github.com/sagernet/gomobile/cmd/gobind@v0.1.11
+      if [ "$install_pinned_mobile_tools" = "1" ]; then
+        echo "Installing explicitly requested pinned gomobile tools..."
+        go install -v github.com/sagernet/gomobile/cmd/gomobile@v0.1.11
+        go install -v github.com/sagernet/gomobile/cmd/gobind@v0.1.11
+      fi
+      require_command gomobile
+      require_command gobind
+      for mobile_tool in gomobile gobind; do
+        tool_metadata="$(go version -m "$(command -v "$mobile_tool")")"
+        if ! printf '%s\n' "$tool_metadata" | grep -Eq $'\tmod\tgithub.com/sagernet/gomobile\tv0\\.1\\.11([[:space:]]|$)'; then
+          echo "$mobile_tool version mismatch: expected github.com/sagernet/gomobile v0.1.11" >&2
+          printf '%s\n' "$tool_metadata" >&2
+          exit 1
+        fi
+        if ! printf '%s\n' "$tool_metadata" | head -n 1 | grep -q 'go1.25.6'; then
+          echo "$mobile_tool was not built with baseline Go 1.25.6" >&2
+          exit 1
+        fi
+      done
 
       if [ "$skip_gomobile_init" != "1" ]; then
         echo "Initializing gomobile..."
@@ -259,6 +259,12 @@ for platform in "${platforms[@]}"; do
       mkdir -p "$core_dir/bin" "$(dirname "$android_aar")"
       (
         cd "$core_dir"
+        build_metadata_ldflags="-X github.com/hiddify/hiddify-core/platform/mobile.buildRevision=$zeon_revision"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.hiddifyCoreTree=$hiddify_core_tree"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.hiddifySingBoxTree=$hiddify_sing_box_tree"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.coreBuildTags=$core_build_tags"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/v2/hcommon/constants.Version=zeon-$zeon_revision"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/sagernet/sing-box/constant.Version=1.13.0-zeon-$zeon_revision"
         CGO_LDFLAGS="-O2 -g -s -w -Wl,-z,max-page-size=16384" \
           gomobile bind -v \
           -androidapi=21 \
@@ -266,7 +272,7 @@ for platform in "${platforms[@]}"; do
           -libname=hiddify-core \
           -tags="$core_build_tags" \
           -trimpath \
-          -ldflags="-w -s -checklinkname=0 -buildid=" \
+          -ldflags="-w -s -checklinkname=0 -buildid= $build_metadata_ldflags" \
           -target=android \
           -o bin/hiddify-core.aar \
           github.com/sagernet/sing-box/experimental/libbox ./platform/mobile
@@ -346,8 +352,12 @@ $bashArguments = @(
     $wslRepoRoot,
     $skipGoModDownloadValue,
     $skipGomobileInitValue,
+    $installPinnedMobileToolsValue,
     $installWebDependenciesValue,
-    $smartActiveDebugValue
+    $smartActiveDebugValue,
+    $zeonRevision,
+    $hiddifyCoreTree,
+    $hiddifySingBoxTree
 ) + $selectedPlatforms
 
 Write-Host "Repository in WSL: $wslRepoRoot"
@@ -359,7 +369,7 @@ try {
     if ($DryRun) {
         Write-Host ""
         Write-Host "Dry run: WSL build was not started."
-        Write-Host "Command: wsl.exe bash <temporary-build-script> $wslRepoRoot $skipGoModDownloadValue $skipGomobileInitValue $installWebDependenciesValue $smartActiveDebugValue $($selectedPlatforms -join ' ')"
+        Write-Host "Command: wsl.exe bash <temporary-build-script> $wslRepoRoot $skipGoModDownloadValue $skipGomobileInitValue $installPinnedMobileToolsValue $installWebDependenciesValue $smartActiveDebugValue <revision> <core-tree> <sing-box-tree> $($selectedPlatforms -join ' ')"
     }
     else {
         Invoke-Wsl -Arguments $bashArguments
