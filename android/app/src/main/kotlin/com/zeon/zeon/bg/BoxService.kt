@@ -11,7 +11,6 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
-import android.os.ParcelFileDescriptor
 import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.RequiresApi
@@ -125,10 +124,9 @@ class BoxService(
 
     }
 
-    var fileDescriptor: ParcelFileDescriptor? = null
-
     @Volatile
     private var sessionGeneration: Long = 0L
+    private val tunOwner = TunDescriptorOwner()
     private val status = MutableLiveData(Status.Stopped)
     private val binder = ServiceBinder(status) { sessionGeneration }
     private val notification = ServiceNotification(status, service)
@@ -326,14 +324,12 @@ class BoxService(
     }
 
     suspend fun serviceReload0() {
+        val previousGeneration = sessionGeneration
+        val generation = VpnSessionCoordinator.next("service_reload")
+        sessionGeneration = generation
         notification.close()
-        status.postValue(Status.Starting)
-
-        val pfd = fileDescriptor
-        if (pfd != null) {
-            pfd.close()
-            fileDescriptor = null
-        }
+        publishStatus(Status.Starting, generation, "service_reload")
+        tunOwner.close(previousGeneration, "service_reload")
         
 //        boxService?.apply {
 //            runCatching {
@@ -346,7 +342,7 @@ class BoxService(
         Mobile.stop()
 //        boxService = null
         
-            startService(sessionGeneration)
+            startService(generation)
         
     }
 
@@ -375,6 +371,7 @@ class BoxService(
     }
 
     private fun stopService(generation: Long = VpnSessionCoordinator.next("box_service_stop_internal")) {
+        val closingGeneration = sessionGeneration
         sessionGeneration = VpnSessionCoordinator.accept(generation, "stop_service")
         if (status.value == Status.Stopped) return
         status.value = Status.Stopping
@@ -384,11 +381,7 @@ class BoxService(
         }
         notification.close()
         serviceScope.launch {
-            val pfd = fileDescriptor
-            if (pfd != null) {
-                pfd.close()
-                fileDescriptor = null
-            }
+            tunOwner.close(closingGeneration, "stop")
 //            commandServer?.setService(null)
 //            boxService?.apply {
 //                runCatching {
@@ -420,6 +413,7 @@ class BoxService(
 
     private suspend fun stopAndAlert(type: Alert, message: String? = null) {
         Settings.startedByUser = false
+        tunOwner.close(sessionGeneration, "failed_start")
         withContext(Dispatchers.Main) {
             if (receiverRegistered) {
                 service.unregisterReceiver(receiver)
@@ -483,6 +477,14 @@ class BoxService(
     fun onRevoke() {
         stopService(VpnSessionCoordinator.next("vpn_revoke"))
     }
+
+    internal fun currentSessionGeneration(): Long = sessionGeneration
+
+    internal fun openTun(
+        generation: Long,
+        descriptor: android.os.ParcelFileDescriptor,
+        validate: () -> Unit,
+    ): Int = tunOwner.open(generation, descriptor, validate)
 
     private fun publishStatus(next: Status, generation: Long, source: String): Boolean {
         if (!VpnSessionCoordinator.isCurrent(generation) || generation != sessionGeneration) {

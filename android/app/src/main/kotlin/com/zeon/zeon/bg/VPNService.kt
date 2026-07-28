@@ -16,6 +16,8 @@ import com.hiddify.core.libbox.TunOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import java.net.DatagramSocket
+import java.net.InetSocketAddress
 
 class VPNService : VpnService(), PlatformInterfaceWrapper {
 
@@ -37,7 +39,11 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     override fun onDestroy() {
-        service.onDestroy()
+        try {
+            service.onDestroy()
+        } finally {
+            super.onDestroy()
+        }
     }
 
     override fun onRevoke() {
@@ -49,7 +55,17 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     override fun autoDetectInterfaceControl(fd: Int) {
-        protect(fd)
+        val generation = service.currentSessionGeneration()
+        val protected = protect(fd)
+        VpnSessionCoordinator.event(
+            "protect_result",
+            generation,
+            "source=core_socket success=$protected",
+            if (protected) Log.INFO else Log.ERROR,
+        )
+        if (!protected) {
+            error("android: VpnService.protect failed for core socket")
+        }
     }
 
     var systemProxyAvailable = false
@@ -72,6 +88,8 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     override fun openTun(options: TunOptions): Int {
+        val generation = service.currentSessionGeneration()
+        VpnSessionCoordinator.event("tun_open_requested", generation)
         var hasPermission = false
         for (i in 0 until 20) {
             if (prepare(this) != null) {
@@ -208,8 +226,25 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
         }
 
         val pfd = builder.establish() ?: error("android: the application is not prepared or is revoked")
-        service.fileDescriptor = pfd
-        return pfd.fd
+        return service.openTun(generation, pfd) {
+            verifyPlatformProtect(generation)
+        }
+    }
+
+    private fun verifyPlatformProtect(generation: Long) {
+        DatagramSocket(null).use { socket ->
+            socket.bind(InetSocketAddress(0))
+            val protected = protect(socket)
+            VpnSessionCoordinator.event(
+                "protect_result",
+                generation,
+                "source=post_tun_probe success=$protected",
+                if (protected) Log.INFO else Log.ERROR,
+            )
+            if (!protected) {
+                error("android: post-TUN VpnService.protect self-check failed")
+            }
+        }
     }
 
 //    override fun writeLog(message: String) = service.writeLog(message)

@@ -21,6 +21,7 @@ class VpnTestInstrumentation : Instrumentation() {
     override fun onStart() {
         val generationTests = VpnSessionCoordinatorInstrumentedTest()
         val startupTests = CoreStartupGateInstrumentedTest()
+        val tunTests = TunDescriptorOwnerInstrumentedTest()
         val tests = listOf(
             TestCase(generationTests.javaClass.name, "generationIsStrictlyMonotonic") {
                 generationTests.generationIsStrictlyMonotonic()
@@ -42,6 +43,21 @@ class VpnTestInstrumentation : Instrumentation() {
             },
             TestCase(startupTests.javaClass.name, "restartDuringStartSupersedesPendingResult") {
                 startupTests.restartDuringStartSupersedesPendingResult()
+            },
+            TestCase(tunTests.javaClass.name, "duplicateOpenIsRejectedAndNewDescriptorIsClosed") {
+                tunTests.duplicateOpenIsRejectedAndNewDescriptorIsClosed()
+            },
+            TestCase(tunTests.javaClass.name, "validationFailureClosesEstablishedDescriptor") {
+                tunTests.validationFailureClosesEstablishedDescriptor()
+            },
+            TestCase(tunTests.javaClass.name, "stopDuringOpenRejectsStaleDescriptor") {
+                tunTests.stopDuringOpenRejectsStaleDescriptor()
+            },
+            TestCase(tunTests.javaClass.name, "repeatedStartStopDoesNotGrowDescriptorCount") {
+                tunTests.repeatedStartStopDoesNotGrowDescriptorCount()
+            },
+            TestCase(tunTests.javaClass.name, "rapidRestartIsIdempotent") {
+                tunTests.rapidRestartIsIdempotent()
             },
         )
 
