@@ -11,7 +11,6 @@ import (
 	"github.com/hiddify/hiddify-core/v2/db"
 	hcommon "github.com/hiddify/hiddify-core/v2/hcommon"
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/conntrack"
 	"github.com/sagernet/sing-box/protocol/group"
 
 	"github.com/sagernet/sing-box/common/monitoring"
@@ -29,7 +28,6 @@ func (h *HiddifyInstance) readStatus(prev *SystemInfo) *SystemInfo {
 	var message SystemInfo
 	message.Memory = int64(memory.Inuse())
 	message.Goroutines = int32(runtime.NumGoroutine())
-	message.ConnectionsOut = int32(conntrack.Count())
 
 	if ss := h.StartedService; ss != nil {
 		status := ss.ReadStatus()
