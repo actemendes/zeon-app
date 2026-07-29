@@ -11,9 +11,27 @@ type recordingStartedService struct {
 	calls             []string
 }
 
+type recordingCloser struct {
+	closed int
+}
+
+func (c *recordingCloser) Close() error {
+	c.closed++
+	return errors.New("ignored close error")
+}
+
 func (s *recordingStartedService) CloseService() error {
 	s.calls = append(s.calls, "close_service")
 	return s.closeServiceError
+}
+
+func TestClosePreviousCoreLogFactory(t *testing.T) {
+	closePreviousCoreLogFactory(nil)
+	closer := new(recordingCloser)
+	closePreviousCoreLogFactory(closer)
+	if closer.closed != 1 {
+		t.Fatalf("close count = %d, want 1", closer.closed)
+	}
 }
 
 func (s *recordingStartedService) Close() {

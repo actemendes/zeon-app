@@ -93,11 +93,12 @@ func Setup(params *SetupRequest, platformInterface libbox.PlatformInterface) err
 			// 	Output:   "stdout",
 			// },
 		})
-	static.CoreLogFactory = factory
-
 	if err != nil {
 		return E.Cause(err, "create logger")
 	}
+	previousCoreLogFactory := static.CoreLogFactory
+	static.CoreLogFactory = factory
+	closePreviousCoreLogFactory(previousCoreLogFactory)
 
 	Log(LogLevel_DEBUG, LogType_CORE, fmt.Sprintf("StartGrpcServerByMode %s %d\n", params.Listen, params.Mode))
 	switch params.Mode {
@@ -128,6 +129,16 @@ func Setup(params *SetupRequest, platformInterface libbox.PlatformInterface) err
 
 	}
 	return InitHiddifyService()
+}
+
+type coreLogFactoryCloser interface {
+	Close() error
+}
+
+func closePreviousCoreLogFactory(factory coreLogFactoryCloser) {
+	if factory != nil {
+		_ = factory.Close()
+	}
 }
 
 func StartGrpcServer(listenAddressG string, service string) (*grpc.Server, error) {
