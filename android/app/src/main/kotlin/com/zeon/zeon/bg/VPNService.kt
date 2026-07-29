@@ -102,6 +102,15 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     override fun openTun(options: TunOptions): Int {
         val generation = service.currentSessionGeneration()
         VpnSessionCoordinator.event("tun_open_requested", generation)
+        if (!VpnSessionCoordinator.isCurrent(generation)) {
+            VpnSessionCoordinator.event(
+                "stale_exception_ignored",
+                generation,
+                "current_generation=${VpnSessionCoordinator.current()} session_state=tun source=open_tun reason=pre_establish_generation_check",
+                Log.WARN,
+            )
+            error("stale VPN operation")
+        }
         var hasPermission = false
         for (i in 0 until 20) {
             if (prepare(this) != null) {

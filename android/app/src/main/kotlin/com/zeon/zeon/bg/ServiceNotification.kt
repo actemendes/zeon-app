@@ -46,6 +46,7 @@ import okhttp3.OkHttpClient
 import java.io.IOException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancelAndJoin
 class ServiceNotification(private val status: MutableLiveData<Status>, private val service: Service) : BroadcastReceiver(){
     companion object {
         private const val notificationId = 1
@@ -138,10 +139,13 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     }
 
 
-    suspend fun start() {
+    suspend fun start(generation: Long, sessionAcceptsOperations: () -> Boolean) {
+        stopListenSystemInfoAndJoin()
+        activeGeneration = generation
+        activeSessionAcceptsOperations = sessionAcceptsOperations
         if (Settings.dynamicNotification && checkPermission()) {
 //            commandClient.connect()
-            startListenSystemInfo()
+            startListenSystemInfo(generation, sessionAcceptsOperations)
             withContext(Dispatchers.Main) {
                 registerReceiver()
             }
@@ -217,7 +221,11 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_SCREEN_ON -> {
-                startListenSystemInfo()
+                val generation = activeGeneration
+                val acceptsOperations = activeSessionAcceptsOperations
+                if (generation > 0L && acceptsOperations != null) {
+                    startListenSystemInfo(generation, acceptsOperations)
+                }
             }
 
             Intent.ACTION_SCREEN_OFF -> {
@@ -227,6 +235,8 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     }
 
     fun close() {
+        activeGeneration = 0L
+        activeSessionAcceptsOperations = null
         stopListenSystemInfo()
         ServiceCompat.stopForeground(service, ServiceCompat.STOP_FOREGROUND_REMOVE)
         if (receiverRegistered) {
@@ -236,8 +246,12 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     }
 
     private var streamingJob: Job? = null
+    @Volatile
+    private var activeGeneration: Long = 0L
+    @Volatile
+    private var activeSessionAcceptsOperations: (() -> Boolean)? = null
 
-    fun startListenSystemInfo() {
+    private fun startListenSystemInfo(generation: Long, sessionAcceptsOperations: () -> Boolean) {
         // Cancel any previous stream if still running
         Log.d("notification","startListenSystemInfo")
         streamingJob?.cancel()
@@ -248,11 +262,14 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
             val coreClient = GrpcClientProvider.grpcClient.create(CoreClient::class)
 
             try {
+                if (!isPollingCurrent(generation, sessionAcceptsOperations, "initial")) return@launch
                 var previous = coreClient.GetSystemInfo().executeBlocking(Empty())
 
                 while (isActive) {
                     delay(1_000) // ✅ coroutine-friendly
+                    if (!isPollingCurrent(generation, sessionAcceptsOperations, "interval")) break
                     val current = coreClient.GetSystemInfo().executeBlocking(Empty())
+                    if (!isPollingCurrent(generation, sessionAcceptsOperations, "result")) break
                     updateStatus(previous,current)
                     previous = current
                 }
@@ -266,6 +283,33 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
             }
         }
     }
+    private fun isPollingCurrent(
+        generation: Long,
+        sessionAcceptsOperations: () -> Boolean,
+        source: String,
+    ): Boolean {
+        val current = generation == activeGeneration &&
+            VpnSessionCoordinator.isCurrent(generation) &&
+            sessionAcceptsOperations()
+        if (!current) {
+            VpnSessionCoordinator.event(
+                "stale_completion_ignored",
+                generation,
+                "current_generation=${VpnSessionCoordinator.current()} session_state=notification source=system_info_$source reason=session_closed",
+                Log.WARN,
+            )
+        }
+        return current
+    }
+
+    suspend fun stopListenSystemInfoAndJoin() {
+        activeGeneration = 0L
+        activeSessionAcceptsOperations = null
+        val job = streamingJob
+        streamingJob = null
+        job?.cancelAndJoin()
+    }
+
     fun stopListenSystemInfo(){
         try {
             streamingJob?.cancel()

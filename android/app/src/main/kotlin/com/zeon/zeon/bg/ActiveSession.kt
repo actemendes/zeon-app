@@ -30,7 +30,35 @@ class ActiveSession(
     private val closing = AtomicBoolean(false)
     private val closed = CompletableDeferred<Unit>()
 
+    @Volatile
+    private var commandEndpointReady = false
+
+    @Volatile
+    private var tunOpened = false
+
+    @Volatile
+    private var postTunProtectSucceeded = false
+
     fun acceptsOperations(): Boolean = !closing.get() && !closed.isCompleted
+
+    fun markCommandEndpointReady() {
+        commandEndpointReady = true
+    }
+
+    fun markTunReady(protectSucceeded: Boolean) {
+        tunOpened = true
+        postTunProtectSucceeded = protectSucceeded
+    }
+
+    internal fun startEvidence(permissionGranted: Boolean, mobileStartSucceeded: Boolean) = VpnConnectedGate.Evidence(
+        permissionGranted = permissionGranted,
+        mobileStartSucceeded = mobileStartSucceeded,
+        commandEndpointReady = commandEndpointReady,
+        tunOpened = tunOpened && tunOwner.hasOpenDescriptor(generation),
+        postTunProtectSucceeded = postTunProtectSucceeded,
+        generationCurrent = VpnSessionCoordinator.isCurrent(generation),
+        sessionAcceptingOperations = acceptsOperations(),
+    )
 
     suspend fun close(
         reason: String,

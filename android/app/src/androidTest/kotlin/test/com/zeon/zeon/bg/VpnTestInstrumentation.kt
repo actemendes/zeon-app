@@ -28,7 +28,8 @@ class VpnTestInstrumentation : Instrumentation() {
         val startupTests = CoreStartupGateInstrumentedTest()
         val tunTests = TunDescriptorOwnerInstrumentedTest()
         val activeSessionTests = ActiveSessionInstrumentedTest()
-        val tests = listOf(
+        val permissionTests = VpnPermissionAndConnectedGateInstrumentedTest()
+        val tests = mutableListOf(
             TestCase(generationTests.javaClass.name, "generationIsStrictlyMonotonic") {
                 generationTests.generationIsStrictlyMonotonic()
             },
@@ -69,6 +70,22 @@ class VpnTestInstrumentation : Instrumentation() {
                 activeSessionTests.teardownOrderIsStableAndCloseIsIdempotent()
             },
         )
+        listOf(
+            "firstConnectPermissionGrantedCompletesCurrentAttempt" to permissionTests::firstConnectPermissionGrantedCompletesCurrentAttempt,
+            "permissionDeniedDoesNotBecomeGranted" to permissionTests::permissionDeniedDoesNotBecomeGranted,
+            "closedDialogIsDenied" to permissionTests::closedDialogIsDenied,
+            "delayedPermissionUsesBarrierAndKeepsGeneration" to permissionTests::delayedPermissionUsesBarrierAndKeepsGeneration,
+            "stopWhilePermissionPendingMakesResultStale" to permissionTests::stopWhilePermissionPendingMakesResultStale,
+            "restartWhilePermissionPendingMakesOldResultStale" to permissionTests::restartWhilePermissionPendingMakesOldResultStale,
+            "duplicatePermissionCallbackCompletesOnlyOnce" to permissionTests::duplicatePermissionCallbackCompletesOnlyOnce,
+            "stalePermissionResultCannotCompleteNewGeneration" to permissionTests::stalePermissionResultCannotCompleteNewGeneration,
+            "commandEndpointWithoutTunCannotPublishStarted" to permissionTests::commandEndpointWithoutTunCannotPublishStarted,
+            "tunWithoutMobileStartCannotPublishStarted" to permissionTests::tunWithoutMobileStartCannotPublishStarted,
+            "oldGenerationCoreSuccessCannotPublishStarted" to permissionTests::oldGenerationCoreSuccessCannotPublishStarted,
+            "reconnectAfterPermissionFailureNeedsNoProcessRestart" to permissionTests::reconnectAfterPermissionFailureNeedsNoProcessRestart,
+        ).forEach { (name, body) ->
+            tests += TestCase(permissionTests.javaClass.name, name) { body() }
+        }
 
         var failures = 0
         tests.forEachIndexed { index, test ->

@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.net.VpnService as AndroidVpnService
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -115,12 +116,21 @@ class BoxService(
             )
         }
 
-        fun markCoreStarted(generation: Long) {
-            Application.application.sendBroadcast(
-                Intent(Action.SERVICE_CORE_STARTED)
-                    .setPackage(Application.application.packageName)
-                    .putExtra(EXTRA_SESSION_GENERATION, generation),
-            )
+        @Volatile
+        private var activeInstance: BoxService? = null
+
+        suspend fun markCoreStarted(generation: Long): Boolean {
+            val instance = activeInstance
+            if (instance == null) {
+                VpnSessionCoordinator.event(
+                    "start_gate_rejected",
+                    generation,
+                    "current_generation=${VpnSessionCoordinator.current()} session_state=missing source=mark_core_started reason=no_service",
+                    Log.ERROR,
+                )
+                return false
+            }
+            return instance.confirmCoreStarted(generation)
         }
 
     }
@@ -137,6 +147,9 @@ class BoxService(
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var receiverRegistered = false
+    init {
+        activeInstance = this
+    }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
@@ -151,12 +164,8 @@ class BoxService(
 
                 Action.SERVICE_CORE_STARTED -> {
                     val generation = intent.getLongExtra(EXTRA_SESSION_GENERATION, 0L)
-                    if (VpnSessionCoordinator.isCurrent(generation) && generation == sessionGeneration) {
-                        VpnSessionCoordinator.event("core_start_success", generation)
-                        VpnSessionCoordinator.event("command_endpoint_ready", generation)
-                        publishStatus(Status.Started, generation, "flutter_core_start_confirmed")
-                    } else {
-                        VpnSessionCoordinator.stale(generation, "core_started_broadcast")
+                    serviceScope.launch {
+                        confirmCoreStarted(generation)
                     }
                 }
 
@@ -235,7 +244,7 @@ class BoxService(
 
             val selectedConfigPath = Settings.activeConfigPath
             if (selectedConfigPath.isBlank()) {
-                stopAndAlert(Alert.EmptyConfiguration)
+                stopAndAlert(generation, Alert.EmptyConfiguration)
                 return
             }
 
@@ -267,7 +276,7 @@ class BoxService(
 //                Libbox.newService(content,platformInterface)
 
             } catch (e: Exception) {
-                stopAndAlert(Alert.CreateService, e.message)
+                stopAndAlert(generation, Alert.CreateService, e.message)
                 return
             }
             val startsCoreHere = Settings.startCoreAfterStartingService
@@ -283,12 +292,14 @@ class BoxService(
             )
             when (readiness) {
                 CoreStartupGate.Result.Ready -> {
+                    session.markCommandEndpointReady()
                     VpnSessionCoordinator.event("command_endpoint_ready", generation)
-                    publishStatus(
-                        if (startsCoreHere) Status.Started else Status.CoreReady,
+                    VpnSessionCoordinator.event(
+                        "start_gate_waiting",
                         generation,
-                        if (startsCoreHere) "mobile_start_complete" else "command_endpoint_ready",
+                        "current_generation=${VpnSessionCoordinator.current()} session_state=starting source=command_endpoint reason=awaiting_mobile_start_tun_protect",
                     )
+                    publishStatus(Status.CoreReady, generation, "command_endpoint_ready")
                 }
                 CoreStartupGate.Result.Superseded -> return
                 is CoreStartupGate.Result.Failed -> {
@@ -298,12 +309,12 @@ class BoxService(
                         "error=${readiness.error.javaClass.simpleName}",
                         Log.ERROR,
                     )
-                    stopAndAlert(Alert.StartService, readiness.error.message)
+                    stopAndAlert(generation, Alert.StartService, readiness.error.message)
                     return
                 }
                 CoreStartupGate.Result.Timeout -> {
                     VpnSessionCoordinator.event("core_start_failure", generation, "error=command_endpoint_timeout", Log.ERROR)
-                    stopAndAlert(Alert.StartService, "command endpoint readiness timeout")
+                    stopAndAlert(generation, Alert.StartService, "command endpoint readiness timeout")
                     return
                 }
             }
@@ -317,14 +328,22 @@ class BoxService(
 
 
             withContext(Dispatchers.Main) {
-                notification.show(
-                    activeProfileName,
-                    if (startsCoreHere) R.string.status_started else R.string.status_starting,
-                )
+                notification.show(activeProfileName, R.string.status_starting)
             }
-            notification.start()
+            if (startsCoreHere) {
+                confirmCoreStarted(generation)
+            }
         } catch (e: Exception) {
-            stopAndAlert(Alert.StartService, e.message)
+            if (!VpnSessionCoordinator.isCurrent(generation)) {
+                VpnSessionCoordinator.event(
+                    "stale_exception_ignored",
+                    generation,
+                    "current_generation=${VpnSessionCoordinator.current()} session_state=starting source=android_start_service reason=${e.javaClass.simpleName}",
+                    Log.WARN,
+                )
+                return
+            }
+            stopAndAlert(generation, Alert.StartService, e.message)
             return
         }
     }
@@ -339,10 +358,10 @@ class BoxService(
         val previousSession = activeSession
         val generation = VpnSessionCoordinator.next("service_reload")
         sessionGeneration = generation
-        notification.close()
         if (previousSession != null) {
             closeSession(previousSession, "service_reload")
         }
+        notification.close()
         val session = ActiveSession(generation, platformInterface, tunOwner)
         activeSession = session
         publishStatus(Status.Starting, generation, "service_reload")
@@ -396,11 +415,11 @@ class BoxService(
             service.unregisterReceiver(receiver)
             receiverRegistered = false
         }
-        notification.close()
         serviceScope.launch {
             if (closingSession != null) {
                 closeSession(closingSession, "stop")
             }
+            notification.close()
             Settings.startedByUser = false
             withContext(Dispatchers.Main) {
                 publishStatus(Status.Stopped, sessionGeneration, "stop_complete")
@@ -410,7 +429,16 @@ class BoxService(
         }
     }
 
-    private suspend fun stopAndAlert(type: Alert, message: String? = null) {
+    private suspend fun stopAndAlert(generation: Long, type: Alert, message: String? = null) {
+        if (!VpnSessionCoordinator.isCurrent(generation) || activeSession?.generation != generation) {
+            VpnSessionCoordinator.event(
+                "stale_exception_ignored",
+                generation,
+                "current_generation=${VpnSessionCoordinator.current()} session_state=${status.value?.name ?: "unknown"} source=stop_and_alert reason=${type.name}",
+                Log.WARN,
+            )
+            return
+        }
         Settings.startedByUser = false
         activeSession?.let { closeSession(it, "failed_start") }
         withContext(Dispatchers.Main) {
@@ -502,9 +530,13 @@ class BoxService(
             runCatching { service.unregisterReceiver(receiver) }
             receiverRegistered = false
         }
+        notification.close()
         binder.close()
         serviceScope.cancel()
         mainScope.cancel()
+        if (activeInstance === this) {
+            activeInstance = null
+        }
     }
 
     fun onRevoke() {
@@ -524,7 +556,60 @@ class BoxService(
             VpnSessionCoordinator.stale(generation, "open_tun_without_active_session")
             error("VPN session is not accepting TUN requests")
         }
-        return tunOwner.open(generation, descriptor, validate)
+        val fd = tunOwner.open(generation, descriptor, validate)
+        session.markTunReady(protectSucceeded = true)
+        return fd
+    }
+
+    private suspend fun confirmCoreStarted(generation: Long): Boolean {
+        val session = activeSession
+        if (session == null || session.generation != generation) {
+            VpnSessionCoordinator.event(
+                "stale_completion_ignored",
+                generation,
+                "current_generation=${VpnSessionCoordinator.current()} session_state=${status.value?.name ?: "unknown"} source=mark_core_started reason=session_mismatch",
+                Log.WARN,
+            )
+            return false
+        }
+
+        val permissionGranted = service !is AndroidVpnService || AndroidVpnService.prepare(service) == null
+        val result = VpnConnectedGate.evaluate(
+            session.startEvidence(
+                permissionGranted = permissionGranted,
+                mobileStartSucceeded = true,
+            ),
+        )
+        if (result is VpnConnectedGate.Result.Rejected) {
+            val stale = !VpnSessionCoordinator.isCurrent(generation)
+            VpnSessionCoordinator.event(
+                if (stale) "stale_completion_ignored" else "start_gate_rejected",
+                generation,
+                "current_generation=${VpnSessionCoordinator.current()} session_state=${status.value?.name ?: "unknown"} source=mark_core_started reason=${result.missing.joinToString("+")}",
+                if (stale) Log.WARN else Log.ERROR,
+            )
+            if (!stale) {
+                stopAndAlert(generation, Alert.StartService, "VPN startup readiness validation failed")
+            }
+            return false
+        }
+
+        VpnSessionCoordinator.event(
+            "start_gate_completed",
+            generation,
+            "current_generation=${VpnSessionCoordinator.current()} session_state=started source=mark_core_started reason=all_required_evidence",
+        )
+        VpnSessionCoordinator.event("core_start_success", generation)
+        if (!publishStatus(Status.Started, generation, "all_start_gates_confirmed")) {
+            return false
+        }
+        withContext(Dispatchers.Main) {
+            notification.show(activeProfileName, R.string.status_started)
+        }
+        notification.start(generation) {
+            activeSession === session && session.acceptsOperations()
+        }
+        return true
     }
 
     private suspend fun closeSession(session: ActiveSession, reason: String) {
@@ -533,6 +618,7 @@ class BoxService(
             closeCommandClientsAndListeners = {
                 // Flutter owns gRPC client objects; Android owns the endpoint and
                 // removes all native callbacks before stopping it.
+                notification.stopListenSystemInfoAndJoin()
                 DefaultNetworkMonitor.setListener(null)
             },
             stopCore = {

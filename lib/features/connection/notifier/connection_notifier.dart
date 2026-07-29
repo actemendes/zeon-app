@@ -214,6 +214,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
           _markUserAction('manual_disconnect', expectsStop: true);
           await ref.read(Preferences.startedByUser.notifier).update(false);
           await _disconnect();
+        case Connecting():
+          await haptic.mediumImpact();
+          _markUserAction('cancel_pending_connect', expectsStop: true);
+          await ref.read(Preferences.startedByUser.notifier).update(false);
+          await _disconnect();
         default:
           loggy.warning("switching status, debounce");
       }
@@ -237,16 +242,19 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       await ref.read(Preferences.startedByUser.notifier).update(true);
       final previousProfileId = _connectedProfileId;
       _connectedProfileId = profile.id;
-      await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit)).mapLeft((err) async {
-        _connectedProfileId = previousProfileId;
-        loggy.warning("error reconnecting", err);
-        unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(err, StackTrace.current));
-        state = AsyncError(err, StackTrace.current);
-        final t = ref.read(translationsProvider).requireValue;
-        await ref
-            .read(dialogNotifierProvider.notifier)
-            .showCustomAlertFromErrWithDiagnostic(err.present(t), diagnosticText: t.diagnosticError(err));
-      }).run();
+      await _connectionRepo
+          .reconnect(profile, ref.read(Preferences.disableMemoryLimit), source: "profile_switch")
+          .mapLeft((err) async {
+            _connectedProfileId = previousProfileId;
+            loggy.warning("error reconnecting", err);
+            unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(err, StackTrace.current));
+            state = AsyncError(err, StackTrace.current);
+            final t = ref.read(translationsProvider).requireValue;
+            await ref
+                .read(dialogNotifierProvider.notifier)
+                .showCustomAlertFromErrWithDiagnostic(err.present(t), diagnosticText: t.diagnosticError(err));
+          })
+          .run();
     }
   }
 
@@ -264,15 +272,17 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       loggy.info("config options changed, restarting connection");
       _markUserAction('config_restart', expectsStop: true);
       await ref.read(Preferences.startedByUser.notifier).update(true);
-      await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit)).mapLeft((err) async {
-        loggy.warning("error restarting after config change", err);
-        unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(err, StackTrace.current));
-        state = AsyncError(err, StackTrace.current);
-        final t = ref.read(translationsProvider).requireValue;
-        await ref
-            .read(dialogNotifierProvider.notifier)
-            .showCustomAlertFromErrWithDiagnostic(err.present(t), diagnosticText: t.diagnosticError(err));
-      }).run();
+      await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit), source: "mode_switch").mapLeft(
+        (err) async {
+          loggy.warning("error restarting after config change", err);
+          unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(err, StackTrace.current));
+          state = AsyncError(err, StackTrace.current);
+          final t = ref.read(translationsProvider).requireValue;
+          await ref
+              .read(dialogNotifierProvider.notifier)
+              .showCustomAlertFromErrWithDiagnostic(err.present(t), diagnosticText: t.diagnosticError(err));
+        },
+      ).run();
     }
   }
 

@@ -13,8 +13,11 @@ import com.hiddify.core.mobile.Mobile
 import com.hiddify.core.mobile.SetupOptions
 import com.zeon.zeon.bg.Bugs
 import com.zeon.zeon.bg.VpnSessionCoordinator
+import com.zeon.zeon.bg.VpnPermissionRequestCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
@@ -120,10 +123,27 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         Settings.grpcServiceModePort = args["grpcPort"] as Int
                         Settings.disableMemoryLimit = args["disableMemoryLimit"] as Boolean? ?: false
                         val generation = (args["generation"] as Number?)?.toLong() ?: 0L
-                        VpnSessionCoordinator.accept(generation, "prepare_vpn")
+                        val acceptedGeneration = VpnSessionCoordinator.accept(generation, "prepare_vpn")
+                        if (generation <= 0 || acceptedGeneration != generation) {
+                            VpnSessionCoordinator.event(
+                                "permission_result_ignored_stale",
+                                generation,
+                                "current_generation=$acceptedGeneration session_state=permission source=method_handler reason=invalid_generation",
+                            )
+                            result.error("vpn_operation_stale", "VPN permission result belongs to a stale session", null)
+                            return@launch
+                        }
 
-                        MainActivity.instance.prepareVpn { prepared ->
-                            result.success(prepared)
+                        MainActivity.instance.prepareVpn(generation) { outcome ->
+                            when (outcome) {
+                                VpnPermissionRequestCoordinator.Outcome.Granted -> result.success(true)
+                                VpnPermissionRequestCoordinator.Outcome.Denied -> result.success(false)
+                                VpnPermissionRequestCoordinator.Outcome.Stale -> result.error(
+                                    "vpn_operation_stale",
+                                    "VPN permission result belongs to a stale session",
+                                    null,
+                                )
+                            }
                         }
                     } catch (e: Exception) {
                         result.error("prepare_vpn_failed", e.message, null)
@@ -190,9 +210,20 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         val generation = (args?.get("generation") as Number?)?.toLong() ?: 0L
                         if (!VpnSessionCoordinator.isCurrent(generation)) {
                             VpnSessionCoordinator.stale(generation, "flutter_mark_core_started")
-                            return@runCatching error(IllegalStateException("stale VPN session generation"))
+                            result.error("vpn_operation_stale", "VPN core completion belongs to a stale session", null)
+                            return@runCatching
                         }
-                        BoxService.markCoreStarted(generation)
+                        val confirmed = withContext(Dispatchers.IO) {
+                            BoxService.markCoreStarted(generation)
+                        }
+                        if (!confirmed) {
+                            result.error(
+                                "vpn_start_gate_rejected",
+                                "VPN startup readiness validation failed",
+                                null,
+                            )
+                            return@runCatching
+                        }
                         success(generation)
                     }
                 }

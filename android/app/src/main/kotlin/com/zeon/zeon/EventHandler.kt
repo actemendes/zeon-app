@@ -54,7 +54,8 @@ class EventHandler : FlutterPlugin {
                     val map = listOf(
                         Pair("status", it.status.name),
                         Pair("alert", it.alert?.name),
-                        Pair("message", it.message)
+                        Pair("message", it.message),
+                        Pair("generation", it.generation),
                     )
                         .mapNotNull { p -> p.second?.let { Pair(p.first, p.second) } }
                         .toMap()
@@ -80,4 +81,9 @@ class EventHandler : FlutterPlugin {
     }
 }
 
-data class ServiceEvent(val status: Status, val alert: Alert? = null, val message: String? = null)
+data class ServiceEvent(
+    val status: Status,
+    val alert: Alert? = null,
+    val message: String? = null,
+    val generation: Long = 0L,
+)

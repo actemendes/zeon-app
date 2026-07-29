@@ -15,6 +15,7 @@ import com.zeon.zeon.bg.BoxService
 import com.zeon.zeon.bg.ServiceConnection
 import com.zeon.zeon.bg.ServiceNotification
 import com.zeon.zeon.bg.VpnSessionCoordinator
+import com.zeon.zeon.bg.VpnPermissionRequestCoordinator
 import com.zeon.zeon.constant.Alert
 import com.zeon.zeon.constant.ServiceMode
 import com.zeon.zeon.constant.Status
@@ -24,7 +25,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.LinkedList
-import java.util.ArrayDeque
 
 
 class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
@@ -42,9 +42,9 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     val serviceStatus = MutableLiveData(Status.Stopped)
     val serviceGeneration = MutableLiveData(0L)
     val serviceAlerts = MutableLiveData<ServiceEvent?>(null)
-    private val vpnPermissionCallbacks = ArrayDeque<(Boolean) -> Unit>()
-    private var startServiceAfterVpnPermission = false
+    private val vpnPermissionRequests = VpnPermissionRequestCoordinator()
     private var pendingStartGeneration = 0L
+    private var notificationPermissionGeneration = 0L
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -67,22 +67,20 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     fun startService(generation: Long = VpnSessionCoordinator.next("main_activity_start")) {
         pendingStartGeneration = VpnSessionCoordinator.accept(generation, "main_activity_start")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !ServiceNotification.checkPermission()) {
+            notificationPermissionGeneration = pendingStartGeneration
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
         startService0(pendingStartGeneration)
     }
 
-    fun prepareVpn(callback: (Boolean) -> Unit) {
+    internal fun prepareVpn(generation: Long, callback: (VpnPermissionRequestCoordinator.Outcome) -> Unit) {
         lifecycleScope.launch(Dispatchers.Main) {
             if (Settings.serviceMode != ServiceMode.VPN) {
-                callback(true)
+                callback(VpnPermissionRequestCoordinator.Outcome.Granted)
                 return@launch
             }
-            val waitingForUser = requestVpnPermission(startAfterGrant = false, callback = callback)
-            if (!waitingForUser) {
-                callback(true)
-            }
+            requestVpnPermission(generation, startAfterGrant = false, callback = callback)
         }
     }
 
@@ -96,7 +94,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
                 connection.reconnect()
             }
             if (Settings.serviceMode == ServiceMode.VPN) {
-                if (prepareForServiceStart()) {
+                if (prepareForServiceStart(acceptedGeneration)) {
                     return@launch
                 }
             }
@@ -109,47 +107,45 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         }
     }
 
-    private suspend fun prepareForServiceStart() = withContext(Dispatchers.Main) {
-        requestVpnPermission(startAfterGrant = true)
+    private suspend fun prepareForServiceStart(generation: Long) = withContext(Dispatchers.Main) {
+        requestVpnPermission(generation, startAfterGrant = true)
     }
 
-    private fun requestVpnPermission(startAfterGrant: Boolean, callback: ((Boolean) -> Unit)? = null): Boolean {
-        if (vpnPermissionCallbacks.isNotEmpty()) {
-            callback?.let { vpnPermissionCallbacks.add(it) }
-            startServiceAfterVpnPermission = startServiceAfterVpnPermission || startAfterGrant
-            return true
-        }
-
+    private fun requestVpnPermission(
+        generation: Long,
+        startAfterGrant: Boolean,
+        callback: ((VpnPermissionRequestCoordinator.Outcome) -> Unit)? = null,
+    ): Boolean {
+        val completion = callback ?: {}
         return try {
             val intent = VpnService.prepare(this@MainActivity)
             if (intent != null) {
-                callback?.let { vpnPermissionCallbacks.add(it) }
-                startServiceAfterVpnPermission = startAfterGrant
-                prepareLauncher.launch(intent)
+                val launch = vpnPermissionRequests.request(
+                    VpnPermissionRequestCoordinator.Request(generation, startAfterGrant, completion),
+                )
+                if (launch) prepareLauncher.launch(intent)
                 true
             } else {
+                vpnPermissionRequests.completeAlreadyGranted(generation, completion)
                 false
             }
         } catch (e: Exception) {
-            onServiceAlert(Alert.RequestVPNPermission, e.message)
-            callback?.invoke(false)
+            if (VpnSessionCoordinator.isCurrent(generation)) {
+                onServiceAlert(Alert.RequestVPNPermission, e.message, generation)
+                completion(VpnPermissionRequestCoordinator.Outcome.Denied)
+            } else {
+                completion(VpnPermissionRequestCoordinator.Outcome.Stale)
+            }
             true
         }
     }
 
     private fun completeVpnPermissionRequest(granted: Boolean) {
-        val callbacks = ArrayList<(Boolean) -> Unit>()
-        while (vpnPermissionCallbacks.isNotEmpty()) {
-            callbacks.add(vpnPermissionCallbacks.removeFirst())
-        }
-        val shouldStartService = startServiceAfterVpnPermission && granted
-        startServiceAfterVpnPermission = false
-
-        callbacks.forEach { it(granted) }
-        if (shouldStartService) {
-            startService0(pendingStartGeneration)
-        } else if (!granted) {
-            onServiceAlert(Alert.RequestVPNPermission, null)
+        val completed = vpnPermissionRequests.complete(granted) ?: return
+        if (granted && completed.startAfterGrant) {
+            startService0(completed.generation)
+        } else if (!granted && VpnSessionCoordinator.isCurrent(completed.generation)) {
+            onServiceAlert(Alert.RequestVPNPermission, null, completed.generation)
         }
     }
 
@@ -157,10 +153,20 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         registerForActivityResult(
             ActivityResultContracts.RequestPermission(),
         ) { isGranted ->
-            if (Settings.dynamicNotification && !isGranted) {
-                onServiceAlert(Alert.RequestNotificationPermission, null)
+            val generation = notificationPermissionGeneration
+            notificationPermissionGeneration = 0L
+            if (!VpnSessionCoordinator.isCurrent(generation)) {
+                VpnSessionCoordinator.event(
+                    "stale_completion_ignored",
+                    generation,
+                    "current_generation=${VpnSessionCoordinator.current()} session_state=permission source=notification_permission reason=stale_result",
+                )
+                return@registerForActivityResult
             }
-            startService0(pendingStartGeneration)
+            if (Settings.dynamicNotification && !isGranted) {
+                onServiceAlert(Alert.RequestNotificationPermission, null, generation)
+            }
+            startService0(generation)
         }
 
     private val prepareLauncher =
@@ -185,7 +191,19 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     }
 
     override fun onServiceAlert(type: Alert, message: String?) {
-        serviceAlerts.postValue(ServiceEvent(Status.Stopped, type, message))
+        onServiceAlert(type, message, VpnSessionCoordinator.current())
+    }
+
+    private fun onServiceAlert(type: Alert, message: String?, generation: Long) {
+        if (!VpnSessionCoordinator.isCurrent(generation)) {
+            VpnSessionCoordinator.event(
+                "stale_exception_ignored",
+                generation,
+                "current_generation=${VpnSessionCoordinator.current()} session_state=alert source=android_alert reason=${type.name}",
+            )
+            return
+        }
+        serviceAlerts.postValue(ServiceEvent(Status.Stopped, type, message, generation))
     }
 
 

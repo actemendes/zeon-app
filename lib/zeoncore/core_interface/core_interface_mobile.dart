@@ -161,7 +161,9 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
         message: "background command endpoint readiness timeout",
       );
     }
-    return const CoreStarted();
+    // The daemon/control endpoint is reachable, but the tunnel core has not
+    // completed Mobile.start yet. This must never be exposed as Connected.
+    return const CoreStarting();
   }
 
   @override

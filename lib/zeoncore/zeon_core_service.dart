@@ -79,16 +79,13 @@ class ZeonCoreService with InfraLogger {
   late final SessionGenerationGate _sessionGeneration = SessionGenerationGate(
     onStale: (stale, current, source) {
       loggy.warning(
-        vpnDiagnosticEvent(
-          "stale_callback_ignored",
-          stale,
-          details: "current_generation=$current source=$source",
-        ),
+        vpnDiagnosticEvent("stale_callback_ignored", stale, details: "current_generation=$current source=$source"),
       );
     },
   );
-  Future<void> _lifecycleQueueTail = Future<void>.value();
+  final SerialLifecycleQueue _lifecycleQueue = SerialLifecycleQueue();
   _CoreLifecycleState _lifecycleState = _CoreLifecycleState.stopped;
+  int _connectedGeneration = 0;
   ChangeHiddifySettingsRequest? _latestCoreOptionsRequest;
   static const _platformChannel = MethodChannel("com.zeon.app/platform");
   List<OutboundGroup> latest = [];
@@ -258,12 +255,64 @@ class ZeonCoreService with InfraLogger {
     }
   }
 
+  int beginVpnOperation(String source) {
+    final generation = _sessionGeneration.next();
+    _connectedGeneration = 0;
+    _transitionLifecycle(_CoreLifecycleState.starting, reason: "$source requested");
+    statusController.add(currentState = const CoreStatus.starting());
+    final operationEvent = vpnDiagnosticEvent(
+      source == "mode_switch" ? "mode_switch_requested" : "vpn_session_start",
+      generation,
+      details:
+          "operation_generation=$generation current_generation=${_sessionGeneration.current} "
+          "session_state=${_lifecycleState.name} source=$source reason=requested",
+    );
+    if (source == "mode_switch") {
+      loggy.warning(operationEvent);
+    } else {
+      loggy.info(operationEvent);
+    }
+    return generation;
+  }
+
+  bool _isStaleOperation(int generation, String source, {Object? error}) {
+    if (_sessionGeneration.classifyCompletion(generation, source: source) == SessionCompletionDisposition.current) {
+      return false;
+    }
+    loggy.warning(
+      vpnDiagnosticEvent(
+        error == null ? "stale_completion_ignored" : "stale_exception_ignored",
+        generation,
+        details:
+            "operation_generation=$generation current_generation=${_sessionGeneration.current} "
+            "session_state=${_lifecycleState.name} source=$source "
+            "reason=${error == null ? "superseded" : error.runtimeType}",
+      ),
+    );
+    return true;
+  }
+
+  CoreStatus _gateTerminalStatus(CoreStatus next, int generation, String source) {
+    if (next is! CoreStarted || generation == _connectedGeneration) return next;
+    loggy.warning(
+      vpnDiagnosticEvent(
+        "terminal_state_blocked",
+        generation,
+        details:
+            "operation_generation=$generation current_generation=${_sessionGeneration.current} "
+            "session_state=${_lifecycleState.name} source=$source reason=start_gate_incomplete",
+      ),
+    );
+    return const CoreStatus.starting();
+  }
+
   Future<CoreStatus> _applyCoreStatusFromListener(String key, CoreStatus next, int generation) async {
     if (!_sessionGeneration.isCurrent(generation, source: "coreInfoListener[$key]")) {
       return currentState;
     }
+    final gatedNext = _gateTerminalStatus(next, generation, "coreInfoListener[$key]");
     // Guard against transient/stale "stopped" events while background core is still alive.
-    if (next is CoreStopped && _lifecycleState == _CoreLifecycleState.started) {
+    if (gatedNext is CoreStopped && _lifecycleState == _CoreLifecycleState.started) {
       try {
         if (await core.isActiveBg()) {
           loggy.warning("ignore stale stopped from coreInfoListener[$key]: bg port still active");
@@ -271,30 +320,25 @@ class ZeonCoreService with InfraLogger {
         }
       } catch (_) {}
     }
-    currentState = next;
+    currentState = gatedNext;
     _syncLifecycleFromCoreStatus(currentState, reason: "coreInfoListener[$key]");
     statusController.add(currentState);
-    if (next is CoreStopping) {
+    if (gatedNext is CoreStopping) {
       _scheduleStoppingStatusWatchdog("coreInfoListener[$key]");
     }
     return currentState;
   }
 
   Future<T> _enqueueLifecycle<T>(String opName, Future<T> Function() action) {
-    final completer = Completer<T>();
     loggy.debug("lifecycle queue: enqueue $opName (state=${_lifecycleState.name})");
-    _lifecycleQueueTail = _lifecycleQueueTail.catchError((_) {}).then((_) async {
+    return _lifecycleQueue.enqueue(() async {
       loggy.debug("lifecycle queue: begin $opName (state=${_lifecycleState.name})");
       try {
-        final res = await action();
-        if (!completer.isCompleted) completer.complete(res);
-      } catch (e, st) {
-        if (!completer.isCompleted) completer.completeError(e, st);
+        return await action();
       } finally {
         loggy.debug("lifecycle queue: end $opName (state=${_lifecycleState.name})");
       }
     });
-    return completer.future;
   }
 
   Duration _listenerReconnectDelay(String key) {
@@ -914,19 +958,27 @@ class ZeonCoreService with InfraLogger {
     }
   }
 
-  TaskEither<ConnectionFailure, Unit> start(String path, String name, bool disableMemoryLimit) {
+  TaskEither<ConnectionFailure, Unit> start(
+    String path,
+    String name,
+    bool disableMemoryLimit, {
+    required int generation,
+  }) {
     return TaskEither(() {
-      final generation = _sessionGeneration.next();
-      loggy.info(vpnDiagnosticEvent("vpn_session_start", generation));
       return _enqueueLifecycle("start", () async {
-        await core.setSessionGeneration(generation);
+        if (_isStaleOperation(generation, "start_queue_entry")) return right(unit);
+        try {
+          await core.setSessionGeneration(generation);
+        } catch (e) {
+          if (_isStaleOperation(generation, "start_set_generation", error: e)) return right(unit);
+          rethrow;
+        }
         if (_useMockCore) {
           _transitionLifecycle(_CoreLifecycleState.starting, reason: "mock start");
           statusController.add(currentState = const CoreStatus.starting());
           await Future<void>.delayed(const Duration(milliseconds: 180));
-          if (!_sessionGeneration.isCurrent(generation, source: "mock_start")) {
-            return left(const ConnectionFailure.unexpected("start superseded by a newer VPN session"));
-          }
+          if (_isStaleOperation(generation, "mock_start")) return right(unit);
+          _connectedGeneration = generation;
           _transitionLifecycle(_CoreLifecycleState.started, reason: "mock start complete");
           statusController.add(currentState = const CoreStatus.started());
           return right(unit);
@@ -951,16 +1003,15 @@ class ZeonCoreService with InfraLogger {
         try {
           background = await core.setupBackground(path, name, generation: generation);
         } catch (e, st) {
+          if (_isStaleOperation(generation, "background_setup", error: e)) return right(unit);
           await _deleteCoreCurrentConfigSnapshot();
           loggy.error("failed to setup background core", e, st);
           _transitionLifecycle(_CoreLifecycleState.stopped, reason: "background setup error");
           statusController.add(currentState = const CoreStatus.stopped());
           return left(const ConnectionFailure.unexpected("failed to setup background core"));
         }
-        if (!_sessionGeneration.isCurrent(generation, source: "background_setup")) {
-          return left(const ConnectionFailure.unexpected("start superseded by a newer VPN session"));
-        }
-        if (background != const CoreStatus.started()) {
+        if (_isStaleOperation(generation, "background_setup")) return right(unit);
+        if (background is! CoreStarting) {
           await _deleteCoreCurrentConfigSnapshot();
           _transitionLifecycle(_CoreLifecycleState.stopped, reason: "background setup failed");
           statusController.add(currentState = const CoreStatus.stopped());
@@ -986,9 +1037,7 @@ class ZeonCoreService with InfraLogger {
           final res = await core.bgClient.start(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
           );
-          if (!_sessionGeneration.isCurrent(generation, source: "core_start_result")) {
-            return left(const ConnectionFailure.unexpected("start superseded by a newer VPN session"));
-          }
+          if (_isStaleOperation(generation, "core_start_result")) return right(unit);
           ref.read(coreRestartSignalProvider.notifier).restart();
           if (res.messageType == MessageType.ALREADY_STARTED) {
             loggy.error(vpnDiagnosticEvent("core_already_started_conflict", generation));
@@ -1018,16 +1067,13 @@ class ZeonCoreService with InfraLogger {
             );
           }
           await core.markCoreStarted(generation);
+          if (_isStaleOperation(generation, "mark_core_started_result")) return right(unit);
+          _connectedGeneration = generation;
           loggy.info(vpnDiagnosticEvent("core_start_success", generation));
           await _logRuntimeIndicators(generation, "core_start_success");
         } on GrpcError catch (e) {
-          loggy.error(
-            vpnDiagnosticEvent(
-              "grpc_disconnect",
-              generation,
-              details: "source=core_start code=${e.code}",
-            ),
-          );
+          if (_isStaleOperation(generation, "core_start_grpc", error: e)) return right(unit);
+          loggy.error(vpnDiagnosticEvent("grpc_disconnect", generation, details: "source=core_start code=${e.code}"));
           ref.read(coreRestartSignalProvider.notifier).restart();
           if (isVpnPermissionDenied(e)) {
             final message = e.message ?? e.toString();
@@ -1044,16 +1090,14 @@ class ZeonCoreService with InfraLogger {
             loggy.warning("start bg core transport closed after start, but background core is active: $e");
             _transitionLifecycle(_CoreLifecycleState.started, reason: "start transport closed with active bg");
             await core.markCoreStarted(generation);
+            if (_isStaleOperation(generation, "core_start_transport_mark")) return right(unit);
+            _connectedGeneration = generation;
             statusController.add(currentState = const CoreStatus.started());
             return right(unit);
           }
           _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc error on start");
           loggy.error(
-            vpnDiagnosticEvent(
-              "terminal_failure",
-              generation,
-              details: "phase=core_start error=grpc_${e.code}",
-            ),
+            vpnDiagnosticEvent("terminal_failure", generation, details: "phase=core_start error=grpc_${e.code}"),
           );
           if (_isMissingWindowsTunPrivilege()) {
             return left(const ConnectionFailure.missingPrivilege());
@@ -1062,10 +1106,17 @@ class ZeonCoreService with InfraLogger {
             return left(const ConnectionFailure.unexpected("background core is not started yet!"));
           }
           return left(const ConnectionFailure.unexpected("failed to start background core"));
+        } catch (e) {
+          if (_isStaleOperation(generation, "core_start_exception", error: e)) return right(unit);
+          loggy.error(vpnDiagnosticEvent("core_start_failure", generation, details: "error=${e.runtimeType}"));
+          return left(const ConnectionFailure.unexpected("failed to start background core"));
         } finally {
-          await _deleteCoreCurrentConfigSnapshot();
+          if (_sessionGeneration.isCurrent(generation, source: "core_start_cleanup")) {
+            await _deleteCoreCurrentConfigSnapshot();
+          }
         }
 
+        if (_isStaleOperation(generation, "start_terminal_publication")) return right(unit);
         _transitionLifecycle(_CoreLifecycleState.started, reason: "start complete");
         statusController.add(currentState = const CoreStatus.started());
         return right(unit);
@@ -1073,7 +1124,12 @@ class ZeonCoreService with InfraLogger {
     });
   }
 
-  TaskEither<String, Unit> prepareVpnConfiguration(String path, String name, bool disableMemoryLimit) {
+  TaskEither<String, Unit> prepareVpnConfiguration(
+    String path,
+    String name,
+    bool disableMemoryLimit, {
+    required int generation,
+  }) {
     return TaskEither(() async {
       if ((!PlatformUtils.isIOS && !PlatformUtils.isAndroid) ||
           (PlatformUtils.isAndroid && ref.read(ConfigOptions.serviceMode) != ServiceMode.tun) ||
@@ -1081,9 +1137,38 @@ class ZeonCoreService with InfraLogger {
         return right(unit);
       }
       try {
-        final prepared = await core.prepareVpn(path, name, disableMemoryLimit);
-        return prepared ? right(unit) : left("missing VPN permission");
+        if (_isStaleOperation(generation, "permission_request")) return right(unit);
+        loggy.info(
+          vpnDiagnosticEvent(
+            "permission_request_started",
+            generation,
+            details:
+                "operation_generation=$generation current_generation=${_sessionGeneration.current} "
+                "session_state=${_lifecycleState.name} source=flutter reason=prepare_vpn",
+          ),
+        );
+        await core.setSessionGeneration(generation);
+        final prepared = await core.prepareVpn(path, name, disableMemoryLimit, generation: generation);
+        if (_isStaleOperation(generation, "permission_result")) return right(unit);
+        loggy.info(
+          vpnDiagnosticEvent(
+            "permission_result_received",
+            generation,
+            details:
+                "operation_generation=$generation current_generation=${_sessionGeneration.current} "
+                "session_state=${_lifecycleState.name} source=flutter reason=${prepared ? "granted" : "denied"}",
+          ),
+        );
+        if (!prepared) {
+          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "VPN permission denied");
+          statusController.add(currentState = const CoreStatus.stopped(alert: CoreAlert.requestVPNPermission));
+          return left("missing VPN permission");
+        }
+        return right(unit);
       } catch (e) {
+        if (_isStaleOperation(generation, "permission_exception", error: e)) return right(unit);
+        _transitionLifecycle(_CoreLifecycleState.stopped, reason: "VPN permission failure");
+        statusController.add(currentState = const CoreStatus.stopped(alert: CoreAlert.requestVPNPermission));
         return left(e.toString());
       }
     });
@@ -1104,6 +1189,7 @@ class ZeonCoreService with InfraLogger {
   TaskEither<String, Unit> stop({bool force = false}) {
     return TaskEither(() {
       final generation = _sessionGeneration.next();
+      _connectedGeneration = 0;
       return _enqueueLifecycle("stop", () async {
         await core.setSessionGeneration(generation);
         if (_useMockCore) {
@@ -1158,14 +1244,25 @@ class ZeonCoreService with InfraLogger {
     });
   }
 
-  TaskEither<String, Unit> restart(String path, String name, bool disableMemoryLimit) {
+  TaskEither<String, Unit> restart(
+    String path,
+    String name,
+    bool disableMemoryLimit, {
+    required int generation,
+    String source = "restart",
+  }) {
     if (_lifecycleState == _CoreLifecycleState.starting || _lifecycleState == _CoreLifecycleState.stopping) {
       loggy.info("restart requested during ${_lifecycleState.name}; queued");
     }
     return TaskEither(() {
-      final generation = _sessionGeneration.next();
       return _enqueueLifecycle("restart", () async {
-        await core.setSessionGeneration(generation);
+        if (_isStaleOperation(generation, "restart_queue_entry")) return right(unit);
+        try {
+          await core.setSessionGeneration(generation);
+        } catch (e) {
+          if (_isStaleOperation(generation, "restart_set_generation", error: e)) return right(unit);
+          rethrow;
+        }
         if (_useMockCore) {
           _transitionLifecycle(_CoreLifecycleState.stopping, reason: "mock restart");
           statusController.add(currentState = const CoreStatus.stopping());
@@ -1173,9 +1270,8 @@ class ZeonCoreService with InfraLogger {
           _transitionLifecycle(_CoreLifecycleState.starting, reason: "mock restart");
           statusController.add(currentState = const CoreStatus.starting());
           await Future<void>.delayed(const Duration(milliseconds: 140));
-          if (!_sessionGeneration.isCurrent(generation, source: "mock_restart")) {
-            return left("restart superseded by a newer VPN session");
-          }
+          if (_isStaleOperation(generation, "mock_restart")) return right(unit);
+          _connectedGeneration = generation;
           _transitionLifecycle(_CoreLifecycleState.started, reason: "mock restart complete");
           statusController.add(currentState = const CoreStatus.started());
           return right(unit);
@@ -1187,26 +1283,87 @@ class ZeonCoreService with InfraLogger {
 
         try {
           await _closeSessionListeners(generation);
+          try {
+            await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
+          } on GrpcError catch (error) {
+            if (!_isTransientGrpcTransportClose(error)) rethrow;
+          }
+          final oldClosed = await core
+              .stop(generation: generation)
+              .timeout(const Duration(seconds: 14), onTimeout: () => false);
+          if (_isStaleOperation(generation, "mode_switch_old_close")) return right(unit);
+          if (!oldClosed) {
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "old generation close timeout");
+            statusController.add(currentState = const CoreStatus.stopped());
+            return left("old VPN generation did not close before restart");
+          }
+          if (source == "mode_switch") {
+            loggy.warning(
+              vpnDiagnosticEvent(
+                "mode_switch_old_generation_closed",
+                generation,
+                details:
+                    "operation_generation=$generation current_generation=${_sessionGeneration.current} "
+                    "session_state=stopped source=config_option reason=teardown_completed",
+              ),
+            );
+          }
+
+          _transitionLifecycle(_CoreLifecycleState.starting, reason: "restart old generation closed");
+          statusController.add(currentState = const CoreStatus.starting());
+          final background = await core.setupBackground(path, name, generation: generation);
+          if (_isStaleOperation(generation, "mode_switch_background_setup")) return right(unit);
+          if (background is! CoreStarting) {
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart background setup failed");
+            statusController.add(currentState = const CoreStatus.stopped());
+            return left(background.getCoreAlert()?.toString() ?? "failed to create background core for restart");
+          }
+
+          await startListeningLogs("bg", core.bgClient);
+          await startListeningStatus("bg", core.bgClient, generation: generation);
           final optionsResult = await _applyLatestCoreOptionsToBackground("restart");
           if (optionsResult.isLeft()) {
             final error = optionsResult.getLeft().toNullable() ?? "failed to apply core options";
+            await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart options failed");
             statusController.add(currentState = const CoreStatus.stopped());
             return left("failed to apply core options: $error");
           }
-          final res = await core.bgClient.restart(
-            StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit, delayStart: true),
+
+          loggy.info(vpnDiagnosticEvent("core_start_requested", generation, details: "owner=flutter source=$source"));
+          final res = await core.bgClient.start(
+            StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
           );
-          if (!_sessionGeneration.isCurrent(generation, source: "core_restart_result")) {
-            return left("restart superseded by a newer VPN session");
+          if (_isStaleOperation(generation, "core_restart_start_result")) return right(unit);
+          if (res.messageType == MessageType.ALREADY_STARTED) {
+            loggy.error(vpnDiagnosticEvent("core_already_started_conflict", generation));
+            await core.stop(generation: generation);
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "duplicate native core on restart");
+            statusController.add(currentState = const CoreStatus.stopped());
+            return left("core is already started by another session");
           }
           if (res.messageType != MessageType.EMPTY) {
-            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart failed");
+            await core.stop(generation: generation);
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart start failed");
             statusController.add(currentState = const CoreStatus.stopped());
             return left("${res.messageType} ${res.message}");
           }
           await core.markCoreStarted(generation);
+          if (_isStaleOperation(generation, "core_restart_mark_result")) return right(unit);
+          _connectedGeneration = generation;
+          if (source == "mode_switch") {
+            loggy.warning(
+              vpnDiagnosticEvent(
+                "mode_switch_new_generation_started",
+                generation,
+                details:
+                    "operation_generation=$generation current_generation=${_sessionGeneration.current} "
+                    "session_state=starting source=config_option reason=start_gate_confirmed",
+              ),
+            );
+          }
         } on GrpcError catch (e) {
+          if (_isStaleOperation(generation, "core_restart_grpc", error: e)) return right(unit);
           if (isTunInterfacePermissionDenied(e)) {
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "tun permission denied on restart");
             statusController.add(currentState = const CoreStatus.stopped());
@@ -1214,27 +1371,48 @@ class ZeonCoreService with InfraLogger {
           }
           loggy.error("failed to restart bg core: $e");
           if (!_isTransientGrpcTransportClose(e)) {
+            await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc restart failure");
             statusController.add(currentState = const CoreStatus.stopped());
             return left("${e.message}");
           }
           if (!_sessionGeneration.isCurrent(generation, source: "core_restart_transport_close") ||
               !await _isBackgroundCoreReachable()) {
+            await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart endpoint not ready");
             statusController.add(currentState = const CoreStatus.stopped());
             return left("background core command endpoint is not ready after restart");
           }
           await core.markCoreStarted(generation);
+          if (_isStaleOperation(generation, "core_restart_transport_mark")) return right(unit);
+          _connectedGeneration = generation;
+        } catch (e) {
+          if (_isStaleOperation(generation, "core_restart_exception", error: e)) return right(unit);
+          loggy.error("failed to restart bg core: $e");
+          await core.stop(generation: generation);
+          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart exception");
+          statusController.add(currentState = const CoreStatus.stopped());
+          return left("failed to restart background core");
         } finally {
-          await _deleteCoreCurrentConfigSnapshot();
+          if (_sessionGeneration.isCurrent(generation, source: "core_restart_cleanup")) {
+            await _deleteCoreCurrentConfigSnapshot();
+          }
         }
 
-        _transitionLifecycle(_CoreLifecycleState.starting, reason: "restart in progress");
-        statusController.add(currentState = const CoreStatus.starting());
-        await startListeningLogs("bg", core.bgClient);
-        await startListeningStatus("bg", core.bgClient, generation: generation);
+        if (_isStaleOperation(generation, "restart_terminal_publication")) return right(unit);
         _transitionLifecycle(_CoreLifecycleState.started, reason: "restart complete");
         statusController.add(currentState = const CoreStatus.started());
+        if (source == "mode_switch") {
+          loggy.warning(
+            vpnDiagnosticEvent(
+              "mode_switch_completed",
+              generation,
+              details:
+                  "operation_generation=$generation current_generation=${_sessionGeneration.current} "
+                  "session_state=${_lifecycleState.name} source=config_option reason=single_generation_ready",
+            ),
+          );
+        }
         ref.read(coreRestartSignalProvider.notifier).restart();
         return right(unit);
       });
@@ -1603,7 +1781,9 @@ class ZeonCoreService with InfraLogger {
     if (!statusController.hasValue) {
       statusController.add(currentState);
     }
-    yield* statusController.stream;
+    yield* statusController.stream.map(
+      (next) => _gateTerminalStatus(next, _sessionGeneration.current, "status_stream"),
+    );
     // .endWith(const CoreStatus.stopped());
   }
 
@@ -1626,11 +1806,7 @@ class ZeonCoreService with InfraLogger {
           .asyncMap((event) => _applyCoreStatusFromListener(key, CoreStatus.fromCoreInfo(event), listenerGeneration)),
       onDone: () {
         loggy.warning(
-          vpnDiagnosticEvent(
-            "grpc_disconnect",
-            listenerGeneration,
-            details: "source=${key}_status outcome=done",
-          ),
+          vpnDiagnosticEvent("grpc_disconnect", listenerGeneration, details: "source=${key}_status outcome=done"),
         );
         loggy.warning("status listener closed [$key], scheduling reconnect");
         _recoverStatusAfterListenerClose(key, null);
@@ -1640,11 +1816,7 @@ class ZeonCoreService with InfraLogger {
       },
       onError: (error) {
         loggy.warning(
-          vpnDiagnosticEvent(
-            "grpc_disconnect",
-            listenerGeneration,
-            details: "source=${key}_status outcome=error",
-          ),
+          vpnDiagnosticEvent("grpc_disconnect", listenerGeneration, details: "source=${key}_status outcome=error"),
         );
         if (_isExpectedLifecycleGrpcClose(error)) {
           loggy.warning("Stream closed in $listenKey during lifecycle transition: $error");
@@ -1684,11 +1856,7 @@ class ZeonCoreService with InfraLogger {
               }
             } else if (line.contains("[SelectorStaleResult]")) {
               loggy.warning(
-                vpnDiagnosticEvent(
-                  "stale_callback_ignored",
-                  listenerGeneration,
-                  details: "source=core_selector",
-                ),
+                vpnDiagnosticEvent("stale_callback_ignored", listenerGeneration, details: "source=core_selector"),
               );
             }
           });
@@ -1697,22 +1865,14 @@ class ZeonCoreService with InfraLogger {
       },
       onDone: () {
         loggy.warning(
-          vpnDiagnosticEvent(
-            "grpc_disconnect",
-            listenerGeneration,
-            details: "source=${key}_log outcome=done",
-          ),
+          vpnDiagnosticEvent("grpc_disconnect", listenerGeneration, details: "source=${key}_log outcome=done"),
         );
         loggy.warning("log listener closed [$key], scheduling reconnect");
         _scheduleListenerReconnect(listenKey, () => startListeningLogs(key, cc));
       },
       onError: (error) {
         loggy.warning(
-          vpnDiagnosticEvent(
-            "grpc_disconnect",
-            listenerGeneration,
-            details: "source=${key}_log outcome=error",
-          ),
+          vpnDiagnosticEvent("grpc_disconnect", listenerGeneration, details: "source=${key}_log outcome=error"),
         );
         if (_isExpectedLifecycleGrpcClose(error)) {
           loggy.warning("Stream closed in $listenKey during lifecycle transition: $error");
@@ -1795,9 +1955,7 @@ class ZeonCoreService with InfraLogger {
 
   Future<void> _logRuntimeIndicators(int generation, String source) async {
     try {
-      final info = await core.bgClient
-          .getSystemInfo(Empty())
-          .timeout(const Duration(milliseconds: 800));
+      final info = await core.bgClient.getSystemInfo(Empty()).timeout(const Duration(milliseconds: 800));
       loggy.info(
         vpnDiagnosticEvent(
           "runtime_indicators",
