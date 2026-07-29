@@ -11,7 +11,6 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/outbound"
-	"github.com/sagernet/sing-box/common/conntrack"
 	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/common/monitoring"
 	C "github.com/sagernet/sing-box/constant"
@@ -380,8 +379,12 @@ func (s *Balancer) logSmartActiveDecision(history map[string]*adapter.URLTestHis
 		if decision.state == "CRITICAL" {
 			s.logger.Warn("[SmartActiveEmergency] from=", decision.from, " to=", decision.to, " error=", errorTypeOf(history[decision.from]))
 		}
+		activeConnections := 0
+		if s.connection != nil {
+			activeConnections = s.connection.Count()
+		}
 		s.logger.Warn("[SmartActiveSwitch] from=", decision.from, " to=", decision.to, " reason=", decisionReason,
-			" activeConnections=", conntrack.Count(), " activeDownloadBps=unavailable videoLikeLongLivedConnections=unavailable")
+			" activeConnections=", activeConnections, " activeDownloadBps=unavailable videoLikeLongLivedConnections=unavailable")
 	} else if decision.action == "confirm" {
 		s.logger.Info("[SmartActiveConfirmed] tag=", decision.to, " reason=", decisionReason, " mode=", decision.mode)
 	} else if decision.action == "keep" {
