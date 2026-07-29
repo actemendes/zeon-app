@@ -3,6 +3,7 @@ package libbox
 import (
 	"bytes"
 	"context"
+	"net/netip"
 	"os"
 
 	box "github.com/sagernet/sing-box"
@@ -23,8 +24,13 @@ import (
 )
 
 func BaseContext(platformInterface PlatformInterface) context.Context {
+	return baseContext(platformInterface)
+}
+
+func baseContext(platformInterface PlatformInterface) context.Context {
 	return FromContext(context.Background(), platformInterface)
 }
+
 func FromContext(ctx context.Context, platformInterface PlatformInterface) context.Context {
 	dnsRegistry := include.DNSTransportRegistry()
 	if platformInterface != nil {
@@ -48,7 +54,7 @@ func parseConfig(ctx context.Context, configContent string) (option.Options, err
 }
 
 func CheckConfig(configContent string) error {
-	ctx := BaseContext(nil)
+	ctx := baseContext(nil)
 	options, err := parseConfig(ctx, configContent)
 	if err != nil {
 		return err
@@ -154,6 +160,10 @@ func (s *platformInterfaceStub) SendNotification(notification *adapter.Notificat
 	return nil
 }
 
+func (s *platformInterfaceStub) MyInterfaceAddress() []netip.Addr {
+	return nil
+}
+
 func (s *platformInterfaceStub) UsePlatformLocalDNSTransport() bool {
 	return false
 }
@@ -194,12 +204,12 @@ func (s *interfaceMonitorStub) UnregisterCallback(element *list.Element[tun.Defa
 func (s *interfaceMonitorStub) RegisterMyInterface(interfaceName string) {
 }
 
-func (s *interfaceMonitorStub) MyInterface() string {
-	return ""
+func (s *interfaceMonitorStub) MyInterfaces() []string {
+	return nil
 }
 
 func FormatConfig(configContent string) (*StringBox, error) {
-	options, err := parseConfig(BaseContext(nil), configContent)
+	options, err := parseConfig(baseContext(nil), configContent)
 	if err != nil {
 		return nil, err
 	}

@@ -138,9 +138,6 @@ func (h *Inbound) handleConnection(conn net.Conn, request *mierumodel.Request) {
 	metadata.InboundType = h.Type()
 	//nolint:staticcheck
 	metadata.InboundDetour = h.listener.ListenOptions().Detour
-	//nolint:staticcheck
-	metadata.InboundOptions = h.listener.ListenOptions().InboundOptions
-
 	// Parse source address.
 	if remoteAddr := conn.RemoteAddr(); remoteAddr != nil {
 		metadata.Source = M.SocksaddrFromNet(remoteAddr)

@@ -34,7 +34,6 @@ type WireGuardPeer struct {
 	PersistentKeepaliveInterval uint16                           `json:"persistent_keepalive_interval,omitempty"`
 	Reserved                    []uint8                          `json:"reserved,omitempty"`
 }
-
 type WireGuardWARPEndpointOptions struct {
 	System                     bool               `json:"system,omitempty"`
 	Name                       string             `json:"name,omitempty"`

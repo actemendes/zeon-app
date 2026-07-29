@@ -21,7 +21,6 @@ import (
 	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/dns"
-	"github.com/sagernet/sing-box/dns/transport/local"
 	"github.com/sagernet/sing-box/experimental"
 	"github.com/sagernet/sing-box/experimental/cachefile"
 	"github.com/sagernet/sing-box/log"
@@ -128,7 +127,10 @@ func New(options Options) (*Box, error) {
 
 	ctx = pause.WithDefaultManager(ctx)
 	experimentalOptions := common.PtrValueOrDefault(options.Experimental)
-	applyDebugOptions(common.PtrValueOrDefault(experimentalOptions.Debug))
+	err := applyDebugOptions(common.PtrValueOrDefault(experimentalOptions.Debug))
+	if err != nil {
+		return nil, err
+	}
 	var needCacheFile bool
 	var needClashAPI bool
 	var needV2RayAPI bool
@@ -345,11 +347,12 @@ func New(options Options) (*Box, error) {
 		)
 	})
 	dnsTransportManager.Initialize(func() (adapter.DNSTransport, error) {
-		return local.NewTransport(
+		return dnsTransportRegistry.CreateDNSTransport(
 			ctx,
 			logFactory.NewLogger("dns/local"),
 			"local",
-			option.LocalDNSServerOptions{},
+			C.DNSTypeLocal,
+			&option.LocalDNSServerOptions{},
 		)
 	})
 	if platformInterface != nil {
@@ -528,7 +531,7 @@ func (s *Box) Close() error {
 	default:
 		close(s.done)
 	}
-	closeTimeout := time.Second * 10
+	closeTimeout := 10 * time.Second
 	var err error
 	for _, closeItem := range []struct {
 		name    string
@@ -544,25 +547,32 @@ func (s *Box) Close() error {
 		{"dns-transport", s.dnsTransport},
 		{"network", s.network},
 	} {
+		done := adapter.LogElapsed(s.logger, "close ", closeItem.name)
 		cerr := s.closeWithTimeout(closeItem.name, closeTimeout, closeItem.service.Close)
 		err = E.Append(err, cerr, func(err error) error {
 			return E.Cause(err, "close ", closeItem.name)
 		})
+		done()
 	}
 	for _, lifecycleService := range s.internalService {
+		done := adapter.LogElapsed(s.logger, "close ", lifecycleService.Name())
 		cerr := s.closeWithTimeout(lifecycleService.Name(), closeTimeout, lifecycleService.Close)
 		err = E.Append(err, cerr, func(err error) error {
 			return E.Cause(err, "close ", lifecycleService.Name())
 		})
+		done()
 	}
+	done := adapter.LogElapsed(s.logger, "close logger")
 	cerr := s.closeWithTimeout("logger", closeTimeout, s.logFactory.Close)
 	err = E.Append(err, cerr, func(err error) error {
 		return E.Cause(err, "close logger")
 	})
+	done()
 	return err
 }
+
 func (s *Box) closeWithTimeout(name string, timeout time.Duration, closeFn func() error) (err error) {
-	s.logger.Trace("closeing ", name)
+	s.logger.Trace("closing ", name)
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
@@ -585,6 +595,7 @@ func (s *Box) closeWithTimeout(name string, timeout time.Duration, closeFn func(
 	}
 
 }
+
 func (s *Box) Network() adapter.NetworkManager {
 	return s.network
 }

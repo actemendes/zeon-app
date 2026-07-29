@@ -64,13 +64,10 @@ type InboundContext struct {
 	// cache
 
 	// Deprecated: implement in rule action
-	InboundDetour            string
-	LastInbound              string
-	OriginDestination        M.Socksaddr
-	RouteOriginalDestination M.Socksaddr
-	// Deprecated: to be removed
-	//nolint:staticcheck
-	InboundOptions            option.InboundOptions
+	InboundDetour             string
+	LastInbound               string
+	OriginDestination         M.Socksaddr
+	RouteOriginalDestination  M.Socksaddr
 	UDPDisableDomainUnmapping bool
 	UDPConnect                bool
 	UDPTimeout                time.Duration
@@ -114,6 +111,10 @@ func (c *InboundContext) GetRealOutbound() string {
 func (c *InboundContext) ResetRuleCache() {
 	c.IPCIDRMatchSource = false
 	c.IPCIDRAcceptEmpty = false
+	c.ResetRuleMatchCache()
+}
+
+func (c *InboundContext) ResetRuleMatchCache() {
 	c.SourceAddressMatch = false
 	c.SourcePortMatch = false
 	c.DestinationAddressMatch = false

@@ -21,7 +21,6 @@ import (
 	"github.com/sagernet/sing-box/protocol/anytls"
 	"github.com/sagernet/sing-box/protocol/block"
 	"github.com/sagernet/sing-box/protocol/direct"
-	protocolDNS "github.com/sagernet/sing-box/protocol/dns"
 	"github.com/sagernet/sing-box/protocol/group"
 	"github.com/sagernet/sing-box/protocol/group/balancer"
 	"github.com/sagernet/sing-box/protocol/hiddify/dnstt"
@@ -87,7 +86,6 @@ func OutboundRegistry() *outbound.Registry {
 	direct.RegisterOutbound(registry)
 
 	block.RegisterOutbound(registry)
-	protocolDNS.RegisterOutbound(registry)
 
 	group.RegisterSelector(registry)
 	group.RegisterURLTest(registry)
@@ -161,6 +159,7 @@ func ServiceRegistry() *service.Registry {
 	registerDERPService(registry)
 	registerCCMService(registry)
 	registerOCMService(registry)
+	registerOOMKillerService(registry)
 
 	return registry
 }

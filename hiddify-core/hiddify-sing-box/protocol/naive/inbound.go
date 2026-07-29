@@ -29,7 +29,10 @@ import (
 	"golang.org/x/net/http2/h2c"
 )
 
-var ConfigureHTTP3ListenerFunc func(ctx context.Context, logger logger.Logger, listener *listener.Listener, handler http.Handler, tlsConfig tls.ServerConfig, options option.NaiveInboundOptions) (io.Closer, error)
+var (
+	ConfigureHTTP3ListenerFunc func(ctx context.Context, logger logger.Logger, listener *listener.Listener, handler http.Handler, tlsConfig tls.ServerConfig, options option.NaiveInboundOptions) (io.Closer, error)
+	WrapError                  func(error) error
+)
 
 func RegisterInbound(registry *inbound.Registry) {
 	inbound.Register[option.NaiveInboundOptions](registry, C.TypeNaive, NewInbound)
@@ -104,16 +107,16 @@ func (n *Inbound) Start(stage adapter.StartStage) error {
 				return n.ctx
 			},
 		}
-		go func() {
-			listener := net.Listener(tcpListener)
-			if n.tlsConfig != nil {
-				if len(n.tlsConfig.NextProtos()) == 0 {
-					n.tlsConfig.SetNextProtos([]string{http2.NextProtoTLS, "http/1.1"})
-				} else if !common.Contains(n.tlsConfig.NextProtos(), http2.NextProtoTLS) {
-					n.tlsConfig.SetNextProtos(append([]string{http2.NextProtoTLS}, n.tlsConfig.NextProtos()...))
-				}
-				listener = aTLS.NewListener(tcpListener, n.tlsConfig)
+		listener := net.Listener(tcpListener)
+		if n.tlsConfig != nil {
+			if len(n.tlsConfig.NextProtos()) == 0 {
+				n.tlsConfig.SetNextProtos([]string{http2.NextProtoTLS, "http/1.1"})
+			} else if !common.Contains(n.tlsConfig.NextProtos(), http2.NextProtoTLS) {
+				n.tlsConfig.SetNextProtos(append([]string{http2.NextProtoTLS}, n.tlsConfig.NextProtos()...))
 			}
+			listener = aTLS.NewListener(tcpListener, n.tlsConfig)
+		}
+		go func() {
 			sErr := n.httpServer.Serve(listener)
 			if sErr != nil && !errors.Is(sErr, http.ErrServerClosed) {
 				n.logger.Error("http server serve error: ", sErr)
@@ -137,7 +140,7 @@ func (n *Inbound) Start(stage adapter.StartStage) error {
 
 func (n *Inbound) Close() error {
 	return common.Close(
-		&n.listener,
+		n.listener,
 		common.PtrOrNil(n.httpServer),
 		n.h3Server,
 		n.tlsConfig,
@@ -209,7 +212,6 @@ func (n *Inbound) newConnection(ctx context.Context, waitForClose bool, conn net
 	//nolint:staticcheck
 	metadata.InboundDetour = n.listener.ListenOptions().Detour
 	//nolint:staticcheck
-	metadata.InboundOptions = n.listener.ListenOptions().InboundOptions
 	metadata.Source = source
 	metadata.Destination = destination
 	metadata.OriginDestination = M.SocksaddrFromNet(conn.LocalAddr()).Unwrap()

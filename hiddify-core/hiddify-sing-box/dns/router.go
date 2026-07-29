@@ -195,7 +195,16 @@ func (r *Router) matchDNS(ctx context.Context, allowFakeIP bool, ruleIndex int, 
 			}
 		}
 	}
-	return r.transport.Default(), nil, -1
+	transport := r.transport.Default()
+	if legacyTransport, isLegacy := transport.(adapter.LegacyDNSTransport); isLegacy {
+		if options.Strategy == C.DomainStrategyAsIS {
+			options.Strategy = legacyTransport.LegacyStrategy()
+		}
+		if !options.ClientSubnet.IsValid() {
+			options.ClientSubnet = legacyTransport.LegacyClientSubnet()
+		}
+	}
+	return transport, nil, -1
 }
 
 func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapter.DNSQueryOptions) (*mDNS.Msg, error) {
@@ -272,15 +281,7 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 					return action.Response(message), nil
 				}
 			}
-
-			var responseCheck func(responseAddrs []netip.Addr) bool
-			if rule != nil && rule.WithAddressLimit() {
-				responseCheck = func(responseAddrs []netip.Addr) bool {
-					metadata.DestinationAddresses = responseAddrs
-					return rule.MatchAddressLimit(metadata)
-				}
-			}
-
+			responseCheck := addressLimitResponseCheck(rule, metadata)
 			if dnsOptions.Strategy == C.DomainStrategyAsIS {
 				dnsOptions.Strategy = r.defaultDomainStrategy
 			}
@@ -365,7 +366,7 @@ func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQ
 		transport := options.Transport
 		if legacyTransport, isLegacy := transport.(adapter.LegacyDNSTransport); isLegacy {
 			if options.Strategy == C.DomainStrategyAsIS {
-				options.Strategy = r.defaultDomainStrategy
+				options.Strategy = legacyTransport.LegacyStrategy()
 			}
 			if !options.ClientSubnet.IsValid() {
 				options.ClientSubnet = legacyTransport.LegacyClientSubnet()
@@ -391,9 +392,11 @@ func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQ
 				case *R.RuleActionReject:
 					return nil, &R.RejectedError{Cause: action.Error(ctx)}
 				case *R.RuleActionPredefined:
+					responseAddrs = nil
 					if action.Rcode != mDNS.RcodeSuccess {
 						err = RcodeError(action.Rcode)
 					} else {
+						err = nil
 						for _, answer := range action.Answer {
 							switch record := answer.(type) {
 							case *mDNS.A:
@@ -408,13 +411,7 @@ func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQ
 					goto response
 				}
 			}
-			var responseCheck func(responseAddrs []netip.Addr) bool
-			if rule != nil && rule.WithAddressLimit() {
-				responseCheck = func(responseAddrs []netip.Addr) bool {
-					metadata.DestinationAddresses = responseAddrs
-					return rule.MatchAddressLimit(metadata)
-				}
-			}
+			responseCheck := addressLimitResponseCheck(rule, metadata)
 			if dnsOptions.Strategy == C.DomainStrategyAsIS {
 				dnsOptions.Strategy = r.defaultDomainStrategy
 			}
@@ -443,6 +440,18 @@ func isAddressQuery(message *mDNS.Msg) bool {
 		}
 	}
 	return false
+}
+
+func addressLimitResponseCheck(rule adapter.DNSRule, metadata *adapter.InboundContext) func(responseAddrs []netip.Addr) bool {
+	if rule == nil || !rule.WithAddressLimit() {
+		return nil
+	}
+	responseMetadata := *metadata
+	return func(responseAddrs []netip.Addr) bool {
+		checkMetadata := responseMetadata
+		checkMetadata.DestinationAddresses = responseAddrs
+		return rule.MatchAddressLimit(&checkMetadata)
+	}
 }
 
 func (r *Router) ClearCache() {
