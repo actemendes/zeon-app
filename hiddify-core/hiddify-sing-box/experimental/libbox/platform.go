@@ -21,18 +21,36 @@ type PlatformInterface interface {
 }
 
 type ConnectionOwner struct {
-	UserId              int32
-	UserName            string
-	ProcessPath         string
+	UserId      int32
+	UserName    string
+	ProcessPath string
+	// AndroidPackageName preserves the Stage 1 gomobile API. New callers
+	// should use AndroidPackageNames for shared-UID processes.
+	AndroidPackageName  string
 	androidPackageNames []string
 }
 
 func (c *ConnectionOwner) SetAndroidPackageNames(names StringIterator) {
 	c.androidPackageNames = iteratorToArray[string](names)
+	if len(c.androidPackageNames) > 0 {
+		c.AndroidPackageName = c.androidPackageNames[0]
+	} else {
+		c.AndroidPackageName = ""
+	}
 }
 
 func (c *ConnectionOwner) AndroidPackageNames() StringIterator {
-	return newIterator(c.androidPackageNames)
+	return newIterator(c.effectiveAndroidPackageNames())
+}
+
+func (c *ConnectionOwner) effectiveAndroidPackageNames() []string {
+	if len(c.androidPackageNames) > 0 {
+		return c.androidPackageNames
+	}
+	if c.AndroidPackageName != "" {
+		return []string{c.AndroidPackageName}
+	}
+	return nil
 }
 
 type InterfaceUpdateListener interface {

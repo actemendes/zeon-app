@@ -239,14 +239,27 @@ func (c *Connections) Iterator() ConnectionIterator {
 }
 
 type ProcessInfo struct {
-	ProcessID    int64
-	UserID       int32
-	UserName     string
-	ProcessPath  string
+	ProcessID   int64
+	UserID      int32
+	UserName    string
+	ProcessPath string
+	// PackageName preserves the Stage 1 gomobile API while PackageNames
+	// exposes all packages associated with a shared Android UID.
+	PackageName  string
 	packageNames []string
 }
 
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
 func (p *ProcessInfo) PackageNames() StringIterator {
+	if len(p.packageNames) == 0 && p.PackageName != "" {
+		return newIterator([]string{p.PackageName})
+	}
 	return newIterator(p.packageNames)
 }
 
@@ -347,6 +360,7 @@ func connectionFromGRPC(conn *daemon.Connection) Connection {
 			UserID:       conn.ProcessInfo.UserId,
 			UserName:     conn.ProcessInfo.UserName,
 			ProcessPath:  conn.ProcessInfo.ProcessPath,
+			PackageName:  firstString(conn.ProcessInfo.PackageNames),
 			packageNames: conn.ProcessInfo.PackageNames,
 		}
 	}
