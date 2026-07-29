@@ -170,6 +170,7 @@ fi
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
 export GOFLAGS="-buildvcs=false"
+export SOURCE_DATE_EPOCH="0"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -263,8 +264,17 @@ for platform in "${platforms[@]}"; do
         build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.hiddifyCoreTree=$hiddify_core_tree"
         build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.hiddifySingBoxTree=$hiddify_sing_box_tree"
         build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.coreBuildTags=$core_build_tags"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.upstreamVersion=v1.13.14"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.upstreamCommit=25a600db24f7680ad9806ce5427bd0ab8afe1114"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.hiddifyCompatibilityRevision=$hiddify_core_tree"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.zeonPatchRevision=$hiddify_sing_box_tree"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.sourceDirty=false"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.gomobileVersion=v0.1.11"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.androidNDKVersion=28.2.13676358"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.buildTimestampPolicy=SOURCE_DATE_EPOCH=0"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.buildIDPolicy=empty"
         build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/v2/hcommon/constants.Version=zeon-$zeon_revision"
-        build_metadata_ldflags="$build_metadata_ldflags -X github.com/sagernet/sing-box/constant.Version=1.13.0-zeon-$zeon_revision"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/sagernet/sing-box/constant.Version=1.13.14-zeon.1-$zeon_revision"
         CGO_LDFLAGS="-O2 -g -s -w -Wl,-z,max-page-size=16384" \
           gomobile bind -v \
           -androidapi=21 \

@@ -69,6 +69,66 @@ function Get-CoreEntries {
     }
 }
 
+function Get-ArchiveEntrySha256 {
+    param(
+        [Parameter(Mandatory = $true)][string]$ArchivePath,
+        [Parameter(Mandatory = $true)][string]$EntryName
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
+    try {
+        $entry = $archive.GetEntry($EntryName)
+        if ($null -eq $entry) {
+            throw "Archive entry is missing: $EntryName"
+        }
+        $stream = $entry.Open()
+        try {
+            return Get-Sha256Hex -Stream $stream
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $archive.Dispose()
+    }
+}
+
+function Assert-ArchiveEntryContainsAscii {
+    param(
+        [Parameter(Mandatory = $true)][string]$ArchivePath,
+        [Parameter(Mandatory = $true)][string]$EntryName,
+        [Parameter(Mandatory = $true)][string[]]$ExpectedValues
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
+    try {
+        $entry = $archive.GetEntry($EntryName)
+        if ($null -eq $entry) {
+            throw "Archive entry is missing: $EntryName"
+        }
+        $stream = $entry.Open()
+        try {
+            $memory = New-Object System.IO.MemoryStream
+            try {
+                $stream.CopyTo($memory)
+                $content = [System.Text.Encoding]::ASCII.GetString($memory.ToArray())
+                foreach ($expected in $ExpectedValues) {
+                    if (-not $content.Contains($expected)) {
+                        throw "$EntryName does not contain expected embedded provenance: $expected"
+                    }
+                }
+            } finally {
+                $memory.Dispose()
+            }
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $archive.Dispose()
+    }
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $resolvedManifest = if ([System.IO.Path]::IsPathRooted($ManifestPath)) {
     (Resolve-Path -LiteralPath $ManifestPath).Path
@@ -107,6 +167,20 @@ foreach ($entry in $aarEntries) {
     $expected = $expectedByAbi[$entry.Abi]
     if ($entry.Sha256 -ne $expected.so_sha256.ToUpperInvariant()) {
         throw "AAR $($entry.Abi) libhiddify-core.so mismatch: expected $($expected.so_sha256), got $($entry.Sha256)"
+    }
+}
+
+if ($null -ne $manifest.aar.PSObject.Properties["classes_jar_sha256"]) {
+    $actualClassesHash = Get-ArchiveEntrySha256 -ArchivePath $resolvedAar -EntryName "classes.jar"
+    if ($actualClassesHash -ne $manifest.aar.classes_jar_sha256.ToUpperInvariant()) {
+        throw "AAR classes.jar mismatch: expected $($manifest.aar.classes_jar_sha256), got $actualClassesHash"
+    }
+}
+
+if ($null -ne $manifest.PSObject.Properties["verification_strings"]) {
+    $expectedStrings = @($manifest.verification_strings)
+    foreach ($entry in $aarEntries) {
+        Assert-ArchiveEntryContainsAscii -ArchivePath $resolvedAar -EntryName $entry.Entry -ExpectedValues $expectedStrings
     }
 }
 
