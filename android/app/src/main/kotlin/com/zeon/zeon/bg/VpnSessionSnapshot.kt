@@ -168,9 +168,14 @@ object VpnSessionSnapshotCoordinator {
         } else {
             current
         }
-        val next = transform(base).copy(
+        val transformed = transform(base).copy(
             generation = generation,
             runtimeEpoch = runtimeEpoch,
+        )
+        if (generation == current.generation && transformed == current) {
+            return@synchronized current
+        }
+        val next = transformed.copy(
             sequenceNumber = sequence.incrementAndGet(),
             snapshotVersion = version.incrementAndGet(),
         )

@@ -94,6 +94,9 @@ class VpnTestInstrumentation : Instrumentation() {
             TestCase(snapshotTests.javaClass.name, "nonConnectedPhaseCannotPassTheGate") {
                 snapshotTests.nonConnectedPhaseCannotPassTheGate()
             },
+            TestCase(snapshotTests.javaClass.name, "duplicateSelectedOutboundDoesNotPublishANewSnapshot") {
+                snapshotTests.duplicateSelectedOutboundDoesNotPublishANewSnapshot()
+            },
         )
         listOf(
             "firstConnectPermissionGrantedCompletesCurrentAttempt" to permissionTests::firstConnectPermissionGrantedCompletesCurrentAttempt,

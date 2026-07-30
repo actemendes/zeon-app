@@ -2,6 +2,8 @@ package test.com.zeon.zeon.bg
 
 import com.zeon.zeon.bg.VpnSessionPhase
 import com.zeon.zeon.bg.VpnSessionSnapshot
+import com.zeon.zeon.bg.VpnSessionCoordinator
+import com.zeon.zeon.bg.VpnSessionSnapshotCoordinator
 
 class VpnSessionSnapshotInstrumentedTest {
     private fun snapshot(
@@ -32,5 +34,18 @@ class VpnSessionSnapshotInstrumentedTest {
     fun nonConnectedPhaseCannotPassTheGate() {
         check(!snapshot(VpnSessionPhase.VERIFYING, ready = true).provesConnected())
         check(!snapshot(VpnSessionPhase.STOPPING, ready = true).provesConnected())
+    }
+
+    fun duplicateSelectedOutboundDoesNotPublishANewSnapshot() {
+        val generation = VpnSessionCoordinator.next("snapshot_duplicate_outbound_test")
+        VpnSessionSnapshotCoordinator.begin(generation, "connect")
+        val first = VpnSessionSnapshotCoordinator.selectedOutbound(generation, "opaque-test-name", "selector")
+        val second = VpnSessionSnapshotCoordinator.selectedOutbound(generation, "opaque-test-name", "selector")
+        check(second.sequenceNumber == first.sequenceNumber) {
+            "unchanged outbound must not create a new snapshot event"
+        }
+        check(second.snapshotVersion == first.snapshotVersion) {
+            "unchanged outbound must not increment snapshot version"
+        }
     }
 }
