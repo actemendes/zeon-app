@@ -161,6 +161,11 @@ android {
             }
             debuggable false
             jniDebuggable false
+            // Keep the Play release contract explicit even though the Flutter
+            // Gradle plugin currently applies the same optimization defaults.
+            minifyEnabled true
+            shrinkResources true
+            proguardFile 'proguard-rules.pro'
             ndk {
                 //noinspection ChromeOsAbiSupport
                 abiFilters "x86_64", "armeabi-v7a", "arm64-v8a"
