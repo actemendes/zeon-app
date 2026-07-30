@@ -13,6 +13,7 @@ import 'package:path/path.dart' as p;
 import 'package:protobuf/protobuf.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
+import 'package:zeon/core/http_client/mobile_api_proxy_route.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
@@ -25,6 +26,7 @@ import 'package:zeon/singbox/model/warp_account.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/utils/windows_privilege_utils.dart';
+import 'package:zeon/zeoncore/core_interface/core_interface.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface_wrapper_stub.dart'
     if (dart.library.io) 'package:zeon/zeoncore/core_interface/core_interface_wrapper.dart';
 import 'package:zeon/zeoncore/generated/v2/config/route_rule.pb.dart' as route_rule;
@@ -38,7 +40,7 @@ import 'package:zeon/zeoncore/vpn_diagnostics.dart';
 enum _CoreLifecycleState { stopped, starting, started, stopping }
 
 class ZeonCoreService with InfraLogger {
-  ZeonCoreService(this.ref);
+  ZeonCoreService(this.ref, {CoreInterface? coreInterface}) : core = coreInterface ?? getCoreInterface();
   final Ref ref;
   static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
   static const _debugNetworkProfile = String.fromEnvironment("debug_network_profile");
@@ -66,7 +68,7 @@ class ZeonCoreService with InfraLogger {
   bool get _useMockCore => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
 
   // CoreZeonCoreService() {}
-  final core = getCoreInterface();
+  final CoreInterface core;
 
   CoreStatus currentState = const CoreStatus.stopped();
   final statusController = BehaviorSubject<CoreStatus>();
@@ -867,14 +869,21 @@ class ZeonCoreService with InfraLogger {
     map["network-interface-mtu"] = runtime.$2;
 
     final userRules = await _loadUserRouteRulesFromProto();
-    if (userRules.isNotEmpty) {
-      map["rules"] = userRules;
-    }
+    final configuredRules = (map["rules"] as List? ?? const <dynamic>[])
+        .whereType<Map>()
+        .map((rule) => Map<String, dynamic>.from(rule))
+        .toList();
+    map["rules"] = MobileApiProxyRoute.mergeCoreRules(configuredRules: configuredRules, userRules: userRules);
 
     loggy.info(
       "core options prepared: full-config=$fullConfig transport=${runtime.$1} iface-mtu=${runtime.$2} user-rules=${(map["rules"] as List?)?.length ?? 0}",
     );
     return map;
+  }
+
+  @visibleForTesting
+  Future<Map<String, dynamic>> buildCoreOptionsPayloadForTesting(SingboxConfigOption options) {
+    return _buildCoreOptionsPayload(options);
   }
 
   Map<String, dynamic> _safeCorePayload(Map<String, dynamic> payload) {
