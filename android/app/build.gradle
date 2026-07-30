@@ -172,6 +172,19 @@ android {
                 debugSymbolLevel 'FULL'
             }
         }
+        // Manual, same-package validation on the physical device. This variant
+        // intentionally replaces the installed production package in-place so
+        // migration and browser routing can be exercised against preserved app
+        // data. It must never be used for instrumentation or publication.
+        physicalValidation {
+            initWith release
+            if (hasKeyStore) {
+                signingConfig signingConfigs.release
+            }
+            matchingFallbacks = ["release"]
+            debuggable true
+            jniDebuggable false
+        }
     }
 
     buildFeatures {
@@ -190,7 +203,10 @@ gradle.taskGraph.whenReady { graph ->
                 name.startsWith("device") ||
                 name.startsWith("install") ||
                 name.startsWith("uninstall"))
-        managedTestTask && !name.contains("validation")
+        def isolatedValidationAndroidTest =
+            name.contains("validationandroidtest") &&
+            !name.contains("physicalvalidation")
+        managedTestTask && !isolatedValidationAndroidTest
     }
     if (!unsafeManagedAndroidTests.isEmpty()) {
         throw new GradleException(
@@ -207,6 +223,34 @@ gradle.taskGraph.whenReady { graph ->
         throw new GradleException(
             "Refusing to build a release artifact without android/key.properties. " +
             "Production releases must never use the public Android debug signing key."
+        )
+    }
+
+    def buildsPhysicalValidationArtifact = graph.allTasks.any { task ->
+        task.project == project && task.name.toLowerCase().contains('physicalvalidation')
+    }
+    if (buildsPhysicalValidationArtifact && !hasKeyStore) {
+        throw new GradleException(
+            "Refusing to build same-package physicalValidation without android/key.properties. " +
+            "It must be signed by the configured production release certificate."
+        )
+    }
+
+    def forbiddenPhysicalValidationPublication = graph.allTasks.findAll { task ->
+        if (task.project != project) {
+            return false
+        }
+        def name = task.name.toLowerCase()
+        name == "bundlephysicalvalidation" ||
+            name.startsWith("publishphysicalvalidation") ||
+            name.startsWith("uploadphysicalvalidation") ||
+            name.startsWith("publishbundlephysicalvalidation")
+    }
+    if (!forbiddenPhysicalValidationPublication.isEmpty()) {
+        throw new GradleException(
+            "physicalValidation is an install-only APK for manual device evidence and must never be published. " +
+            "Use :app:assemblePhysicalValidation or :app:installPhysicalValidation. " +
+            "Blocked tasks: ${forbiddenPhysicalValidationPublication*.path.join(', ')}"
         )
     }
 }

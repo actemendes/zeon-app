@@ -14,11 +14,21 @@ GM1901 (Android 16 / API 36). `HttpsURLConnection`,
 `RussianServicesValidationActivity`, `curl`, and host-side HTTP clients are not
 substitutes.
 
-Use only an isolated ZEON package whose application ID ends in `.validation`
-and whose native core contains the `ZEON_ROUTE_VALIDATION` marker. The harness
-hard-fails if the expected device, Chrome, validation package, or telemetry
-marker is absent. It also pins the installed APK SHA-256 to the evidence
-session, so a reinstall cannot silently mix builds in one matrix.
+Use the isolated ZEON package whose application ID ends in `.validation` for
+instrumentation and tests that do not need production data. Migration and
+same-package physical browser validation may instead use the install-only
+`physicalValidation` APK. That build has the production application ID and
+release certificate, is debuggable, and must contain the
+`ZEON_ROUTE_VALIDATION` marker. It may be assembled or installed, but Gradle
+rejects its AAB/publish tasks.
+
+The harness rejects `com.zeon.hiddify` by default. Allowing it requires both
+`-AllowProductionPhysicalValidation` and the exact artifact hash through
+`-ExpectedZeonApkSha256`. The harness hard-fails if the expected device,
+browser, package, telemetry marker, or pinned hash is absent. It also pins the
+installed APK SHA-256 to the evidence session, so a reinstall cannot silently
+mix builds in one matrix. Android instrumentation remains restricted to the
+isolated `.validation` target.
 
 Before testing:
 
@@ -83,8 +93,8 @@ mutate the runtime routing policy.
 ## Commands
 
 PowerShell 5.1 or later and Android platform-tools are required. Connect and
-unlock exactly one GM1901, authorize USB debugging, install the isolated
-validation APK, then run:
+unlock exactly one GM1901 and authorize USB debugging. For an isolated
+`.validation` APK, run:
 
 ```powershell
 .\scripts\validate_stage2_8_ru_browser.ps1 -Action Preflight
@@ -93,6 +103,28 @@ validation APK, then run:
   -Action Initialize `
   -DnsVariant DIRECT_DNS `
   -BuildLabel stage2.8-direct-dns
+```
+
+For a release-signed, same-package `physicalValidation` APK, pass the explicit
+opt-in and the expected lowercase or uppercase SHA-256 on every action that
+runs preflight:
+
+```powershell
+$physicalValidationSha = "<64-hex APK SHA-256>"
+
+.\scripts\validate_stage2_8_ru_browser.ps1 `
+  -Action Preflight `
+  -ZeonPackage com.zeon.hiddify `
+  -AllowProductionPhysicalValidation `
+  -ExpectedZeonApkSha256 $physicalValidationSha
+
+.\scripts\validate_stage2_8_ru_browser.ps1 `
+  -Action Initialize `
+  -ZeonPackage com.zeon.hiddify `
+  -AllowProductionPhysicalValidation `
+  -ExpectedZeonApkSha256 $physicalValidationSha `
+  -DnsVariant DIRECT_DNS `
+  -BuildLabel stage2.8-physical-validation-direct-dns
 ```
 
 ADB is resolved from `-AdbPath`, `PATH`, `ANDROID_SDK_ROOT`, or `ANDROID_HOME`
@@ -124,6 +156,12 @@ path for each preset:
   -Preset Global `
   -SessionPath <session-path>
 ```
+
+For a same-package session, add `-ZeonPackage com.zeon.hiddify`,
+`-AllowProductionPhysicalValidation`, and
+`-ExpectedZeonApkSha256 $physicalValidationSha` to every `RunPreset` command.
+`Finalize` reads the already pinned local session and does not preflight the
+device again.
 
 The script stops before each preset until the operator types `READY`, and
 machine-checks that `tun0` is absent for Direct and present for Russia/Global.
@@ -175,12 +213,16 @@ operator fields and automated route assessments. Its strongest result is
 
 The harness contains all required entry points:
 
-- Gosuslugi, ESIA, Nalog, Mos.ru, the Central Bank and SBP;
-- Sber, T-Bank, Alfa-Bank, VTB and Gazprombank;
+- Gosuslugi, ESIA, the Goskey public page, Nalog, Mos.ru, the Central Bank and
+  SBP;
+- Sber, T-Bank, Alfa-Bank, VTB, Gazprombank, Raiffeisen and Sovcombank;
 - Yandex, Yandex Search, Yandex Maps, Yandex Music and Kinopoisk;
 - Wildberries, Ozon, Avito, Megamarket and Yandex Market;
 - VK, Mail.ru, OK, Dzen, 2GIS, Rutube and RuStore;
 - RZD, Aeroflot, HH, RIA and Lenta.
+
+The catalog is asserted as 36 mandatory services plus 8 diagnostics. Across
+Direct, Russia and Global this is exactly 44 × 3 = 132 captures.
 
 For every applicable site, inspect visual load, JavaScript, CSS, images, API
 responses, CDN resources, redirects, search, public cards, video

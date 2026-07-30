@@ -22,6 +22,11 @@ param(
 
     [string]$ZeonPackage = "com.zeon.hiddify.validation",
 
+    [switch]$AllowProductionPhysicalValidation,
+
+    [ValidatePattern("^[A-Fa-f0-9]{64}$")]
+    [string]$ExpectedZeonApkSha256,
+
     # Evidence label only. The harness never mutates ZEON's runtime DNS policy.
     [ValidateSet("DIRECT_DNS", "REMOTE_DNS_BASELINE")]
     [string]$DnsVariant = "DIRECT_DNS",
@@ -37,6 +42,11 @@ Set-StrictMode -Version Latest
 
 $script:Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $script:TelemetryPrefix = "ZEON_ROUTE_VALIDATION "
+$script:ProductionPackage = "com.zeon.hiddify"
+$script:ExpectedMandatorySiteCount = 36
+$script:ExpectedDiagnosticSiteCount = 8
+$script:ExpectedPresetCount = 3
+$script:ExpectedCaptureCount = 132
 $script:RequiredTelemetryFields = @(
     "kind",
     "hostname",
@@ -55,6 +65,7 @@ function Get-Stage28Sites {
 Id,Name,Url,Kind,Applicable
 gosuslugi,Gosuslugi,https://www.gosuslugi.ru/,mandatory,visual;js;css;images;api;cdn;redirects
 esia,ESIA,https://esia.gosuslugi.ru/,mandatory,visual;js;css;images;api;cdn;redirects
+goskey,Goskey public page,https://goskey.ru/,mandatory,visual;js;css;images;api;cdn;redirects
 nalog,Nalog,https://www.nalog.gov.ru/,mandatory,visual;js;css;images;api;cdn;redirects;search
 mos,Mos.ru,https://www.mos.ru/,mandatory,visual;js;css;images;api;cdn;redirects;search
 cbr,Central Bank,https://cbr.ru/,mandatory,visual;js;css;images;api;cdn;redirects;search
@@ -64,6 +75,8 @@ tbank,T-Bank,https://www.tbank.ru/,mandatory,visual;js;css;images;api;cdn;redire
 alfa,Alfa-Bank,https://alfabank.ru/,mandatory,visual;js;css;images;api;cdn;redirects;publicCards
 vtb,VTB,https://www.vtb.ru/,mandatory,visual;js;css;images;api;cdn;redirects;publicCards
 gazprombank,Gazprombank,https://www.gazprombank.ru/,mandatory,visual;js;css;images;api;cdn;redirects;publicCards
+raiffeisen,Raiffeisen,https://www.raiffeisen.ru/,mandatory,visual;js;css;images;api;cdn;redirects;publicCards
+sovcombank,Sovcombank,https://sovcombank.ru/,mandatory,visual;js;css;images;api;cdn;redirects;publicCards
 yandex,Yandex,https://yandex.ru/,mandatory,visual;js;css;images;api;cdn;redirects;search;webSocket
 yandex_search,Yandex Search,https://yandex.ru/search/?text=ZEON%20Stage%202.8,mandatory,visual;js;css;images;api;cdn;redirects;search
 yandex_maps,Yandex Maps,https://yandex.ru/maps/,mandatory,visual;js;css;images;api;cdn;redirects;search;webSocket
@@ -95,7 +108,26 @@ browser_consistency,Timezone and language,https://browserleaks.com/javascript,di
 su_suffix,.su suffix route,https://ripn.su/,diagnostic,suffixRoute
 rf_suffix,.xn--p1ai suffix route,https://xn--80aa3ak5a.xn--p1ai/,diagnostic,suffixRoute
 '@
-    return @($catalog | ConvertFrom-Csv)
+    $sites = @($catalog | ConvertFrom-Csv)
+    $mandatoryCount = @($sites | Where-Object { $_.Kind -eq "mandatory" }).Count
+    $diagnosticCount = @($sites | Where-Object { $_.Kind -eq "diagnostic" }).Count
+    $duplicateIds = @($sites | Group-Object -Property Id | Where-Object { $_.Count -ne 1 })
+    $captureCount = $sites.Count * $script:ExpectedPresetCount
+
+    if ($mandatoryCount -ne $script:ExpectedMandatorySiteCount) {
+        throw "Stage 2.8 catalog has $mandatoryCount mandatory sites; expected $($script:ExpectedMandatorySiteCount)."
+    }
+    if ($diagnosticCount -ne $script:ExpectedDiagnosticSiteCount) {
+        throw "Stage 2.8 catalog has $diagnosticCount diagnostics; expected $($script:ExpectedDiagnosticSiteCount)."
+    }
+    if ($duplicateIds.Count -ne 0) {
+        throw "Stage 2.8 catalog contains duplicate IDs: $($duplicateIds.Name -join ', ')."
+    }
+    if ($captureCount -ne $script:ExpectedCaptureCount) {
+        throw "Stage 2.8 matrix arithmetic produced $captureCount captures; expected $($script:ExpectedCaptureCount)."
+    }
+
+    return $sites
 }
 
 function Resolve-Adb {
@@ -151,8 +183,18 @@ function Invoke-Adb {
         [switch]$AllowFailure
     )
 
-    $output = @(& $script:AdbPath @Arguments 2>&1 | ForEach-Object { $_.ToString() })
-    $exitCode = $LASTEXITCODE
+    # Windows PowerShell promotes native stderr (including adb pull progress)
+    # to ErrorRecord objects. Keep it captured without allowing the script-wide
+    # Stop policy to abort an otherwise successful ADB command.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $rawOutput = @(& $script:AdbPath @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    $output = @($rawOutput | ForEach-Object { $_.ToString() })
     if ($exitCode -ne 0 -and -not $AllowFailure) {
         throw "ADB failed ($exitCode): adb $($Arguments -join ' ')`n$($output -join [Environment]::NewLine)"
     }
@@ -218,10 +260,26 @@ function Get-PackageVersion {
 }
 
 function Get-InstalledApkEvidence {
-    param([Parameter(Mandatory = $true)][string]$PackageName)
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageName,
+        [Parameter(Mandatory = $true)][bool]$ProductionPhysicalValidationAllowed,
+        [string]$PinnedApkSha256
+    )
 
-    if ($PackageName -notmatch '\.validation$') {
-        throw "Stage 2.8 browser evidence must use an isolated .validation package, got: $PackageName"
+    $isIsolatedValidation = $PackageName -match '\.validation$'
+    $isProductionPhysicalValidation = $PackageName -ceq $script:ProductionPackage
+    if ($isProductionPhysicalValidation -and -not $ProductionPhysicalValidationAllowed) {
+        throw (
+            "Refusing Stage 2.8 browser evidence against production package $PackageName. " +
+            "Use the same-package physicalValidation artifact only with explicit " +
+            "-AllowProductionPhysicalValidation and -ExpectedZeonApkSha256."
+        )
+    }
+    if (-not $isIsolatedValidation -and -not $isProductionPhysicalValidation) {
+        throw "Unsupported ZEON validation package: $PackageName"
+    }
+    if ($isProductionPhysicalValidation -and -not $PinnedApkSha256) {
+        throw "-ExpectedZeonApkSha256 is mandatory for same-package physicalValidation."
     }
 
     $packagePathResult = Invoke-DeviceAdb -Arguments @("shell", "pm", "path", $PackageName)
@@ -238,6 +296,12 @@ function Get-InstalledApkEvidence {
             throw "ADB reported success but did not pull the installed APK."
         }
         $apkHash = (Get-FileHash -LiteralPath $temporaryApk -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($PinnedApkSha256 -and $apkHash -cne $PinnedApkSha256.ToLowerInvariant()) {
+            throw (
+                "Installed ZEON APK SHA-256 '$apkHash' does not match the explicitly pinned " +
+                "artifact '$($PinnedApkSha256.ToLowerInvariant())'."
+            )
+        }
 
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $archive = [System.IO.Compression.ZipFile]::OpenRead($temporaryApk)
@@ -277,6 +341,12 @@ function Get-InstalledApkEvidence {
         return [ordered]@{
             package = $PackageName
             apkSha256 = $apkHash
+            validationMode = if ($isProductionPhysicalValidation) {
+                "same-package-physicalValidation"
+            } else {
+                "isolated-validation"
+            }
+            productionPhysicalValidationOptIn = $isProductionPhysicalValidation -and $ProductionPhysicalValidationAllowed
             validationTelemetryMarker = $true
         }
     } finally {
@@ -345,7 +415,10 @@ function Invoke-Stage28Preflight {
         throw "Chrome cannot resolve a normal HTTPS browser intent: $($resolvedBrowser.Text)"
     }
 
-    $apkEvidence = Get-InstalledApkEvidence -PackageName $ZeonPackage
+    $apkEvidence = Get-InstalledApkEvidence `
+        -PackageName $ZeonPackage `
+        -ProductionPhysicalValidationAllowed $AllowProductionPhysicalValidation.IsPresent `
+        -PinnedApkSha256 $ExpectedZeonApkSha256
     $script:Preflight = [ordered]@{
         capturedAtUtc = [DateTime]::UtcNow.ToString("o")
         device = [ordered]@{
@@ -485,12 +558,20 @@ function Assert-SessionMatchesPreflight {
     $manifest = Get-Content -LiteralPath (Join-Path $ResolvedSession "session.json") -Raw | ConvertFrom-Json
     $expectedModelValue = $manifest.preflight.device.model
     $expectedSerialHash = $manifest.preflight.device.serialSha256
+    $expectedZeonPackage = $manifest.preflight.installedArtifact.package
+    $expectedValidationMode = $manifest.preflight.installedArtifact.validationMode
     $expectedApkHash = $manifest.preflight.installedArtifact.apkSha256
     if ($script:Preflight.device.model -ne $expectedModelValue) {
         throw "Session device model differs from the connected device."
     }
     if ($script:Preflight.device.serialSha256 -ne $expectedSerialHash) {
         throw "Session belongs to a different physical device."
+    }
+    if ($script:Preflight.installedArtifact.package -ne $expectedZeonPackage) {
+        throw "Installed ZEON package differs from the package pinned by this session."
+    }
+    if ($script:Preflight.installedArtifact.validationMode -ne $expectedValidationMode) {
+        throw "ZEON validation mode differs from the mode pinned by this session."
     }
     if ($script:Preflight.installedArtifact.apkSha256 -ne $expectedApkHash) {
         throw "Installed ZEON APK differs from the artifact pinned by this session."
@@ -914,7 +995,14 @@ function Finalize-Stage28Session {
 
     $sites = Get-Stage28Sites
     $rows = @(Import-Csv -LiteralPath (Join-Path $ResolvedSession "operator-observations.csv"))
-    $expectedRowCount = $sites.Count * 3
+    $computedRowCount = $sites.Count * $script:ExpectedPresetCount
+    if ($computedRowCount -ne $script:ExpectedCaptureCount) {
+        throw (
+            "Stage 2.8 finalization arithmetic produced $computedRowCount rows; " +
+            "expected $($script:ExpectedCaptureCount)."
+        )
+    }
+    $expectedRowCount = $script:ExpectedCaptureCount
     if ($rows.Count -ne $expectedRowCount) {
         throw "Observation matrix has $($rows.Count) rows; expected $expectedRowCount."
     }
@@ -1159,6 +1247,7 @@ switch ($Action) {
     "Preflight" {
         $preflight = Invoke-Stage28Preflight
         Write-Host "PREFLIGHT OK: $($preflight.device.manufacturer) $($preflight.device.model), Android $($preflight.device.androidRelease), Chrome $($preflight.browser.versionName)."
+        Write-Host "Validation mode: $($preflight.installedArtifact.validationMode)"
         Write-Host "Validation APK SHA-256: $($preflight.installedArtifact.apkSha256)"
         Write-Host "No browser test was executed."
     }
