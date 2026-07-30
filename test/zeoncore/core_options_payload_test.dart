@@ -74,6 +74,7 @@ void main() {
     expect(rules[1]['name'], 'first explicit rule');
     expect(rules[2]['name'], 'second explicit rule');
     expect(rules[3]['domain_suffixes'], const <String>['global.example']);
+    expect(rules.map((rule) => rule['list_order']), orderedEquals(<int>[0, 1, 2, 3]));
     expect(
       rules.where((rule) {
         final values = rule['ip_cidrs'];

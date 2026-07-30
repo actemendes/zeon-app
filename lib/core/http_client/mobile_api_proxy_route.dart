@@ -53,11 +53,19 @@ abstract final class MobileApiProxyRoute {
     String baseUrl = apiBaseUrl,
   }) {
     final mandatoryRule = ruleFor(baseUrl)?.toCoreJson();
-    if (mandatoryRule == null) {
-      return _distinctCoreRules(<Map<String, dynamic>>[...userRules, ...configuredRules]);
-    }
+    final merged = _distinctCoreRules(<Map<String, dynamic>>[
+      if (mandatoryRule != null) mandatoryRule,
+      ...userRules,
+      ...configuredRules,
+    ]);
 
-    return _distinctCoreRules(<Map<String, dynamic>>[mandatoryRule, ...userRules, ...configuredRules]);
+    // zeon-core sorts every enabled rule by list_order before compiling the
+    // sing-box config. Re-number the final transport payload so that this
+    // boundary cannot undo the mandatory -> user -> profile ordering above.
+    // The persisted user rule order is untouched.
+    return <Map<String, dynamic>>[
+      for (final (index, rule) in merged.indexed) <String, dynamic>{...rule, 'list_order': index},
+    ];
   }
 
   static SingboxRule? ruleFor(String baseUrl) {
