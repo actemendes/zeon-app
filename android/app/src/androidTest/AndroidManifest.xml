@@ -6,5 +6,8 @@
         <activity
             android:name="test.com.zeon.zeon.bg.Http3ValidationActivity"
             android:exported="true" />
+        <activity
+            android:name="test.com.zeon.zeon.bg.DataPlaneValidationActivity"
+            android:exported="true" />
     </application>
 </manifest>
