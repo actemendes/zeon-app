@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-07-30T11:07:09Z",
+  "purpose": "Stage 2.5 Google Play performance and release-hardening source baseline.",
+  "source": {
+    "branch": "stage2.5/google-play-performance",
+    "stage2_4_commit": "961ced2058c8b67c268ac5a44bf4c260b958127d",
+    "stage2_4_tree": "9f004a9b6e8fa50ec7b57f5271e4bb8b4eb783e7",
+    "source_dirty": true,
+    "preserved_untracked_files": [
+      "android/app/src/main/assets/adi-registration.properties",
+      "docs/ZEON_VPN_STAGE2_DEVICE_VALIDATION_2026-07-29.md",
+      "docs/ZEON_VPN_STAGE2_TECHNICAL_VALIDATION_2026-07-29.md"
+    ]
+  },
+  "application": {
+    "package": "com.zeon.hiddify",
+    "version": "1.3.0+103001",
+    "compile_sdk": 36,
+    "target_sdk": 36
+  },
+  "core": {
+    "fork_version": "sing-box 1.13.14-zeon.1",
+    "source_revision": "e8c06439e1864255d81f4ee89290d89cbb1b3a18",
+    "upstream_version": "v1.13.14",
+    "upstream_commit": "25a600db24f7680ad9806ce5427bd0ab8afe1114",
+    "hiddify_core_tree": "7390740472f8e17abd281c0e10ab40eb77c971af",
+    "hiddify_sing_box_tree": "7f4930c76d7dbe9f08a6de01acaaca33db5bac9d",
+    "aar_sha256": "5BEC09E8AA72E385C0BB4950FE9970759725C6083F813E6DAB7BBFE436BECB00"
+  },
+  "android_toolchain": {
+    "flutter": "3.41.9",
+    "dart": "3.11.5",
+    "android_gradle_plugin": "8.6.0",
+    "r8": "8.6.17",
+    "gradle": "8.7",
+    "kotlin_plugin": "2.1.0",
+    "java_language_level": 17,
+    "ndk": "28.2.13676358"
+  },
+  "baseline_release": {
+    "aab_sha256": "43E2A522277EDA9BAA12AD8EC22DD5D9CEB9111210EB89032AC4063745FC530B",
+    "aab_size_bytes": 232637936,
+    "bundletool": "1.18.3",
+    "universal_apk_sha256": "6B3517B5C2D639D8210C6E36B86B331C8BBE8B3861F404831FB2A14B6E3DC6DA",
+    "arm64_split_apk_sha256": "1860149CEA3791FF68E30D76E6B2189596E502172AF48B918798F27E4115D367",
+    "device_download_size_bytes": 48156581,
+    "r8_mapping_generated": true,
+    "r8_usage_generated": true,
+    "r8_configuration_generated": true,
+    "resource_shrinker_report_generated": true
+  }
+}
