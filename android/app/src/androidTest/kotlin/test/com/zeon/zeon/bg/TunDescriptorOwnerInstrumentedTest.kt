@@ -67,6 +67,13 @@ class TunDescriptorOwnerInstrumentedTest {
 
     fun repeatedStartStopDoesNotGrowDescriptorCount() {
         val owner = TunDescriptorOwner()
+        // Warm up Android logging/procfs bookkeeping before taking the
+        // baseline. Those process-wide descriptors are opened lazily on the
+        // first owner event and are unrelated to a TUN lifecycle cycle.
+        val warmupGeneration = VpnSessionCoordinator.next("tun_stress_warmup")
+        owner.open(warmupGeneration, descriptor())
+        check(owner.close(warmupGeneration, "stress_warmup"))
+        fdCount()
         val before = fdCount()
         repeat(100) { index ->
             val generation = VpnSessionCoordinator.next("tun_stress_$index")

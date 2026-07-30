@@ -44,6 +44,7 @@ class VpnTestInstrumentation : Instrumentation() {
         val tunTests = TunDescriptorOwnerInstrumentedTest()
         val activeSessionTests = ActiveSessionInstrumentedTest()
         val permissionTests = VpnPermissionAndConnectedGateInstrumentedTest()
+        val startPermissionTests = StartPermissionRequestCoordinatorInstrumentedTest()
         val tests = mutableListOf(
             TestCase(generationTests.javaClass.name, "generationIsStrictlyMonotonic") {
                 generationTests.generationIsStrictlyMonotonic()
@@ -100,6 +101,32 @@ class VpnTestInstrumentation : Instrumentation() {
             "reconnectAfterPermissionFailureNeedsNoProcessRestart" to permissionTests::reconnectAfterPermissionFailureNeedsNoProcessRestart,
         ).forEach { (name, body) ->
             tests += TestCase(permissionTests.javaClass.name, name) { body() }
+        }
+        listOf(
+            "bothPermissionsMissingAreSerializedNotificationThenVpn" to
+                startPermissionTests::bothPermissionsMissingAreSerializedNotificationThenVpn,
+            "notificationGrantedThenVpnGrantedCompletesOneAttempt" to
+                startPermissionTests::notificationGrantedThenVpnGrantedCompletesOneAttempt,
+            "vpnAlreadyGrantedWaitsOnlyForNotification" to
+                startPermissionTests::vpnAlreadyGrantedWaitsOnlyForNotification,
+            "notificationDeniedTerminatesAttempt" to
+                startPermissionTests::notificationDeniedTerminatesAttempt,
+            "vpnDeniedTerminatesAttempt" to startPermissionTests::vpnDeniedTerminatesAttempt,
+            "closedDialogIsDenied" to startPermissionTests::closedDialogIsDenied,
+            "delayedCallbacksKeepTheOwningGeneration" to
+                startPermissionTests::delayedCallbacksKeepTheOwningGeneration,
+            "duplicateCallbackCannotCompleteTwice" to
+                startPermissionTests::duplicateCallbackCannotCompleteTwice,
+            "stopDuringDialogCancelsPendingAttempt" to
+                startPermissionTests::stopDuringDialogCancelsPendingAttempt,
+            "processRecreationCancelsOldDialogOwnership" to
+                startPermissionTests::processRecreationCancelsOldDialogOwnership,
+            "staleDialogResultReevaluatesButDoesNotCompleteNewGenerationDirectly" to
+                startPermissionTests::staleDialogResultReevaluatesButDoesNotCompleteNewGenerationDirectly,
+            "successfulFirstStartNeedsNoSecondBegin" to
+                startPermissionTests::successfulFirstStartNeedsNoSecondBegin,
+        ).forEach { (name, body) ->
+            tests += TestCase(startPermissionTests.javaClass.name, name) { body() }
         }
 
         var failures = 0

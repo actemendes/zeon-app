@@ -1,21 +1,19 @@
 package com.zeon.zeon
 
 import android.annotation.SuppressLint
-import android.content.Intent
 import android.Manifest
-import android.content.pm.PackageManager
+import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
 import com.zeon.zeon.bg.BoxService
 import com.zeon.zeon.bg.ServiceConnection
 import com.zeon.zeon.bg.ServiceNotification
+import com.zeon.zeon.bg.StartPermissionRequestCoordinator
 import com.zeon.zeon.bg.VpnSessionCoordinator
-import com.zeon.zeon.bg.VpnPermissionRequestCoordinator
 import com.zeon.zeon.constant.Alert
 import com.zeon.zeon.constant.ServiceMode
 import com.zeon.zeon.constant.Status
@@ -30,9 +28,6 @@ import java.util.LinkedList
 class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     companion object {
         lateinit var instance: MainActivity
-
-        const val VPN_PERMISSION_REQUEST_CODE = 1001
-        const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1010
     }
 
     private val connection = ServiceConnection(this, this)
@@ -42,9 +37,8 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     val serviceStatus = MutableLiveData(Status.Stopped)
     val serviceGeneration = MutableLiveData(0L)
     val serviceAlerts = MutableLiveData<ServiceEvent?>(null)
-    private val vpnPermissionRequests = VpnPermissionRequestCoordinator()
-    private var pendingStartGeneration = 0L
-    private var notificationPermissionGeneration = 0L
+    private val startPermissionRequests = StartPermissionRequestCoordinator()
+    private var serviceLaunchGeneration = 0L
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -65,38 +59,43 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
 
     @SuppressLint("NewApi")
     fun startService(generation: Long = VpnSessionCoordinator.next("main_activity_start")) {
-        pendingStartGeneration = VpnSessionCoordinator.accept(generation, "main_activity_start")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !ServiceNotification.checkPermission()) {
-            notificationPermissionGeneration = pendingStartGeneration
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            return
-        }
-        startService0(pendingStartGeneration)
+        val acceptedGeneration = VpnSessionCoordinator.accept(generation, "main_activity_start")
+        requestStartPermissions(acceptedGeneration, startAfterGrant = true)
     }
 
-    internal fun prepareVpn(generation: Long, callback: (VpnPermissionRequestCoordinator.Outcome) -> Unit) {
+    internal fun prepareVpn(generation: Long, callback: (StartPermissionRequestCoordinator.Outcome) -> Unit) {
         lifecycleScope.launch(Dispatchers.Main) {
             if (Settings.serviceMode != ServiceMode.VPN) {
-                callback(VpnPermissionRequestCoordinator.Outcome.Granted)
+                callback(StartPermissionRequestCoordinator.Outcome.Granted)
                 return@launch
             }
-            requestVpnPermission(generation, startAfterGrant = false, callback = callback)
+            requestStartPermissions(generation, startAfterGrant = false, callback = callback)
         }
     }
 
-    private fun startService0(
-        generation: Long = pendingStartGeneration.takeIf { it > 0 }
-            ?: VpnSessionCoordinator.next("main_activity_start_fallback"),
-    ) {
+    @Synchronized
+    private fun startServiceAfterPermissions(generation: Long) {
+        if (!VpnSessionCoordinator.isCurrent(generation)) {
+            VpnSessionCoordinator.event(
+                "stale_completion_ignored",
+                generation,
+                "current_generation=${VpnSessionCoordinator.current()} session_state=permission source=service_launch reason=stale_generation",
+            )
+            return
+        }
+        if (serviceLaunchGeneration == generation) {
+            VpnSessionCoordinator.event(
+                "stale_completion_ignored",
+                generation,
+                "current_generation=${VpnSessionCoordinator.current()} session_state=permission source=service_launch reason=duplicate_launch",
+            )
+            return
+        }
+        serviceLaunchGeneration = generation
         val acceptedGeneration = VpnSessionCoordinator.accept(generation, "main_activity_start_service")
         lifecycleScope.launch(Dispatchers.IO) {
             if (Settings.rebuildServiceMode()) {
                 connection.reconnect()
-            }
-            if (Settings.serviceMode == ServiceMode.VPN) {
-                if (prepareForServiceStart(acceptedGeneration)) {
-                    return@launch
-                }
             }
             val intent = Intent(Application.application, Settings.serviceClass())
                 .putExtra(BoxService.EXTRA_SESSION_GENERATION, acceptedGeneration)
@@ -107,73 +106,102 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         }
     }
 
-    private suspend fun prepareForServiceStart(generation: Long) = withContext(Dispatchers.Main) {
-        requestVpnPermission(generation, startAfterGrant = true)
-    }
-
-    private fun requestVpnPermission(
+    private fun requestStartPermissions(
         generation: Long,
         startAfterGrant: Boolean,
-        callback: ((VpnPermissionRequestCoordinator.Outcome) -> Unit)? = null,
-    ): Boolean {
+        callback: ((StartPermissionRequestCoordinator.Outcome) -> Unit)? = null,
+    ) {
         val completion = callback ?: {}
-        return try {
-            val intent = VpnService.prepare(this@MainActivity)
-            if (intent != null) {
-                val launch = vpnPermissionRequests.request(
-                    VpnPermissionRequestCoordinator.Request(generation, startAfterGrant, completion),
-                )
-                if (launch) prepareLauncher.launch(intent)
-                true
-            } else {
-                vpnPermissionRequests.completeAlreadyGranted(generation, completion)
-                false
-            }
+        try {
+            val action = startPermissionRequests.begin(
+                StartPermissionRequestCoordinator.Request(generation, startAfterGrant) { outcome ->
+                    when (outcome) {
+                        StartPermissionRequestCoordinator.Outcome.Granted -> {
+                            if (startAfterGrant) {
+                                startServiceAfterPermissions(generation)
+                            }
+                        }
+                        StartPermissionRequestCoordinator.Outcome.NotificationDenied -> {
+                            if (VpnSessionCoordinator.isCurrent(generation)) {
+                                onServiceAlert(Alert.RequestNotificationPermission, null, generation)
+                            }
+                        }
+                        StartPermissionRequestCoordinator.Outcome.VpnDenied -> {
+                            if (VpnSessionCoordinator.isCurrent(generation)) {
+                                onServiceAlert(Alert.RequestVPNPermission, null, generation)
+                            }
+                        }
+                        StartPermissionRequestCoordinator.Outcome.Stale -> Unit
+                    }
+                    completion(outcome)
+                },
+                notificationGranted = notificationPermissionGranted(),
+                vpnGranted = vpnPermissionGranted(),
+            )
+            executePermissionAction(action)
         } catch (e: Exception) {
             if (VpnSessionCoordinator.isCurrent(generation)) {
                 onServiceAlert(Alert.RequestVPNPermission, e.message, generation)
-                completion(VpnPermissionRequestCoordinator.Outcome.Denied)
+                completion(StartPermissionRequestCoordinator.Outcome.VpnDenied)
             } else {
-                completion(VpnPermissionRequestCoordinator.Outcome.Stale)
+                completion(StartPermissionRequestCoordinator.Outcome.Stale)
             }
-            true
         }
     }
 
-    private fun completeVpnPermissionRequest(granted: Boolean) {
-        val completed = vpnPermissionRequests.complete(granted) ?: return
-        if (granted && completed.startAfterGrant) {
-            startService0(completed.generation)
-        } else if (!granted && VpnSessionCoordinator.isCurrent(completed.generation)) {
-            onServiceAlert(Alert.RequestVPNPermission, null, completed.generation)
+    private fun executePermissionAction(action: StartPermissionRequestCoordinator.Action) {
+        when (action) {
+            StartPermissionRequestCoordinator.Action.None -> Unit
+            StartPermissionRequestCoordinator.Action.RequestNotification ->
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            StartPermissionRequestCoordinator.Action.RequestVpn -> {
+                val intent = VpnService.prepare(this)
+                if (intent == null) {
+                    executePermissionAction(
+                        startPermissionRequests.completeVpn(
+                            resultGranted = true,
+                            notificationGranted = notificationPermissionGranted(),
+                            vpnGranted = true,
+                        ),
+                    )
+                } else {
+                    prepareLauncher.launch(intent)
+                }
+            }
         }
     }
+
+    private fun notificationPermissionGranted() =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || ServiceNotification.checkPermission()
+
+    private fun vpnPermissionGranted() =
+        Settings.serviceMode != ServiceMode.VPN || VpnService.prepare(this) == null
 
     private val notificationPermissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission(),
         ) { isGranted ->
-            val generation = notificationPermissionGeneration
-            notificationPermissionGeneration = 0L
-            if (!VpnSessionCoordinator.isCurrent(generation)) {
-                VpnSessionCoordinator.event(
-                    "stale_completion_ignored",
-                    generation,
-                    "current_generation=${VpnSessionCoordinator.current()} session_state=permission source=notification_permission reason=stale_result",
-                )
-                return@registerForActivityResult
-            }
-            if (Settings.dynamicNotification && !isGranted) {
-                onServiceAlert(Alert.RequestNotificationPermission, null, generation)
-            }
-            startService0(generation)
+            executePermissionAction(
+                startPermissionRequests.completeNotification(
+                    resultGranted = isGranted,
+                    notificationGranted = notificationPermissionGranted(),
+                    vpnGranted = vpnPermissionGranted(),
+                ),
+            )
         }
 
     private val prepareLauncher =
         registerForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
         ) { result ->
-            completeVpnPermissionRequest(result.resultCode == RESULT_OK)
+            val granted = result.resultCode == RESULT_OK && vpnPermissionGranted()
+            executePermissionAction(
+                startPermissionRequests.completeVpn(
+                    resultGranted = granted,
+                    notificationGranted = notificationPermissionGranted(),
+                    vpnGranted = vpnPermissionGranted(),
+                ),
+            )
         }
 
     override fun onServiceStatusChanged(status: Status, generation: Long) {
@@ -210,47 +238,8 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
 
 
     override fun onDestroy() {
+        startPermissionRequests.cancelAll("activity_destroyed")
         connection.disconnect()
         super.onDestroy()
-    }
-
-    @SuppressLint("NewApi")
-    private fun grantNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                NOTIFICATION_PERMISSION_REQUEST_CODE
-            )
-        }
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startService(pendingStartGeneration)
-            } else {
-                onServiceAlert(Alert.RequestNotificationPermission, null)
-                startService0()
-            }
-        }
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == VPN_PERMISSION_REQUEST_CODE) {
-            completeVpnPermissionRequest(resultCode == RESULT_OK)
-        } else if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
-            if (resultCode == RESULT_OK) startService()
-            else {
-                onServiceAlert(Alert.RequestNotificationPermission, null)
-                startService0()
-            }
-        }
     }
 }

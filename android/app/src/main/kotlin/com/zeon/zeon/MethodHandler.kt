@@ -13,7 +13,7 @@ import com.hiddify.core.mobile.Mobile
 import com.hiddify.core.mobile.SetupOptions
 import com.zeon.zeon.bg.Bugs
 import com.zeon.zeon.bg.VpnSessionCoordinator
-import com.zeon.zeon.bg.VpnPermissionRequestCoordinator
+import com.zeon.zeon.bg.StartPermissionRequestCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -136,9 +136,11 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
 
                         MainActivity.instance.prepareVpn(generation) { outcome ->
                             when (outcome) {
-                                VpnPermissionRequestCoordinator.Outcome.Granted -> result.success(true)
-                                VpnPermissionRequestCoordinator.Outcome.Denied -> result.success(false)
-                                VpnPermissionRequestCoordinator.Outcome.Stale -> result.error(
+                                StartPermissionRequestCoordinator.Outcome.Granted -> result.success(true)
+                                StartPermissionRequestCoordinator.Outcome.NotificationDenied,
+                                StartPermissionRequestCoordinator.Outcome.VpnDenied,
+                                -> result.success(false)
+                                StartPermissionRequestCoordinator.Outcome.Stale -> result.error(
                                     "vpn_operation_stale",
                                     "VPN permission result belongs to a stale session",
                                     null,
