@@ -62,7 +62,7 @@ const (
 	// Keep the service decisions separate so each override can be reverted
 	// without changing the other service or the generic RU destination rules.
 	ruYandexRussiaDirect      = true
-	ruWildberriesRussiaDirect = false
+	ruWildberriesRussiaDirect = true
 
 	// Group interruption is a capability, not a blanket switch behavior.
 	// Manual/metric switches preserve user TCP/UDP sessions. Smart Active is

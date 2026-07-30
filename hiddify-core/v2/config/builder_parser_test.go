@@ -230,12 +230,12 @@ func TestRussiaYandexDirectPolicyIsIndependent(t *testing.T) {
 	)
 }
 
-func TestRussiaWildberriesProxyPolicyIsIndependent(t *testing.T) {
+func TestRussiaWildberriesDirectPolicyIsIndependent(t *testing.T) {
 	assertRussiaServicePolicy(
 		t,
 		RUWildberriesRuleSetTag,
-		OutboundMainDetour,
-		DNSMultiRemoteTag,
+		OutboundDirectTag,
+		DNSMultiDirectTag,
 	)
 }
 
