@@ -48,6 +48,7 @@ class ZeonCoreService with InfraLogger {
   static const _debugFragmentMode = String.fromEnvironment("debug_fragment_mode");
   static const _debugProfileDnsStrategy = String.fromEnvironment("debug_profile_dns_strategy");
   static const _debugTunImplementation = String.fromEnvironment("debug_tun_implementation");
+  static const _routeEvidenceLogcatEnabled = bool.fromEnvironment("route_evidence_logcat_enabled");
   // Release builds may receive the authenticated UDP probe settings from CI.
   // The secret is never copied into diagnostic logs or the safe payload dump.
   static const _udpProbeEnabled = bool.fromEnvironment("udp_probe_enabled");
@@ -1874,6 +1875,9 @@ class ZeonCoreService with InfraLogger {
           // loggy.log(getLogLevel(event.level), event.message);
           final logLevel = _coreLogLevelForAppLog(safeEvent);
           safeEvent.message.split('\n').forEach((line) {
+            if (_routeEvidenceLogcatEnabled && Platform.isAndroid) {
+              unawaited(_emitRouteEvidence(line));
+            }
             loggy.log(logLevel, line);
             if (line.contains("[SelectorSwitch]")) {
               final details = selectorDiagnosticDetails(line);
@@ -1917,6 +1921,16 @@ class ZeonCoreService with InfraLogger {
       return loggyl.LogLevel.warning;
     }
     return level;
+  }
+
+  Future<void> _emitRouteEvidence(String line) async {
+    try {
+      await _platformChannel.invokeMethod<void>('emit_route_evidence', line);
+    } on PlatformException {
+      // Validation evidence must never affect the VPN or application lifecycle.
+    } on MissingPluginException {
+      // Non-Android and unit-test environments intentionally have no bridge.
+    }
   }
 
   bool _isBenignCanceledSystemInfoLog(String message) {

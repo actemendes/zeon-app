@@ -117,6 +117,9 @@ android {
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        // Shared code can call the evidence bridge, but every normal artifact
+        // compiles it as a hard no-op. physicalValidation overrides this flag.
+        buildConfigField "boolean", "ROUTE_EVIDENCE_ENABLED", "false"
         multiDexEnabled true
         testInstrumentationRunner "test.com.zeon.zeon.bg.VpnTestInstrumentation"
     }
@@ -190,12 +193,14 @@ android {
             // artifact keeps plugins intact and is deliberately not published.
             minifyEnabled false
             shrinkResources false
+            buildConfigField "boolean", "ROUTE_EVIDENCE_ENABLED", "true"
         }
     }
 
     buildFeatures {
         viewBinding true
         aidl true
+        buildConfig true
     }
 
 }

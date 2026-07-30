@@ -12,6 +12,7 @@ import android.net.Uri
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Base64
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.zeon.zeon.Application.Companion.packageManager
@@ -47,6 +48,7 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
             GetPackagesIcon("get_package_icon"),
             GetStableDeviceId("get_stable_device_id"),
             GetNetworkRuntimeInfo("get_network_runtime_info"),
+            EmitRouteEvidence("emit_route_evidence"),
         }
     }
 
@@ -234,6 +236,22 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
                             "network-interface-mtu" to 0
                         )
                     )
+                }
+            }
+            Trigger.EmitRouteEvidence.method -> {
+                if (!BuildConfig.ROUTE_EVIDENCE_ENABLED) {
+                    result.success(false)
+                    return
+                }
+                result.runCatching {
+                    val line = call.arguments as? String
+                    val tag = listOf("ZEON", "ROUTE", "VALIDATION").joinToString("_")
+                    if (line.isNullOrBlank() || line.length > 8192 || !line.startsWith("$tag ")) {
+                        success(false)
+                        return@runCatching
+                    }
+                    Log.w(tag, line)
+                    success(true)
                 }
             }
 
