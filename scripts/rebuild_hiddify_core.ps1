@@ -167,7 +167,13 @@ if [ "$smart_active_debug" = "1" ]; then
   echo "Building Smart Active debug fault injection support."
 fi
 
-export GOPATH="$HOME/go"
+user_home="$(getent passwd "$(id -un)" | cut -d: -f6)"
+if [ -z "$user_home" ] || [ ! -d "$user_home" ]; then
+  echo "Unable to resolve the WSL user's home directory." >&2
+  exit 1
+fi
+export HOME="$user_home"
+export GOPATH="$user_home/go"
 export PATH="$GOPATH/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
 export GOFLAGS="-buildvcs=false"
 export SOURCE_DATE_EPOCH="0"
@@ -296,13 +302,24 @@ for platform in "${platforms[@]}"; do
       require_command x86_64-w64-mingw32-gcc
 
       echo "Building Windows core DLL, Cronet DLL and CLI..."
+      desktop_metadata_ldflags="-X github.com/hiddify/hiddify-core/platform/desktop.buildRevision=$zeon_revision"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/desktop.hiddifyCoreTree=$hiddify_core_tree"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/desktop.hiddifySingBoxTree=$hiddify_sing_box_tree"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/desktop.coreBuildTags=$core_build_tags"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/desktop.upstreamVersion=v1.13.14"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/desktop.upstreamCommit=25a600db24f7680ad9806ce5427bd0ab8afe1114"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/desktop.sourceDirty=false"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/desktop.buildTimestampPolicy=SOURCE_DATE_EPOCH=0"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/desktop.buildIDPolicy=empty"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/hiddify/hiddify-core/v2/hcommon/constants.Version=zeon-$zeon_revision"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/sagernet/sing-box/constant.Version=1.13.14-zeon.1-$zeon_revision"
       windows_backup_dir="$(mktemp -d)"
       for artifact in hiddify-core.dll libcronet.dll HiddifyCli.exe; do
         if [ -f "$core_dir/bin/$artifact" ]; then
           cp -f "$core_dir/bin/$artifact" "$windows_backup_dir/$artifact"
         fi
       done
-      if ! make -C "$core_dir" TAGS="$core_build_tags" windows-amd64; then
+      if ! CODE_VERSION="$desktop_metadata_ldflags" make -C "$core_dir" TAGS="$core_build_tags" windows-amd64; then
         for artifact in hiddify-core.dll libcronet.dll HiddifyCli.exe; do
           if [ -f "$windows_backup_dir/$artifact" ]; then
             cp -f "$windows_backup_dir/$artifact" "$core_dir/bin/$artifact"
