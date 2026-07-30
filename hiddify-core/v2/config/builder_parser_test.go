@@ -221,7 +221,26 @@ func TestRussiaPresetHasExplicitRussianPublicSuffixes(t *testing.T) {
 	}
 }
 
-func TestRussiaProxyOverridesPrecedePublicSuffixDirectRule(t *testing.T) {
+func TestRussiaYandexProxyPolicyIsIndependent(t *testing.T) {
+	assertRussiaServicePolicy(
+		t,
+		RUYandexRuleSetTag,
+		OutboundMainDetour,
+		DNSMultiRemoteTag,
+	)
+}
+
+func TestRussiaWildberriesProxyPolicyIsIndependent(t *testing.T) {
+	assertRussiaServicePolicy(
+		t,
+		RUWildberriesRuleSetTag,
+		OutboundMainDetour,
+		DNSMultiRemoteTag,
+	)
+}
+
+func assertRussiaServicePolicy(t *testing.T, tag string, expectedOutbound string, expectedDNSServer string) {
+	t.Helper()
 	hopt := DefaultHiddifyOptions()
 	hopt.Region = "ru"
 	opts := option.Options{DNS: &option.DNSOptions{}}
@@ -229,24 +248,45 @@ func TestRussiaProxyOverridesPrecedePublicSuffixDirectRule(t *testing.T) {
 		t.Fatalf("setRoutingOptions returned error: %v", err)
 	}
 
-	overrideIndex, directIndex := -1, -1
+	serviceIndex, directIndex := -1, -1
 	for index, rule := range opts.Route.Rules {
 		candidate := rule.DefaultOptions
 		if candidate.Action != constant.RuleActionTypeRoute {
 			continue
 		}
-		if candidate.RouteOptions.Outbound == OutboundMainDetour &&
-			containsString(candidate.DomainSuffix, "yandex.ru") {
-			overrideIndex = index
+		if candidate.RouteOptions.Outbound == expectedOutbound &&
+			containsString(candidate.RuleSet, tag) {
+			serviceIndex = index
 		}
 		if candidate.RouteOptions.Outbound == OutboundDirectTag &&
 			containsString(candidate.DomainSuffix, ".ru") {
 			directIndex = index
 		}
 	}
-	if overrideIndex < 0 || directIndex < 0 || overrideIndex >= directIndex {
-		t.Fatalf("proxy override index=%d must precede RU direct index=%d", overrideIndex, directIndex)
+	if serviceIndex < 0 || directIndex < 0 || serviceIndex >= directIndex {
+		t.Fatalf("%s route index=%d must precede RU direct index=%d", tag, serviceIndex, directIndex)
 	}
+
+	foundDNSRule := false
+	for _, rule := range opts.DNS.Rules {
+		candidate := rule.DefaultOptions
+		if containsString(candidate.RuleSet, tag) &&
+			candidate.Action == constant.RuleActionTypeRoute &&
+			candidate.RouteOptions.Server == expectedDNSServer {
+			foundDNSRule = true
+			break
+		}
+	}
+	if !foundDNSRule {
+		t.Fatalf("%s has no DNS route through %s", tag, expectedDNSServer)
+	}
+
+	for _, ruleSet := range opts.Route.RuleSet {
+		if ruleSet.Tag == tag && ruleSet.Type == constant.RuleSetTypeInline {
+			return
+		}
+	}
+	t.Fatalf("%s has no independent inline rule set", tag)
 }
 
 func TestGlobalPresetDoesNotInstallRussiaDirectRules(t *testing.T) {
