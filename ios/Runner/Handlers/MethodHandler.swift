@@ -32,6 +32,8 @@ public class MethodHandler: NSObject, FlutterPlugin {
         }
         
         switch call.method {
+        case "get_vpn_session_snapshot":
+            result(VPNManager.shared.sessionSnapshot())
         case "set_session_generation":
             guard let generation = generation(from: call.arguments) else {
                 result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))

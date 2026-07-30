@@ -28,6 +28,8 @@ class VPNManager: ObservableObject {
     private let generationLock = NSLock()
     private var sessionGeneration: Int64 = 0
     private var coreReadyGeneration: Int64 = 0
+    private let runtimeEpoch = UUID().uuidString
+    private var snapshotSequence: Int64 = 1
     
     private var observer: NSObjectProtocol?
     private var manager = NEVPNManager.shared()
@@ -164,6 +166,9 @@ class VPNManager: ObservableObject {
     }
 
     private func setState(_ status: NEVPNStatus) {
+        generationLock.lock()
+        snapshotSequence += 1
+        generationLock.unlock()
         DispatchQueue.main.async { [weak self] in
             self?.state = status
         }
@@ -176,6 +181,7 @@ class VPNManager: ObservableObject {
         if generation > sessionGeneration {
             sessionGeneration = generation
             coreReadyGeneration = 0
+            snapshotSequence += 1
         }
         return sessionGeneration
     }
@@ -235,13 +241,56 @@ class VPNManager: ObservableObject {
         defer { generationLock.unlock() }
         guard generation == sessionGeneration else { return false }
         coreReadyGeneration = generation
+        snapshotSequence += 1
         return true
     }
 
     private func clearCoreReady() {
         generationLock.lock()
         coreReadyGeneration = 0
+        snapshotSequence += 1
         generationLock.unlock()
+    }
+
+    func sessionSnapshot() -> [String: Any] {
+        generationLock.lock()
+        defer { generationLock.unlock() }
+        let generation = sessionGeneration
+        let ready = generation > 0 && coreReadyGeneration == generation
+        let status = manager.connection.status
+        let phase: String
+        switch status {
+        case .connected:
+            phase = ready ? "connected" : "verifying"
+        case .connecting, .reasserting:
+            phase = "starting_platform"
+        case .disconnecting:
+            phase = "stopping"
+        case .disconnected, .invalid:
+            phase = "disconnected"
+        @unknown default:
+            phase = "failed"
+        }
+        return [
+            "generation": generation,
+            "runtimeEpoch": runtimeEpoch,
+            "sequenceNumber": snapshotSequence,
+            "snapshotVersion": snapshotSequence,
+            "phase": phase,
+            "requestedAction": "",
+            "coreReady": ready,
+            "coreStarted": ready,
+            "commandEndpointReady": ready,
+            "tunnelReady": status == .connected,
+            "protectSucceeded": status == .connected,
+            "platformVpnValidated": status == .connected,
+            "selectedOutboundId": "",
+            "selectedOutboundLabel": "",
+            "strategy": "",
+            "failureCode": "",
+            "failureOwner": "",
+            "recoverable": false,
+        ]
     }
 
     private func migrateStoredProviderConfigurationIfNeeded() async throws {
