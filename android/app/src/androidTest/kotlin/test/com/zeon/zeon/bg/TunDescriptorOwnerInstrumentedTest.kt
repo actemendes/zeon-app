@@ -67,22 +67,25 @@ class TunDescriptorOwnerInstrumentedTest {
 
     fun repeatedStartStopDoesNotGrowDescriptorCount() {
         val owner = TunDescriptorOwner()
-        // Warm up Android logging/procfs bookkeeping before taking the
-        // baseline. Those process-wide descriptors are opened lazily on the
-        // first owner event and are unrelated to a TUN lifecycle cycle.
-        val warmupGeneration = VpnSessionCoordinator.next("tun_stress_warmup")
-        owner.open(warmupGeneration, descriptor())
-        check(owner.close(warmupGeneration, "stress_warmup"))
-        fdCount()
+        // Execute the complete measured path before taking the baseline.
+        // ART, logcat and procfs may open process-wide descriptors lazily
+        // while this code becomes hot; a single owner cycle does not exercise
+        // that path. A second identical batch must not retain descriptors.
+        runOwnershipCycles(owner, "tun_stress_warmup")
         val before = fdCount()
+        runOwnershipCycles(owner, "tun_stress")
+        val after = fdCount()
+        check(after <= before + 2) { "file descriptor count grew from $before to $after" }
+    }
+
+    private fun runOwnershipCycles(owner: TunDescriptorOwner, prefix: String) {
         repeat(100) { index ->
-            val generation = VpnSessionCoordinator.next("tun_stress_$index")
+            val generation = VpnSessionCoordinator.next("${prefix}_$index")
             val descriptor = descriptor()
             owner.open(generation, descriptor)
             check(owner.close(generation, "stress"))
+            check(!descriptor.fileDescriptor.valid())
         }
-        val after = fdCount()
-        check(after <= before + 2) { "file descriptor count grew from $before to $after" }
     }
 
     fun rapidRestartIsIdempotent() {
