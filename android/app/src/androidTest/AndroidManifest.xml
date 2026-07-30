@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application>
         <activity
+            android:name="test.com.zeon.zeon.bg.RussianServicesValidationActivity"
+            android:exported="true" />
+        <activity
             android:name="test.com.zeon.zeon.bg.Http3ValidationActivity"
             android:exported="true" />
         <activity
