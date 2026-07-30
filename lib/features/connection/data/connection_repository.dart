@@ -24,6 +24,7 @@ abstract interface class ConnectionRepository {
   TaskEither<ConnectionFailure, Unit> setup();
   TaskEither<ConnectionFailure, Unit> prepareSystemVpn(ProfileEntity activeProfile, bool disableMemoryLimit);
   Stream<ConnectionStatus> watchConnectionStatus();
+  Future<ConnectionStatus?> resyncConnectionStatus(String source);
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit);
   TaskEither<ConnectionFailure, Unit> disconnect();
   TaskEither<ConnectionFailure, Unit> reconnect(
@@ -89,6 +90,17 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
         CoreStopping() => const Disconnecting(),
       },
     );
+  }
+
+  @override
+  Future<ConnectionStatus?> resyncConnectionStatus(String source) async {
+    final status = await singbox.resyncFromPlatform(source);
+    return switch (status) {
+      CoreStopped() => Disconnected(status.getCoreAlert()),
+      CoreStarting() => const Connecting(),
+      CoreStarted() => const Connected(),
+      CoreStopping() => const Disconnecting(),
+    };
   }
 
   @override

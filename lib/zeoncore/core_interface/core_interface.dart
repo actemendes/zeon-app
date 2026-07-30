@@ -34,6 +34,8 @@ class CoreInterface {
 
   Future<void> markCoreStarted(int generation) async {}
 
+  Future<CoreStatus?> resyncSessionStatus() async => null;
+
   bool isSingleChannel() {
     // return true;
     return fgClient == bgClient;

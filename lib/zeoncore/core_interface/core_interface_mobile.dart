@@ -16,12 +16,14 @@ import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/generated/v2/hello/hello.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hello/hello_service.pbgrpc.dart';
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   static const channelPrefix = "com.zeon.app";
   static const methodChannel = MethodChannel("$channelPrefix/method");
   static const statusChannel = EventChannel("$channelPrefix/service.status", JSONMethodCodec());
   static const alertsChannel = EventChannel("$channelPrefix/service.alerts", JSONMethodCodec());
+  static const snapshotChannel = EventChannel("$channelPrefix/service.snapshot", JSONMethodCodec());
 
   late Uint8List serverPublicKey;
   static final cert = CryptoUtils.generateEcKeyPair();
@@ -33,6 +35,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   bool _isBgClientAvailable = false;
   bool _debug = false;
   int _sessionGeneration = 0;
+  final VpnSessionSnapshotGate _snapshotGate = VpnSessionSnapshotGate();
 
   late LastStream<CoreStatus> _status;
   @override
@@ -48,8 +51,12 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
         options: ChannelOptions(credentials: channelOption),
       ),
     );
-    final status = statusChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent);
-    final alerts = alertsChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent);
+    final status = Platform.isAndroid
+        ? _androidSnapshotStatuses()
+        : statusChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent);
+    final alerts = Platform.isAndroid
+        ? const Stream<CoreStatus>.empty()
+        : alertsChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent);
 
     _status = LastStream(ValueConnectableStream(Rx.merge([status, alerts])).autoConnect());
     try {
@@ -98,6 +105,49 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     );
     // await start("/sdcard/Android/data/app.zeonvpn.com/files/configs/cdc633e9-8cfc-4a67-948d-009f779a5c91.json", "zeon");
     return "";
+  }
+
+  Stream<CoreStatus> _androidSnapshotStatuses() async* {
+    await for (final event in snapshotChannel.receiveBroadcastStream()) {
+      final incoming = VpnSessionSnapshot.fromEvent(event);
+      final disposition = _snapshotGate.classify(incoming);
+      if (disposition == VpnSnapshotDisposition.duplicate || disposition == VpnSnapshotDisposition.stale) {
+        loggy.warning(
+          "event=stale_callback_ignored generation=${incoming.generation} "
+          "sequence=${incoming.sequenceNumber} source=android_snapshot disposition=${disposition.name}",
+        );
+        continue;
+      }
+      if (disposition == VpnSnapshotDisposition.gap) {
+        final resynced = await _getAuthoritativeSnapshot();
+        if (resynced == null) continue;
+        _snapshotGate.acceptAuthoritative(resynced);
+        yield resynced.toCoreStatus();
+        continue;
+      }
+      _snapshotGate.acceptAuthoritative(incoming);
+      _sessionGeneration = max(_sessionGeneration, incoming.generation);
+      yield incoming.toCoreStatus();
+    }
+  }
+
+  Future<VpnSessionSnapshot?> _getAuthoritativeSnapshot() async {
+    if (!Platform.isAndroid) return null;
+    final event = await methodChannel.invokeMethod<Object?>("get_vpn_session_snapshot");
+    return VpnSessionSnapshot.fromEvent(event);
+  }
+
+  @override
+  Future<CoreStatus?> resyncSessionStatus() async {
+    final snapshot = await _getAuthoritativeSnapshot();
+    if (snapshot == null) return null;
+    _snapshotGate.acceptAuthoritative(snapshot);
+    _sessionGeneration = max(_sessionGeneration, snapshot.generation);
+    loggy.info(
+      "event=vpn_snapshot_resync generation=${snapshot.generation} "
+      "sequence=${snapshot.sequenceNumber} phase=${snapshot.phase.name}",
+    );
+    return snapshot.toCoreStatus();
   }
 
   Future<HelloResponse> _sayHelloWhenReady(HelloClient client) async {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -56,9 +57,15 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   String? _lastUserAction;
   DateTime? _lastUserActionAt;
   DateTime? _expectedStopUntil;
+  AppLifecycleListener? _appLifecycleListener;
 
   @override
   Stream<ConnectionStatus> build() async* {
+    _appLifecycleListener ??= AppLifecycleListener(onResume: () => unawaited(_resyncFromPlatform("app_resume")));
+    ref.onDispose(() {
+      _appLifecycleListener?.dispose();
+      _appLifecycleListener = null;
+    });
     if (!kIsWeb && Platform.isIOS) {
       await _connectionRepo.setup().mapLeft((l) {
         loggy.error("error setting up connection repository", l);
@@ -154,6 +161,27 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         unawaited(_promoteEmbeddedBootstrapProfileAfterConnection());
       }
     });
+  }
+
+  Future<void> _resyncFromPlatform(String source) async {
+    if (_useMockConnectionFlow) return;
+    try {
+      final authoritative = await _connectionRepo.resyncConnectionStatus(source);
+      if (authoritative == null) return;
+      final current = state.asData?.value;
+      if (current != authoritative) {
+        loggy.info("event=vpn_ui_resync source=$source from=${current?.runtimeType} to=${authoritative.runtimeType}");
+        state = AsyncData(authoritative);
+      }
+    } catch (e, st) {
+      loggy.warning("VPN snapshot resync failed [$source]", e, st);
+    }
+  }
+
+  Future<void> _boundedConnectingResync() async {
+    await Future<void>.delayed(const Duration(seconds: 12));
+    if (state.asData?.value is! Connecting) return;
+    await _resyncFromPlatform("connecting_timeout");
   }
 
   ConnectionRepository get _connectionRepo => ref.read(connectionRepositoryProvider);
@@ -449,7 +477,8 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       return;
     }
     _connectedProfileId = activeProfile.id;
-    await _connectionRepo.connect(activeProfile, ref.read(Preferences.disableMemoryLimit)).mapLeft((
+    unawaited(_boundedConnectingResync());
+    final result = await _connectionRepo.connect(activeProfile, ref.read(Preferences.disableMemoryLimit)).mapLeft((
       ConnectionFailure err,
     ) async {
       _connectedProfileId = null;
@@ -467,6 +496,9 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       await ref.read(Preferences.startedByUser.notifier).update(false);
       state = AsyncError(err, StackTrace.current);
     }).run();
+    if (result.isRight()) {
+      await _resyncFromPlatform("connect_completion");
+    }
   }
 
   Future<void> _disconnect() async {

@@ -255,6 +255,22 @@ class ZeonCoreService with InfraLogger {
     }
   }
 
+  Future<CoreStatus> resyncFromPlatform(String source) async {
+    final authoritative = await core.resyncSessionStatus();
+    if (authoritative == null) return currentState;
+    currentState = authoritative;
+    _syncLifecycleFromCoreStatus(authoritative, reason: "platform resync/$source");
+    statusController.add(authoritative);
+    loggy.info(
+      vpnDiagnosticEvent(
+        "vpn_snapshot_resync",
+        _sessionGeneration.current,
+        details: "source=$source status=${authoritative.runtimeType}",
+      ),
+    );
+    return authoritative;
+  }
+
   int beginVpnOperation(String source) {
     final generation = _sessionGeneration.next();
     _connectedGeneration = 0;
