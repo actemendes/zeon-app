@@ -96,6 +96,9 @@ service.ru -> CNAME edge.example.com -> address
 retains `service.ru` for the subsequent TUN connection. IPv4, IPv6 and CNAME
 regressions are covered by tests. If a non-RU domain resolves to an address in
 `zapret-ru-ip`, the post-resolution route rule sends that connection DIRECT.
+FakeDNS is forcibly disabled only in Russia mode because a synthetic address
+would otherwise hide the real IPv4/IPv6 destination from that IP matcher.
+Global FakeDNS behavior is unchanged.
 
 RU suffix and service-family DNS rules select direct DNS. The IP rule is not
 installed as a pre-resolution DNS matcher. Global DNS policy is unchanged.
@@ -167,7 +170,8 @@ generation
 Plain IP destinations are not logged. The HMAC salt is per process; DNS
 correlation is capped at 256 entries, expires after 10 minutes and is never
 persisted. Ambiguous shared-IP correlation is not attributed. `DNS UNKNOWN` is
-a validation failure.
+a validation failure, and a failed resolver exchange is explicitly marked
+`DNS_EXCHANGE_FAILED` rather than being represented as a successful lookup.
 
 The production build compiles no-op stubs. The production verifier rejects the
 build tag and log marker unless validation mode is explicitly authorized.
