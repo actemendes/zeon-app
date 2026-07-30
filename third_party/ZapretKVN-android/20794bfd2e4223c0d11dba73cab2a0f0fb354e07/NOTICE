@@ -1,0 +1,16 @@
+Zapret KVN Android
+Copyright 2026 Zapret KVN contributors
+
+This project is distributed under GPL-3.0-or-later. The complete license text
+is in docs/LICENSE. Third-party components, source locations and license notices are
+listed in docs/THIRD_PARTY_NOTICES.md.
+
+Proprietary or closed-source conveyance of covered binaries is not permitted.
+Distributors must provide the complete Corresponding Source under
+GPL-3.0-or-later.
+
+No trademark rights in the Zapret KVN name, app icon, logo, or branding are
+granted. Forks must not imply that they are official or endorsed releases.
+
+Release builds include sing-box-extended from the exact source revision and the
+separately hashed Android patch recorded in core.properties and build metadata.

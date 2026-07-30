@@ -73,7 +73,12 @@ func Setup(params *SetupRequest, platformInterface libbox.PlatformInterface) err
 	Log(LogLevel_DEBUG, LogType_CORE, fmt.Sprintf("libbox.Setup success %s %s %s %v", params.BasePath, params.WorkingDir, params.TempDir, tcpConn))
 
 	sWorkingPath = params.WorkingDir
-	os.Chdir(sWorkingPath)
+	if err := os.Chdir(sWorkingPath); err != nil {
+		return E.Cause(err, "change core working directory")
+	}
+	if err := config.EnsureBundledRURuleSets(sWorkingPath); err != nil {
+		return E.Cause(err, "install bundled RU rule-sets")
+	}
 	sTempPath = params.TempDir
 	sUserID = os.Getuid()
 	sGroupID = os.Getgid()

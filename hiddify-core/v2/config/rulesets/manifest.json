@@ -1,0 +1,46 @@
+{
+  "formatVersion": 1,
+  "generatedAtSemantics": "ZEON bundle assembly timestamp; the pinned reference does not publish the original SRS generation time",
+  "reference": {
+    "repository": "https://github.com/youtubediscord/ZapretKVN-android",
+    "commit": "20794bfd2e4223c0d11dba73cab2a0f0fb354e07",
+    "tree": "490d86e6eea8dc16fd47e40c9914e6e942cc4963",
+    "manifestFile": "app/src/main/assets/rule-sets/manifest.json",
+    "manifestSha256": "7e231278c6d274428d80da7d92b42a62378a90ceaced913e7c9d69d627ccb37d"
+  },
+  "ruleSets": [
+    {
+      "id": "zapret-ru-domains",
+      "version": "zapretkvn-20794bfd-manifest-v1",
+      "sourceRepository": "https://github.com/youtubediscord/ZapretKVN-android",
+      "sourceCommit": "20794bfd2e4223c0d11dba73cab2a0f0fb354e07",
+      "sourceFile": "rulesets/zapret-ru-domains.json",
+      "sourceSha256": "311c8f5a2ef10b5ad2d52362db354e42dba45d34993816dae2cbf027867bea1b",
+      "generatedSrsSha256": "a39faeb4a4c894a2ce665b8919322cee626f61dd12c63a63736fcf8b0a433053",
+      "license": "GPL-3.0-or-later",
+      "generatedAt": "2026-07-30T17:38:29.841Z",
+      "domainCount": 3,
+      "cidrCount": 0,
+      "formatVersion": 2
+    },
+    {
+      "id": "zapret-ru-ip",
+      "version": "zapretkvn-20794bfd-manifest-v1",
+      "sourceRepository": "https://github.com/youtubediscord/ZapretKVN-android",
+      "sourceCommit": "20794bfd2e4223c0d11dba73cab2a0f0fb354e07",
+      "sourceFile": "app/src/main/assets/rule-sets/zapret-ru-ip.srs",
+      "sourceSha256": "1f4cccc9bb9510bb29d8a4b7d326b869bff94e9911d555acc0570545dabfaa7b",
+      "generatedSrsSha256": "1f4cccc9bb9510bb29d8a4b7d326b869bff94e9911d555acc0570545dabfaa7b",
+      "license": "GPL-3.0-or-later",
+      "generatedAt": "2026-07-30T17:38:29.841Z",
+      "domainCount": 0,
+      "cidrCount": 10842,
+      "formatVersion": 1,
+      "ipv4CidrCount": 8668,
+      "ipv6CidrCount": 2174,
+      "declaredUpstreamSource": "https://github.com/SagerNet/sing-geoip/raw/5605651c12ed5b2fcf3b5de580c041eb9d8d938e/geoip-ru.srs",
+      "declaredUpstreamCommit": "5605651c12ed5b2fcf3b5de580c041eb9d8d938e",
+      "declaredUpstreamVerified": false
+    }
+  ]
+}

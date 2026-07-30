@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "generated_with_core": "ff11f007ec798136a5de258f947a4f34011a37ea",
+  "sets": [
+    {
+      "tag": "zapret-ru-domains",
+      "file": "zapret-ru-domains.srs",
+      "sha256": "a39faeb4a4c894a2ce665b8919322cee626f61dd12c63a63736fcf8b0a433053",
+      "source": "rulesets/zapret-ru-domains.json",
+      "source_revision": "project-v1",
+      "license": "GPL-3.0-or-later"
+    },
+    {
+      "tag": "zapret-ru-ip",
+      "file": "zapret-ru-ip.srs",
+      "sha256": "1f4cccc9bb9510bb29d8a4b7d326b869bff94e9911d555acc0570545dabfaa7b",
+      "source": "https://github.com/SagerNet/sing-geoip/raw/5605651c12ed5b2fcf3b5de580c041eb9d8d938e/geoip-ru.srs",
+      "source_revision": "5605651c12ed5b2fcf3b5de580c041eb9d8d938e",
+      "license": "GPL-3.0-or-later"
+    }
+  ]
+}
