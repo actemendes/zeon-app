@@ -1,0 +1,15 @@
+fix,shared_core,android_status,ios_status,windows_status,required_work
+StartedService.Close and observable owners,yes,embedded and validated,source shared but existing XCFramework stale,embedded in rebuilt DLL,rebuild iOS XCFramework on macOS
+replaceable CoreLogFactory close,yes,embedded and validated,source shared but existing XCFramework stale,embedded in rebuilt DLL,rebuild iOS XCFramework on macOS
+immutable URLTestHistory and Smart Active race,yes,embedded and race-tested,source shared but existing XCFramework stale,embedded and race-tested,rebuild iOS XCFramework on macOS
+session generation,partly,implemented and device-validated,implemented in Swift source but uncompiled,implemented in Dart desktop bridge,compile and device-test iOS
+stale completion suppression,partly,implemented and device-validated,implemented in Swift source but uncompiled,implemented in Dart desktop bridge,compile and device-test iOS
+start-stop-restart serialization,partly,implemented and device-validated,implemented in Swift source but uncompiled,desktop setup future serialized,compile and device-test iOS
+CoreReady versus Started separation,partly,implemented,implemented in Swift source but uncompiled,CoreStarting no longer reported as CoreStarted,compile and device-test iOS
+command polling ownership,partly,implemented,extension/app ownership reviewed,desktop endpoint isolated by dynamic port,device-test iOS
+TUN-adapter ownership,no,Android PFD owner,PacketTunnelProvider generation added,not exercised because Windows VPN prohibited,device-test iOS and separate Windows VPN stage
+event-listener cleanup,partly,implemented,observer identity and generation guarded,single-instance and runner callbacks fixed,compile and device-test iOS
+safe redacted diagnostics,partly,implemented,generation-safe markers added,startup markers added,compile iOS and retain validation-only Windows guard separation
+reproducible provenance,yes,AAR verified,existing framework stale,new DLL metadata verified,rebuild iOS XCFramework
+Bitmap downsampling,no,Stage 2.5 Android-only,not applicable,not applicable,none
+R8 hardening,no,Stage 2.5 Android-only,not applicable,not applicable,none

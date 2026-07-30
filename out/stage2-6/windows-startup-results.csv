@@ -1,0 +1,11 @@
+scenario,attempts,passed,unexpected_exits,orphan_processes,tunnel_starts,network_state_changed,result,evidence
+cold_launch_idle_close,30,30,0,0,0,false,PASS,evidence/20260730T133517Z/windows/cold-launch-idle-close-30.csv
+rapid_secondary_launch,20,20,0,0,0,false,PASS,evidence/20260730T133517Z/windows/rapid-launch-20.csv
+second_launch_activates_primary,1,1,0,0,0,false,PASS,evidence/20260730T133517Z/windows/rapid-launch-20.csv
+minimize_restore,1,1,0,0,0,false,PASS,evidence/20260730T133517Z/windows/close-dialog.png
+tray_close_dialog,1,1,0,0,0,false,PASS,evidence/20260730T133517Z/windows/close-dialog.png
+foreign_working_directory,1,1,0,0,0,false,PASS,evidence/20260730T133517Z/windows/path-launch-results.csv
+unicode_path,1,1,0,0,0,false,PASS,evidence/20260730T133517Z/windows/path-launch-results.csv
+long_path_packaging,1,0,0,0,0,false,BLOCKED_BY_LEGACY_PATH_LIMIT,evidence/20260730T133517Z/windows/path-launch-results.csv
+route_proxy_adapter_dns_comparison,1,1,0,0,0,false,PASS,evidence/20260730T133517Z/windows/network-state-comparison.csv
+application_error_event_scan,1,1,0,0,0,false,PASS,evidence/20260730T133517Z/windows-event-scan.txt
