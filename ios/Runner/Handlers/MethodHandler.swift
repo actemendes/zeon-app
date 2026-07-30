@@ -32,6 +32,32 @@ public class MethodHandler: NSObject, FlutterPlugin {
         }
         
         switch call.method {
+        case "set_session_generation":
+            guard let generation = generation(from: call.arguments) else {
+                result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+                return
+            }
+            result(NSNumber(value: VPNManager.shared.setSessionGeneration(generation)))
+        case "mark_core_started":
+            guard let generation = generation(from: call.arguments) else {
+                result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+                return
+            }
+            Task {
+                do {
+                    try await VPNManager.shared.markCoreStarted(generation)
+                    await mainResult(NSNumber(value: generation))
+                } catch {
+                    if !VPNManager.shared.isCurrentGeneration(generation) {
+                        NSLog("event=stale_completion_ignored source=ios_mark_core_started")
+                        await mainResult(NSNumber(value: VPNManager.shared.currentSessionGeneration()))
+                        return
+                    }
+                    await mainResult(
+                        FlutterError(code: "CORE_NOT_READY", message: error.localizedDescription, details: nil)
+                    )
+                }
+            }
         case "get_grpc_server_public_key":
             result("")
         case "add_grpc_client_public_key":
@@ -109,7 +135,8 @@ public class MethodHandler: NSObject, FlutterPlugin {
                     let args = call.arguments as? [String:Any?],
                     let path = args["path"] as? String,
                     let name = args["name"] as? String,
-                    let grpcPort=args["grpcPort"] as? Int
+                    let grpcPort=args["grpcPort"] as? Int,
+                    let generation = generation(from: args)
                 else {
                     await mainResult(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
                     return
@@ -125,9 +152,23 @@ public class MethodHandler: NSObject, FlutterPlugin {
                     return
                 }
                 do {
+                    guard VPNManager.shared.isCurrentGeneration(generation) else {
+                        await mainResult(true)
+                        return
+                    }
                     try await VPNManager.shared.setup()
-                    try await VPNManager.shared.connect(with: path, grpcServiceModePort: grpcPort, disableMemoryLimit: VPNConfig.shared.disableMemoryLimit)
+                    try await VPNManager.shared.connect(
+                        with: path,
+                        grpcServiceModePort: grpcPort,
+                        disableMemoryLimit: VPNConfig.shared.disableMemoryLimit,
+                        generation: generation
+                    )
                 } catch {
+                    if !VPNManager.shared.isCurrentGeneration(generation) {
+                        NSLog("event=stale_exception_ignored source=ios_start")
+                        await mainResult(true)
+                        return
+                    }
                     await mainResult(FlutterError(code: "SETUP_CONNECTION", message: error.localizedDescription, details: nil))
                     return
                 }
@@ -139,7 +180,8 @@ public class MethodHandler: NSObject, FlutterPlugin {
                     let args = call.arguments as? [String:Any?],
                     let path = args["path"] as? String,
                     let name = args["name"] as? String,
-                    let grpcPort=args["grpcPort"] as? Int
+                    let grpcPort=args["grpcPort"] as? Int,
+                    let generation = generation(from: args)
                 else {
                     await mainResult(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
                     return
@@ -150,13 +192,23 @@ public class MethodHandler: NSObject, FlutterPlugin {
                 VPNConfig.shared.grpcServiceModePort=grpcPort
                 VPNConfig.shared.disableMemoryLimit = disableMemoryLimit
                 do {
+                    guard VPNManager.shared.isCurrentGeneration(generation) else {
+                        await mainResult(true)
+                        return
+                    }
                     try await VPNManager.shared.setup()
                     try await VPNManager.shared.prepare(
                         with: path,
                         grpcServiceModePort: grpcPort,
-                        disableMemoryLimit: disableMemoryLimit
+                        disableMemoryLimit: disableMemoryLimit,
+                        generation: generation
                     )
                 } catch {
+                    if !VPNManager.shared.isCurrentGeneration(generation) {
+                        NSLog("event=stale_exception_ignored source=ios_prepare")
+                        await mainResult(true)
+                        return
+                    }
                     await mainResult(FlutterError(code: "PREPARE_VPN", message: error.localizedDescription, details: nil))
                     return
                 }
@@ -192,7 +244,15 @@ public class MethodHandler: NSObject, FlutterPlugin {
 //            }
         case "stop":
             Task {
-                await VPNManager.shared.disconnectAsync()
+                guard let generation = generation(from: call.arguments) else {
+                    await mainResult(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+                    return
+                }
+                if VPNManager.shared.isCurrentGeneration(generation) {
+                    await VPNManager.shared.disconnectAsync(generation: generation)
+                } else {
+                    NSLog("event=stale_completion_ignored source=ios_stop")
+                }
                 await mainResult(true)
             }
         case "reset":
@@ -259,6 +319,20 @@ public class MethodHandler: NSObject, FlutterPlugin {
         default:
             result(FlutterMethodNotImplemented)
         }
+    }
+
+    private func generation(from arguments: Any?) -> Int64? {
+        guard let args = arguments as? [String: Any?] else { return nil }
+        if let value = args["generation"] as? NSNumber {
+            return value.int64Value
+        }
+        if let value = args["generation"] as? Int {
+            return Int64(value)
+        }
+        if let value = args["generation"] as? String {
+            return Int64(value)
+        }
+        return nil
     }
     
     private func waitForStop() -> Future<Void, Never> {

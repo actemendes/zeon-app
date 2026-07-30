@@ -12,6 +12,7 @@ open class ExtensionProvider: NEPacketTunnelProvider {
     private var systemProxyEnabled = false
     private var platformInterface: ExtensionPlatformInterface!
     private var config: String!
+    private var sessionGeneration: Int64 = 0
 
     override open func startTunnel(options: [String: NSObject]?) async throws {
         // Clear previous logs
@@ -33,6 +34,11 @@ open class ExtensionProvider: NEPacketTunnelProvider {
                 options: options,
                 providerConfiguration: providerConfiguration
             ) ?? 17179
+            sessionGeneration = Int64(optionInt(
+                "Generation",
+                options: options,
+                providerConfiguration: providerConfiguration
+            ) ?? 0)
             let config = optionString("Config", options: options, providerConfiguration: providerConfiguration) ?? ""
             
             // guard let config = SingBox.setupConfig(config: config2) else {
@@ -82,7 +88,7 @@ open class ExtensionProvider: NEPacketTunnelProvider {
             
             LibboxSetMemoryLimit(!disableMemoryLimit)
             
-            writeMessage("(packet-tunnel) setup completed successfully")
+            writeMessage("(packet-tunnel) setup completed generation=\(sessionGeneration)")
             if (!launchedFromApp) {
                 if config.isEmpty {
                     writeMessage("(packet-tunnel) saved configuration is missing; waiting for app start command")
@@ -213,6 +219,7 @@ open class ExtensionProvider: NEPacketTunnelProvider {
 //        logger.debug("Stopping tunnel with reason: \(reason)")
         writeMessage("(packet-tunnel) stopping, reason: \(reason)")
         stopService()
+        sessionGeneration = 0
         
 //        // Allow time for cleanup
 //        try? await Task.sleep(nanoseconds: 100 * NSEC_PER_MSEC)

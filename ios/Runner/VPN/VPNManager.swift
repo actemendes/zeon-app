@@ -25,6 +25,9 @@ struct VPNManagerAlert {
 
 class VPNManager: ObservableObject {
     private var cancelBag: Set<AnyCancellable> = []
+    private let generationLock = NSLock()
+    private var sessionGeneration: Int64 = 0
+    private var coreReadyGeneration: Int64 = 0
     
     private var observer: NSObjectProtocol?
     private var manager = NEVPNManager.shared()
@@ -62,8 +65,11 @@ class VPNManager: ObservableObject {
     
     init() {
         observer = NotificationCenter.default.addObserver(forName: .NEVPNStatusDidChange, object: nil, queue: nil) { [weak self] notification in
-            guard let connection = notification.object as? NEVPNConnection else { return }
-            self?.setState(connection.status)
+            guard let self,
+                  let connection = notification.object as? NEVPNConnection,
+                  connection === self.manager.connection
+            else { return }
+            self.setState(connection.status)
         }
         
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -114,7 +120,12 @@ class VPNManager: ObservableObject {
         }
     }
     
-    private func enableVPNManager(config: String, grpcServiceModePort: Int, disableMemoryLimit: Bool) async throws {
+    private func enableVPNManager(
+        config: String,
+        grpcServiceModePort: Int,
+        disableMemoryLimit: Bool,
+        generation: Int64 = 0
+    ) async throws {
         var lastError: Error?
         for attempt in 0..<2 {
             do {
@@ -127,7 +138,8 @@ class VPNManager: ObservableObject {
                     tunnelProtocol.providerConfiguration = providerConfiguration(
                         config: config,
                         grpcServiceModePort: grpcServiceModePort,
-                        disableMemoryLimit: disableMemoryLimit
+                        disableMemoryLimit: disableMemoryLimit,
+                        generation: generation
                     )
                     manager.protocolConfiguration = tunnelProtocol
                 }
@@ -155,6 +167,81 @@ class VPNManager: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             self?.state = status
         }
+    }
+
+    @discardableResult
+    func setSessionGeneration(_ generation: Int64) -> Int64 {
+        generationLock.lock()
+        defer { generationLock.unlock() }
+        if generation > sessionGeneration {
+            sessionGeneration = generation
+            coreReadyGeneration = 0
+        }
+        return sessionGeneration
+    }
+
+    func currentSessionGeneration() -> Int64 {
+        generationLock.lock()
+        defer { generationLock.unlock() }
+        return sessionGeneration
+    }
+
+    func isCurrentGeneration(_ generation: Int64) -> Bool {
+        generationLock.lock()
+        defer { generationLock.unlock() }
+        return generation > 0 && generation == sessionGeneration
+    }
+
+    func isCoreReadyForCurrentGeneration() -> Bool {
+        generationLock.lock()
+        defer { generationLock.unlock() }
+        return sessionGeneration > 0 && coreReadyGeneration == sessionGeneration
+    }
+
+    func markCoreStarted(_ generation: Int64) async throws {
+        guard isCurrentGeneration(generation) else {
+            throw staleGenerationError()
+        }
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline {
+            guard isCurrentGeneration(generation) else {
+                throw staleGenerationError()
+            }
+            if manager.connection.status == .connected {
+                guard markReadyIfCurrent(generation) else { throw staleGenerationError() }
+                // Republish only after both the packet tunnel and core are ready.
+                setState(manager.connection.status)
+                return
+            }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        throw NSError(
+            domain: "VPNManager",
+            code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "packet tunnel was not ready after core start"]
+        )
+    }
+
+    private func staleGenerationError() -> NSError {
+        NSError(
+            domain: "VPNManager",
+            code: 2,
+            userInfo: [NSLocalizedDescriptionKey: "stale VPN session operation"]
+        )
+    }
+
+    private func markReadyIfCurrent(_ generation: Int64) -> Bool {
+        generationLock.lock()
+        defer { generationLock.unlock() }
+        guard generation == sessionGeneration else { return false }
+        coreReadyGeneration = generation
+        return true
+    }
+
+    private func clearCoreReady() {
+        generationLock.lock()
+        coreReadyGeneration = 0
+        generationLock.unlock()
     }
 
     private func migrateStoredProviderConfigurationIfNeeded() async throws {
@@ -205,12 +292,14 @@ class VPNManager: ObservableObject {
     private func providerConfiguration(
         config: String,
         grpcServiceModePort: Int,
-        disableMemoryLimit: Bool
+        disableMemoryLimit: Bool,
+        generation: Int64 = 0
     ) -> [String: Any] {
         [
             "Config": config,
             "GrpcServiceModePort": grpcServiceModePort,
             "DisableMemoryLimit": disableMemoryLimit ? "YES" : "NO",
+            "Generation": generation,
         ]
     }
 
@@ -313,15 +402,23 @@ class VPNManager: ObservableObject {
         }
     }
     
-    func connect(with config: String, grpcServiceModePort:Int, disableMemoryLimit: Bool = false) async throws {
+    func connect(
+        with config: String,
+        grpcServiceModePort:Int,
+        disableMemoryLimit: Bool = false,
+        generation: Int64
+    ) async throws {
+        guard isCurrentGeneration(generation) else { throw staleGenerationError() }
         
         await set(upload: 0, download: 0)
 //        guard state == .disconnected else { return }
         try await enableVPNManager(
             config: config,
             grpcServiceModePort: grpcServiceModePort,
-            disableMemoryLimit: disableMemoryLimit
+            disableMemoryLimit: disableMemoryLimit,
+            generation: generation
         )
+        guard isCurrentGeneration(generation) else { throw staleGenerationError() }
 
         let status = manager.connection.status
         if isActiveTunnelStatus(status) || status == .disconnecting {
@@ -333,23 +430,33 @@ class VPNManager: ObservableObject {
                     userInfo: [NSLocalizedDescriptionKey: "VPN tunnel did not stop before reconnect"]
                 )
             }
+            guard isCurrentGeneration(generation) else { throw staleGenerationError() }
         }
 
         try manager.connection.startVPNTunnel(options: [
             "Config": config as NSString,
             "GrpcServiceModePort":NSNumber(value: grpcServiceModePort),
             "DisableMemoryLimit": (disableMemoryLimit ? "YES" : "NO") as NSString,
+            "Generation": NSNumber(value: generation),
         ])
         setState(manager.connection.status)
         connectTime = .now
     }
 
-    func prepare(with config: String, grpcServiceModePort:Int, disableMemoryLimit: Bool = false) async throws {
+    func prepare(
+        with config: String,
+        grpcServiceModePort:Int,
+        disableMemoryLimit: Bool = false,
+        generation: Int64
+    ) async throws {
+        guard isCurrentGeneration(generation) else { throw staleGenerationError() }
         try await enableVPNManager(
             config: config,
             grpcServiceModePort: grpcServiceModePort,
-            disableMemoryLimit: disableMemoryLimit
+            disableMemoryLimit: disableMemoryLimit,
+            generation: generation
         )
+        guard isCurrentGeneration(generation) else { throw staleGenerationError() }
     }
     
     func disconnect() {
@@ -358,7 +465,10 @@ class VPNManager: ObservableObject {
         }
     }
     
-    func disconnectAsync() async {
+    func disconnectAsync(generation: Int64? = nil) async {
+        if let generation, !isCurrentGeneration(generation) {
+            return
+        }
         if manager.isOnDemandEnabled {
             manager.isOnDemandEnabled = false
             manager.onDemandRules = []
@@ -380,6 +490,7 @@ class VPNManager: ObservableObject {
         }
         manager.connection.stopVPNTunnel()
         _ = await waitForInactiveTunnel()
+        clearCoreReady()
         connectTime = nil
     }
 }

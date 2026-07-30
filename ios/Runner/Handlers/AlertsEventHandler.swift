@@ -27,6 +27,7 @@ public class AlertsEventHandler: NSObject, FlutterPlugin, FlutterStreamHandler {
                 "status": "Stopped",
                 "alert": alert.alert?.rawValue,
                 "message": alert.message,
+                "generation": String(VPNManager.shared.currentSessionGeneration()),
             ]
             for key in data.keys {
                 if data[key] == nil {
