@@ -1066,12 +1066,18 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	})
 	appendInternalDirectRoutes(&dnsRules, &routeRules, options, hopt)
 
-	userRouteRules := buildUserRouteRules(hopt.Rules)
+	earlyRules := hopt.Rules
+	// Outside Russia retain the historic profile-rule precedence. Russia has
+	// a strict late stage for profile/global policy after RU destination rules.
+	if hopt.Region != "ru" {
+		earlyRules = append(append([]Rule(nil), earlyRules...), hopt.ProfileRules...)
+	}
+	userRouteRules := buildUserRouteRules(earlyRules)
 	if len(userRouteRules) > 0 {
-		fmt.Printf("Applying user route rules: configured=%d active=%d\n", len(hopt.Rules), len(userRouteRules))
+		fmt.Printf("Applying early route rules: configured=%d active=%d\n", len(earlyRules), len(userRouteRules))
 		routeRules = append(routeRules, userRouteRules...)
 	}
-	dnsRules = append(dnsRules, buildUserDNSRules(hopt.Rules, hopt)...)
+	dnsRules = append(dnsRules, buildUserDNSRules(earlyRules, hopt)...)
 	// {
 	// 	Type: C.RuleTypeDefault,
 	// 	DefaultOptions: option.DefaultRule{
@@ -1309,6 +1315,11 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			},
 		)
 		appendBundledRUDestinationRouting(&dnsRules, &routeRules, &rulesets, hopt)
+		// Profile/global policy is deliberately late in Russia mode: it cannot
+		// preempt LAN, security, service-family, RU-domain, or RU-IP DIRECT
+		// decisions. Explicit user rules remain in the early bucket above.
+		dnsRules = append(dnsRules, buildUserDNSRules(hopt.ProfileRules, hopt)...)
+		routeRules = append(routeRules, buildUserRouteRules(hopt.ProfileRules)...)
 	} else if hopt.Region != "other" {
 		dnsRules = append(dnsRules, option.DefaultDNSRule{
 			RawDefaultDNSRule: option.RawDefaultDNSRule{

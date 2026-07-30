@@ -873,7 +873,9 @@ class ZeonCoreService with InfraLogger {
         .whereType<Map>()
         .map((rule) => Map<String, dynamic>.from(rule))
         .toList();
-    map["rules"] = MobileApiProxyRoute.mergeCoreRules(configuredRules: configuredRules, userRules: userRules);
+    final rulePlan = MobileApiProxyRoute.planCoreRules(configuredRules: configuredRules, userRules: userRules);
+    map["rules"] = rulePlan.priorityRules;
+    map["profile-rules"] = rulePlan.profileRules;
 
     loggy.info(
       "core options prepared: full-config=$fullConfig transport=${runtime.$1} iface-mtu=${runtime.$2} user-rules=${(map["rules"] as List?)?.length ?? 0}",

@@ -67,14 +67,17 @@ void main() {
     );
     final payload = await container.read(_testCoreServiceProvider).buildCoreOptionsPayloadForTesting(configured);
     final rules = (payload['rules'] as List).cast<Map<String, dynamic>>();
+    final profileRules = (payload['profile-rules'] as List).cast<Map<String, dynamic>>();
 
-    expect(rules, hasLength(4));
+    expect(rules, hasLength(3));
     expect(rules.first['ip_cidrs'], const <String>['130.49.151.173/32']);
     expect(rules.first['outbound'], RuleOutbound.proxy.toCoreValue());
     expect(rules[1]['name'], 'first explicit rule');
     expect(rules[2]['name'], 'second explicit rule');
-    expect(rules[3]['domain_suffixes'], const <String>['global.example']);
-    expect(rules.map((rule) => rule['list_order']), orderedEquals(<int>[0, 1, 2, 3]));
+    expect(rules.map((rule) => rule['list_order']), orderedEquals(<int>[0, 1, 2]));
+    expect(profileRules, hasLength(1));
+    expect(profileRules.single['domain_suffixes'], const <String>['global.example']);
+    expect(profileRules.single['list_order'], 0);
     expect(
       rules.where((rule) {
         final values = rule['ip_cidrs'];

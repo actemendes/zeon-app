@@ -334,6 +334,14 @@ func TestRussiaDestinationRulePriority(t *testing.T) {
 			DomainSuffixes: []string{"user-priority.example"},
 		},
 	}
+	hopt.ProfileRules = []Rule{
+		{
+			ListOrder:      0,
+			Enabled:        true,
+			Outbound:       Outbound_proxy,
+			DomainSuffixes: []string{"explicit-global-vpn.example"},
+		},
+	}
 	opts := option.Options{DNS: &option.DNSOptions{}}
 	if err := setRoutingOptions(&opts, hopt); err != nil {
 		t.Fatalf("setRoutingOptions returned error: %v", err)
@@ -349,6 +357,7 @@ func TestRussiaDestinationRulePriority(t *testing.T) {
 		"Wildberries": indexRouteRuleSet(opts.Route.Rules, RUWildberriesRuleSetTag, OutboundDirectTag),
 		"RU domains":  indexRouteRuleSet(opts.Route.Rules, BundledRUDomainsRuleSetTag, OutboundDirectTag),
 		"RU IP":       indexRouteRuleSet(opts.Route.Rules, BundledRUIPRuleSetTag, OutboundDirectTag),
+		"global VPN":  indexRouteDomainSuffix(opts.Route.Rules, "explicit-global-vpn.example"),
 	}
 	for name, index := range indexes {
 		if index < 0 {
@@ -365,6 +374,14 @@ func TestRussiaDestinationRulePriority(t *testing.T) {
 		indexes["Wildberries"] < indexes["RU domains"] &&
 		indexes["RU domains"] < indexes["RU IP"]) {
 		t.Fatalf("invalid Russia destination priority: %v", indexes)
+	}
+	if indexes["RU IP"] >= indexes["global VPN"] {
+		t.Fatalf("global VPN rule must follow RU IP: %v", indexes)
+	}
+	ruDomainDNS := indexDNSRuleSet(opts.DNS.Rules, BundledRUDomainsRuleSetTag, DNSMultiDirectTag)
+	globalVPNDNS := indexDNSDomainSuffix(opts.DNS.Rules, "explicit-global-vpn.example", DNSMultiRemoteTag)
+	if ruDomainDNS < 0 || globalVPNDNS < 0 || ruDomainDNS >= globalVPNDNS {
+		t.Fatalf("global VPN DNS index=%d must follow RU domain DNS index=%d", globalVPNDNS, ruDomainDNS)
 	}
 	if opts.Route.Final != OutboundMainDetour {
 		t.Fatalf("Russia final = %s, want VPN %s", opts.Route.Final, OutboundMainDetour)

@@ -43,29 +43,28 @@ abstract final class MobileApiProxyRoute {
     return <SingboxRule>[rule, ...rules.where((existing) => existing != rule)];
   }
 
-  /// Applies the control-plane invariant to the final core rule payload.
+  /// Separates early user policy from late profile/global policy.
   ///
   /// Explicit user rules are evaluated immediately after the mandatory route.
-  /// Profile-provided rules retain their relative order after user rules.
-  static List<Map<String, dynamic>> mergeCoreRules({
+  /// Profile-provided rules retain their relative order but are sent in a
+  /// separate bucket so the Russia builder can place them after RU DIRECT
+  /// destination rules.
+  static ({List<Map<String, dynamic>> priorityRules, List<Map<String, dynamic>> profileRules}) planCoreRules({
     required List<Map<String, dynamic>> configuredRules,
     required List<Map<String, dynamic>> userRules,
     String baseUrl = apiBaseUrl,
   }) {
     final mandatoryRule = ruleFor(baseUrl)?.toCoreJson();
-    final merged = _distinctCoreRules(<Map<String, dynamic>>[
-      if (mandatoryRule != null) mandatoryRule,
-      ...userRules,
-      ...configuredRules,
-    ]);
+    final priority = _distinctCoreRules(<Map<String, dynamic>>[if (mandatoryRule != null) mandatoryRule, ...userRules]);
+    final priorityKeys = priority.map(_coreRuleKey).toSet();
+    final profile = _distinctCoreRules(
+      configuredRules.where((rule) => !priorityKeys.contains(_coreRuleKey(rule))).toList(),
+    );
 
     // zeon-core sorts every enabled rule by list_order before compiling the
-    // sing-box config. Re-number the final transport payload so that this
-    // boundary cannot undo the mandatory -> user -> profile ordering above.
-    // The persisted user rule order is untouched.
-    return <Map<String, dynamic>>[
-      for (final (index, rule) in merged.indexed) <String, dynamic>{...rule, 'list_order': index},
-    ];
+    // sing-box config. Re-number each transport bucket so that boundary cannot
+    // undo its intended relative order. Persisted rules are untouched.
+    return (priorityRules: _withSequentialCoreOrder(priority), profileRules: _withSequentialCoreOrder(profile));
   }
 
   static SingboxRule? ruleFor(String baseUrl) {
@@ -118,6 +117,11 @@ abstract final class MobileApiProxyRoute {
     }
     return result;
   }
+
+  static List<Map<String, dynamic>> _withSequentialCoreOrder(List<Map<String, dynamic>> rules) =>
+      <Map<String, dynamic>>[
+        for (final (index, rule) in rules.indexed) <String, dynamic>{...rule, 'list_order': index},
+      ];
 
   static String _coreRuleKey(Map<String, dynamic> rule) {
     // Presentation/order fields do not alter route matching.
