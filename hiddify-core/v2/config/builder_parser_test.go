@@ -196,7 +196,7 @@ func TestSetRoutingOptionsAddsHardcodedRUAdListWhenBlockAdsEnabled(t *testing.T)
 	}
 }
 
-func TestRussiaPresetHasExplicitRussianPublicSuffixes(t *testing.T) {
+func TestRussiaPresetUsesPinnedLocalRussianRuleSets(t *testing.T) {
 	hopt := DefaultHiddifyOptions()
 	hopt.Region = "ru"
 	opts := option.Options{DNS: &option.DNSOptions{}}
@@ -204,19 +204,40 @@ func TestRussiaPresetHasExplicitRussianPublicSuffixes(t *testing.T) {
 		t.Fatalf("setRoutingOptions returned error: %v", err)
 	}
 
-	var routeSuffixes []string
-	for _, rule := range opts.Route.Rules {
-		candidate := rule.DefaultOptions
-		if candidate.Action == constant.RuleActionTypeRoute &&
-			candidate.RouteOptions.Outbound == OutboundDirectTag &&
-			containsString(candidate.DomainSuffix, ".ru") {
-			routeSuffixes = candidate.DomainSuffix
-			break
+	expectedPaths := map[string]string{
+		BundledRUDomainsRuleSetTag: BundledRUDomainsRuleSetPath,
+		BundledRUIPRuleSetTag:      BundledRUIPRuleSetPath,
+	}
+	for _, ruleSet := range opts.Route.RuleSet {
+		expectedPath, expected := expectedPaths[ruleSet.Tag]
+		if !expected {
+			if ruleSet.Tag == "geosite-ru" || ruleSet.Tag == "geoip-ru" {
+				t.Fatalf("Russia preset contains mutable legacy rule set: %+v", ruleSet)
+			}
+			continue
+		}
+		if ruleSet.Type != constant.RuleSetTypeLocal ||
+			ruleSet.Format != constant.RuleSetFormatBinary ||
+			ruleSet.LocalOptions.Path != expectedPath {
+			t.Fatalf("%s local rule set = %+v", ruleSet.Tag, ruleSet)
+		}
+		delete(expectedPaths, ruleSet.Tag)
+	}
+	if len(expectedPaths) != 0 {
+		t.Fatalf("missing pinned local rule sets: %v", expectedPaths)
+	}
+
+	for _, tag := range []string{BundledRUDomainsRuleSetTag, BundledRUIPRuleSetTag} {
+		if indexRouteRuleSet(opts.Route.Rules, tag, OutboundDirectTag) < 0 {
+			t.Fatalf("%s has no DIRECT route rule", tag)
 		}
 	}
-	for _, suffix := range []string{".ru", ".su", ".xn--p1ai"} {
-		if !containsString(routeSuffixes, suffix) {
-			t.Fatalf("Russia direct suffix rule = %v, missing %s", routeSuffixes, suffix)
+	if indexDNSRuleSet(opts.DNS.Rules, BundledRUDomainsRuleSetTag, DNSMultiDirectTag) < 0 {
+		t.Fatalf("%s has no DIRECT DNS rule", BundledRUDomainsRuleSetTag)
+	}
+	for _, rule := range opts.DNS.Rules {
+		if containsString(rule.DefaultOptions.RuleSet, BundledRUIPRuleSetTag) {
+			t.Fatalf("%s must not be used before DNS resolution", BundledRUIPRuleSetTag)
 		}
 	}
 }
@@ -248,7 +269,12 @@ func assertRussiaServicePolicy(t *testing.T, tag string, expectedOutbound string
 		t.Fatalf("setRoutingOptions returned error: %v", err)
 	}
 
-	serviceIndex, directIndex := -1, -1
+	serviceIndex := -1
+	directIndex := indexRouteRuleSet(
+		opts.Route.Rules,
+		BundledRUDomainsRuleSetTag,
+		OutboundDirectTag,
+	)
 	for index, rule := range opts.Route.Rules {
 		candidate := rule.DefaultOptions
 		if candidate.Action != constant.RuleActionTypeRoute {
@@ -257,10 +283,6 @@ func assertRussiaServicePolicy(t *testing.T, tag string, expectedOutbound string
 		if candidate.RouteOptions.Outbound == expectedOutbound &&
 			containsString(candidate.RuleSet, tag) {
 			serviceIndex = index
-		}
-		if candidate.RouteOptions.Outbound == OutboundDirectTag &&
-			containsString(candidate.DomainSuffix, ".ru") {
-			directIndex = index
 		}
 	}
 	if serviceIndex < 0 || directIndex < 0 || serviceIndex >= directIndex {
@@ -300,12 +322,200 @@ func TestGlobalPresetDoesNotInstallRussiaDirectRules(t *testing.T) {
 		candidate := rule.DefaultOptions
 		if candidate.Action == constant.RuleActionTypeRoute &&
 			candidate.RouteOptions.Outbound == OutboundDirectTag &&
-			(containsString(candidate.DomainSuffix, ".ru") ||
+			(containsString(candidate.RuleSet, BundledRUDomainsRuleSetTag) ||
+				containsString(candidate.RuleSet, BundledRUIPRuleSetTag) ||
 				containsString(candidate.RuleSet, "geosite-ru") ||
 				containsString(candidate.RuleSet, "geoip-ru")) {
 			t.Fatalf("Global preset unexpectedly contains RU direct rule: %+v", candidate)
 		}
 	}
+	for _, ruleSet := range opts.Route.RuleSet {
+		if ruleSet.Tag == BundledRUDomainsRuleSetTag || ruleSet.Tag == BundledRUIPRuleSetTag {
+			t.Fatalf("Global preset unexpectedly installs local RU rule set: %+v", ruleSet)
+		}
+	}
+}
+
+func TestRussiaDestinationRulePriority(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.Region = "ru"
+	hopt.BypassLAN = true
+	hopt.BlockAds = true
+	hopt.RouteOptions.BlockQuic = true
+	hopt.Rules = []Rule{
+		{
+			ListOrder:      0,
+			Enabled:        true,
+			Outbound:       Outbound_direct,
+			DomainSuffixes: []string{"user-priority.example"},
+		},
+	}
+	opts := option.Options{DNS: &option.DNSOptions{}}
+	if err := setRoutingOptions(&opts, hopt); err != nil {
+		t.Fatalf("setRoutingOptions returned error: %v", err)
+	}
+
+	indexes := map[string]int{
+		"internal":    indexRouteIPCIDR(opts.Route.Rules, "10.10.34.0/24"),
+		"user":        indexRouteDomainSuffix(opts.Route.Rules, "user-priority.example"),
+		"LAN":         indexPrivateRoute(opts.Route.Rules),
+		"ad block":    indexRejectedRuleSet(opts.Route.Rules, RUAdListHardcodedRuleSetTag),
+		"QUIC block":  indexRejectedProtocol(opts.Route.Rules, constant.ProtocolQUIC),
+		"Yandex":      indexRouteRuleSet(opts.Route.Rules, RUYandexRuleSetTag, OutboundDirectTag),
+		"Wildberries": indexRouteRuleSet(opts.Route.Rules, RUWildberriesRuleSetTag, OutboundDirectTag),
+		"RU domains":  indexRouteRuleSet(opts.Route.Rules, BundledRUDomainsRuleSetTag, OutboundDirectTag),
+		"RU IP":       indexRouteRuleSet(opts.Route.Rules, BundledRUIPRuleSetTag, OutboundDirectTag),
+	}
+	for name, index := range indexes {
+		if index < 0 {
+			t.Fatalf("missing %s rule; indexes=%v", name, indexes)
+		}
+	}
+	if !(indexes["internal"] < indexes["user"] &&
+		indexes["user"] < indexes["LAN"] &&
+		indexes["LAN"] < indexes["ad block"] &&
+		indexes["LAN"] < indexes["QUIC block"] &&
+		indexes["ad block"] < indexes["Yandex"] &&
+		indexes["QUIC block"] < indexes["Yandex"] &&
+		indexes["Yandex"] < indexes["RU domains"] &&
+		indexes["Wildberries"] < indexes["RU domains"] &&
+		indexes["RU domains"] < indexes["RU IP"]) {
+		t.Fatalf("invalid Russia destination priority: %v", indexes)
+	}
+	if opts.Route.Final != OutboundMainDetour {
+		t.Fatalf("Russia final = %s, want VPN %s", opts.Route.Final, OutboundMainDetour)
+	}
+}
+
+func TestUserDomainRuleControlsDNSBeforeRussiaServiceRules(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.Region = "ru"
+	hopt.Rules = []Rule{
+		{
+			ListOrder:      0,
+			Enabled:        true,
+			Outbound:       Outbound_direct,
+			DomainSuffixes: []string{"yandex.ru"},
+		},
+	}
+	opts := option.Options{DNS: &option.DNSOptions{}}
+	if err := setRoutingOptions(&opts, hopt); err != nil {
+		t.Fatalf("setRoutingOptions returned error: %v", err)
+	}
+	userDNS := indexDNSDomainSuffix(opts.DNS.Rules, "yandex.ru", DNSMultiDirectTag)
+	serviceDNS := indexDNSRuleSet(opts.DNS.Rules, RUYandexRuleSetTag, DNSMultiDirectTag)
+	if userDNS < 0 || serviceDNS < 0 || userDNS >= serviceDNS {
+		t.Fatalf("user DNS index=%d must precede Yandex service DNS index=%d", userDNS, serviceDNS)
+	}
+}
+
+func TestRussiaDNSPreservesReverseMappingWithoutChangingGlobal(t *testing.T) {
+	staticIPs := map[string][]string{}
+
+	russia := DefaultHiddifyOptions()
+	russia.Region = "ru"
+	var russiaOptions option.Options
+	if err := setDns(&russiaOptions, russia, &staticIPs); err != nil {
+		t.Fatalf("setDns Russia returned error: %v", err)
+	}
+	if russiaOptions.DNS == nil || !russiaOptions.DNS.ReverseMapping {
+		t.Fatalf("Russia DNS must preserve domain-to-address reverse mapping")
+	}
+
+	global := DefaultHiddifyOptions()
+	global.Region = "other"
+	var globalOptions option.Options
+	if err := setDns(&globalOptions, global, &staticIPs); err != nil {
+		t.Fatalf("setDns Global returned error: %v", err)
+	}
+	if globalOptions.DNS == nil || globalOptions.DNS.ReverseMapping {
+		t.Fatalf("Global DNS reverse mapping policy changed unexpectedly")
+	}
+}
+
+func indexRouteRuleSet(rules []option.Rule, tag string, outbound string) int {
+	for index, rule := range rules {
+		candidate := rule.DefaultOptions
+		if candidate.Action == constant.RuleActionTypeRoute &&
+			candidate.RouteOptions.Outbound == outbound &&
+			containsString(candidate.RuleSet, tag) {
+			return index
+		}
+	}
+	return -1
+}
+
+func indexRouteIPCIDR(rules []option.Rule, cidr string) int {
+	for index, rule := range rules {
+		if containsString(rule.DefaultOptions.IPCIDR, cidr) {
+			return index
+		}
+	}
+	return -1
+}
+
+func indexRouteDomainSuffix(rules []option.Rule, suffix string) int {
+	for index, rule := range rules {
+		if containsString(rule.DefaultOptions.DomainSuffix, suffix) {
+			return index
+		}
+	}
+	return -1
+}
+
+func indexPrivateRoute(rules []option.Rule) int {
+	for index, rule := range rules {
+		if rule.DefaultOptions.IPIsPrivate &&
+			rule.DefaultOptions.Action == constant.RuleActionTypeRoute &&
+			rule.DefaultOptions.RouteOptions.Outbound == OutboundDirectTag {
+			return index
+		}
+	}
+	return -1
+}
+
+func indexRejectedRuleSet(rules []option.Rule, tag string) int {
+	for index, rule := range rules {
+		if rule.DefaultOptions.Action == constant.RuleActionTypeReject &&
+			containsString(rule.DefaultOptions.RuleSet, tag) {
+			return index
+		}
+	}
+	return -1
+}
+
+func indexRejectedProtocol(rules []option.Rule, protocol string) int {
+	for index, rule := range rules {
+		if rule.DefaultOptions.Action == constant.RuleActionTypeReject &&
+			containsString(rule.DefaultOptions.Protocol, protocol) {
+			return index
+		}
+	}
+	return -1
+}
+
+func indexDNSRuleSet(rules []option.DNSRule, tag string, server string) int {
+	for index, rule := range rules {
+		candidate := rule.DefaultOptions
+		if candidate.Action == constant.RuleActionTypeRoute &&
+			candidate.RouteOptions.Server == server &&
+			containsString(candidate.RuleSet, tag) {
+			return index
+		}
+	}
+	return -1
+}
+
+func indexDNSDomainSuffix(rules []option.DNSRule, suffix string, server string) int {
+	for index, rule := range rules {
+		candidate := rule.DefaultOptions
+		if candidate.Action == constant.RuleActionTypeRoute &&
+			candidate.RouteOptions.Server == server &&
+			containsString(candidate.DomainSuffix, suffix) {
+			return index
+		}
+	}
+	return -1
 }
 
 func containsString(items []string, target string) bool {

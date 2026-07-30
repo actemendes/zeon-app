@@ -101,7 +101,8 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 				IndependentCache: opt.IndependentDNSCache && !C.IsIos,
 				DisableExpire:    true,
 			},
-			Final: DNSMultiRemoteTag,
+			Final:          DNSMultiRemoteTag,
+			ReverseMapping: opt.Region == "ru",
 
 			Servers: []option.DNSServerOptions{
 				*static_dns,

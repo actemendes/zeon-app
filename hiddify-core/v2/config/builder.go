@@ -728,7 +728,7 @@ func toNetworkString(n Network) string {
 	}
 }
 
-func buildUserRouteRules(rules []Rule) []option.Rule {
+func orderedEnabledUserRules(rules []Rule) []Rule {
 	if len(rules) == 0 {
 		return nil
 	}
@@ -742,7 +742,11 @@ func buildUserRouteRules(rules []Rule) []option.Rule {
 	sort.Slice(ordered, func(i, j int) bool {
 		return ordered[i].ListOrder < ordered[j].ListOrder
 	})
+	return ordered
+}
 
+func buildUserRouteRules(rules []Rule) []option.Rule {
+	ordered := orderedEnabledUserRules(rules)
 	routeRules := make([]option.Rule, 0, len(ordered))
 	for _, r := range ordered {
 		raw := option.RawDefaultRule{
@@ -781,6 +785,67 @@ func buildUserRouteRules(rules []Rule) []option.Rule {
 		})
 	}
 	return routeRules
+}
+
+func buildUserDNSRules(rules []Rule, hopt *HiddifyOptions) []option.DefaultDNSRule {
+	ordered := orderedEnabledUserRules(rules)
+	dnsRules := make([]option.DefaultDNSRule, 0, len(ordered))
+	for _, rule := range ordered {
+		// Address-only rules are evaluated after resolution by the route
+		// engine. Installing an empty pre-resolution DNS matcher for them
+		// would accidentally turn the rule into a global DNS policy.
+		if len(rule.RuleSets) == 0 &&
+			len(rule.Domains) == 0 &&
+			len(rule.DomainSuffixes) == 0 &&
+			len(rule.DomainKeywords) == 0 &&
+			len(rule.DomainRegexes) == 0 {
+			continue
+		}
+		raw := option.RawDefaultDNSRule{
+			RuleSet:       rule.RuleSets,
+			Domain:        rule.Domains,
+			DomainSuffix:  rule.DomainSuffixes,
+			DomainKeyword: rule.DomainKeywords,
+			DomainRegex:   rule.DomainRegexes,
+		}
+
+		var action option.DNSRuleAction
+		switch rule.Outbound {
+		case Outbound_direct, Outbound_direct_with_fragment:
+			action = option.DNSRuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.DNSRouteActionOptions{
+					Server:         DNSMultiDirectTag,
+					Strategy:       hopt.DirectDnsDomainStrategy,
+					RewriteTTL:     &DEFAULT_DNS_TTL,
+					BypassIfFailed: true,
+				},
+			}
+		case Outbound_block:
+			rejectRCode := option.DNSRCode(sdns.RcodeRefused)
+			action = option.DNSRuleAction{
+				Action: C.RuleActionTypePredefined,
+				PredefinedOptions: option.DNSRouteActionPredefined{
+					Rcode: &rejectRCode,
+				},
+			}
+		default:
+			action = option.DNSRuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.DNSRouteActionOptions{
+					Server:         DNSMultiRemoteTag,
+					Strategy:       hopt.RemoteDnsDomainStrategy,
+					RewriteTTL:     &DEFAULT_DNS_TTL,
+					BypassIfFailed: true,
+				},
+			}
+		}
+		dnsRules = append(dnsRules, option.DefaultDNSRule{
+			RawDefaultDNSRule: raw,
+			DNSRuleAction:     action,
+		})
+	}
+	return dnsRules
 }
 
 func setInbound(options *option.Options, hopt *HiddifyOptions) {
@@ -921,11 +986,6 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	routeRules := []option.Rule{}
 	rulesets := []option.RuleSet{}
 	regionDomainSuffixes := []string{"." + hopt.Region}
-	if hopt.Region == "ru" {
-		// These are Russian public suffixes, not a DPI hostlist. Keep the
-		// action explicit and independent from the remote geosite snapshot.
-		regionDomainSuffixes = []string{".ru", ".su", ".xn--p1ai"}
-	}
 	// if opt.EnableTun && runtime.GOOS == "android" {
 	// 	// routeRules = append(
 	// 	// 	routeRules,
@@ -1009,11 +1069,14 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			},
 		},
 	})
+	appendInternalDirectRoutes(&dnsRules, &routeRules, options, hopt)
+
 	userRouteRules := buildUserRouteRules(hopt.Rules)
 	if len(userRouteRules) > 0 {
 		fmt.Printf("Applying user route rules: configured=%d active=%d\n", len(hopt.Rules), len(userRouteRules))
 		routeRules = append(routeRules, userRouteRules...)
 	}
+	dnsRules = append(dnsRules, buildUserDNSRules(hopt.Rules, hopt)...)
 	// {
 	// 	Type: C.RuleTypeDefault,
 	// 	DefaultOptions: option.DefaultRule{
@@ -1088,53 +1151,6 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	// 	}
 	// 	dnsRules = append(dnsRules, dnsRule)
 	// }
-	forceDirectRoute := make([]string, 0)
-	if options.NTP != nil && options.NTP.Enabled {
-		forceDirectRoute = append(forceDirectRoute, options.NTP.Server)
-	}
-
-	// parsedURL, err := url.Parse(opt.ConnectionTestUrl)
-	// if err == nil {
-	// 	dnsRules = append(dnsRules, option.DefaultDNSRule{
-	// 		Domain:       []string{parsedURL.Host},
-	// 		Server:       DNSRemoteTag,
-	// 		RewriteTTL:   &dnsCPttl,
-	// 		DisableCache: false,
-	// 	})
-	// }
-
-	if len(forceDirectRoute) > 0 {
-
-		dnsRules = append(dnsRules, option.DefaultDNSRule{
-			RawDefaultDNSRule: option.RawDefaultDNSRule{
-				Domain: forceDirectRoute,
-			},
-			DNSRuleAction: option.DNSRuleAction{
-				Action: C.RuleActionTypeRoute,
-				RouteOptions: option.DNSRouteActionOptions{
-					Server:         DNSMultiDirectTag,
-					Strategy:       hopt.DirectDnsDomainStrategy,
-					RewriteTTL:     &DEFAULT_DNS_TTL,
-					DisableCache:   false,
-					BypassIfFailed: true,
-				},
-			},
-		})
-		routeRules = append(routeRules, option.Rule{
-			Type: C.RuleTypeDefault,
-			DefaultOptions: option.DefaultRule{
-				RawDefaultRule: option.RawDefaultRule{
-					Domain: forceDirectRoute,
-				},
-				RuleAction: option.RuleAction{
-					Action: C.RuleActionTypeRoute,
-					RouteOptions: option.RouteActionOptions{
-						Outbound: OutboundDirectTag,
-					},
-				},
-			},
-		})
-	}
 	rejectRCode := (option.DNSRCode(sdns.RcodeRefused))
 	rejectDnsAction := option.DNSRuleAction{
 		Action: C.RuleActionTypePredefined,
@@ -1255,6 +1271,22 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			DNSRuleAction: rejectDnsAction,
 		})
 	}
+	if hopt.RouteOptions.BlockQuic {
+		routeRules = append(routeRules, option.Rule{
+			Type: C.RuleTypeDefault,
+			DefaultOptions: option.DefaultRule{
+				RawDefaultRule: option.RawDefaultRule{
+					Protocol: []string{C.ProtocolQUIC},
+				},
+				RuleAction: option.RuleAction{
+					Action: C.RuleActionTypeReject,
+					RejectOptions: option.RejectActionOptions{
+						Method: C.RuleActionRejectMethodDefault,
+					},
+				},
+			},
+		})
+	}
 	if hopt.Region == "ru" {
 		appendRUServiceRoutingPolicy(
 			&dnsRules,
@@ -1278,8 +1310,8 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 				direct:         ruWildberriesRussiaDirect,
 			},
 		)
-	}
-	if hopt.Region != "other" {
+		appendBundledRUDestinationRouting(&dnsRules, &routeRules, &rulesets, hopt)
+	} else if hopt.Region != "other" {
 		dnsRules = append(dnsRules, option.DefaultDNSRule{
 			RawDefaultDNSRule: option.RawDefaultDNSRule{
 				DomainSuffix: regionDomainSuffixes,
@@ -1361,22 +1393,6 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 					Action: C.RuleActionTypeRoute,
 					RouteOptions: option.RouteActionOptions{
 						Outbound: OutboundDirectTag,
-					},
-				},
-			},
-		})
-	}
-	if hopt.RouteOptions.BlockQuic {
-		routeRules = append(routeRules, option.Rule{
-			Type: C.RuleTypeDefault,
-			DefaultOptions: option.DefaultRule{
-				RawDefaultRule: option.RawDefaultRule{
-					Protocol: []string{C.ProtocolQUIC},
-				},
-				RuleAction: option.RuleAction{
-					Action: C.RuleActionTypeReject,
-					RejectOptions: option.RejectActionOptions{
-						Method: C.RuleActionRejectMethodDefault,
 					},
 				},
 			},
@@ -1507,6 +1523,117 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	}
 	// }
 	return nil
+}
+
+func appendInternalDirectRoutes(
+	dnsRules *[]option.DefaultDNSRule,
+	routeRules *[]option.Rule,
+	options *option.Options,
+	hopt *HiddifyOptions,
+) {
+	if options.NTP == nil || !options.NTP.Enabled || options.NTP.Server == "" {
+		return
+	}
+	internalDomains := []string{options.NTP.Server}
+	*dnsRules = append(*dnsRules, option.DefaultDNSRule{
+		RawDefaultDNSRule: option.RawDefaultDNSRule{
+			Domain: internalDomains,
+		},
+		DNSRuleAction: option.DNSRuleAction{
+			Action: C.RuleActionTypeRoute,
+			RouteOptions: option.DNSRouteActionOptions{
+				Server:         DNSMultiDirectTag,
+				Strategy:       hopt.DirectDnsDomainStrategy,
+				RewriteTTL:     &DEFAULT_DNS_TTL,
+				DisableCache:   false,
+				BypassIfFailed: true,
+			},
+		},
+	})
+	*routeRules = append(*routeRules, option.Rule{
+		Type: C.RuleTypeDefault,
+		DefaultOptions: option.DefaultRule{
+			RawDefaultRule: option.RawDefaultRule{
+				Domain: internalDomains,
+			},
+			RuleAction: option.RuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.RouteActionOptions{
+					Outbound: OutboundDirectTag,
+				},
+			},
+		},
+	})
+}
+
+func appendBundledRUDestinationRouting(
+	dnsRules *[]option.DefaultDNSRule,
+	routeRules *[]option.Rule,
+	ruleSets *[]option.RuleSet,
+	hopt *HiddifyOptions,
+) {
+	*ruleSets = append(
+		*ruleSets,
+		option.RuleSet{
+			Type:   C.RuleSetTypeLocal,
+			Tag:    BundledRUDomainsRuleSetTag,
+			Format: C.RuleSetFormatBinary,
+			LocalOptions: option.LocalRuleSet{
+				Path: BundledRUDomainsRuleSetPath,
+			},
+		},
+		option.RuleSet{
+			Type:   C.RuleSetTypeLocal,
+			Tag:    BundledRUIPRuleSetTag,
+			Format: C.RuleSetFormatBinary,
+			LocalOptions: option.LocalRuleSet{
+				Path: BundledRUIPRuleSetPath,
+			},
+		},
+	)
+
+	*dnsRules = append(*dnsRules, option.DefaultDNSRule{
+		RawDefaultDNSRule: option.RawDefaultDNSRule{
+			RuleSet: []string{BundledRUDomainsRuleSetTag},
+		},
+		DNSRuleAction: option.DNSRuleAction{
+			Action: C.RuleActionTypeRoute,
+			RouteOptions: option.DNSRouteActionOptions{
+				Server:         DNSMultiDirectTag,
+				Strategy:       hopt.DirectDnsDomainStrategy,
+				RewriteTTL:     &DEFAULT_DNS_TTL,
+				BypassIfFailed: true,
+			},
+		},
+	})
+	*routeRules = append(*routeRules, option.Rule{
+		Type: C.RuleTypeDefault,
+		DefaultOptions: option.DefaultRule{
+			RawDefaultRule: option.RawDefaultRule{
+				RuleSet: []string{BundledRUDomainsRuleSetTag},
+			},
+			RuleAction: option.RuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.RouteActionOptions{
+					Outbound: OutboundDirectTag,
+				},
+			},
+		},
+	})
+	*routeRules = append(*routeRules, option.Rule{
+		Type: C.RuleTypeDefault,
+		DefaultOptions: option.DefaultRule{
+			RawDefaultRule: option.RawDefaultRule{
+				RuleSet: []string{BundledRUIPRuleSetTag},
+			},
+			RuleAction: option.RuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.RouteActionOptions{
+					Outbound: OutboundDirectTag,
+				},
+			},
+		},
+	})
 }
 
 func appendRUServiceRoutingPolicy(
