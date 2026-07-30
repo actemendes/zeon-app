@@ -182,11 +182,12 @@ android {
                 signingConfig signingConfigs.release
             }
             matchingFallbacks = ["release"]
-            debuggable true
+            // Flutter selects its runtime mode from this flag. Keep this false
+            // so the inherited release engine receives an AOT snapshot.
+            debuggable false
             jniDebuggable false
-            // A debuggable, same-package validation APK must keep generated
-            // Flutter plugin classes intact. Release remains minified; this
-            // install-only artifact is deliberately not an R8 deliverable.
+            // Release remains minified. This telemetry-bearing install-only
+            // artifact keeps plugins intact and is deliberately not published.
             minifyEnabled false
             shrinkResources false
         }
