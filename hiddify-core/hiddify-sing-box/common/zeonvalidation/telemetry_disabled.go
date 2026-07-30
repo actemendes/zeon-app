@@ -15,6 +15,11 @@ func Enabled() bool {
 	return false
 }
 
+// IsLogMessage is intentionally false in production builds.
+func IsLogMessage(string) bool {
+	return false
+}
+
 // RecordRoute is intentionally empty in production builds.
 func RecordRoute(
 	context.Context,

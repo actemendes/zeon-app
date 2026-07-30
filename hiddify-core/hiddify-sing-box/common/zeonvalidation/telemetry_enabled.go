@@ -179,6 +179,13 @@ func Enabled() bool {
 	return true
 }
 
+// IsLogMessage reports whether a daemon log line is a validation-only route
+// telemetry event. The disabled implementation always returns false, so normal
+// production logs are never promoted to the mobile validation bridge.
+func IsLogMessage(message string) bool {
+	return strings.Contains(message, validationLogPrefix)
+}
+
 // RecordRoute emits one structured event per resolved address for an allowlisted
 // Stage 2.8 validation host. It never logs a plaintext destination IP.
 func RecordRoute(
