@@ -16,6 +16,9 @@ param(
     # Adds the smart_active_debug Go build tag. Never use this for releases.
     [switch]$SmartActiveDebug,
 
+    # Adds validation-only allowlisted route/DNS telemetry. Never use this for releases.
+    [switch]$RouteValidationTelemetry,
+
     [switch]$DryRun
 )
 
@@ -142,6 +145,7 @@ $skipGomobileInitValue = if ($SkipGomobileInit) { "1" } else { "0" }
 $installPinnedMobileToolsValue = if ($InstallPinnedMobileTools) { "1" } else { "0" }
 $installWebDependenciesValue = if ($InstallWebDependencies) { "1" } else { "0" }
 $smartActiveDebugValue = if ($SmartActiveDebug) { "1" } else { "0" }
+$routeValidationTelemetryValue = if ($RouteValidationTelemetry) { "1" } else { "0" }
 $selectedPlatforms = @($Platform | Select-Object -Unique)
 
 $bashScript = @'
@@ -153,10 +157,11 @@ skip_gomobile_init="$3"
 install_pinned_mobile_tools="$4"
 install_web_dependencies="$5"
 smart_active_debug="$6"
-zeon_revision="$7"
-hiddify_core_tree="$8"
-hiddify_sing_box_tree="$9"
-shift 9
+route_validation_telemetry="$7"
+zeon_revision="$8"
+hiddify_core_tree="$9"
+hiddify_sing_box_tree="${10}"
+shift 10
 platforms=("$@")
 
 core_dir="$repo_root/hiddify-core"
@@ -165,6 +170,10 @@ core_build_tags="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,w
 if [ "$smart_active_debug" = "1" ]; then
   core_build_tags="$core_build_tags,smart_active_debug"
   echo "Building Smart Active debug fault injection support."
+fi
+if [ "$route_validation_telemetry" = "1" ]; then
+  core_build_tags="$core_build_tags,zeon_route_validation"
+  echo "Building VALIDATION-ONLY allowlisted route/DNS telemetry; do not publish this artifact."
 fi
 
 user_home="$(getent passwd "$(id -un)" | cut -d: -f6)"
@@ -384,6 +393,7 @@ $bashArguments = @(
     $installPinnedMobileToolsValue,
     $installWebDependenciesValue,
     $smartActiveDebugValue,
+    $routeValidationTelemetryValue,
     $zeonRevision,
     $hiddifyCoreTree,
     $hiddifySingBoxTree
@@ -391,6 +401,7 @@ $bashArguments = @(
 
 Write-Host "Repository in WSL: $wslRepoRoot"
 Write-Host "Platforms: $($selectedPlatforms -join ', ')"
+Write-Host "Route validation telemetry: $($RouteValidationTelemetry.IsPresent)"
 
 try {
     Invoke-Wsl -Arguments @("bash", "-n", $wslBashScript)

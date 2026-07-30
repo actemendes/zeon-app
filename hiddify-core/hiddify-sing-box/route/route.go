@@ -10,6 +10,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/sniff"
+	"github.com/sagernet/sing-box/common/zeonvalidation"
 	C "github.com/sagernet/sing-box/constant"
 	R "github.com/sagernet/sing-box/route/rule"
 	"github.com/sagernet/sing-mux"
@@ -91,7 +92,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 	if deadline.NeedAdditionalReadDeadline(conn) {
 		conn = deadline.NewConn(conn)
 	}
-	selectedRule, _, buffers, _, err := r.matchRule(ctx, &metadata, false, false, conn, nil)
+	selectedRule, selectedRuleIndex, buffers, _, err := r.matchRule(ctx, &metadata, false, false, conn, nil)
 	if err != nil {
 		return err
 	}
@@ -125,6 +126,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 			}
 		case *R.RuleActionReject:
 			buf.ReleaseMulti(buffers)
+			zeonvalidation.RecordRoute(ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, nil, true)
 			if action.Method == C.RuleActionRejectMethodReply {
 				return E.New("reject method `reply` is not supported for TCP connections")
 			}
@@ -145,6 +147,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 		}
 		selectedOutbound = defaultOutbound
 	}
+	zeonvalidation.RecordRoute(ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, selectedOutbound, false)
 
 	for _, buffer := range buffers {
 		conn = bufio.NewCachedConn(conn, buffer)
@@ -220,7 +223,7 @@ func (r *Router) routePacketConnection(ctx context.Context, conn N.PacketConn, m
 		conn = deadline.NewPacketConn(bufio.NewNetPacketConn(conn))
 	}*/
 
-	selectedRule, _, _, packetBuffers, err := r.matchRule(ctx, &metadata, false, false, nil, conn)
+	selectedRule, selectedRuleIndex, _, packetBuffers, err := r.matchRule(ctx, &metadata, false, false, nil, conn)
 	if err != nil {
 		return err
 	}
@@ -255,6 +258,7 @@ func (r *Router) routePacketConnection(ctx context.Context, conn N.PacketConn, m
 			}
 		case *R.RuleActionReject:
 			N.ReleaseMultiPacketBuffer(packetBuffers)
+			zeonvalidation.RecordRoute(ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, nil, true)
 			if action.Method == C.RuleActionRejectMethodReply {
 				return E.New("reject method `reply` is not supported for UDP connections")
 			}
@@ -271,6 +275,7 @@ func (r *Router) routePacketConnection(ctx context.Context, conn N.PacketConn, m
 		}
 		selectedOutbound = defaultOutbound
 	}
+	zeonvalidation.RecordRoute(ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, selectedOutbound, false)
 	for _, buffer := range packetBuffers {
 		conn = bufio.NewCachedPacketConn(conn, buffer.Buffer, buffer.Destination)
 		N.PutPacketBuffer(buffer)
@@ -290,7 +295,7 @@ func (r *Router) routePacketConnection(ctx context.Context, conn N.PacketConn, m
 }
 
 func (r *Router) PreMatch(metadata adapter.InboundContext, routeContext tun.DirectRouteContext, timeout time.Duration, supportBypass bool) (tun.DirectRouteDestination, error) {
-	selectedRule, _, _, _, err := r.matchRule(r.ctx, &metadata, true, supportBypass, nil, nil)
+	selectedRule, selectedRuleIndex, _, _, err := r.matchRule(r.ctx, &metadata, true, supportBypass, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -298,6 +303,7 @@ func (r *Router) PreMatch(metadata adapter.InboundContext, routeContext tun.Dire
 	if selectedRule != nil {
 		switch action := selectedRule.Action().(type) {
 		case *R.RuleActionReject:
+			zeonvalidation.RecordRoute(r.ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, nil, true)
 			switch metadata.Network {
 			case N.NetworkTCP:
 				if action.Method == C.RuleActionRejectMethodReply {
@@ -311,6 +317,7 @@ func (r *Router) PreMatch(metadata adapter.InboundContext, routeContext tun.Dire
 			return nil, action.Error(context.Background())
 		case *R.RuleActionBypass:
 			if supportBypass {
+				zeonvalidation.RecordRoute(r.ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, nil, false)
 				return nil, &R.BypassedError{Cause: tun.ErrBypass}
 			}
 			if routeContext == nil {
@@ -395,9 +402,15 @@ func (r *Router) PreMatch(metadata adapter.InboundContext, routeContext tun.Dire
 		if err != nil {
 			return nil, err
 		}
-		return ping.NewDestinationWriter(routeDestination, newDestination), nil
+		routeDestination = ping.NewDestinationWriter(routeDestination, newDestination)
+		zeonvalidation.RecordRoute(r.ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, directRouteOutbound, false)
+		return routeDestination, nil
 	}
-	return directRouteOutbound.NewDirectRouteConnection(metadata, routeContext, timeout)
+	routeDestination, err := directRouteOutbound.NewDirectRouteConnection(metadata, routeContext, timeout)
+	if err == nil && routeDestination != nil {
+		zeonvalidation.RecordRoute(r.ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, directRouteOutbound, false)
+	}
+	return routeDestination, err
 }
 
 func (r *Router) matchRule(

@@ -7,7 +7,10 @@ param(
 
     [string]$AarPath,
 
-    [switch]$SkipApkHash
+    [switch]$SkipApkHash,
+
+    # Validation builds only. Production verification rejects telemetry markers.
+    [switch]$AllowValidationTelemetry
 )
 
 $ErrorActionPreference = "Stop"
@@ -129,6 +132,42 @@ function Assert-ArchiveEntryContainsAscii {
     }
 }
 
+function Assert-ArchiveEntryDoesNotContainAscii {
+    param(
+        [Parameter(Mandatory = $true)][string]$ArchivePath,
+        [Parameter(Mandatory = $true)][string]$EntryName,
+        [Parameter(Mandatory = $true)][string[]]$RejectedValues
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
+    try {
+        $entry = $archive.GetEntry($EntryName)
+        if ($null -eq $entry) {
+            throw "Archive entry is missing: $EntryName"
+        }
+        $stream = $entry.Open()
+        try {
+            $memory = New-Object System.IO.MemoryStream
+            try {
+                $stream.CopyTo($memory)
+                $content = [System.Text.Encoding]::ASCII.GetString($memory.ToArray())
+                foreach ($rejected in $RejectedValues) {
+                    if ($content.Contains($rejected)) {
+                        throw "$EntryName contains validation-only telemetry marker '$rejected'. Use -AllowValidationTelemetry only for a non-production validation artifact."
+                    }
+                }
+            } finally {
+                $memory.Dispose()
+            }
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $archive.Dispose()
+    }
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $resolvedManifest = if ([System.IO.Path]::IsPathRooted($ManifestPath)) {
     (Resolve-Path -LiteralPath $ManifestPath).Path
@@ -183,6 +222,14 @@ if ($null -ne $manifest.PSObject.Properties["verification_strings"]) {
         Assert-ArchiveEntryContainsAscii -ArchivePath $resolvedAar -EntryName $entry.Entry -ExpectedValues $expectedStrings
     }
 }
+if (-not $AllowValidationTelemetry) {
+    foreach ($entry in $aarEntries) {
+        Assert-ArchiveEntryDoesNotContainAscii `
+            -ArchivePath $resolvedAar `
+            -EntryName $entry.Entry `
+            -RejectedValues @("zeon_route_validation", "ZEON_ROUTE_VALIDATION ")
+    }
+}
 
 $resolvedApk = (Resolve-Path -LiteralPath $ApkPath).Path
 if (-not $SkipApkHash -and $apkManifest.sha256) {
@@ -214,6 +261,12 @@ foreach ($entry in $apkEntries) {
     }
     if ($entry.Sha256 -ne $expectedApkHash) {
         throw "APK $($entry.Abi) libhiddify-core.so mismatch: expected $expectedApkHash, got $($entry.Sha256)"
+    }
+    if (-not $AllowValidationTelemetry) {
+        Assert-ArchiveEntryDoesNotContainAscii `
+            -ArchivePath $resolvedApk `
+            -EntryName $entry.Entry `
+            -RejectedValues @("zeon_route_validation", "ZEON_ROUTE_VALIDATION ")
     }
 }
 

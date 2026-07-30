@@ -9,6 +9,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/taskmonitor"
+	"github.com/sagernet/sing-box/common/zeonvalidation"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -222,9 +223,11 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 	}
 	r.logger.DebugContext(ctx, "exchange ", FormatQuestion(message.Question[0].String()))
 	var (
-		response  *mDNS.Msg
-		transport adapter.DNSTransport
-		err       error
+		response          *mDNS.Msg
+		transport         adapter.DNSTransport
+		selectedRule      adapter.DNSRule
+		selectedRuleIndex = -1
+		err               error
 	)
 	var metadata *adapter.InboundContext
 	ctx, metadata = adapter.ExtendContext(ctx)
@@ -252,18 +255,14 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 		}
 		response, err = r.client.Exchange(ctx, transport, message, options, nil)
 	} else {
-		var (
-			rule      adapter.DNSRule
-			ruleIndex int
-		)
-		ruleIndex = -1
 		for {
 			dnsCtx := adapter.OverrideContext(ctx)
 			dnsOptions := options
-			transport, rule, ruleIndex = r.matchDNS(ctx, true, ruleIndex, isAddressQuery(message), &dnsOptions)
-			if rule != nil {
-				switch action := rule.Action().(type) {
+			transport, selectedRule, selectedRuleIndex = r.matchDNS(ctx, true, selectedRuleIndex, isAddressQuery(message), &dnsOptions)
+			if selectedRule != nil {
+				switch action := selectedRule.Action().(type) {
 				case *R.RuleActionReject:
+					zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, nil, metadata.QueryType, selectedRule, selectedRuleIndex, nil, true)
 					switch action.Method {
 					case C.RuleActionRejectMethodDefault:
 						return &mDNS.Msg{
@@ -278,10 +277,22 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 						return nil, tun.ErrDrop
 					}
 				case *R.RuleActionPredefined:
-					return action.Response(message), nil
+					response = action.Response(message)
+					zeonvalidation.RecordDNS(
+						ctx,
+						r.logger,
+						metadata.Domain,
+						MessageToAddresses(response),
+						metadata.QueryType,
+						selectedRule,
+						selectedRuleIndex,
+						nil,
+						predefinedDNSResponseBlocked(response),
+					)
+					return response, nil
 				}
 			}
-			responseCheck := addressLimitResponseCheck(rule, metadata)
+			responseCheck := addressLimitResponseCheck(selectedRule, metadata)
 			if dnsOptions.Strategy == C.DomainStrategyAsIS {
 				dnsOptions.Strategy = r.defaultDomainStrategy
 			}
@@ -300,7 +311,7 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 				} else {
 					r.logger.ErrorContext(ctx, E.Cause(err, "exchange ", transport.Tag(), " failed for <empty query>"))
 				}
-				if rule != nil && rule.BypassIfFailed() && ruleIndex != -1 {
+				if selectedRule != nil && selectedRule.BypassIfFailed() && selectedRuleIndex != -1 {
 					select {
 					case <-ctx.Done():
 					default:
@@ -319,6 +330,7 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 		}
 	}
 	if err != nil {
+		zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, nil, metadata.QueryType, selectedRule, selectedRuleIndex, transport, false)
 		return nil, err
 	}
 	if r.dnsReverseMapping != nil && len(message.Question) > 0 && response != nil && len(response.Answer) > 0 {
@@ -333,7 +345,12 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 			}
 		}
 	}
+	zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, MessageToAddresses(response), metadata.QueryType, selectedRule, selectedRuleIndex, transport, false)
 	return response, nil
+}
+
+func predefinedDNSResponseBlocked(response *mDNS.Msg) bool {
+	return response == nil || response.Rcode != mDNS.RcodeSuccess
 }
 
 func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQueryOptions) ([]netip.Addr, error) {
