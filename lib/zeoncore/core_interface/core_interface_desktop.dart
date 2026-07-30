@@ -58,6 +58,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   int? _port;
   Future<String>? _setupOperation;
   int _sessionGeneration = 0;
+  bool _coreStarted = false;
   static String generateRandomPassword(int length) {
     const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random();
@@ -159,6 +160,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   @override
   Future<CoreStatus> setupBackground(String path, String name, {int generation = 0}) async {
     await setSessionGeneration(generation);
+    _coreStarted = false;
     if (_startupValidationGuard) {
       loggy.warning("Windows startup validation guard blocked an explicit VPN start");
       return const CoreStatus.stopped(message: "VPN disabled by startup validation artifact");
@@ -183,6 +185,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     if (generation != _sessionGeneration) {
       throw StateError("cannot mark stale desktop VPN generation ready");
     }
+    _coreStarted = true;
   }
 
   @override
@@ -193,11 +196,16 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   @override
   Future<bool> stop({int generation = 0}) async {
     if (generation > 0) await setSessionGeneration(generation);
+    _coreStarted = false;
     // The shared lifecycle already stops the service over gRPC. The desktop
     // management endpoint is process-owned and remains ready for a later
     // explicit user start.
     return true;
   }
+
+  @override
+  Future<CoreStatus?> resyncSessionStatus() async =>
+      _coreStarted ? const CoreStatus.started() : const CoreStatus.stopped();
 
   @override
   Future<bool> isActiveFg() async {
