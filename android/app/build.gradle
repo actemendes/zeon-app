@@ -184,6 +184,11 @@ android {
             matchingFallbacks = ["release"]
             debuggable true
             jniDebuggable false
+            // A debuggable, same-package validation APK must keep generated
+            // Flutter plugin classes intact. Release remains minified; this
+            // install-only artifact is deliberately not an R8 deliverable.
+            minifyEnabled false
+            shrinkResources false
         }
     }
 
