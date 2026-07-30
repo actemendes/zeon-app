@@ -3,6 +3,7 @@ package test.com.zeon.zeon.bg
 import android.app.Activity
 import android.app.Instrumentation
 import android.os.Bundle
+import test.com.zeon.zeon.performance.SampledBitmapDecoderInstrumentedTest
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -45,6 +46,7 @@ class VpnTestInstrumentation : Instrumentation() {
         val activeSessionTests = ActiveSessionInstrumentedTest()
         val permissionTests = VpnPermissionAndConnectedGateInstrumentedTest()
         val startPermissionTests = StartPermissionRequestCoordinatorInstrumentedTest()
+        val bitmapTests = SampledBitmapDecoderInstrumentedTest(targetContext)
         val tests = mutableListOf(
             TestCase(generationTests.javaClass.name, "generationIsStrictlyMonotonic") {
                 generationTests.generationIsStrictlyMonotonic()
@@ -127,6 +129,27 @@ class VpnTestInstrumentation : Instrumentation() {
                 startPermissionTests::successfulFirstStartNeedsNoSecondBegin,
         ).forEach { (name, body) ->
             tests += TestCase(startPermissionTests.javaClass.name, name) { body() }
+        }
+        listOf(
+            "largeLandscapeIsSampled" to bitmapTests::largeLandscapeIsSampled,
+            "largePortraitIsSampled" to bitmapTests::largePortraitIsSampled,
+            "smallImageIsNotUpscaled" to bitmapTests::smallImageIsNotUpscaled,
+            "squareImageIsSampled" to bitmapTests::squareImageIsSampled,
+            "veryWideImageIsBounded" to bitmapTests::veryWideImageIsBounded,
+            "veryTallImageIsBounded" to bitmapTests::veryTallImageIsBounded,
+            "corruptFileIsRejected" to bitmapTests::corruptFileIsRejected,
+            "emptyByteArrayIsRejected" to bitmapTests::emptyByteArrayIsRejected,
+            "truncatedStreamIsRejected" to bitmapTests::truncatedStreamIsRejected,
+            "excessiveDimensionsAreSampledWithoutOverflow" to
+                bitmapTests::excessiveDimensionsAreSampledWithoutOverflow,
+            "repeatedDecodeKeepsStableDimensions" to bitmapTests::repeatedDecodeKeepsStableDimensions,
+            "parallelDecodeIsIndependent" to bitmapTests::parallelDecodeIsIndependent,
+            "qrLikeImageRemainsPixelSharpWhenSamplingIsNotNeeded" to
+                bitmapTests::qrLikeImageRemainsPixelSharpWhenSamplingIsNotNeeded,
+            "notificationOrProfileIconIsNotUpscaled" to
+                bitmapTests::notificationOrProfileIconIsNotUpscaled,
+        ).forEach { (name, body) ->
+            tests += TestCase(bitmapTests.javaClass.name, name) { body() }
         }
 
         var failures = 0

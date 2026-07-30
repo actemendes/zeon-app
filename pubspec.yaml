@@ -116,7 +116,10 @@ dependencies:
   flutter_markdown_plus: ^1.0.6
   # platform-specific  settings
   # https://github.com/miguelpruivo/flutter_file_picker/wiki/Setup
-  file_picker: ^8.1.7
+  # Local 8.3.7 compatibility patch: two-pass, bounded BitmapFactory decode.
+  # Remove after a stable upstream file_picker release contains commit 8d8713f6.
+  file_picker:
+    path: third_party/file_picker
   installed_apps: # ^1.5.2
     git: https://github.com/VB10/installed_apps
 
