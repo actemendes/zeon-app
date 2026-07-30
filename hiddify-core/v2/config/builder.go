@@ -1087,7 +1087,10 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	// 	},
 	// },	}
 
-	if hopt.BypassLAN {
+	// Russia mode always keeps private/LAN destinations on the ordinary
+	// network. Explicit user rules are appended above this invariant and can
+	// still override it intentionally.
+	if hopt.BypassLAN || hopt.Region == "ru" {
 		routeRules = append(
 			routeRules,
 			option.Rule{

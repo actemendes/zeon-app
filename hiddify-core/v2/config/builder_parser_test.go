@@ -321,7 +321,9 @@ func TestGlobalPresetDoesNotInstallRussiaDirectRules(t *testing.T) {
 func TestRussiaDestinationRulePriority(t *testing.T) {
 	hopt := DefaultHiddifyOptions()
 	hopt.Region = "ru"
-	hopt.BypassLAN = true
+	// The Russia preset must keep LAN direct even if the general UI toggle is
+	// disabled. Explicit user rules still remain above this rule.
+	hopt.BypassLAN = false
 	hopt.BlockAds = true
 	hopt.RouteOptions.BlockQuic = true
 	hopt.Rules = []Rule{
