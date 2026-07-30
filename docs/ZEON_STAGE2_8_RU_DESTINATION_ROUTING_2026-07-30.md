@@ -77,8 +77,8 @@ The generated route order is tested as:
 The final Dart-to-Go payload re-numbers priority rules after semantic
 deduplication, so Go's `list_order` sort cannot move a profile rule above an
 explicit user rule. Profile rules are carried separately and inserted after
-the RU IP rule only in Russia; their historical precedence is retained outside
-Russia.
+the RU IP rule only in Russia. Outside Russia they remain ahead of built-in
+regional/final policy but after explicit user rules.
 
 The Global preset does not install either bundled RU rule set and retains its
 existing final VPN behavior.

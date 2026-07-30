@@ -723,18 +723,19 @@ func toNetworkString(n Network) string {
 	}
 }
 
-func orderedEnabledUserRules(rules []Rule) []Rule {
+func orderedEnabledUserRules(rules []Rule) []*Rule {
 	if len(rules) == 0 {
 		return nil
 	}
-	ordered := make([]Rule, 0, len(rules))
-	for _, r := range rules {
-		if !r.Enabled {
+	ordered := make([]*Rule, 0, len(rules))
+	for index := range rules {
+		rule := &rules[index]
+		if !rule.Enabled {
 			continue
 		}
-		ordered = append(ordered, r)
+		ordered = append(ordered, rule)
 	}
-	sort.Slice(ordered, func(i, j int) bool {
+	sort.SliceStable(ordered, func(i, j int) bool {
 		return ordered[i].ListOrder < ordered[j].ListOrder
 	})
 	return ordered
@@ -1066,18 +1067,21 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	})
 	appendInternalDirectRoutes(&dnsRules, &routeRules, options, hopt)
 
-	earlyRules := hopt.Rules
-	// Outside Russia retain the historic profile-rule precedence. Russia has
-	// a strict late stage for profile/global policy after RU destination rules.
+	earlyRouteRules := buildUserRouteRules(hopt.Rules)
+	earlyDNSRules := buildUserDNSRules(hopt.Rules, hopt)
+	earlyRuleCount := len(hopt.Rules)
+	// Explicit user rules precede profile policy in every preset. Russia moves
+	// profile/global rules to its strict late stage after RU destinations.
 	if hopt.Region != "ru" {
-		earlyRules = append(append([]Rule(nil), earlyRules...), hopt.ProfileRules...)
+		earlyRouteRules = append(earlyRouteRules, buildUserRouteRules(hopt.ProfileRules)...)
+		earlyDNSRules = append(earlyDNSRules, buildUserDNSRules(hopt.ProfileRules, hopt)...)
+		earlyRuleCount += len(hopt.ProfileRules)
 	}
-	userRouteRules := buildUserRouteRules(earlyRules)
-	if len(userRouteRules) > 0 {
-		fmt.Printf("Applying early route rules: configured=%d active=%d\n", len(earlyRules), len(userRouteRules))
-		routeRules = append(routeRules, userRouteRules...)
+	if len(earlyRouteRules) > 0 {
+		fmt.Printf("Applying early route rules: configured=%d active=%d\n", earlyRuleCount, len(earlyRouteRules))
+		routeRules = append(routeRules, earlyRouteRules...)
 	}
-	dnsRules = append(dnsRules, buildUserDNSRules(earlyRules, hopt)...)
+	dnsRules = append(dnsRules, earlyDNSRules...)
 	// {
 	// 	Type: C.RuleTypeDefault,
 	// 	DefaultOptions: option.DefaultRule{
