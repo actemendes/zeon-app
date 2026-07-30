@@ -1,5 +1,5 @@
-import 'dart:convert';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
@@ -169,7 +169,7 @@ class ManagedRuleSetNormalizer {
     if (value.contains('://')) {
       final uri = Uri.tryParse(value);
       if (uri == null || uri.host.isEmpty) {
-        throw RuleSetValidationException('invalid domain URL');
+        throw const RuleSetValidationException('invalid domain URL');
       }
       value = uri.host.toLowerCase();
     } else {
@@ -180,7 +180,7 @@ class ManagedRuleSetNormalizer {
         value.length > 253 ||
         value.contains(RegExp(r'[\s@]')) ||
         value.split('.').any((label) => label.isEmpty || label.length > 63)) {
-      throw RuleSetValidationException('invalid domain');
+      throw const RuleSetValidationException('invalid domain');
     }
     return value;
   }
