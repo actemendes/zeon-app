@@ -256,10 +256,38 @@ func installBundledRURuleSetFile(target string, content []byte, expectedSHA256 s
 	if err := os.Chmod(temporaryPath, 0o644); err != nil {
 		return err
 	}
-	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+	replaceErr := os.Rename(temporaryPath, target)
+	if replaceErr == nil {
+		return nil
+	}
+
+	// Android/Linux replace an existing file atomically above. Windows does
+	// not, so keep a recoverable backup while swapping a corrupt local copy.
+	if _, err := os.Stat(target); err != nil {
+		return fmt.Errorf("replace target: %w", replaceErr)
+	}
+	backup, err := os.CreateTemp(filepath.Dir(target), filepath.Base(target)+".*.previous")
+	if err != nil {
 		return err
 	}
-	return os.Rename(temporaryPath, target)
+	backupPath := backup.Name()
+	defer os.Remove(backupPath)
+	if err := backup.Close(); err != nil {
+		return err
+	}
+	if err := os.Remove(backupPath); err != nil {
+		return err
+	}
+	if err := os.Rename(target, backupPath); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryPath, target); err != nil {
+		if restoreErr := os.Rename(backupPath, target); restoreErr != nil {
+			return fmt.Errorf("replace target: %v; restore previous target: %w", err, restoreErr)
+		}
+		return err
+	}
+	return nil
 }
 
 func sha256Hex(content []byte) string {
