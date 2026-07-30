@@ -6,7 +6,7 @@ func TestRussiaYandexPolicyIsIndependent(t *testing.T) {
 	assertRussiaServicePolicy(
 		t,
 		RUYandexRuleSetTag,
-		OutboundMainDetour,
-		DNSMultiRemoteTag,
+		OutboundDirectTag,
+		DNSMultiDirectTag,
 	)
 }
