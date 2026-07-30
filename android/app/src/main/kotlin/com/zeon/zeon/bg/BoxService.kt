@@ -711,7 +711,7 @@ class BoxService(
                 DefaultNetworkMonitor.setListener(null)
             },
             stopCore = {
-                withContext(Dispatchers.Main) {
+                CoreShutdownDispatcher.close {
                     Mobile.close(4L)
                 }
             },

@@ -47,6 +47,7 @@ class VpnTestInstrumentation : Instrumentation() {
         val permissionTests = VpnPermissionAndConnectedGateInstrumentedTest()
         val startPermissionTests = StartPermissionRequestCoordinatorInstrumentedTest()
         val snapshotTests = VpnSessionSnapshotInstrumentedTest()
+        val shutdownTests = CoreShutdownDispatcherInstrumentedTest()
         val bitmapTests = SampledBitmapDecoderInstrumentedTest(targetContext)
         val tests = mutableListOf(
             TestCase(generationTests.javaClass.name, "generationIsStrictlyMonotonic") {
@@ -96,6 +97,9 @@ class VpnTestInstrumentation : Instrumentation() {
             },
             TestCase(snapshotTests.javaClass.name, "duplicateSelectedOutboundDoesNotPublishANewSnapshot") {
                 snapshotTests.duplicateSelectedOutboundDoesNotPublishANewSnapshot()
+            },
+            TestCase(shutdownTests.javaClass.name, "nativeCoreCloseNeverRunsOnMainLooper") {
+                shutdownTests.nativeCoreCloseNeverRunsOnMainLooper()
             },
         )
         listOf(
