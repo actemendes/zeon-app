@@ -121,6 +121,11 @@ android {
         testInstrumentationRunner "test.com.zeon.zeon.bg.VpnTestInstrumentation"
     }
 
+    // Instrumentation must never target the production package on a device
+    // that contains user profiles. The validation target has independent app
+    // data, permissions and VPN ownership.
+    testBuildType "validation"
+
     splits {
         abi {
             enable true
@@ -144,6 +149,12 @@ android {
     }
 
     buildTypes {
+        validation {
+            initWith debug
+            applicationIdSuffix ".validation"
+            matchingFallbacks = ["debug"]
+            debuggable true
+        }
         release {
             if (hasKeyStore) {
                 signingConfig signingConfigs.release
@@ -166,6 +177,24 @@ android {
 }
 
 gradle.taskGraph.whenReady { graph ->
+    def unsafeManagedAndroidTests = graph.allTasks.findAll { task ->
+        def name = task.name.toLowerCase()
+        def managedTestTask =
+            name.contains("androidtest") &&
+            (name.startsWith("connected") ||
+                name.startsWith("device") ||
+                name.startsWith("install") ||
+                name.startsWith("uninstall"))
+        managedTestTask && !name.contains("validation")
+    }
+    if (!unsafeManagedAndroidTests.isEmpty()) {
+        throw new GradleException(
+            "Refusing Android instrumentation against com.zeon.hiddify. " +
+            "Use the isolated validation target (:app:connectedValidationAndroidTest). " +
+            "Blocked tasks: ${unsafeManagedAndroidTests*.path.join(', ')}"
+        )
+    }
+
     def buildsReleaseArtifact = graph.allTasks.any { task ->
         task.project == project && task.name.toLowerCase().contains('release')
     }

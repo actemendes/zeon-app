@@ -24,6 +24,21 @@ class VpnTestInstrumentation : Instrumentation() {
     }
 
     override fun onStart() {
+        val targetPackage = targetContext.packageName
+        if (targetPackage == PRODUCTION_PACKAGE || !targetPackage.endsWith(VALIDATION_SUFFIX)) {
+            finish(
+                Activity.RESULT_CANCELED,
+                Bundle().apply {
+                    putString(
+                        "stream",
+                        "Refusing instrumentation target=$targetPackage; " +
+                            "tests require an isolated .validation application.",
+                    )
+                },
+            )
+            return
+        }
+
         val generationTests = VpnSessionCoordinatorInstrumentedTest()
         val startupTests = CoreStartupGateInstrumentedTest()
         val tunTests = TunDescriptorOwnerInstrumentedTest()
@@ -121,6 +136,8 @@ class VpnTestInstrumentation : Instrumentation() {
     }
 
     private companion object {
+        const val PRODUCTION_PACKAGE = "com.zeon.hiddify"
+        const val VALIDATION_SUFFIX = ".validation"
         const val STATUS_START = 1
         const val STATUS_OK = 0
         const val STATUS_FAILURE = -2
