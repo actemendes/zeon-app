@@ -12,6 +12,7 @@ class PreferencesMigration with InfraLogger {
   static const v16RoutingCleanupOwnedKey = "per_app_proxy_v16_rutube_cleanup_owned";
   static const v17SeededRoutingCleanupPendingKey = "per_app_proxy_v17_seeded_cleanup_pending";
   static const v17SeededRoutingCleanupPackagesKey = "per_app_proxy_v17_seeded_cleanup_packages";
+  static const v17SeededRoutingExactOwnedPackagesKey = "per_app_proxy_v17_seeded_exact_owned_packages";
 
   Future<void> migrate() async {
     final currentVersion = sharedPreferences.getInt(versionKey) ?? 0;
@@ -432,60 +433,56 @@ class PreferencesVersion16Migration extends PreferencesMigrationStep with InfraL
       await sharedPreferences.setBool("block-ads", true);
     }
 
-    final seededPackages = sharedPreferences.getStringList("per_app_proxy_seeded_exclude_list") ?? const <String>[];
-    final ownsRutubeDefault = seededPackages.contains(PreferencesMigration.v16RemovedRoutingPackage);
-    if (ownsRutubeDefault) {
-      for (final key in const ["per_app_proxy_exclude_list", "per_app_proxy_seeded_exclude_list"]) {
-        final packages = sharedPreferences.getStringList(key);
-        if (packages != null && packages.contains(PreferencesMigration.v16RemovedRoutingPackage)) {
-          final updated = packages.where((pkg) => pkg != PreferencesMigration.v16RemovedRoutingPackage).toList();
-          loggy.debug("v16: removing owned [${PreferencesMigration.v16RemovedRoutingPackage}] from [$key]");
-          await sharedPreferences.setStringList(key, updated);
-        }
-      }
-    }
-
-    await sharedPreferences.setBool(PreferencesMigration.v16RoutingCleanupOwnedKey, ownsRutubeDefault);
-    await sharedPreferences.setBool(PreferencesMigration.v16RoutingCleanupPendingKey, ownsRutubeDefault);
+    // The legacy seed list records that ZEON selected a package at some point,
+    // but not whether the user later removed and explicitly selected it again.
+    // Do not use that ambiguous marker to remove a current user selection.
+    await sharedPreferences.remove(PreferencesMigration.v16RoutingCleanupOwnedKey);
+    await sharedPreferences.setBool(PreferencesMigration.v16RoutingCleanupPendingKey, false);
   }
 }
 
 class PreferencesVersion17Migration extends PreferencesMigrationStep with InfraLogger {
   PreferencesVersion17Migration(super.sharedPreferences);
 
-  static const _excludeAppsKey = "per_app_proxy_exclude_list";
   static const _seededExcludeAppsKey = "per_app_proxy_seeded_exclude_list";
 
   @override
   Future<void> migrate() async {
-    final seededPackages =
-        sharedPreferences
-            .getStringList(_seededExcludeAppsKey)
-            ?.where((pkg) => pkg.isNotEmpty)
-            .toSet()
-            .toList(growable: false) ??
-        const <String>[];
+    final seededPackages = sharedPreferences.getStringList(_seededExcludeAppsKey) ?? const <String>[];
+    if (seededPackages.isNotEmpty) {
+      loggy.debug(
+        "v17: preserving [${seededPackages.length}] ambiguous legacy package selections; "
+        "the old format has no user-reselection provenance",
+      );
+    }
 
-    if (seededPackages.isEmpty) {
-      await sharedPreferences.setStringList(_seededExcludeAppsKey, const <String>[]);
+    // Retire only the obsolete ownership hint. The active exclusion list is
+    // user state and must stay untouched. A database cleanup may be scheduled
+    // only by code that also writes the separate exact-ownership list.
+    await sharedPreferences.setStringList(_seededExcludeAppsKey, const <String>[]);
+    final exactOwnedPackages =
+        sharedPreferences
+            .getStringList(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey)
+            ?.where((pkg) => pkg.isNotEmpty)
+            .toSet() ??
+        const <String>{};
+    final requestedCleanup =
+        sharedPreferences
+            .getStringList(PreferencesMigration.v17SeededRoutingCleanupPackagesKey)
+            ?.where((pkg) => pkg.isNotEmpty)
+            .toSet() ??
+        const <String>{};
+    final provenCleanup = requestedCleanup.intersection(exactOwnedPackages).toList(growable: false)..sort();
+
+    if (provenCleanup.isEmpty) {
       await sharedPreferences.remove(PreferencesMigration.v17SeededRoutingCleanupPackagesKey);
+      await sharedPreferences.remove(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey);
       await sharedPreferences.setBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey, false);
       return;
     }
 
-    final seededSet = seededPackages.toSet();
-    final currentExclude = sharedPreferences.getStringList(_excludeAppsKey) ?? const <String>[];
-    final remainingExclude = currentExclude.where((pkg) => !seededSet.contains(pkg)).toList(growable: false);
-
-    loggy.debug(
-      "v17: removing [${currentExclude.length - remainingExclude.length}] legacy seeded package routing entries",
-    );
-    await sharedPreferences.setStringList(_excludeAppsKey, remainingExclude);
-    await sharedPreferences.setStringList(_seededExcludeAppsKey, const <String>[]);
-
-    // The Drift rows are removed only after the database is available during
-    // bootstrap. Keep the exact ownership marker until that cleanup succeeds.
-    await sharedPreferences.setStringList(PreferencesMigration.v17SeededRoutingCleanupPackagesKey, seededPackages);
+    await sharedPreferences.setStringList(PreferencesMigration.v17SeededRoutingCleanupPackagesKey, provenCleanup);
+    await sharedPreferences.setStringList(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey, provenCleanup);
     await sharedPreferences.setBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey, true);
   }
 }

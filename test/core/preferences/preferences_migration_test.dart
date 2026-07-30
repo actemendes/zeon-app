@@ -72,7 +72,7 @@ void main() {
     expect(prefs.getString("balancer-strategy"), "round-robin");
   });
 
-  test("v16 enables ad blocking and v17 schedules cleanup of the remaining owned seed", () async {
+  test("v16 enables ad blocking without deleting ambiguous former seed selections", () async {
     SharedPreferences.setMockInitialValues({
       PreferencesMigration.versionKey: 15,
       "block-ads": false,
@@ -84,12 +84,16 @@ void main() {
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
     expect(prefs.getBool("block-ads"), true);
-    expect(prefs.getStringList("per_app_proxy_exclude_list"), ["com.example.other"]);
+    expect(prefs.getStringList("per_app_proxy_exclude_list"), [
+      "com.example.other",
+      PreferencesMigration.v16RemovedRoutingPackage,
+    ]);
     expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), isEmpty);
-    expect(prefs.getBool(PreferencesMigration.v16RoutingCleanupPendingKey), true);
-    expect(prefs.getBool(PreferencesMigration.v16RoutingCleanupOwnedKey), true);
-    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), true);
-    expect(prefs.getStringList(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), ["com.example.seeded"]);
+    expect(prefs.getBool(PreferencesMigration.v16RoutingCleanupPendingKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v16RoutingCleanupOwnedKey), false);
+    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey), false);
   });
 
   test("v16 preserves an explicit Rutube rule without seed ownership evidence", () async {
@@ -103,11 +107,11 @@ void main() {
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
     expect(prefs.getStringList("per_app_proxy_exclude_list"), [PreferencesMigration.v16RemovedRoutingPackage]);
-    expect(prefs.getBool(PreferencesMigration.v16RoutingCleanupOwnedKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v16RoutingCleanupOwnedKey), false);
     expect(prefs.getBool(PreferencesMigration.v16RoutingCleanupPendingKey), false);
   });
 
-  test("v17 removes only exclusions owned by the legacy seed marker", () async {
+  test("v17 preserves ambiguous legacy seed rows and explicit user state", () async {
     SharedPreferences.setMockInitialValues({
       PreferencesMigration.versionKey: 16,
       "per_app_proxy_mode": "exclude",
@@ -125,13 +129,36 @@ void main() {
 
     expect(prefs.getString("per_app_proxy_mode"), "exclude");
     expect(prefs.getStringList("per_app_proxy_include_list"), ["com.example.explicit.include"]);
-    expect(prefs.getStringList("per_app_proxy_exclude_list"), ["com.example.explicit.exclude"]);
-    expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), isEmpty);
-    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), true);
-    expect(prefs.getStringList(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), [
+    expect(prefs.getStringList("per_app_proxy_exclude_list"), [
       "com.example.seeded.one",
+      "com.example.explicit.exclude",
       "com.example.seeded.two",
     ]);
+    expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), isEmpty);
+    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey), false);
+  });
+
+  test("v17 keeps a cleanup request only for packages with separate exact ownership proof", () async {
+    SharedPreferences.setMockInitialValues({
+      PreferencesMigration.versionKey: 16,
+      "per_app_proxy_mode": "exclude",
+      "per_app_proxy_exclude_list": ["com.example.proven", "com.example.ambiguous"],
+      "per_app_proxy_seeded_exclude_list": ["com.example.proven", "com.example.ambiguous"],
+      PreferencesMigration.v17SeededRoutingCleanupPendingKey: true,
+      PreferencesMigration.v17SeededRoutingCleanupPackagesKey: ["com.example.ambiguous", "com.example.proven"],
+      PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey: ["com.example.proven"],
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs).migrate();
+
+    expect(prefs.getStringList("per_app_proxy_exclude_list"), ["com.example.proven", "com.example.ambiguous"]);
+    expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), isEmpty);
+    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), true);
+    expect(prefs.getStringList(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), ["com.example.proven"]);
+    expect(prefs.getStringList(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey), ["com.example.proven"]);
   });
 
   test("v17 preserves all per-app state when no seed ownership marker exists", () async {
@@ -152,7 +179,7 @@ void main() {
     expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
   });
 
-  test("latest migration version is 17", () async {
+  test("fresh install reaches v17 without creating RU package exclusions", () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
 
@@ -164,5 +191,7 @@ void main() {
     expect(prefs.getStringList("per_app_proxy_exclude_list"), isNull);
     expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), isEmpty);
     expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey), false);
   });
 }

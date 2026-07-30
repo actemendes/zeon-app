@@ -9,17 +9,10 @@ final class LegacySeededRoutingCleanup {
   final SharedPreferences preferences;
   final AppProxyDataSource dataSource;
 
-  static const _includeAppsKey = "per_app_proxy_include_list";
-  static const _excludeAppsKey = "per_app_proxy_exclude_list";
-
   Future<LegacySeededRoutingCleanupResult> run() async {
     if (preferences.getBool(PreferencesMigration.v16RoutingCleanupPendingKey) ?? false) {
-      if (preferences.getBool(PreferencesMigration.v16RoutingCleanupOwnedKey) ?? false) {
-        await dataSource.clearUserSelectionFromPkgs(
-          pkgs: const [PreferencesMigration.v16RemovedRoutingPackage],
-          mode: AppProxyMode.exclude,
-        );
-      }
+      // v16's legacy boolean cannot prove that the current row was not
+      // re-selected by the user. Retire the ambiguous retry state only.
       await preferences.remove(PreferencesMigration.v16RoutingCleanupOwnedKey);
       await preferences.setBool(PreferencesMigration.v16RoutingCleanupPendingKey, false);
     }
@@ -28,29 +21,30 @@ final class LegacySeededRoutingCleanup {
       return const LegacySeededRoutingCleanupResult(shouldDisableExcludeMode: false);
     }
 
-    final cleanupPackages =
+    final requestedCleanup =
         preferences
             .getStringList(PreferencesMigration.v17SeededRoutingCleanupPackagesKey)
             ?.where((pkg) => pkg.isNotEmpty)
             .toSet() ??
         const <String>{};
+    final exactOwnedPackages =
+        preferences
+            .getStringList(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey)
+            ?.where((pkg) => pkg.isNotEmpty)
+            .toSet() ??
+        const <String>{};
+    final cleanupPackages = requestedCleanup.intersection(exactOwnedPackages);
 
     await dataSource.clearUserSelectionFromPkgs(pkgs: cleanupPackages, mode: AppProxyMode.exclude);
 
-    final hasPreferenceRules =
-        (preferences.getStringList(_includeAppsKey)?.isNotEmpty ?? false) ||
-        (preferences.getStringList(_excludeAppsKey)?.isNotEmpty ?? false);
-    final hasDatabaseRules =
-        await dataSource.hasAnyPkgs(mode: AppProxyMode.include) ||
-        await dataSource.hasAnyPkgs(mode: AppProxyMode.exclude);
-
-    // Clear the retry state only after both deletion and verification succeed.
+    // Clear the retry state only after the database mutation succeeds.
     await preferences.remove(PreferencesMigration.v17SeededRoutingCleanupPackagesKey);
+    await preferences.remove(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey);
     await preferences.setBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey, false);
 
-    return LegacySeededRoutingCleanupResult(
-      shouldDisableExcludeMode: cleanupPackages.isNotEmpty && !hasPreferenceRules && !hasDatabaseRules,
-    );
+    // The legacy format also cannot prove that exclude mode itself was seeded.
+    // Preserve the user's explicit mode even when no package rows remain.
+    return const LegacySeededRoutingCleanupResult(shouldDisableExcludeMode: false);
   }
 }
 
