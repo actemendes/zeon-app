@@ -251,6 +251,45 @@ func TestUnknownDNSCorrelationIsEmittedAsValidationFailure(t *testing.T) {
 	}
 }
 
+func TestDNSExchangeFailureIsNotReportedAsSuccessfulLookup(t *testing.T) {
+	withFreshTelemetry(t)
+	t.Setenv(sessionGenerationEnv, "generation-dns-error")
+	var output bytes.Buffer
+	factory := SBLog.NewDefaultFactory(
+		context.Background(),
+		SBLog.Formatter{DisableColors: true, DisableTimestamp: true},
+		&output,
+		"",
+		nil,
+		false,
+	)
+	t.Cleanup(func() {
+		_ = factory.Close()
+	})
+	RecordDNS(
+		context.Background(),
+		factory.NewLogger("validation-test"),
+		"yandex.ru",
+		nil,
+		mDNS.TypeA,
+		nil,
+		-1,
+		&fakeDNSTransport{tag: "dns-direct"},
+		false,
+		true,
+	)
+	logLine := output.String()
+	for _, expected := range []string{
+		validationLogPrefix,
+		`"dns":"DIRECT"`,
+		`"validationFailure":"DNS_EXCHANGE_FAILED"`,
+	} {
+		if !strings.Contains(logLine, expected) {
+			t.Fatalf("DNS failure log does not contain %q: %s", expected, logLine)
+		}
+	}
+}
+
 func TestRuleSetExtraction(t *testing.T) {
 	if got := extractRuleSet("network=tcp rule_set=zapret-ru-domains"); got != "zapret-ru-domains" {
 		t.Fatalf("single rule set = %q", got)

@@ -38,5 +38,6 @@ func RecordDNS(
 	int,
 	adapter.DNSTransport,
 	bool,
+	bool,
 ) {
 }

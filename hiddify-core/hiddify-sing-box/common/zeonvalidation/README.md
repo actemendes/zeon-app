@@ -22,6 +22,10 @@ before the validation session, or the matching DNS observation was otherwise
 missed. A browser validation row cannot receive PASS until DNS is observed as
 `DIRECT` or `REMOTE` and agrees with the expected route.
 
+A selected DNS transport whose exchange fails emits
+`validationFailure: "DNS_EXCHANGE_FAILED"`. This records the resolver decision
+without misrepresenting it as a successful lookup.
+
 Build a validation artifact explicitly:
 
 ```powershell

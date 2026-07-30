@@ -238,6 +238,7 @@ func RecordDNS(
 	ruleIndex int,
 	transport adapter.DNSTransport,
 	blocked bool,
+	failed bool,
 ) {
 	hostname = normalizeHostname(hostname)
 	if !isValidationHostname(hostname) {
@@ -252,6 +253,10 @@ func RecordDNS(
 		route = "DIRECT"
 	}
 	generation := sessionGeneration()
+	validationFailure := ""
+	if failed {
+		validationFailure = "DNS_EXCHANGE_FAILED"
+	}
 	addresses = uniqueAddresses(addresses)
 	telemetry.remember(dnsCorrelation{
 		hostname:       hostname,
@@ -263,14 +268,15 @@ func RecordDNS(
 		expiresAt:      telemetry.now().Add(dnsCorrelationTTL),
 	})
 	emitForAddresses(log, ctx, validationEvent{
-		Kind:           "dns",
-		Hostname:       hostname,
-		MatchedRule:    matchedRule,
-		MatchedRuleSet: matchedRuleSet,
-		Route:          route,
-		DNS:            dnsMode,
-		Protocol:       dnsProtocol(queryType),
-		Generation:     generation,
+		Kind:              "dns",
+		Hostname:          hostname,
+		MatchedRule:       matchedRule,
+		MatchedRuleSet:    matchedRuleSet,
+		Route:             route,
+		DNS:               dnsMode,
+		Protocol:          dnsProtocol(queryType),
+		Generation:        generation,
+		ValidationFailure: validationFailure,
 	}, addresses)
 }
 
