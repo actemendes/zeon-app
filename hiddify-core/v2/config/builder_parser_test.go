@@ -221,12 +221,12 @@ func TestRussiaPresetHasExplicitRussianPublicSuffixes(t *testing.T) {
 	}
 }
 
-func TestRussiaYandexProxyPolicyIsIndependent(t *testing.T) {
+func TestRussiaYandexDirectPolicyIsIndependent(t *testing.T) {
 	assertRussiaServicePolicy(
 		t,
 		RUYandexRuleSetTag,
-		OutboundMainDetour,
-		DNSMultiRemoteTag,
+		OutboundDirectTag,
+		DNSMultiDirectTag,
 	)
 }
 

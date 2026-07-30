@@ -61,7 +61,7 @@ const (
 
 	// Keep the service decisions separate so each override can be reverted
 	// without changing the other service or the generic RU destination rules.
-	ruYandexRussiaDirect      = false
+	ruYandexRussiaDirect      = true
 	ruWildberriesRussiaDirect = false
 
 	// Group interruption is a capability, not a blanket switch behavior.
