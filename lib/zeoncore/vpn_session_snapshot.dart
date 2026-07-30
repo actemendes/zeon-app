@@ -153,6 +153,9 @@ class VpnSessionSnapshotGate {
     if (next.generation < _generation || next.snapshotVersion < _snapshotVersion) {
       return VpnSnapshotDisposition.stale;
     }
+    if (next.generation == _generation && _current != null && _phaseRank(next.phase) < _phaseRank(_current!.phase)) {
+      return VpnSnapshotDisposition.stale;
+    }
     if (next.sequenceNumber == _sequence && next.snapshotVersion == _snapshotVersion) {
       return VpnSnapshotDisposition.duplicate;
     }
@@ -164,6 +167,20 @@ class VpnSessionSnapshotGate {
     }
     return VpnSnapshotDisposition.accepted;
   }
+
+  int _phaseRank(VpnSessionPhase phase) => switch (phase) {
+    VpnSessionPhase.idle => 0,
+    VpnSessionPhase.permissionRequired => 1,
+    VpnSessionPhase.startRequested => 2,
+    VpnSessionPhase.startingPlatform => 3,
+    VpnSessionPhase.startingCore => 4,
+    VpnSessionPhase.waitingTun => 5,
+    VpnSessionPhase.verifying => 6,
+    VpnSessionPhase.connected => 7,
+    VpnSessionPhase.stopRequested => 8,
+    VpnSessionPhase.stopping => 9,
+    VpnSessionPhase.disconnected || VpnSessionPhase.failed => 10,
+  };
 
   void acceptAuthoritative(VpnSessionSnapshot next) {
     _runtimeEpoch = next.runtimeEpoch;
