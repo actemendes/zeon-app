@@ -6,7 +6,7 @@ func TestRussiaWildberriesPolicyIsIndependent(t *testing.T) {
 	assertRussiaServicePolicy(
 		t,
 		RUWildberriesRuleSetTag,
-		OutboundMainDetour,
-		DNSMultiRemoteTag,
+		OutboundDirectTag,
+		DNSMultiDirectTag,
 	)
 }
