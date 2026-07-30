@@ -11,7 +11,11 @@ param(
 
     [switch]$SkipCodeGeneration,
 
-    [switch]$SkipClean
+    [switch]$SkipClean,
+
+    # Creates an isolated portable UI artifact whose desktop core refuses all
+    # VPN start operations. This switch is for startup validation only.
+    [switch]$StartupValidation
 )
 
 $ErrorActionPreference = "Stop"
@@ -482,6 +486,13 @@ try {
         Patch-TrayManagerWindowsPlugin -WorkingRoot $workingRoot
 
         $buildArgs = @("build", "windows", "--$BuildMode", "--target", $BuildTarget)
+        if ($StartupValidation) {
+            $buildArgs += @(
+                "--dart-define=portable=true",
+                "--dart-define=zeon_windows_startup_validation=true"
+            )
+            Write-Host "Startup validation guard: enabled (VPN start is blocked)"
+        }
         Write-Host "Build target: $BuildTarget"
         Write-Host ("Running: flutter " + ($buildArgs -join " "))
         & flutter @buildArgs

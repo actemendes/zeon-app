@@ -21,6 +21,7 @@ typedef StopFunc = Pointer<Utf8> Function();
 typedef StopFuncDart = Pointer<Utf8> Function();
 
 class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
+  static const _startupValidationGuard = bool.fromEnvironment("zeon_windows_startup_validation");
   static final ZeonCoreNativeLibrary _box = _gen();
 
   static ZeonCoreNativeLibrary _gen() {
@@ -158,6 +159,10 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   @override
   Future<CoreStatus> setupBackground(String path, String name, {int generation = 0}) async {
     await setSessionGeneration(generation);
+    if (_startupValidationGuard) {
+      loggy.warning("Windows startup validation guard blocked an explicit VPN start");
+      return const CoreStatus.stopped(message: "VPN disabled by startup validation artifact");
+    }
     if (!isInitialized() || _port == null) {
       return const CoreStatus.stopped(message: "desktop core management endpoint is unavailable");
     }
