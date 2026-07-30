@@ -246,11 +246,13 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
                 result.runCatching {
                     val line = call.arguments as? String
                     val tag = listOf("ZEON", "ROUTE", "VALIDATION").joinToString("_")
-                    if (line.isNullOrBlank() || line.length > 8192 || !line.startsWith("$tag ")) {
+                    val marker = "$tag "
+                    val markerIndex = line?.indexOf(marker) ?: -1
+                    if (line.isNullOrBlank() || line.length > 8192 || markerIndex < 0) {
                         success(false)
                         return@runCatching
                     }
-                    Log.w(tag, line)
+                    Log.w(tag, line.substring(markerIndex))
                     success(true)
                 }
             }
