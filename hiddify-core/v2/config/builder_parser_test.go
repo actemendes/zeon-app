@@ -196,6 +196,78 @@ func TestSetRoutingOptionsAddsHardcodedRUAdListWhenBlockAdsEnabled(t *testing.T)
 	}
 }
 
+func TestRussiaPresetHasExplicitRussianPublicSuffixes(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.Region = "ru"
+	opts := option.Options{DNS: &option.DNSOptions{}}
+	if err := setRoutingOptions(&opts, hopt); err != nil {
+		t.Fatalf("setRoutingOptions returned error: %v", err)
+	}
+
+	var routeSuffixes []string
+	for _, rule := range opts.Route.Rules {
+		candidate := rule.DefaultOptions
+		if candidate.Action == constant.RuleActionTypeRoute &&
+			candidate.RouteOptions.Outbound == OutboundDirectTag &&
+			containsString(candidate.DomainSuffix, ".ru") {
+			routeSuffixes = candidate.DomainSuffix
+			break
+		}
+	}
+	for _, suffix := range []string{".ru", ".su", ".xn--p1ai"} {
+		if !containsString(routeSuffixes, suffix) {
+			t.Fatalf("Russia direct suffix rule = %v, missing %s", routeSuffixes, suffix)
+		}
+	}
+}
+
+func TestRussiaProxyOverridesPrecedePublicSuffixDirectRule(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.Region = "ru"
+	opts := option.Options{DNS: &option.DNSOptions{}}
+	if err := setRoutingOptions(&opts, hopt); err != nil {
+		t.Fatalf("setRoutingOptions returned error: %v", err)
+	}
+
+	overrideIndex, directIndex := -1, -1
+	for index, rule := range opts.Route.Rules {
+		candidate := rule.DefaultOptions
+		if candidate.Action != constant.RuleActionTypeRoute {
+			continue
+		}
+		if candidate.RouteOptions.Outbound == OutboundMainDetour &&
+			containsString(candidate.DomainSuffix, "yandex.ru") {
+			overrideIndex = index
+		}
+		if candidate.RouteOptions.Outbound == OutboundDirectTag &&
+			containsString(candidate.DomainSuffix, ".ru") {
+			directIndex = index
+		}
+	}
+	if overrideIndex < 0 || directIndex < 0 || overrideIndex >= directIndex {
+		t.Fatalf("proxy override index=%d must precede RU direct index=%d", overrideIndex, directIndex)
+	}
+}
+
+func TestGlobalPresetDoesNotInstallRussiaDirectRules(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.Region = "other"
+	opts := option.Options{DNS: &option.DNSOptions{}}
+	if err := setRoutingOptions(&opts, hopt); err != nil {
+		t.Fatalf("setRoutingOptions returned error: %v", err)
+	}
+	for _, rule := range opts.Route.Rules {
+		candidate := rule.DefaultOptions
+		if candidate.Action == constant.RuleActionTypeRoute &&
+			candidate.RouteOptions.Outbound == OutboundDirectTag &&
+			(containsString(candidate.DomainSuffix, ".ru") ||
+				containsString(candidate.RuleSet, "geosite-ru") ||
+				containsString(candidate.RuleSet, "geoip-ru")) {
+			t.Fatalf("Global preset unexpectedly contains RU direct rule: %+v", candidate)
+		}
+	}
+}
+
 func containsString(items []string, target string) bool {
 	for _, item := range items {
 		if item == target {

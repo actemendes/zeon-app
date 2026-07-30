@@ -890,6 +890,12 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	dnsRules := []option.DefaultDNSRule{}
 	routeRules := []option.Rule{}
 	rulesets := []option.RuleSet{}
+	regionDomainSuffixes := []string{"." + hopt.Region}
+	if hopt.Region == "ru" {
+		// These are Russian public suffixes, not a DPI hostlist. Keep the
+		// action explicit and independent from the remote geosite snapshot.
+		regionDomainSuffixes = []string{".ru", ".su", ".xn--p1ai"}
+	}
 	ruProxyOverrideDomainSuffixes := []string{
 		"ya.ru",
 		"yandex.ru",
@@ -1268,7 +1274,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	if hopt.Region != "other" {
 		dnsRules = append(dnsRules, option.DefaultDNSRule{
 			RawDefaultDNSRule: option.RawDefaultDNSRule{
-				DomainSuffix: []string{"." + hopt.Region},
+				DomainSuffix: regionDomainSuffixes,
 			},
 			DNSRuleAction: option.DNSRuleAction{
 				Action: C.RuleActionTypeRoute,
@@ -1284,7 +1290,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			Type: C.RuleTypeDefault,
 			DefaultOptions: option.DefaultRule{
 				RawDefaultRule: option.RawDefaultRule{
-					DomainSuffix: []string{"." + hopt.Region},
+					DomainSuffix: regionDomainSuffixes,
 				},
 				RuleAction: option.RuleAction{
 					Action: C.RuleActionTypeRoute,
