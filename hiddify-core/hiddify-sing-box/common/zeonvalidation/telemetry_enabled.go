@@ -34,6 +34,7 @@ const (
 var validationDomainSuffixes = []string{
 	// Government and public infrastructure.
 	"gosuslugi.ru",
+	"goskey.ru",
 	"nalog.gov.ru",
 	"nalog.ru",
 	"mos.ru",
@@ -51,6 +52,8 @@ var validationDomainSuffixes = []string{
 	"vtb.ru",
 	"gazprombank.ru",
 	"gpb.ru",
+	"raiffeisen.ru",
+	"sovcombank.ru",
 
 	// Yandex services and required first-party resource families.
 	"ya.ru",
@@ -121,19 +124,20 @@ var validationDomainSuffixes = []string{
 }
 
 type validationEvent struct {
-	Kind              string `json:"kind"`
-	Hostname          string `json:"hostname"`
-	ResolvedIPHash    string `json:"resolvedIpHash"`
-	IPVersion         string `json:"ipVersion"`
-	MatchedRule       string `json:"matchedRule"`
-	MatchedRuleSet    string `json:"matchedRuleSet"`
-	Route             string `json:"route"`
-	DNS               string `json:"dns"`
-	Protocol          string `json:"protocol"`
-	Generation        string `json:"generation"`
-	ValidationFailure string `json:"validationFailure,omitempty"`
-	DNSMatchedRule    string `json:"dnsMatchedRule,omitempty"`
-	DNSMatchedRuleSet string `json:"dnsMatchedRuleSet,omitempty"`
+	Kind              string   `json:"kind"`
+	Hostname          string   `json:"hostname"`
+	ResolvedIPHash    string   `json:"resolvedIpHash"`
+	IPVersion         string   `json:"ipVersion"`
+	MatchedRule       string   `json:"matchedRule"`
+	MatchedRuleSet    string   `json:"matchedRuleSet"`
+	Route             string   `json:"route"`
+	DNS               string   `json:"dns"`
+	Protocol          string   `json:"protocol"`
+	Generation        string   `json:"generation"`
+	ValidationFailure string   `json:"validationFailure,omitempty"`
+	DNSMatchedRule    string   `json:"dnsMatchedRule,omitempty"`
+	DNSMatchedRuleSet string   `json:"dnsMatchedRuleSet,omitempty"`
+	CNAMEChain        []string `json:"cnameChain,omitempty"`
 }
 
 type dnsCorrelation struct {
@@ -233,6 +237,7 @@ func RecordDNS(
 	log logger.ContextLogger,
 	hostname string,
 	addresses []netip.Addr,
+	cnameChain []string,
 	queryType uint16,
 	rule adapter.DNSRule,
 	ruleIndex int,
@@ -277,7 +282,31 @@ func RecordDNS(
 		Protocol:          dnsProtocol(queryType),
 		Generation:        generation,
 		ValidationFailure: validationFailure,
+		CNAMEChain:        sanitizeCNAMEChain(cnameChain),
 	}, addresses)
+}
+
+func sanitizeCNAMEChain(chain []string) []string {
+	sanitized := make([]string, 0, len(chain))
+	seen := make(map[string]struct{}, len(chain))
+	for _, candidate := range chain {
+		candidate = normalizeHostname(candidate)
+		if candidate == "" || len(candidate) > 253 {
+			continue
+		}
+		if _, err := netip.ParseAddr(candidate); err == nil {
+			continue
+		}
+		if _, loaded := seen[candidate]; loaded {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		sanitized = append(sanitized, candidate)
+		if len(sanitized) == 16 {
+			break
+		}
+	}
+	return sanitized
 }
 
 func emitForAddresses(log logger.ContextLogger, ctx context.Context, base validationEvent, addresses []netip.Addr) {
@@ -302,7 +331,10 @@ func emit(log logger.ContextLogger, ctx context.Context, event validationEvent) 
 	if err != nil {
 		return
 	}
-	log.InfoContext(ctx, validationLogPrefix, string(payload))
+	// The mobile bridge subscribes at warning level. Keep this promotion in the
+	// validation-tagged implementation so evidence is observable without
+	// changing production logging or persisting ordinary browsing history.
+	log.WarnContext(ctx, validationLogPrefix, string(payload))
 }
 
 func routeHostname(metadata *adapter.InboundContext, addresses []netip.Addr) (string, *dnsCorrelation, bool) {

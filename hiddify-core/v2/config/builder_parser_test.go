@@ -232,8 +232,9 @@ func TestRussiaPresetUsesPinnedLocalRussianRuleSets(t *testing.T) {
 			t.Fatalf("%s has no DIRECT route rule", tag)
 		}
 	}
-	if indexDNSRuleSet(opts.DNS.Rules, BundledRUDomainsRuleSetTag, DNSMultiDirectTag) < 0 {
-		t.Fatalf("%s has no DIRECT DNS rule", BundledRUDomainsRuleSetTag)
+	expectedRUDNSServer, _ := ruDestinationDNSPolicy(hopt)
+	if indexDNSRuleSet(opts.DNS.Rules, BundledRUDomainsRuleSetTag, expectedRUDNSServer) < 0 {
+		t.Fatalf("%s has no DNS rule through %s", BundledRUDomainsRuleSetTag, expectedRUDNSServer)
 	}
 	for _, rule := range opts.DNS.Rules {
 		if containsString(rule.DefaultOptions.RuleSet, BundledRUIPRuleSetTag) {
@@ -246,6 +247,9 @@ func assertRussiaServicePolicy(t *testing.T, tag string, expectedOutbound string
 	t.Helper()
 	hopt := DefaultHiddifyOptions()
 	hopt.Region = "ru"
+	if expectedOutbound == OutboundDirectTag {
+		expectedDNSServer, _ = ruDestinationDNSPolicy(hopt)
+	}
 	opts := option.Options{DNS: &option.DNSOptions{}}
 	if err := setRoutingOptions(&opts, hopt); err != nil {
 		t.Fatalf("setRoutingOptions returned error: %v", err)
@@ -378,7 +382,8 @@ func TestRussiaDestinationRulePriority(t *testing.T) {
 	if indexes["RU IP"] >= indexes["global VPN"] {
 		t.Fatalf("global VPN rule must follow RU IP: %v", indexes)
 	}
-	ruDomainDNS := indexDNSRuleSet(opts.DNS.Rules, BundledRUDomainsRuleSetTag, DNSMultiDirectTag)
+	expectedRUDNSServer, _ := ruDestinationDNSPolicy(hopt)
+	ruDomainDNS := indexDNSRuleSet(opts.DNS.Rules, BundledRUDomainsRuleSetTag, expectedRUDNSServer)
 	globalVPNDNS := indexDNSDomainSuffix(opts.DNS.Rules, "explicit-global-vpn.example", DNSMultiRemoteTag)
 	if ruDomainDNS < 0 || globalVPNDNS < 0 || ruDomainDNS >= globalVPNDNS {
 		t.Fatalf("global VPN DNS index=%d must follow RU domain DNS index=%d", globalVPNDNS, ruDomainDNS)
@@ -404,9 +409,56 @@ func TestUserDomainRuleControlsDNSBeforeRussiaServiceRules(t *testing.T) {
 		t.Fatalf("setRoutingOptions returned error: %v", err)
 	}
 	userDNS := indexDNSDomainSuffix(opts.DNS.Rules, "yandex.ru", DNSMultiDirectTag)
-	serviceDNS := indexDNSRuleSet(opts.DNS.Rules, RUYandexRuleSetTag, DNSMultiDirectTag)
+	expectedRUDNSServer, _ := ruDestinationDNSPolicy(hopt)
+	serviceDNS := indexDNSRuleSet(opts.DNS.Rules, RUYandexRuleSetTag, expectedRUDNSServer)
 	if userDNS < 0 || serviceDNS < 0 || userDNS >= serviceDNS {
 		t.Fatalf("user DNS index=%d must precede Yandex service DNS index=%d", userDNS, serviceDNS)
+	}
+}
+
+func TestRussiaDNSABPolicyChangesOnlyServiceAndDomainDNS(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.Region = "ru"
+	hopt.DirectDnsDomainStrategy = option.DomainStrategy(constant.DomainStrategyPreferIPv4)
+	hopt.RemoteDnsDomainStrategy = option.DomainStrategy(constant.DomainStrategyPreferIPv6)
+	opts := option.Options{DNS: &option.DNSOptions{}}
+	if err := setRoutingOptions(&opts, hopt); err != nil {
+		t.Fatalf("setRoutingOptions returned error: %v", err)
+	}
+
+	expectedServer, expectedStrategy := ruDestinationDNSPolicy(hopt)
+	if ruRemoteDNSBaseline {
+		if expectedServer != DNSMultiRemoteTag || expectedStrategy != hopt.RemoteDnsDomainStrategy {
+			t.Fatalf("remote baseline DNS policy = (%s, %s)", expectedServer, expectedStrategy)
+		}
+	} else if expectedServer != DNSMultiDirectTag || expectedStrategy != hopt.DirectDnsDomainStrategy {
+		t.Fatalf("intended direct DNS policy = (%s, %s)", expectedServer, expectedStrategy)
+	}
+
+	for _, tag := range []string{
+		RUYandexRuleSetTag,
+		RUWildberriesRuleSetTag,
+		BundledRUDomainsRuleSetTag,
+	} {
+		index := indexDNSRuleSet(opts.DNS.Rules, tag, expectedServer)
+		if index < 0 {
+			t.Fatalf("%s has no DNS rule through %s", tag, expectedServer)
+		}
+		action := opts.DNS.Rules[index].DefaultOptions.RouteOptions
+		if action.Strategy != expectedStrategy {
+			t.Fatalf("%s DNS strategy = %s, want %s", tag, action.Strategy, expectedStrategy)
+		}
+		if indexRouteRuleSet(opts.Route.Rules, tag, OutboundDirectTag) < 0 {
+			t.Fatalf("%s route changed from DIRECT in DNS A/B policy", tag)
+		}
+	}
+	if indexRouteRuleSet(opts.Route.Rules, BundledRUIPRuleSetTag, OutboundDirectTag) < 0 {
+		t.Fatal("RU IP route changed from DIRECT in DNS A/B policy")
+	}
+	for _, rule := range opts.DNS.Rules {
+		if containsString(rule.DefaultOptions.RuleSet, BundledRUIPRuleSetTag) {
+			t.Fatal("RU IP rule set must remain post-resolution only")
+		}
 	}
 }
 

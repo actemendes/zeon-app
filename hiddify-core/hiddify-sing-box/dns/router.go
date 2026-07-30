@@ -262,7 +262,7 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 			if selectedRule != nil {
 				switch action := selectedRule.Action().(type) {
 				case *R.RuleActionReject:
-					zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, nil, metadata.QueryType, selectedRule, selectedRuleIndex, nil, true, false)
+					zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, nil, nil, metadata.QueryType, selectedRule, selectedRuleIndex, nil, true, false)
 					switch action.Method {
 					case C.RuleActionRejectMethodDefault:
 						return &mDNS.Msg{
@@ -283,6 +283,7 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 						r.logger,
 						metadata.Domain,
 						MessageToAddresses(response),
+						validationCNAMEChain(response),
 						metadata.QueryType,
 						selectedRule,
 						selectedRuleIndex,
@@ -331,13 +332,25 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 		}
 	}
 	if err != nil {
-		zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, nil, metadata.QueryType, selectedRule, selectedRuleIndex, transport, false, true)
+		zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, nil, nil, metadata.QueryType, selectedRule, selectedRuleIndex, transport, false, true)
 		return nil, err
 	}
 	if r.dnsReverseMapping != nil && (transport == nil || transport.Type() != C.DNSTypeFakeIP) {
 		r.rememberDNSReverseMapping(message, response)
 	}
-	zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, MessageToAddresses(response), metadata.QueryType, selectedRule, selectedRuleIndex, transport, false, false)
+	zeonvalidation.RecordDNS(
+		ctx,
+		r.logger,
+		metadata.Domain,
+		MessageToAddresses(response),
+		validationCNAMEChain(response),
+		metadata.QueryType,
+		selectedRule,
+		selectedRuleIndex,
+		transport,
+		false,
+		false,
+	)
 	return response, nil
 }
 

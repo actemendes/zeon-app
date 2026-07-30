@@ -1613,6 +1613,7 @@ func appendBundledRUDestinationRouting(
 		},
 	)
 
+	ruDNSServer, ruDNSStrategy := ruDestinationDNSPolicy(hopt)
 	*dnsRules = append(*dnsRules, option.DefaultDNSRule{
 		RawDefaultDNSRule: option.RawDefaultDNSRule{
 			RuleSet: []string{BundledRUDomainsRuleSetTag},
@@ -1620,8 +1621,8 @@ func appendBundledRUDestinationRouting(
 		DNSRuleAction: option.DNSRuleAction{
 			Action: C.RuleActionTypeRoute,
 			RouteOptions: option.DNSRouteActionOptions{
-				Server:         DNSMultiDirectTag,
-				Strategy:       hopt.DirectDnsDomainStrategy,
+				Server:         ruDNSServer,
+				Strategy:       ruDNSStrategy,
 				RewriteTTL:     &DEFAULT_DNS_TTL,
 				BypassIfFailed: true,
 			},
@@ -1683,8 +1684,7 @@ func appendRUServiceRoutingPolicy(
 	dnsStrategy := hopt.RemoteDnsDomainStrategy
 	outbound := OutboundMainDetour
 	if policy.direct {
-		dnsServer = DNSMultiDirectTag
-		dnsStrategy = hopt.DirectDnsDomainStrategy
+		dnsServer, dnsStrategy = ruDestinationDNSPolicy(hopt)
 		outbound = OutboundDirectTag
 	}
 	*dnsRules = append(*dnsRules, option.DefaultDNSRule{
@@ -1715,6 +1715,13 @@ func appendRUServiceRoutingPolicy(
 			},
 		},
 	})
+}
+
+func ruDestinationDNSPolicy(hopt *HiddifyOptions) (string, option.DomainStrategy) {
+	if ruRemoteDNSBaseline {
+		return DNSMultiRemoteTag, hopt.RemoteDnsDomainStrategy
+	}
+	return DNSMultiDirectTag, hopt.DirectDnsDomainStrategy
 }
 
 func patchHiddifyWarpFromConfig(out *option.Outbound, opt HiddifyOptions) *option.Outbound {

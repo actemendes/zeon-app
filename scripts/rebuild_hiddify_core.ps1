@@ -19,11 +19,20 @@ param(
     # Adds validation-only allowlisted route/DNS telemetry. Never use this for releases.
     [switch]$RouteValidationTelemetry,
 
+    # Selects the Russia-mode DNS side of the Stage 2.8 browser A/B.
+    # REMOTE_DNS_BASELINE is validation-only and cannot be built without telemetry.
+    [ValidateSet("DIRECT_DNS", "REMOTE_DNS_BASELINE")]
+    [string]$RUDnsPolicy = "DIRECT_DNS",
+
     [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+if ($RUDnsPolicy -eq "REMOTE_DNS_BASELINE" -and -not $RouteValidationTelemetry) {
+    throw "REMOTE_DNS_BASELINE is validation-only and requires -RouteValidationTelemetry."
+}
 
 function Assert-Command {
     param([Parameter(Mandatory = $true)][string]$Name)
@@ -158,10 +167,11 @@ install_pinned_mobile_tools="$4"
 install_web_dependencies="$5"
 smart_active_debug="$6"
 route_validation_telemetry="$7"
-zeon_revision="$8"
-hiddify_core_tree="$9"
-hiddify_sing_box_tree="${10}"
-shift 10
+ru_dns_policy="$8"
+zeon_revision="$9"
+hiddify_core_tree="${10}"
+hiddify_sing_box_tree="${11}"
+shift 11
 platforms=("$@")
 
 core_dir="$repo_root/hiddify-core"
@@ -175,6 +185,24 @@ if [ "$route_validation_telemetry" = "1" ]; then
   core_build_tags="$core_build_tags,zeon_route_validation"
   echo "Building VALIDATION-ONLY allowlisted route/DNS telemetry; do not publish this artifact."
 fi
+case "$ru_dns_policy" in
+  DIRECT_DNS)
+    core_build_tags="$core_build_tags,zeon_ru_direct_dns"
+    echo "Building intended Russia DIRECT_DNS policy."
+    ;;
+  REMOTE_DNS_BASELINE)
+    if [ "$route_validation_telemetry" != "1" ]; then
+      echo "REMOTE_DNS_BASELINE requires validation telemetry." >&2
+      exit 1
+    fi
+    core_build_tags="$core_build_tags,zeon_ru_remote_dns_baseline"
+    echo "Building VALIDATION-ONLY Russia REMOTE_DNS_BASELINE policy; destination routes remain unchanged."
+    ;;
+  *)
+    echo "Unsupported Russia DNS policy: $ru_dns_policy" >&2
+    exit 1
+    ;;
+esac
 
 user_home="$(getent passwd "$(id -un)" | cut -d: -f6)"
 if [ -z "$user_home" ] || [ ! -d "$user_home" ]; then
@@ -394,6 +422,7 @@ $bashArguments = @(
     $installWebDependenciesValue,
     $smartActiveDebugValue,
     $routeValidationTelemetryValue,
+    $RUDnsPolicy,
     $zeonRevision,
     $hiddifyCoreTree,
     $hiddifySingBoxTree
@@ -402,6 +431,7 @@ $bashArguments = @(
 Write-Host "Repository in WSL: $wslRepoRoot"
 Write-Host "Platforms: $($selectedPlatforms -join ', ')"
 Write-Host "Route validation telemetry: $($RouteValidationTelemetry.IsPresent)"
+Write-Host "Russia DNS policy: $RUDnsPolicy"
 
 try {
     Invoke-Wsl -Arguments @("bash", "-n", $wslBashScript)
@@ -409,7 +439,7 @@ try {
     if ($DryRun) {
         Write-Host ""
         Write-Host "Dry run: WSL build was not started."
-        Write-Host "Command: wsl.exe bash <temporary-build-script> $wslRepoRoot $skipGoModDownloadValue $skipGomobileInitValue $installPinnedMobileToolsValue $installWebDependenciesValue $smartActiveDebugValue <revision> <core-tree> <sing-box-tree> $($selectedPlatforms -join ' ')"
+        Write-Host "Command: wsl.exe bash <temporary-build-script> $wslRepoRoot $skipGoModDownloadValue $skipGomobileInitValue $installPinnedMobileToolsValue $installWebDependenciesValue $smartActiveDebugValue $routeValidationTelemetryValue $RUDnsPolicy <revision> <core-tree> <sing-box-tree> $($selectedPlatforms -join ' ')"
     }
     else {
         Invoke-Wsl -Arguments $bashArguments

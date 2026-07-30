@@ -33,6 +33,7 @@ func RecordDNS(
 	logger.ContextLogger,
 	string,
 	[]netip.Addr,
+	[]string,
 	uint16,
 	adapter.DNSRule,
 	int,

@@ -30,6 +30,7 @@ func TestMandatoryValidationServicesAreAllowlisted(t *testing.T) {
 	testHosts := map[string]string{
 		"Gosuslugi":     "www.gosuslugi.ru",
 		"ESIA":          "esia.gosuslugi.ru",
+		"Goskey":        "www.goskey.ru",
 		"Nalog":         "lkfl2.nalog.ru",
 		"Mos.ru":        "www.mos.ru",
 		"CBR":           "www.cbr.ru",
@@ -39,6 +40,8 @@ func TestMandatoryValidationServicesAreAllowlisted(t *testing.T) {
 		"Alfa-Bank":     "alfabank.ru",
 		"VTB":           "www.vtb.ru",
 		"Gazprombank":   "gazprombank.ru",
+		"Raiffeisen":    "online.raiffeisen.ru",
+		"Sovcombank":    "halvacard.sovcombank.ru",
 		"Yandex":        "yandex.ru",
 		"Yandex Search": "yandex.ru/search",
 		"Yandex Maps":   "yandex.ru/maps",
@@ -241,6 +244,7 @@ func TestUnknownDNSCorrelationIsEmittedAsValidationFailure(t *testing.T) {
 	)
 	logLine := output.String()
 	for _, expected := range []string{
+		"WARN",
 		validationLogPrefix,
 		`"dns":"UNKNOWN"`,
 		`"validationFailure":"DNS_UNKNOWN_OWN_DOH_OR_UNOBSERVED"`,
@@ -271,6 +275,7 @@ func TestDNSExchangeFailureIsNotReportedAsSuccessfulLookup(t *testing.T) {
 		factory.NewLogger("validation-test"),
 		"yandex.ru",
 		nil,
+		[]string{"Edge.Yandex.NET.", "203.0.113.42", "edge.yandex.net"},
 		mDNS.TypeA,
 		nil,
 		-1,
@@ -283,6 +288,7 @@ func TestDNSExchangeFailureIsNotReportedAsSuccessfulLookup(t *testing.T) {
 		validationLogPrefix,
 		`"dns":"DIRECT"`,
 		`"validationFailure":"DNS_EXCHANGE_FAILED"`,
+		`"cnameChain":["edge.yandex.net"]`,
 	} {
 		if !strings.Contains(logLine, expected) {
 			t.Fatalf("DNS failure log does not contain %q: %s", expected, logLine)
