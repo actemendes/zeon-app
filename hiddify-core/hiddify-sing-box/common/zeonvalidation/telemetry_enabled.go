@@ -112,6 +112,12 @@ var validationDomainSuffixes = []string{
 	"hhcdn.ru",
 	"ria.ru",
 	"lenta.ru",
+
+	// Explicit public-suffix browser acceptance targets. These entries only
+	// permit validation telemetry; production routing still comes from the
+	// bundled zapret-ru-domains rule set.
+	"ripn.su",
+	"xn--80aa3ak5a.xn--p1ai",
 }
 
 type validationEvent struct {

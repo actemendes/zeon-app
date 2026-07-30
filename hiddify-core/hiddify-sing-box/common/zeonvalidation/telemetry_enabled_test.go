@@ -61,6 +61,8 @@ func TestMandatoryValidationServicesAreAllowlisted(t *testing.T) {
 		"HH":            "hh.ru",
 		"RIA":           "ria.ru",
 		"Lenta":         "lenta.ru",
+		".su suffix":    "ripn.su",
+		".rf suffix":    "xn--80aa3ak5a.xn--p1ai",
 	}
 	for service, hostOrURL := range testHosts {
 		host := strings.Split(hostOrURL, "/")[0]
