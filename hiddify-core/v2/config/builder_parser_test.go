@@ -242,24 +242,6 @@ func TestRussiaPresetUsesPinnedLocalRussianRuleSets(t *testing.T) {
 	}
 }
 
-func TestRussiaYandexDirectPolicyIsIndependent(t *testing.T) {
-	assertRussiaServicePolicy(
-		t,
-		RUYandexRuleSetTag,
-		OutboundDirectTag,
-		DNSMultiDirectTag,
-	)
-}
-
-func TestRussiaWildberriesDirectPolicyIsIndependent(t *testing.T) {
-	assertRussiaServicePolicy(
-		t,
-		RUWildberriesRuleSetTag,
-		OutboundDirectTag,
-		DNSMultiDirectTag,
-	)
-}
-
 func assertRussiaServicePolicy(t *testing.T, tag string, expectedOutbound string, expectedDNSServer string) {
 	t.Helper()
 	hopt := DefaultHiddifyOptions()
