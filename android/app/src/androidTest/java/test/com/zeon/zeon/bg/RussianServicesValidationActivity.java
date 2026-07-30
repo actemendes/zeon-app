@@ -67,6 +67,8 @@ public final class RussianServicesValidationActivity extends Activity {
     }
 
     private ExecutorService executor;
+    private Network probeNetwork;
+    private String networkMode;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,8 +78,15 @@ public final class RussianServicesValidationActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         String requested = getIntent().getStringExtra("service");
+        networkMode = "physical".equals(getIntent().getStringExtra("network")) ? "physical" : "active";
+        probeNetwork = selectNetwork(networkMode);
         executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
+            if ("physical".equals(networkMode) && probeNetwork == null) {
+                log("all", "failure", "type=NetworkUnavailable reason=no_validated_non_vpn_network");
+                runOnUiThread(this::finish);
+                return;
+            }
             if (requested == null || "all".equals(requested)) {
                 for (Map.Entry<String, String> service : SERVICES.entrySet()) {
                     probe(service.getKey(), service.getValue());
@@ -104,7 +113,10 @@ public final class RussianServicesValidationActivity extends Activity {
             URL url = new URL(endpoint);
             int ipv4 = 0;
             int ipv6 = 0;
-            for (InetAddress address : InetAddress.getAllByName(url.getHost())) {
+            InetAddress[] addresses = probeNetwork == null
+                    ? InetAddress.getAllByName(url.getHost())
+                    : probeNetwork.getAllByName(url.getHost());
+            for (InetAddress address : addresses) {
                 if (address instanceof Inet4Address) {
                     ipv4++;
                 } else if (address instanceof Inet6Address) {
@@ -113,7 +125,9 @@ public final class RussianServicesValidationActivity extends Activity {
             }
             log(id, "dns", "ipv4=" + ipv4 + " ipv6=" + ipv6 + " " + networkSummary());
 
-            connection = (HttpsURLConnection) url.openConnection();
+            connection = (HttpsURLConnection) (
+                    probeNetwork == null ? url.openConnection() : probeNetwork.openConnection(url)
+            );
             connection.setConnectTimeout(15_000);
             connection.setReadTimeout(20_000);
             connection.setInstanceFollowRedirects(true);
@@ -161,13 +175,33 @@ public final class RussianServicesValidationActivity extends Activity {
 
     private String networkSummary() {
         ConnectivityManager manager = getSystemService(ConnectivityManager.class);
-        Network active = manager == null ? null : manager.getActiveNetwork();
+        Network active = probeNetwork != null
+                ? probeNetwork
+                : manager == null ? null : manager.getActiveNetwork();
         NetworkCapabilities capabilities =
                 manager == null || active == null ? null : manager.getNetworkCapabilities(active);
-        return "vpn=" + (capabilities != null
+        return "network_mode=" + networkMode
+                + " vpn=" + (capabilities != null
                 && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN))
                 + " validated=" + (capabilities != null
                 && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED));
+    }
+
+    private Network selectNetwork(String mode) {
+        ConnectivityManager manager = getSystemService(ConnectivityManager.class);
+        if (manager == null || !"physical".equals(mode)) {
+            return manager == null ? null : manager.getActiveNetwork();
+        }
+        for (Network candidate : manager.getAllNetworks()) {
+            NetworkCapabilities capabilities = manager.getNetworkCapabilities(candidate);
+            if (capabilities != null
+                    && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                    && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private static void log(String service, String event, String details) {
