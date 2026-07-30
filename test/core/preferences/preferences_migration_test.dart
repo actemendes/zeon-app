@@ -179,6 +179,53 @@ void main() {
     expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
   });
 
+  test("v17 preserves legacy string-encoded selections and ignores malformed ownership evidence", () async {
+    SharedPreferences.setMockInitialValues({
+      PreferencesMigration.versionKey: 16,
+      "intro_completed": true,
+      "per_app_proxy_mode": "exclude",
+      "per_app_proxy_exclude_list": "ru.vk.store",
+      "per_app_proxy_seeded_exclude_list": "ru.vk.store",
+      PreferencesMigration.v17SeededRoutingCleanupPendingKey: true,
+      PreferencesMigration.v17SeededRoutingCleanupPackagesKey: "ru.vk.store",
+      PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey: "ru.vk.store",
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs).migrate();
+
+    expect(prefs.getInt(PreferencesMigration.versionKey), 17);
+    expect(prefs.getBool("intro_completed"), true);
+    expect(prefs.getString("per_app_proxy_mode"), "exclude");
+    expect(prefs.getString("per_app_proxy_exclude_list"), "ru.vk.store");
+    expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), isEmpty);
+    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey), false);
+  });
+
+  test("future migration failures preserve every existing preference", () async {
+    SharedPreferences.setMockInitialValues({
+      PreferencesMigration.versionKey: 16,
+      "intro_completed": true,
+      "per_app_proxy_mode": "exclude",
+      "per_app_proxy_exclude_list": "ru.vk.store",
+      "user_explicit_mode": "custom",
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    final failure = await runPreferencesMigrationPreservingState(
+      () => Future<void>.error(StateError("synthetic migration failure")),
+    );
+
+    expect(failure, isNotNull);
+    expect(prefs.getInt(PreferencesMigration.versionKey), 16);
+    expect(prefs.getBool("intro_completed"), true);
+    expect(prefs.getString("per_app_proxy_mode"), "exclude");
+    expect(prefs.getString("per_app_proxy_exclude_list"), "ru.vk.store");
+    expect(prefs.getString("user_explicit_mode"), "custom");
+  });
+
   test("fresh install reaches v17 without creating RU package exclusions", () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();

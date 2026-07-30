@@ -169,13 +169,13 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   await _init("preferences", () => container.read(sharedPreferencesProvider.future));
 
   await _init("preferences migration", () async {
-    try {
-      await PreferencesMigration(sharedPreferences: container.read(sharedPreferencesProvider).requireValue).migrate();
-    } catch (e, stackTrace) {
-      Logger.bootstrap.error("preferences migration failed", e, stackTrace);
-      if (env == Environment.dev) rethrow;
-      Logger.bootstrap.info("clearing preferences");
-      await container.read(sharedPreferencesProvider).requireValue.clear();
+    final failure = await runPreferencesMigrationPreservingState(
+      () => PreferencesMigration(sharedPreferences: container.read(sharedPreferencesProvider).requireValue).migrate(),
+      rethrowOnFailure: env == Environment.dev,
+    );
+    if (failure != null) {
+      Logger.bootstrap.error("preferences migration failed", failure.error, failure.stackTrace);
+      Logger.bootstrap.warning("preserving preferences after migration failure");
     }
   });
 
