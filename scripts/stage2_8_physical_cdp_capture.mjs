@@ -7,7 +7,10 @@
  * - Microsoft Edge for Android only (com.microsoft.emmx).
  * - ADB forwards only localabstract:chrome_devtools_remote.
  * - HTTP discovery uses only /json/version.
- * - A fresh dispose-on-detach browser context and one exact target are created.
+ * - A fresh dispose-on-detach browser context and one exact target are created
+ *   when Android Edge supports it.
+ * - An explicit operator opt-in may fall back to one newly-created clean test
+ *   tab in Edge's current profile; existing targets are still never enumerated.
  * - The script never enumerates browser targets or reads existing tabs.
  * - URLs are reduced to hostnames before persistence.
  * - Remote IPs and console text are reduced to ephemeral capture-scoped HMACs.
@@ -53,6 +56,7 @@ const SAFE_SERIAL = /^[A-Za-z0-9._:-]{1,128}$/;
 const SAFE_ERROR = /(?:^|[^A-Z0-9_])(net::ERR_[A-Z0-9_]+)(?:$|[^A-Z0-9_])/;
 const ALLOWED_PRESETS = new Set(["Direct", "Russia", "Global"]);
 const ALLOWED_KINDS = new Set(["service", "diagnostic"]);
+const ALLOWED_CONTEXT_MODES = new Set(["isolated-only", "allow-clean-tab"]);
 const ALLOWED_RESOURCE_TYPES = new Set([
   "Document",
   "Stylesheet",
@@ -169,6 +173,7 @@ export function parseArgs(argv) {
     "max-resources",
     "max-console",
     "hmac-key-file",
+    "context-mode",
   ]);
   for (const key of values.keys()) {
     if (!allowed.has(key)) {
@@ -190,6 +195,13 @@ export function parseArgs(argv) {
   if (!ALLOWED_KINDS.has(kind)) {
     throw new CaptureError("CLI_ARGUMENT", "kind must be service or diagnostic.");
   }
+  const contextMode = values.get("context-mode") ?? "isolated-only";
+  if (!ALLOWED_CONTEXT_MODES.has(contextMode)) {
+    throw new CaptureError(
+      "CLI_ARGUMENT",
+      "context-mode must be isolated-only or allow-clean-tab.",
+    );
+  }
   let targetUrl;
   try {
     targetUrl = new URL(values.get("url"));
@@ -208,6 +220,7 @@ export function parseArgs(argv) {
     session,
     serial,
     kind,
+    contextMode,
     adb: values.get("adb") ?? process.env.ADB ?? "adb",
     outputRoot: path.resolve(values.get("output-root") ?? "out/stage2-8/physical-cdp"),
     hmacKeyFile: values.has("hmac-key-file")
@@ -1589,6 +1602,7 @@ async function capture(options) {
   let localPort = null;
   let cdp = null;
   let browserContextId = null;
+  let isolationMethod = null;
   let targetId = null;
   let targetSessionId = null;
   let removeRecorder = null;
@@ -1615,25 +1629,38 @@ async function capture(options) {
         disposeOnDetach: true,
       });
     } catch {
-      throw new CaptureError(
-        "CDP_CONTEXT_UNSUPPORTED",
-        "Edge cannot create an isolated browser context; capture is INCONCLUSIVE and regular targets are forbidden.",
-      );
+      if (options.contextMode !== "allow-clean-tab") {
+        throw new CaptureError(
+          "CDP_CONTEXT_UNSUPPORTED",
+          "Edge cannot create an isolated browser context; capture is INCONCLUSIVE unless the operator explicitly permits a clean test tab.",
+        );
+      }
+      context = null;
     }
-    browserContextId = context.browserContextId;
-    if (typeof browserContextId !== "string" || !browserContextId) {
-      throw new CaptureError(
-        "CDP_CONTEXT",
-        "Browser context creation did not return an identifier.",
-      );
+    if (context !== null) {
+      browserContextId = context.browserContextId;
+      if (typeof browserContextId !== "string" || !browserContextId) {
+        throw new CaptureError(
+          "CDP_CONTEXT",
+          "Browser context creation did not return an identifier.",
+        );
+      }
+      isolationMethod =
+        "Target.createBrowserContext(disposeOnDetach)+Target.createTarget";
+    } else {
+      isolationMethod =
+        "OPERATOR_OPT_IN:Target.createTarget(clean-test-tab,current-profile)";
     }
 
-    const target = await cdp.send("Target.createTarget", {
+    const targetParameters = {
       url: "about:blank",
-      browserContextId,
       newWindow: false,
       background: false,
-    });
+    };
+    if (browserContextId) {
+      targetParameters.browserContextId = browserContextId;
+    }
+    const target = await cdp.send("Target.createTarget", targetParameters);
     targetId = target.targetId;
     if (typeof targetId !== "string" || !targetId) {
       throw new CaptureError(
@@ -1836,8 +1863,8 @@ async function capture(options) {
         package: EDGE_PACKAGE,
         product: safeBrowserProduct(version.Browser),
         protocolVersion: safeProtocolVersion(version["Protocol-Version"]),
-        isolation:
-          "Target.createBrowserContext(disposeOnDetach)+Target.createTarget",
+        isolation: isolationMethod,
+        cleanTestTabOperatorOptIn: options.contextMode === "allow-clean-tab",
       },
       privacy: {
         persistedUrlParts: "HOSTNAME_ONLY",
@@ -1982,12 +2009,17 @@ Optional:
   --max-resources 5000
   --max-console 1000
   --hmac-key-file PATH         Reuse one private 32-byte key for matrix comparison
+  --context-mode MODE          isolated-only (default) or allow-clean-tab
 
 The operator must select the ZEON preset before capture. This harness never
 changes ZEON state and never assigns a browser verdict. If Edge is sleeping,
 the harness only resumes its explicit MAIN/LAUNCHER activity before creating
 the isolated CDP context. It never reads or captures that current page.
 Unsupported browser contexts fail closed as INCONCLUSIVE.
+Android Edge builds that do not implement Target.createBrowserContext may be
+used only with --context-mode allow-clean-tab. That mode creates and closes one
+exact new test target without enumerating or reading existing tabs; it does not
+clear browser data or cookies.
 For Direct/Russia/Global comparison, pass the same --hmac-key-file stored under
 the ignored local evidence directory. The key is created with restricted
 permissions where supported and is never embedded in evidence or logs.

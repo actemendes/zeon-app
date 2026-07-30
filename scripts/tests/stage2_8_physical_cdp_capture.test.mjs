@@ -55,6 +55,48 @@ test("CLI requires the exact physical capture identity and keeps URL in memory o
   assert.equal(options.kind, "service");
   assert.equal(options.preset, "Russia");
   assert.equal(options.serial, "18bfc103");
+  assert.equal(options.contextMode, "isolated-only");
+});
+
+test("clean test tab fallback requires explicit operator opt-in", () => {
+  const options = parseArgs([
+    "--site-id",
+    "yandex",
+    "--url",
+    "https://yandex.ru/",
+    "--kind",
+    "service",
+    "--preset",
+    "Russia",
+    "--session",
+    "direct-dns-001",
+    "--serial",
+    "18bfc103",
+    "--context-mode",
+    "allow-clean-tab",
+  ]);
+
+  assert.equal(options.contextMode, "allow-clean-tab");
+  assert.throws(
+    () =>
+      parseArgs([
+        "--site-id",
+        "yandex",
+        "--url",
+        "https://yandex.ru/",
+        "--kind",
+        "service",
+        "--preset",
+        "Russia",
+        "--session",
+        "direct-dns-001",
+        "--serial",
+        "18bfc103",
+        "--context-mode",
+        "unsafe-existing-target",
+      ]),
+    /context-mode/,
+  );
 });
 
 test("URL sanitization persists hostname only", () => {
@@ -321,6 +363,7 @@ test("harness source contains no target enumeration or tab-list endpoint", async
   assert.equal(source.includes('"Target.disposeBrowserContext"'), true);
   assert.equal(source.includes('verdict: "NOT_ASSIGNED"'), true);
   assert.equal(source.includes('verdict: "PASS"'), false);
+  assert.equal(source.includes("OPERATOR_OPT_IN:Target.createTarget(clean-test-tab,current-profile)"), true);
   assert.equal(source.includes("navigationError = sanitizeNetworkError"), true);
   assert.equal(source.includes("loadEventTimedOut = true"), true);
   assert.equal(
