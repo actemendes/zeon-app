@@ -434,6 +434,63 @@ func TestRussiaDNSPreservesReverseMappingWithoutChangingGlobal(t *testing.T) {
 	}
 }
 
+func TestRussiaDisablesFakeDNSWithoutChangingGlobal(t *testing.T) {
+	staticIPs := map[string][]string{}
+
+	russia := DefaultHiddifyOptions()
+	russia.Region = "ru"
+	russia.EnableFakeDNS = true
+	var russiaOptions option.Options
+	if err := setDns(&russiaOptions, russia, &staticIPs); err != nil {
+		t.Fatalf("setDns Russia returned error: %v", err)
+	}
+	if err := setRoutingOptions(&russiaOptions, russia); err != nil {
+		t.Fatalf("setRoutingOptions Russia returned error: %v", err)
+	}
+	if hasDNSServerTag(russiaOptions.DNS, DNSFakeTag) || hasDNSRuleServer(russiaOptions.DNS, DNSFakeTag) {
+		t.Fatal("Russia must disable FakeDNS so zapret-ru-ip sees resolved IPv4/IPv6 destinations")
+	}
+
+	global := DefaultHiddifyOptions()
+	global.Region = "other"
+	global.EnableFakeDNS = true
+	var globalOptions option.Options
+	if err := setDns(&globalOptions, global, &staticIPs); err != nil {
+		t.Fatalf("setDns Global returned error: %v", err)
+	}
+	if err := setRoutingOptions(&globalOptions, global); err != nil {
+		t.Fatalf("setRoutingOptions Global returned error: %v", err)
+	}
+	if !hasDNSServerTag(globalOptions.DNS, DNSFakeTag) || !hasDNSRuleServer(globalOptions.DNS, DNSFakeTag) {
+		t.Fatal("Global FakeDNS behavior changed unexpectedly")
+	}
+}
+
+func hasDNSServerTag(options *option.DNSOptions, tag string) bool {
+	if options == nil {
+		return false
+	}
+	for _, server := range options.Servers {
+		if server.Tag == tag {
+			return true
+		}
+	}
+	return false
+}
+
+func hasDNSRuleServer(options *option.DNSOptions, server string) bool {
+	if options == nil {
+		return false
+	}
+	for _, rule := range options.Rules {
+		if rule.DefaultOptions.Action == constant.RuleActionTypeRoute &&
+			rule.DefaultOptions.RouteOptions.Server == server {
+			return true
+		}
+	}
+	return false
+}
+
 func indexRouteRuleSet(rules []option.Rule, tag string, outbound string) int {
 	for index, rule := range rules {
 		candidate := rule.DefaultOptions

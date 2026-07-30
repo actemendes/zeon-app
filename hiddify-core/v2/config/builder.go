@@ -1426,7 +1426,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 		// },
 	}
 	// if opt.EnableDNSRouting {
-	if hopt.EnableFakeDNS {
+	if fakeDNSEnabled(hopt) {
 		// inbounds := []string{InboundTUNTag}
 		// for _, inp := range options.Inbounds {
 		// 	if strings.Contains(inp.Tag, InboundDirectTag) || strings.Contains(inp.Tag, InboundRedirect) || strings.Contains(inp.Tag, InboundTProxy) {
@@ -1532,6 +1532,14 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	}
 	// }
 	return nil
+}
+
+func fakeDNSEnabled(hopt *HiddifyOptions) bool {
+	// A fake address hides the real resolved destination from the post-DNS
+	// zapret-ru-ip matcher. Keep FakeDNS behavior unchanged for every other
+	// preset, but disable it in Russia so non-RU hostnames on Russian IPv4/IPv6
+	// destinations still reach the IP rule set.
+	return hopt.EnableFakeDNS && hopt.Region != "ru"
 }
 
 func appendInternalDirectRoutes(
