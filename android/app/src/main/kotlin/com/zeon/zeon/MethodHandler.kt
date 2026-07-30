@@ -14,6 +14,7 @@ import com.hiddify.core.mobile.SetupOptions
 import com.zeon.zeon.bg.Bugs
 import com.zeon.zeon.bg.VpnSessionCoordinator
 import com.zeon.zeon.bg.StartPermissionRequestCoordinator
+import com.zeon.zeon.bg.VpnSessionSnapshotCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +37,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             Restart("restart"),
             SetSessionGeneration("set_session_generation"),
             MarkCoreStarted("mark_core_started"),
+            GetVpnSessionSnapshot("get_vpn_session_snapshot"),
             AddGrpcClientPublicKey("add_grpc_client_public_key"),
             GetGrpcServerPublicKey("get_grpc_server_public_key"),
 
@@ -229,6 +231,10 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         success(generation)
                     }
                 }
+            }
+
+            Trigger.GetVpnSessionSnapshot.method -> {
+                result.success(VpnSessionSnapshotCoordinator.current().toEvent())
             }
 
 //            Trigger.Restart.method -> {

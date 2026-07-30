@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.VpnService as AndroidVpnService
 import android.os.Build
 import android.os.IBinder
@@ -49,6 +51,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -237,9 +240,10 @@ class BoxService(
                 return
             }
             if (!publishStatus(Status.Starting, generation, "start_service")) return
+            VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.STARTING_CORE)
             Log.d(TAG, "starting service")
             withContext(Dispatchers.Main) {
-                notification.show(activeProfileName, R.string.status_starting)
+                notification.show(activeProfileName, VpnSessionSnapshotCoordinator.current())
             }
 
             val selectedConfigPath = Settings.activeConfigPath
@@ -251,7 +255,7 @@ class BoxService(
             activeProfileName = Settings.activeProfileName
 
             withContext(Dispatchers.Main) {
-                notification.show(activeProfileName, R.string.status_starting)
+                notification.show(activeProfileName, VpnSessionSnapshotCoordinator.current())
                 binder.broadcast {
                     it.onServiceResetLogs(listOf())
                 }
@@ -293,6 +297,9 @@ class BoxService(
             when (readiness) {
                 CoreStartupGate.Result.Ready -> {
                     session.markCommandEndpointReady()
+                    VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.WAITING_TUN) {
+                        it.copy(coreReady = true, commandEndpointReady = true)
+                    }
                     VpnSessionCoordinator.event("command_endpoint_ready", generation)
                     VpnSessionCoordinator.event(
                         "start_gate_waiting",
@@ -328,7 +335,7 @@ class BoxService(
 
 
             withContext(Dispatchers.Main) {
-                notification.show(activeProfileName, R.string.status_starting)
+                notification.show(activeProfileName, VpnSessionSnapshotCoordinator.current())
             }
             if (startsCoreHere) {
                 confirmCoreStarted(generation)
@@ -410,7 +417,9 @@ class BoxService(
         val closingSession = activeSession
         sessionGeneration = VpnSessionCoordinator.accept(generation, "stop_service")
         if (status.value == Status.Stopped && closingSession == null) return
+        VpnSessionSnapshotCoordinator.transition(sessionGeneration, VpnSessionPhase.STOP_REQUESTED)
         status.value = Status.Stopping
+        VpnSessionSnapshotCoordinator.transition(sessionGeneration, VpnSessionPhase.STOPPING)
         if (receiverRegistered) {
             service.unregisterReceiver(receiver)
             receiverRegistered = false
@@ -423,6 +432,7 @@ class BoxService(
             Settings.startedByUser = false
             withContext(Dispatchers.Main) {
                 publishStatus(Status.Stopped, sessionGeneration, "stop_complete")
+                VpnSessionSnapshotCoordinator.transition(sessionGeneration, VpnSessionPhase.DISCONNECTED)
                 service.stopSelf()
             }
             notification.close()
@@ -440,6 +450,12 @@ class BoxService(
             return
         }
         Settings.startedByUser = false
+        VpnSessionSnapshotCoordinator.failure(
+            generation,
+            type.name,
+            "android_service",
+            recoverable = true,
+        )
         activeSession?.let { closeSession(it, "failed_start") }
         withContext(Dispatchers.Main) {
             if (receiverRegistered) {
@@ -472,6 +488,8 @@ class BoxService(
             return Service.START_NOT_STICKY
         }
         status.value = Status.Starting
+        VpnSessionSnapshotCoordinator.begin(generation, "connect")
+        VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.STARTING_PLATFORM)
         val session = ActiveSession(generation, platformInterface, tunOwner)
         activeSession = session
         VpnSessionCoordinator.event("vpn_session_start", generation, "owner=android")
@@ -558,6 +576,9 @@ class BoxService(
         }
         val fd = tunOwner.open(generation, descriptor, validate)
         session.markTunReady(protectSucceeded = true)
+        VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.VERIFYING) {
+            it.copy(tunnelReady = true, protectSucceeded = true)
+        }
         return fd
     }
 
@@ -594,6 +615,43 @@ class BoxService(
             return false
         }
 
+        val selectedOutbound = awaitSelectedOutbound(generation)
+        VpnSessionSnapshotCoordinator.selectedOutbound(
+            generation,
+            selectedOutbound,
+            if (selectedOutbound.startsWith(AUTO_BALANCER_TAG)) AUTO_BALANCER_TAG else "selector",
+        )
+        VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.VERIFYING) {
+            it.copy(coreStarted = true)
+        }
+
+        if (!awaitValidatedVpn(generation)) {
+            VpnSessionCoordinator.event(
+                "start_gate_rejected",
+                generation,
+                "source=platform_vpn_validation reason=vpn_network_not_validated",
+                Log.ERROR,
+            )
+            stopAndAlert(generation, Alert.StartService, "Android VPN network validation timeout")
+            return false
+        }
+        val connectedSnapshot = VpnSessionSnapshotCoordinator.transition(
+            generation,
+            VpnSessionPhase.CONNECTED,
+        ) {
+            it.copy(platformVpnValidated = true)
+        }
+        if (!connectedSnapshot.provesConnected()) {
+            VpnSessionCoordinator.event(
+                "terminal_state_blocked",
+                generation,
+                "source=vpn_snapshot reason=connected_evidence_incomplete",
+                Log.ERROR,
+            )
+            stopAndAlert(generation, Alert.StartService, "VPN session snapshot evidence incomplete")
+            return false
+        }
+
         VpnSessionCoordinator.event(
             "start_gate_completed",
             generation,
@@ -604,12 +662,43 @@ class BoxService(
             return false
         }
         withContext(Dispatchers.Main) {
-            notification.show(activeProfileName, R.string.status_started)
+            notification.show(activeProfileName, connectedSnapshot)
         }
         notification.start(generation) {
             activeSession === session && session.acceptsOperations()
         }
         return true
+    }
+
+    private suspend fun awaitValidatedVpn(generation: Long): Boolean {
+        val connectivity = service.getSystemService(ConnectivityManager::class.java)
+        repeat(50) {
+            if (!VpnSessionCoordinator.isCurrent(generation)) return false
+            val validated = connectivity.allNetworks.any { network ->
+                val capabilities = connectivity.getNetworkCapabilities(network) ?: return@any false
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            }
+            if (validated) return true
+            delay(100L)
+        }
+        return false
+    }
+
+    private suspend fun awaitSelectedOutbound(generation: Long): String {
+        repeat(20) {
+            if (!VpnSessionCoordinator.isCurrent(generation)) return ""
+            val outbound = runCatching {
+                GrpcClientProvider.grpcClient.create(CoreClient::class)
+                    .GetSystemInfo()
+                    .executeBlocking(Empty())
+                    .current_outbound
+                    .trim()
+            }.getOrDefault("")
+            if (outbound.isNotBlank()) return outbound
+            delay(100L)
+        }
+        return ""
     }
 
     private suspend fun closeSession(session: ActiveSession, reason: String) {

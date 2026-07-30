@@ -46,6 +46,7 @@ class VpnTestInstrumentation : Instrumentation() {
         val activeSessionTests = ActiveSessionInstrumentedTest()
         val permissionTests = VpnPermissionAndConnectedGateInstrumentedTest()
         val startPermissionTests = StartPermissionRequestCoordinatorInstrumentedTest()
+        val snapshotTests = VpnSessionSnapshotInstrumentedTest()
         val bitmapTests = SampledBitmapDecoderInstrumentedTest(targetContext)
         val tests = mutableListOf(
             TestCase(generationTests.javaClass.name, "generationIsStrictlyMonotonic") {
@@ -86,6 +87,12 @@ class VpnTestInstrumentation : Instrumentation() {
             },
             TestCase(activeSessionTests.javaClass.name, "teardownOrderIsStableAndCloseIsIdempotent") {
                 activeSessionTests.teardownOrderIsStableAndCloseIsIdempotent()
+            },
+            TestCase(snapshotTests.javaClass.name, "connectedRequiresEveryGate") {
+                snapshotTests.connectedRequiresEveryGate()
+            },
+            TestCase(snapshotTests.javaClass.name, "nonConnectedPhaseCannotPassTheGate") {
+                snapshotTests.nonConnectedPhaseCannotPassTheGate()
             },
         )
         listOf(

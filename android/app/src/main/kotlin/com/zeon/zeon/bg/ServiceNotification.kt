@@ -119,7 +119,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
                 }
     }
 
-    fun show(profileName: String, @StringRes contentTextId: Int) {
+    fun show(profileName: String, snapshot: VpnSessionSnapshot) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Application.notification.createNotificationChannel(
                 NotificationChannel(
@@ -134,7 +134,11 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
         service.startForeground(
             notificationId, notificationBuilder
                 .setContentTitle(profileName.takeIf { it.isNotBlank() } ?: service.getString(R.string.app_name))
-                .setContentText(service.getString(contentTextId)).build()
+                .setContentText(
+                    service.getString(
+                        if (snapshot.provesConnected()) R.string.status_started else R.string.status_starting,
+                    ),
+                ).build()
         )
     }
 
@@ -163,7 +167,14 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     fun updateStatus(previous:SystemInfo,status: SystemInfo) {
         val uplink=status.uplink_total - previous.uplink_total
         val downlink=status.downlink_total - previous.downlink_total
-        val currentOutbound = presentOutboundForNotification(status.current_outbound)
+        val generation = activeGeneration
+        val snapshot = VpnSessionSnapshotCoordinator.selectedOutbound(
+            generation,
+            status.current_outbound,
+            if (status.current_outbound.startsWith(AUTO_BALANCER_TAG)) AUTO_BALANCER_TAG else "selector",
+        )
+        if (!snapshot.provesConnected()) return
+        val currentOutbound = presentOutboundForNotification(snapshot.selectedOutboundLabel)
         val content = "${Libbox.formatBytes(uplink)}/s \u2191\t${Libbox.formatBytes(downlink)}/s \u2193 \n$currentOutbound"
         val title = "${status.current_profile}"
         Application.notificationManager.notify(
