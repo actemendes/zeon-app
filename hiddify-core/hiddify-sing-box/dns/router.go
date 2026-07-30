@@ -333,20 +333,51 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 		zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, nil, metadata.QueryType, selectedRule, selectedRuleIndex, transport, false)
 		return nil, err
 	}
-	if r.dnsReverseMapping != nil && len(message.Question) > 0 && response != nil && len(response.Answer) > 0 {
-		if transport == nil || transport.Type() != C.DNSTypeFakeIP {
-			for _, answer := range response.Answer {
-				switch record := answer.(type) {
-				case *mDNS.A:
-					r.dnsReverseMapping.AddWithLifetime(M.AddrFromIP(record.A), FqdnToDomain(record.Hdr.Name), time.Duration(record.Hdr.Ttl)*time.Second)
-				case *mDNS.AAAA:
-					r.dnsReverseMapping.AddWithLifetime(M.AddrFromIP(record.AAAA), FqdnToDomain(record.Hdr.Name), time.Duration(record.Hdr.Ttl)*time.Second)
-				}
-			}
-		}
+	if r.dnsReverseMapping != nil && (transport == nil || transport.Type() != C.DNSTypeFakeIP) {
+		r.rememberDNSReverseMapping(message, response)
 	}
 	zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, MessageToAddresses(response), metadata.QueryType, selectedRule, selectedRuleIndex, transport, false)
 	return response, nil
+}
+
+func (r *Router) rememberDNSReverseMapping(message *mDNS.Msg, response *mDNS.Msg) {
+	if message == nil || response == nil || len(message.Question) == 0 {
+		return
+	}
+	questionDomain := strings.ToLower(FqdnToDomain(message.Question[0].Name))
+	if questionDomain == "" {
+		return
+	}
+
+	// Preserve the name the application actually queried. Mapping an A/AAAA
+	// record's owner instead loses the original domain after a CNAME hop (for
+	// example service.ru -> edge.example.com), allowing the later TUN IP
+	// connection to bypass domain-based routing.
+	lifetime := reverseMappingLifetime(response)
+	for _, address := range MessageToAddresses(response) {
+		if address.IsValid() {
+			r.dnsReverseMapping.AddWithLifetime(address.Unmap(), questionDomain, lifetime)
+		}
+	}
+}
+
+func reverseMappingLifetime(response *mDNS.Msg) time.Duration {
+	var minimumTTL uint32
+	var found bool
+	for _, answer := range response.Answer {
+		switch answer.(type) {
+		case *mDNS.A, *mDNS.AAAA, *mDNS.CNAME, *mDNS.HTTPS:
+			ttl := answer.Header().Ttl
+			if !found || ttl < minimumTTL {
+				minimumTTL = ttl
+				found = true
+			}
+		}
+	}
+	if !found {
+		return 0
+	}
+	return time.Duration(minimumTTL) * time.Second
 }
 
 func predefinedDNSResponseBlocked(response *mDNS.Msg) bool {
