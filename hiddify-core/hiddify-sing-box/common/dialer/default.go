@@ -82,6 +82,7 @@ func NewDefault(ctx context.Context, options option.DialerOptions) (*DefaultDial
 		listener.Control = control.Append(listener.Control, setMarkWrapper(networkManager, uint32(options.RoutingMark), false))
 	}
 	disableDefaultBind := options.BindInterface != "" || options.Inet4BindAddress != nil || options.Inet6BindAddress != nil
+	usePlatformInterfaceControl := platformInterface != nil && platformInterface.UsePlatformAutoDetectInterfaceControl()
 	if disableDefaultBind || options.TCPFastOpen {
 		if options.NetworkStrategy != nil || len(options.NetworkType) > 0 && options.FallbackNetworkType == nil && options.FallbackDelay == 0 {
 			return nil, E.New("`network_strategy` is conflict with `bind_interface`, `inet4_bind_address`, `inet6_bind_address` and `tcp_fast_open`")
@@ -94,7 +95,11 @@ func NewDefault(ctx context.Context, options option.DialerOptions) (*DefaultDial
 			bindFunc := control.BindToInterface(networkManager.InterfaceFinder(), defaultOptions.BindInterface, -1)
 			dialer.Control = control.Append(dialer.Control, bindFunc)
 			listener.Control = control.Append(listener.Control, bindFunc)
-		} else if networkManager.AutoDetectInterface() && !disableDefaultBind {
+		} else if shouldInstallDefaultInterfaceControl(
+			networkManager.AutoDetectInterface(),
+			usePlatformInterfaceControl,
+			disableDefaultBind,
+		) {
 			if platformInterface != nil {
 				networkStrategy = (*C.NetworkStrategy)(options.NetworkStrategy)
 				networkType = common.Map(options.NetworkType, option.InterfaceType.Build)
@@ -221,6 +226,15 @@ func NewDefault(ctx context.Context, options option.DialerOptions) (*DefaultDial
 		fallbackNetworkType:    fallbackNetworkType,
 		networkFallbackDelay:   networkFallbackDelay,
 	}, nil
+}
+
+func shouldInstallDefaultInterfaceControl(autoDetectInterface bool, usePlatformInterfaceControl bool, disableDefaultBind bool) bool {
+	// Android intentionally leaves route.auto_detect_interface disabled because
+	// the desktop interface monitor is unsupported there. The mobile platform
+	// control is VpnService.protect(fd), however, and must still be installed on
+	// every ordinary outbound socket so DIRECT and VPN-server dials do not loop
+	// back into the TUN.
+	return !disableDefaultBind && (autoDetectInterface || usePlatformInterfaceControl)
 }
 
 func setMarkWrapper(networkManager adapter.NetworkManager, mark uint32, isDefault bool) control.Func {
