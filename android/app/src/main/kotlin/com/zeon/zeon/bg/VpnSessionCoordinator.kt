@@ -2,8 +2,8 @@ package com.zeon.zeon.bg
 
 import android.os.Process
 import android.os.SystemClock
-import android.system.Os
 import android.util.Log
+import com.hiddify.core.mobile.Mobile
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -63,7 +63,7 @@ object VpnSessionCoordinator {
     }
 
     private fun publishToNativeProcess(generation: Long) {
-        runCatching { Os.setenv("ZEON_SESSION_GENERATION", generation.toString(), true) }
+        runCatching { Mobile.setSessionGeneration(generation) }
             .onFailure {
                 event(
                     "terminal_failure",
