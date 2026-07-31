@@ -153,6 +153,19 @@ class ManagedRuleSetSyncService with InfraLogger {
     return task;
   }
 
+  /// Re-checks once after an in-flight offline startup attempt completes.
+  ///
+  /// Mobile startup can begin a DIRECT request before the VPN is available.
+  /// If the VPN connects while that request is still in flight, a normal
+  /// [sync] call would only inherit its eventual failure. Waiting for it and
+  /// retrying once lets the adaptive HTTP client use the now-running proxy,
+  /// while successful or TTL-skipped checks still perform no extra request.
+  Future<ManagedRuleSetSyncResult> syncWhenVpnAvailable() async {
+    final result = await sync(reason: 'vpn_connected');
+    if (result != ManagedRuleSetSyncResult.failed) return result;
+    return sync(reason: 'vpn_connected_retry');
+  }
+
   Future<ManagedRuleSetSyncResult> _sync({required bool force, required String reason}) async {
     try {
       final checkedAt = _now().toUtc();

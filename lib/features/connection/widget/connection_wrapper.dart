@@ -10,6 +10,7 @@ import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
+import 'package:zeon/features/route_rules/data/managed_rule_set_sync.dart';
 import 'package:zeon/features/settings/notifier/config_option/config_option_notifier.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
@@ -26,7 +27,14 @@ class ConnectionWrapper extends StatefulHookConsumerWidget {
 class _ConnectionWrapperState extends ConsumerState<ConnectionWrapper> with AppLogger {
   @override
   Widget build(BuildContext context) {
-    ref.listen(connectionNotifierProvider, (_, next) => _syncHttpVpnState(next));
+    ref.listen(connectionNotifierProvider, (previous, next) {
+      _syncHttpVpnState(next);
+      final wasConnected = previous?.asData?.value is Connected;
+      final isConnected = next.asData?.value is Connected;
+      if (isConnected && !wasConnected) {
+        unawaited(ref.read(managedRuleSetSyncServiceProvider).syncWhenVpnAvailable());
+      }
+    });
 
     ref.listen(configOptionNotifierProvider, (previous, next) async {
       if (next case AsyncData(value: true)) {
@@ -54,7 +62,11 @@ class _ConnectionWrapperState extends ConsumerState<ConnectionWrapper> with AppL
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _syncHttpVpnState(ref.read(connectionNotifierProvider));
+      final connection = ref.read(connectionNotifierProvider);
+      _syncHttpVpnState(connection);
+      if (connection.asData?.value is Connected) {
+        unawaited(ref.read(managedRuleSetSyncServiceProvider).syncWhenVpnAvailable());
+      }
       if (!PlatformUtils.isMobile) return;
       // A bootstrap request can fail before a Navigator exists. Retry once the
       // UI is ready so adaptive HTTP may offer VPN recovery to the user.

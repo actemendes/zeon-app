@@ -161,6 +161,36 @@ void main() {
     expect((await deps.store.readActiveBundle())?.envelope.generation, 2);
   });
 
+  test('VPN availability retries an inherited offline startup check once', () async {
+    final deps = await dependencies();
+    final firstResponse = Completer<ManagedRuleSetFetchResult>();
+    final next = await envelope(1);
+    var attempt = 0;
+    final remote = _FakeRemote((_) {
+      attempt += 1;
+      if (attempt == 1) return firstResponse.future;
+      return Future.value(ManagedRuleSetFetchResult.modified(next, eTag: '"generation-1"'));
+    });
+    final service = ManagedRuleSetSyncService(
+      remoteDataSource: remote,
+      store: deps.store,
+      preferences: deps.preferences,
+      now: () => generatedAt,
+    );
+
+    final startup = service.sync(reason: 'foreground_startup');
+    final connected = service.syncWhenVpnAvailable();
+    for (var wait = 0; wait < 20 && remote.calls == 0; wait += 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    firstResponse.completeError(const SocketException('offline before VPN'));
+
+    expect(await startup, ManagedRuleSetSyncResult.failed);
+    expect(await connected, ManagedRuleSetSyncResult.updated);
+    expect(remote.calls, 2);
+    expect((await deps.store.readActiveBundle())?.envelope.generation, 1);
+  });
+
   test('network failure is swallowed and preserves active LKG', () async {
     final deps = await dependencies();
     await deps.store.installEnvelope(await envelope(1));
