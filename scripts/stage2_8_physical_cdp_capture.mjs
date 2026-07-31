@@ -1317,6 +1317,58 @@ export const DOM_METRICS_EXPRESSION = String.raw`
 })()
 `;
 
+// This extractor is intentionally exact-host and value-only. It never returns
+// page text, URLs, IP addresses, server names, or browser profile data.
+export const CLOUDFLARE_SPEEDTEST_EXPRESSION = String.raw`
+(() => {
+  if (location.hostname.toLowerCase().replace(/\.$/, "") !== "speed.cloudflare.com") {
+    return null;
+  }
+  const lines = (document.body?.innerText ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const exact = (label) => lines.some((line) => line.toLowerCase() === label.toLowerCase());
+  const metricAfter = (label, unit, maximum) => {
+    const index = lines.findIndex((line) => line.toLowerCase() === label.toLowerCase());
+    if (index < 0) return null;
+    const pattern = new RegExp("^([0-9]+(?:\\.[0-9]+)?)(?:\\s*" + unit + ")?$", "i");
+    const candidates = lines.slice(index + 1, index + 12);
+    for (let candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {
+      const line = candidates[candidateIndex];
+      const match = line.match(pattern);
+      if (!match) continue;
+      const includesUnit = line.toLowerCase().endsWith(unit.toLowerCase());
+      const nextIsUnit = candidates[candidateIndex + 1]?.toLowerCase() === unit.toLowerCase();
+      if (!includesUnit && !nextIsUnit) continue;
+      const value = Number(match[1]);
+      if (Number.isFinite(value) && value >= 0 && value <= maximum) return value;
+    }
+    return null;
+  };
+  const downloadMbps = metricAfter("Download", "Mbps", 100000);
+  const uploadMbps = metricAfter("Upload", "Mbps", 100000);
+  const latencyMs = metricAfter("Latency", "ms", 100000);
+  const jitterMs = metricAfter("Jitter", "ms", 100000);
+  const packetLossPercent = metricAfter("Packet Loss", "%", 100);
+  const hasRetest = exact("Retest");
+  return {
+    downloadMbps,
+    uploadMbps,
+    latencyMs,
+    jitterMs,
+    packetLossPercent,
+    hasRetest,
+    complete: hasRetest
+      && downloadMbps !== null
+      && uploadMbps !== null
+      && latencyMs !== null
+      && jitterMs !== null
+      && packetLossPercent !== null,
+  };
+})()
+`;
+
 export const SCREENSHOT_IP_MASK_EXPRESSION = String.raw`
 (() => {
   const replacement = "[REDACTED IP]";
@@ -1541,6 +1593,32 @@ function sanitizeDomMetrics(value, hmacKey) {
   };
 }
 
+export function sanitizeCloudflareSpeedtestEvidence(value) {
+  if (value === null || value === undefined) return null;
+  const metric = (entry, maximum) =>
+    Number.isFinite(entry) && entry >= 0 && entry <= maximum
+      ? Math.round(entry * 100) / 100
+      : null;
+  const result = {
+    downloadMbps: metric(value.downloadMbps, 100000),
+    uploadMbps: metric(value.uploadMbps, 100000),
+    latencyMs: metric(value.latencyMs, 100000),
+    jitterMs: metric(value.jitterMs, 100000),
+    packetLossPercent: metric(value.packetLossPercent, 100),
+    hasRetest: value.hasRetest === true,
+    complete: false,
+  };
+  result.complete =
+    value.complete === true &&
+    result.hasRetest &&
+    result.downloadMbps !== null &&
+    result.uploadMbps !== null &&
+    result.latencyMs !== null &&
+    result.jitterMs !== null &&
+    result.packetLossPercent !== null;
+  return result;
+}
+
 async function writeExclusive(filePath, data) {
   const handle = await open(filePath, "wx");
   try {
@@ -1752,6 +1830,17 @@ async function capture(options) {
       await evaluateValue(cdp, targetSessionId, DOM_METRICS_EXPRESSION),
       hmacKey,
     );
+    const cloudflareSpeedtest =
+      options.targetUrl.hostname.toLowerCase().replace(/\.$/, "") ===
+      "speed.cloudflare.com"
+        ? sanitizeCloudflareSpeedtestEvidence(
+            await evaluateValue(
+              cdp,
+              targetSessionId,
+              CLOUDFLARE_SPEEDTEST_EXPRESSION,
+            ),
+          )
+        : null;
     const privacyRedaction = await evaluateValue(
       cdp,
       targetSessionId,
@@ -1888,6 +1977,7 @@ async function capture(options) {
             : null,
       },
       page: domMetrics,
+      cloudflareSpeedtest,
       navigation: {
         error: navigationError,
         loadEventTimedOut,

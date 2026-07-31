@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  CLOUDFLARE_SPEEDTEST_EXPRESSION,
   DEVTOOLS_SOCKET,
   DIAGNOSTIC_BLUR_EXPRESSION,
   DOM_METRICS_EXPRESSION,
@@ -31,6 +32,7 @@ import {
   sanitizeProtocol,
   sanitizeResponseTiming,
   stableHashScopeId,
+  sanitizeCloudflareSpeedtestEvidence,
 } from "../stage2_8_physical_cdp_capture.mjs";
 
 test("CLI requires the exact physical capture identity and keeps URL in memory only", () => {
@@ -383,9 +385,46 @@ test("harness source contains no target enumeration or tab-list endpoint", async
 test("all injected page expressions parse before physical capture", () => {
   for (const expression of [
     DOM_METRICS_EXPRESSION,
+    CLOUDFLARE_SPEEDTEST_EXPRESSION,
     SCREENSHOT_IP_MASK_EXPRESSION,
     DIAGNOSTIC_BLUR_EXPRESSION,
   ]) {
     assert.doesNotThrow(() => new Function(`return (${expression});`));
   }
+});
+
+test("Cloudflare Speedtest evidence keeps only bounded numeric results", () => {
+  assert.deepEqual(
+    sanitizeCloudflareSpeedtestEvidence({
+      downloadMbps: 83.456,
+      uploadMbps: 87,
+      latencyMs: 61.6,
+      jitterMs: 9.2,
+      packetLossPercent: 0,
+      hasRetest: true,
+      complete: true,
+      rawText: "must not survive",
+    }),
+    {
+      downloadMbps: 83.46,
+      uploadMbps: 87,
+      latencyMs: 61.6,
+      jitterMs: 9.2,
+      packetLossPercent: 0,
+      hasRetest: true,
+      complete: true,
+    },
+  );
+  assert.equal(
+    sanitizeCloudflareSpeedtestEvidence({
+      downloadMbps: 1,
+      uploadMbps: null,
+      latencyMs: 1,
+      jitterMs: 1,
+      packetLossPercent: 0,
+      hasRetest: true,
+      complete: true,
+    }).complete,
+    false,
+  );
 });
