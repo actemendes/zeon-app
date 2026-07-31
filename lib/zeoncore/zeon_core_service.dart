@@ -1474,7 +1474,9 @@ class ZeonCoreService with InfraLogger {
       }
       final redacted = GlobalDataPlaneConfigRedactor().redactJson(await file.readAsString());
       final encoded = base64Url.encode(utf8.encode(redacted));
-      const chunkSize = 5600;
+      // Android's log payload is capped near 4 KiB. Keep the complete JSON
+      // envelope below that limit after UTF-8 encoding.
+      const chunkSize = 3000;
       final total = (encoded.length / chunkSize).ceil();
       for (var index = 0; index < total; index++) {
         final start = index * chunkSize;

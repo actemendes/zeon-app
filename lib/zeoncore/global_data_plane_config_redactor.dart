@@ -41,14 +41,28 @@ final class GlobalDataPlaneConfigRedactor {
     'password',
     'private_key',
     'public_key',
+    'service_name',
     'secret',
+    'short_id',
     'token',
+    'username',
     'uuid',
   };
 
-  static const _endpointKeys = <String>{'address', 'endpoint', 'host', 'hostname', 'server', 'server_port'};
+  static const _endpointKeys = <String>{
+    'address',
+    'endpoint',
+    'external_controller',
+    'host',
+    'hostname',
+    'listen',
+    'server',
+    'server_name',
+    'server_port',
+    'udp_probe_endpoint',
+  };
 
-  static const _pathKeys = <String>{'cache_file', 'database_path', 'path', 'rule_set_path'};
+  static const _pathKeys = <String>{'cache_file', 'database_path', 'output', 'path', 'rule_set_path'};
 
   static const _destinationListKeys = <String>{
     'domain',
@@ -95,10 +109,10 @@ final class GlobalDataPlaneConfigRedactor {
 
   Object? _redactValue(Object? value, {required String? key}) {
     final normalizedKey = key?.toLowerCase();
-    if (normalizedKey != null && _secretKeys.contains(normalizedKey)) {
+    if (normalizedKey != null && _isSecretKey(normalizedKey)) {
       return '<redacted-secret>';
     }
-    if (normalizedKey != null && _endpointKeys.contains(normalizedKey)) {
+    if (normalizedKey != null && _isEndpointKey(normalizedKey)) {
       return _describeEndpoint(value);
     }
     if (normalizedKey != null && _pathKeys.contains(normalizedKey)) {
@@ -145,6 +159,17 @@ final class GlobalDataPlaneConfigRedactor {
       key == 'download_detour' ||
       key == 'rule_set' ||
       key == 'rule_sets';
+
+  bool _isSecretKey(String key) =>
+      _secretKeys.contains(key) ||
+      key.endsWith('_password') ||
+      key.endsWith('_private_key') ||
+      key.endsWith('_public_key') ||
+      key.endsWith('_secret') ||
+      key.endsWith('_token');
+
+  bool _isEndpointKey(String key) =>
+      _endpointKeys.contains(key) || key.endsWith('_endpoint') || key.endsWith('_server_name');
 
   bool _looksLikeUrlKey(String key) => key == 'url' || key.endsWith('_url') || key == 'urls';
 

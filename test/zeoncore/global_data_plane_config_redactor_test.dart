@@ -25,6 +25,8 @@ void main() {
           'type': 'vless',
           'server': 'vpn.private.example',
           'server_port': 443,
+          'server_name': 'identifying-sni.private.example',
+          'short_id': 'private-short-id',
           'uuid': '12345678-1234-1234-1234-123456789012',
           'password': 'TOP_SECRET',
         },
@@ -37,6 +39,8 @@ void main() {
     expect(redacted, isNot(contains('secret.internal')));
     expect(redacted, isNot(contains('TOP_SECRET')));
     expect(redacted, isNot(contains('12345678-1234')));
+    expect(redacted, isNot(contains('identifying-sni.private.example')));
+    expect(redacted, isNot(contains('private-short-id')));
     expect(redacted, contains('zapret-ru-domains'));
     expect(redacted, contains('tag-001'));
     expect(redacted, contains('"type": "vless"'));
@@ -66,5 +70,22 @@ void main() {
     expect((redacted['dns'] as Map)['independent_cache'], true);
     expect(((redacted['inbounds'] as List).single as Map)['mtu'], 9000);
     expect((((redacted['outbounds'] as List).single as Map)['outbounds'] as List), ['tag-001', 'tag-002']);
+  });
+
+  test('redacts monitoring and controller endpoints', () {
+    final redacted = GlobalDataPlaneConfigRedactor().redact({
+      'inbounds': [
+        {'listen': '127.0.0.1'},
+      ],
+      'log': {'output': 'box.log'},
+      'experimental': {
+        'clash_api': {'external_controller': '127.0.0.1:16756'},
+        'monitoring': {'udp_probe_endpoint': 'probe.private.example:8443'},
+      },
+    }).toString();
+
+    expect(redacted, isNot(contains('127.0.0.1')));
+    expect(redacted, isNot(contains('box.log')));
+    expect(redacted, isNot(contains('probe.private.example')));
   });
 }
