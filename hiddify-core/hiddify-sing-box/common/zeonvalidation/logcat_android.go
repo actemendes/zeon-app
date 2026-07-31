@@ -1,6 +1,6 @@
 //go:build android && zeon_route_validation
 
-package hcore
+package zeonvalidation
 
 /*
 #cgo LDFLAGS: -llog
@@ -15,7 +15,7 @@ import "C"
 
 import "unsafe"
 
-func emitValidationLogcat(message string) {
+func emitPlatformEvent(message string) {
 	cMessage := C.CString(message)
 	defer C.free(unsafe.Pointer(cMessage))
 	C.zeonEmitRouteValidation(cMessage)

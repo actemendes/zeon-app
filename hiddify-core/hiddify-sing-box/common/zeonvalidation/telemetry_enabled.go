@@ -338,10 +338,12 @@ func emit(log logger.ContextLogger, ctx context.Context, event validationEvent) 
 	if err != nil {
 		return
 	}
+	message := validationLogPrefix + string(payload)
+	emitPlatformEvent(message)
 	// The mobile bridge subscribes at warning level. Keep this promotion in the
 	// validation-tagged implementation so evidence is observable without
 	// changing production logging or persisting ordinary browsing history.
-	log.WarnContext(ctx, validationLogPrefix, string(payload))
+	log.WarnContext(ctx, message)
 }
 
 func routeHostname(metadata *adapter.InboundContext, addresses []netip.Addr) (string, *dnsCorrelation, bool) {
