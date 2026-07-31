@@ -1481,6 +1481,7 @@ async function evaluateValue(cdp, sessionId, expression) {
       userGesture: false,
     },
     sessionId,
+    60_000,
   );
   if (result?.exceptionDetails || !result?.result) {
     throw new CaptureError(
