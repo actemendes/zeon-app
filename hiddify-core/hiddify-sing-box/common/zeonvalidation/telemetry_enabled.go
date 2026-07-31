@@ -130,6 +130,24 @@ var validationDomainSuffixes = []string{
 	"ipinfo.io",
 	"test-ipv6.com",
 	"browserleaks.com",
+
+	// Stage 2.9 Global data-plane diagnostics. The physical harness opens only
+	// these explicit public endpoints and closes the browser after each run.
+	"example.com",
+	"youtube.com",
+	"googlevideo.com",
+	"ytimg.com",
+	"ggpht.com",
+	"t.me",
+	"telegram.org",
+	"telegram.me",
+	"speed.cloudflare.com",
+	"cloudflare-quic.com",
+	"cloudflare.com",
+	"github.com",
+	"githubusercontent.com",
+	"wikipedia.org",
+	"microsoft.com",
 }
 
 type validationEvent struct {

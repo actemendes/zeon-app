@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net"
 	"net/netip"
 	"strings"
@@ -26,46 +28,116 @@ func TestValidationTelemetryEnabledWithBuildTag(t *testing.T) {
 	}
 }
 
+func TestConnectionCorrelationIsAllowlistedAndDoesNotRetainOutboundIdentity(t *testing.T) {
+	withFreshTelemetry(t)
+	t.Setenv(sessionGenerationEnv, "generation-global")
+	var output bytes.Buffer
+	factory := SBLog.NewDefaultFactory(
+		context.Background(),
+		SBLog.Formatter{DisableColors: true, DisableTimestamp: true},
+		&output,
+		"",
+		nil,
+		false,
+	)
+	t.Cleanup(func() { _ = factory.Close() })
+	ctx := BeginConnection(
+		context.Background(),
+		factory.NewLogger("connection-test"),
+		&adapter.InboundContext{
+			Domain:      "www.youtube.com",
+			Destination: M.Socksaddr{Fqdn: "www.youtube.com", Port: 443},
+		},
+		"private-server-label",
+		"vless",
+		"tcp",
+	)
+	state := connectionFromContext(ctx)
+	if state == nil {
+		t.Fatal("allowlisted destination did not receive correlation state")
+	}
+	if state.outboundType != "VLESS" || !strings.HasPrefix(state.outboundHash, "hmac-sha256:") {
+		t.Fatalf("unexpected outbound identity: type=%q hash=%q", state.outboundType, state.outboundHash)
+	}
+	if strings.Contains(output.String(), "private-server-label") {
+		t.Fatal("connection telemetry leaked the selected outbound tag")
+	}
+
+	unrelated := BeginConnection(
+		context.Background(),
+		factory.NewLogger("connection-test"),
+		&adapter.InboundContext{
+			Domain:      "private.example",
+			Destination: M.Socksaddr{Fqdn: "private.example", Port: 443},
+		},
+		"private-server-label",
+		"vless",
+		"tcp",
+	)
+	if connectionFromContext(unrelated) != nil {
+		t.Fatal("unrelated destination received connection correlation state")
+	}
+}
+
+func TestConnectionErrorClassificationIsSanitized(t *testing.T) {
+	testCases := map[string]struct {
+		err  error
+		want string
+	}{
+		"orderly":  {err: nil, want: "EOF_OR_ORDERLY_CLOSE"},
+		"eof":      {err: io.EOF, want: "EOF"},
+		"canceled": {err: context.Canceled, want: "CONTEXT_CANCELED"},
+		"reset":    {err: errors.New("read tcp: connection reset by peer at private-endpoint"), want: "CONNECTION_RESET"},
+	}
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			if got := classifyConnectionError(testCase.err); got != testCase.want {
+				t.Fatalf("classification=%q want=%q", got, testCase.want)
+			}
+		})
+	}
+}
+
 func TestMandatoryValidationServicesAreAllowlisted(t *testing.T) {
 	testHosts := map[string]string{
-		"Gosuslugi":     "www.gosuslugi.ru",
-		"ESIA":          "esia.gosuslugi.ru",
-		"Goskey":        "www.goskey.ru",
-		"Nalog":         "lkfl2.nalog.ru",
-		"Mos.ru":        "www.mos.ru",
-		"CBR":           "www.cbr.ru",
-		"SBP":           "sbp.nspk.ru",
-		"Sber":          "online.sberbank.ru",
-		"T-Bank":        "www.tbank.ru",
-		"Alfa-Bank":     "alfabank.ru",
-		"VTB":           "www.vtb.ru",
-		"Gazprombank":   "gazprombank.ru",
-		"Raiffeisen":    "online.raiffeisen.ru",
-		"Sovcombank":    "halvacard.sovcombank.ru",
-		"Yandex":        "yandex.ru",
-		"Yandex Search": "yandex.ru/search",
-		"Yandex Maps":   "yandex.ru/maps",
-		"Yandex Music":  "music.yandex.ru",
-		"Kinopoisk":     "www.kinopoisk.ru",
-		"Wildberries":   "www.wildberries.ru",
-		"Ozon":          "www.ozon.ru",
-		"Avito":         "www.avito.ru",
-		"Megamarket":    "megamarket.ru",
-		"Yandex Market": "market.yandex.ru",
-		"VK":            "vk.com",
-		"Mail.ru":       "mail.ru",
-		"OK":            "ok.ru",
-		"Dzen":          "dzen.ru",
-		"2GIS":          "2gis.ru",
-		"Rutube":        "rutube.ru",
-		"RuStore":       "rustore.ru",
-		"RZD":           "rzd.ru",
-		"Aeroflot":      "aeroflot.ru",
-		"HH":            "hh.ru",
-		"RIA":           "ria.ru",
-		"Lenta":         "lenta.ru",
-		".su suffix":    "ripn.su",
-		".rf suffix":    "xn--80aa3ak5a.xn--p1ai",
+		"Gosuslugi":      "www.gosuslugi.ru",
+		"ESIA":           "esia.gosuslugi.ru",
+		"Goskey":         "www.goskey.ru",
+		"Nalog":          "lkfl2.nalog.ru",
+		"Mos.ru":         "www.mos.ru",
+		"CBR":            "www.cbr.ru",
+		"SBP":            "sbp.nspk.ru",
+		"Sber":           "online.sberbank.ru",
+		"T-Bank":         "www.tbank.ru",
+		"Alfa-Bank":      "alfabank.ru",
+		"VTB":            "www.vtb.ru",
+		"Gazprombank":    "gazprombank.ru",
+		"Raiffeisen":     "online.raiffeisen.ru",
+		"Sovcombank":     "halvacard.sovcombank.ru",
+		"Yandex":         "yandex.ru",
+		"Yandex Search":  "yandex.ru/search",
+		"Yandex Maps":    "yandex.ru/maps",
+		"Yandex Music":   "music.yandex.ru",
+		"Kinopoisk":      "www.kinopoisk.ru",
+		"Wildberries":    "www.wildberries.ru",
+		"Ozon":           "www.ozon.ru",
+		"Avito":          "www.avito.ru",
+		"Megamarket":     "megamarket.ru",
+		"Yandex Market":  "market.yandex.ru",
+		"VK":             "vk.com",
+		"Mail.ru":        "mail.ru",
+		"OK":             "ok.ru",
+		"Dzen":           "dzen.ru",
+		"2GIS":           "2gis.ru",
+		"Rutube":         "rutube.ru",
+		"RuStore":        "rustore.ru",
+		"RZD":            "rzd.ru",
+		"Aeroflot":       "aeroflot.ru",
+		"HH":             "hh.ru",
+		"RIA":            "ria.ru",
+		"Lenta":          "lenta.ru",
+		".su suffix":     "ripn.su",
+		".rf suffix":     "xn--80aa3ak5a.xn--p1ai",
 		"RU public exit": "2ip.ru",
 		"Global exit":    "ipinfo.io",
 		"IPv6":           "test-ipv6.com",

@@ -11,3 +11,10 @@ func zeonOutboundTag(dialer N.Dialer) string {
 	}
 	return ""
 }
+
+func zeonOutboundType(dialer N.Dialer) string {
+	if outbound, ok := dialer.(adapter.Outbound); ok {
+		return outbound.Type()
+	}
+	return ""
+}

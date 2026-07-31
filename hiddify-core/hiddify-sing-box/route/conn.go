@@ -17,6 +17,7 @@ import (
 	"github.com/sagernet/sing-box/common/sniff"
 	"github.com/sagernet/sing-box/common/tlsfragment"
 	"github.com/sagernet/sing-box/common/urltest"
+	"github.com/sagernet/sing-box/common/zeonvalidation"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
@@ -99,6 +100,14 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		metadata.SetRealOutbound(zeonOutboundTag(this))
 	}
 	ctx = adapter.WithContext(ctx, &metadata)
+	ctx = zeonvalidation.BeginConnection(
+		ctx,
+		m.logger,
+		&metadata,
+		zeonOutboundTag(this),
+		zeonOutboundType(this),
+		N.NetworkTCP,
+	)
 	var (
 		remoteConn net.Conn
 		err        error
@@ -109,6 +118,7 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		remoteConn, err = this.DialContext(ctx, N.NetworkTCP, metadata.Destination)
 	}
 	if err != nil {
+		zeonvalidation.RecordConnectionDialResult(ctx, m.logger, err)
 		var remoteString string
 		if len(metadata.DestinationAddresses) > 0 {
 			remoteString = "[" + strings.Join(common.Map(metadata.DestinationAddresses, netip.Addr.String), ",") + "]"
@@ -125,8 +135,10 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		m.recordRuntimePenalty(ctx, err, false)
 		return
 	}
+	zeonvalidation.RecordConnectionDialResult(ctx, m.logger, nil)
 	err = N.ReportConnHandshakeSuccess(conn, remoteConn)
 	if err != nil {
+		zeonvalidation.RecordConnectionHandshakeResult(ctx, m.logger, err)
 		err = E.Cause(err, "report handshake success")
 		remoteConn.Close()
 		N.CloseOnHandshakeFailure(conn, onClose, err)
@@ -134,6 +146,7 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 		m.recordRuntimePenalty(ctx, err, true)
 		return
 	}
+	zeonvalidation.RecordConnectionHandshakeResult(ctx, m.logger, nil)
 	m.recordRuntimeSuccess(ctx)
 	if metadata.TLSFragment || metadata.TLSRecordFragment {
 		remoteConn = tf.NewConn(remoteConn, ctx, metadata.TLSFragment, metadata.TLSRecordFragment, metadata.TLSFragmentFallbackDelay)
@@ -156,6 +169,14 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 		metadata.SetRealOutbound(zeonOutboundTag(this))
 	}
 	ctx = adapter.WithContext(ctx, &metadata)
+	ctx = zeonvalidation.BeginConnection(
+		ctx,
+		m.logger,
+		&metadata,
+		zeonOutboundTag(this),
+		zeonOutboundType(this),
+		N.NetworkUDP,
+	)
 	var (
 		remotePacketConn   net.PacketConn
 		remoteConn         net.Conn
@@ -180,6 +201,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			remoteConn, err = this.DialContext(ctx, N.NetworkUDP, metadata.Destination)
 		}
 		if err != nil {
+			zeonvalidation.RecordConnectionDialResult(ctx, m.logger, err)
 			var remoteString string
 			if len(metadata.DestinationAddresses) > 0 {
 				remoteString = "[" + strings.Join(common.Map(metadata.DestinationAddresses, netip.Addr.String), ",") + "]"
@@ -196,6 +218,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			m.recordRuntimePenalty(ctx, err, false)
 			return
 		}
+		zeonvalidation.RecordConnectionDialResult(ctx, m.logger, nil)
 		remotePacketConn = bufio.NewUnbindPacketConn(remoteConn)
 		connRemoteAddr := M.AddrFromNet(remoteConn.RemoteAddr())
 		if connRemoteAddr != metadata.Destination.Addr {
@@ -210,6 +233,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			remotePacketConn, err = this.ListenPacket(ctx, metadata.Destination)
 		}
 		if err != nil {
+			zeonvalidation.RecordConnectionDialResult(ctx, m.logger, err)
 			var dialerString string
 			if outbound, isOutbound := this.(adapter.Outbound); isOutbound {
 				dialerString = " using outbound/" + outbound.Type() + "[" + outbound.Tag() + "]"
@@ -220,15 +244,18 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 			m.recordRuntimePenalty(ctx, err, false)
 			return
 		}
+		zeonvalidation.RecordConnectionDialResult(ctx, m.logger, nil)
 	}
 	err = N.ReportPacketConnHandshakeSuccess(conn, remotePacketConn)
 	if err != nil {
+		zeonvalidation.RecordConnectionHandshakeResult(ctx, m.logger, err)
 		conn.Close()
 		remotePacketConn.Close()
 		m.logger.ErrorContext(ctx, "report handshake success: ", err)
 		m.recordRuntimePenalty(ctx, err, true)
 		return
 	}
+	zeonvalidation.RecordConnectionHandshakeResult(ctx, m.logger, nil)
 	m.recordRuntimeSuccess(ctx)
 	if destinationAddress.IsValid() {
 		var originDestination M.Socksaddr
@@ -277,6 +304,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 
 func (m *ConnectionManager) connectionCopy(ctx context.Context, source net.Conn, destination net.Conn, direction bool, done *atomic.Bool, onClose N.CloseHandlerFunc) {
 	bytes, err := bufio.CopyWithIncreateBuffer(destination, source, bufio.DefaultIncreaseBufferAfter, bufio.DefaultBatchSize)
+	zeonvalidation.RecordConnectionTransferEnd(ctx, m.logger, direction, bytes, err)
 	m.recordRuntimeTraffic(ctx, bytes, direction)
 	if err != nil {
 		common.Close(source, destination)
@@ -413,6 +441,7 @@ func (m *ConnectionManager) recordRuntimeTraffic(ctx context.Context, bytes int6
 
 func (m *ConnectionManager) packetConnectionCopy(ctx context.Context, source N.PacketReader, destination N.PacketWriter, direction bool, done *atomic.Bool, onClose N.CloseHandlerFunc) {
 	bytes, err := bufio.CopyPacket(destination, source)
+	zeonvalidation.RecordConnectionTransferEnd(ctx, m.logger, direction, int64(bytes), err)
 	m.recordRuntimeTraffic(ctx, int64(bytes), direction)
 	if !direction {
 		if err == nil {
