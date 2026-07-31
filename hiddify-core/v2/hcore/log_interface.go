@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/hiddify/hiddify-core/v2/service_manager"
+	"github.com/sagernet/sing-box/common/zeonvalidation"
 	daemon "github.com/sagernet/sing-box/daemon"
 	"github.com/sagernet/sing-box/log"
 )
@@ -39,6 +40,9 @@ func (h *LogInterface) WriteDebugMessage(message string) {
 	h.WriteMessage(log.LevelDebug, message)
 }
 func (h *LogInterface) WriteMessage(level log.Level, message string) {
+	if zeonvalidation.IsLogMessage(message) {
+		emitValidationLogcat(message)
+	}
 	Log(convertLogLevel(level), LogType_SERVICE, message)
 }
 
