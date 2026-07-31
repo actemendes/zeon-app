@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zeon/features/route_rules/data/managed_rule_set.dart';
 
@@ -12,6 +13,7 @@ void main() {
 
   Future<ManagedRuleSet> build({
     String id = 'ru-direct-core',
+    String version = '1',
     List<String> domains = const ['example.ru'],
     List<String> cidrs = const ['192.0.2.0/24'],
     ManagedRuleAction action = ManagedRuleAction.direct,
@@ -19,7 +21,7 @@ void main() {
   }) {
     return normalizer.compile(
       id: id,
-      version: '1',
+      version: version,
       source: 'pinned:test',
       generatedAt: generatedAt,
       expiresAt: expiresAt,
@@ -28,6 +30,31 @@ void main() {
       applicablePreset: ManagedRulePreset.russia,
       domainInput: domains,
       cidrInput: cidrs,
+    );
+  }
+
+  Future<ManagedRuleSetEnvelope> buildEnvelope({
+    int generation = 1,
+    List<ManagedRuleSet>? ruleSets,
+    DateTime? bundleExpiresAt,
+    Object? rawPayload,
+  }) async {
+    final payload = utf8.encode(
+      rawPayload is String
+          ? rawPayload
+          : jsonEncode({
+              'generatedAt': generatedAt.toIso8601String(),
+              'expiresAt': (bundleExpiresAt ?? expiresAt).toIso8601String(),
+              'ruleSets': (ruleSets ?? [await build()]).map((ruleSet) => ruleSet.toJson()).toList(),
+            }),
+    );
+    final digest = await Sha256().hash(payload);
+    final checksum = digest.bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+    return ManagedRuleSetEnvelope(
+      formatVersion: 1,
+      generation: generation,
+      payload: base64Url.encode(payload).replaceAll('=', ''),
+      checksum: checksum,
     );
   }
 
@@ -84,7 +111,7 @@ void main() {
     final original = await build();
     await store.install(original);
     final tampered = original.toJson();
-    (tampered['payload'] as Map<String, Object?>)['domainSuffix'] = ['other.ru'];
+    (tampered['payload']! as Map<String, Object?>)['domainSuffix'] = ['other.ru'];
     await expectLater(
       store.update(original.metadata.id, () async => jsonEncode(tampered)),
       throwsA(isA<RuleSetValidationException>()),
@@ -132,12 +159,7 @@ void main() {
       action: ManagedRuleAction.vpn,
       priority: 0,
     );
-    final preset = await build(
-      domains: ['service.ru'],
-      cidrs: ['198.51.100.0/24'],
-      action: ManagedRuleAction.direct,
-      priority: 100,
-    );
+    final preset = await build(domains: ['service.ru'], cidrs: ['198.51.100.0/24']);
     final conflicts = detectRuleConflicts([preset, override]);
     expect(conflicts, hasLength(1));
     expect(conflicts.single.winner.metadata.id, 'user-overrides');
@@ -158,6 +180,83 @@ void main() {
     await expectLater(
       store.update('ru-direct-core', () async => utf8.decode(Uint8List.fromList('{'.codeUnits))),
       throwsA(anything),
+    );
+  });
+
+  test('bundle verifies exact payload hash before parsing JSON', () async {
+    final directory = await Directory.systemTemp.createTemp('zeon-rules-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = ManagedRuleSetStore(directory: directory, now: () => generatedAt);
+    final malformed = await buildEnvelope(rawPayload: '{');
+    final tamperedChecksum = ManagedRuleSetEnvelope(
+      formatVersion: malformed.formatVersion,
+      generation: malformed.generation,
+      payload: malformed.payload,
+      checksum: '00${malformed.checksum.substring(2)}',
+    );
+
+    await expectLater(
+      store.validateEnvelope(tamperedChecksum, rejectExpired: true),
+      throwsA(
+        isA<RuleSetValidationException>().having((error) => error.message, 'message', 'envelope checksum mismatch'),
+      ),
+    );
+  });
+
+  test('bundle accepts bootstrap generation zero and installs active.json', () async {
+    final directory = await Directory.systemTemp.createTemp('zeon-rules-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = ManagedRuleSetStore(directory: directory, now: () => generatedAt);
+    final empty = await build(domains: const [], cidrs: const []);
+    final envelope = await buildEnvelope(generation: 0, ruleSets: [empty]);
+
+    final installed = await store.installEnvelope(envelope);
+
+    expect(installed.envelope.generation, 0);
+    expect(await store.activeFile.exists(), isTrue);
+    expect((await store.readActiveBundle())?.bundle.ruleSets.single.domainSuffixes, isEmpty);
+  });
+
+  test('invalid new bundle preserves active last-known-good', () async {
+    final directory = await Directory.systemTemp.createTemp('zeon-rules-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = ManagedRuleSetStore(directory: directory, now: () => generatedAt);
+    final active = await buildEnvelope();
+    await store.installEnvelope(active);
+    final expired = await buildEnvelope(
+      generation: 2,
+      bundleExpiresAt: generatedAt.subtract(const Duration(minutes: 1)),
+    );
+
+    await expectLater(store.installEnvelope(expired), throwsA(isA<RuleSetValidationException>()));
+
+    expect((await store.readActiveBundle())?.envelope.generation, 1);
+  });
+
+  test('corrupt active file is atomically recovered from .lkg', () async {
+    final directory = await Directory.systemTemp.createTemp('zeon-rules-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = ManagedRuleSetStore(directory: directory, now: () => generatedAt);
+    await store.installEnvelope(await buildEnvelope());
+    await store.installEnvelope(await buildEnvelope(generation: 2, ruleSets: [await build(version: '2')]));
+    await store.activeFile.writeAsString('{', flush: true);
+
+    final recovered = await store.readActiveBundle();
+
+    expect(recovered?.envelope.generation, 1);
+    expect(jsonDecode(await store.activeFile.readAsString()), isA<Map<String, dynamic>>());
+  });
+
+  test('bundle rejects cross-action conflicts', () async {
+    final directory = await Directory.systemTemp.createTemp('zeon-rules-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = ManagedRuleSetStore(directory: directory, now: () => generatedAt);
+    final direct = await build(domains: ['same.ru']);
+    final vpn = await build(id: 'force-vpn', domains: ['same.ru'], action: ManagedRuleAction.vpn, priority: 1);
+
+    await expectLater(
+      store.validateEnvelope(await buildEnvelope(ruleSets: [direct, vpn]), rejectExpired: true),
+      throwsA(isA<RuleSetValidationException>()),
     );
   });
 }

@@ -1296,6 +1296,14 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 		})
 	}
 	if hopt.Region == "ru" {
+		managedRuleSets, managedErr := readManagedRURuleSets(managedRURuleSetBundleFile)
+		if managedErr != nil {
+			// A remotely managed bundle is optional and must never make the
+			// embedded/offline routing policy unavailable.
+			fmt.Printf("Ignoring invalid managed RU rule-set bundle: %v\n", managedErr)
+		} else {
+			appendManagedRURouting(&dnsRules, &routeRules, &rulesets, hopt, managedRuleSets)
+		}
 		appendRUServiceRoutingPolicy(
 			&dnsRules,
 			&routeRules,

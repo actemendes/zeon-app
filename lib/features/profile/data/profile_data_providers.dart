@@ -9,6 +9,7 @@ import 'package:zeon/features/profile/data/profile_data_source.dart';
 import 'package:zeon/features/profile/data/profile_parser.dart';
 import 'package:zeon/features/profile/data/profile_path_resolver.dart';
 import 'package:zeon/features/profile/data/profile_repository.dart';
+import 'package:zeon/features/route_rules/data/managed_rule_set_sync.dart';
 import 'package:zeon/features/settings/data/config_option_data_providers.dart';
 import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
@@ -24,6 +25,7 @@ Future<ProfileRepository> profileRepository(Ref ref) async {
     configOptionRepository: ref.watch(configOptionRepositoryProvider),
     profileParser: ref.watch(profileParserProvider),
     profileConfigStore: ref.watch(profileConfigStoreProvider),
+    managedRuleSetSyncService: ref.watch(managedRuleSetSyncServiceProvider),
   );
   await repo.init().getOrElse((l) => throw l).run();
   return repo;

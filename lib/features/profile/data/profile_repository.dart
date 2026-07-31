@@ -16,6 +16,7 @@ import 'package:zeon/features/profile/data/profile_path_resolver.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/model/profile_failure.dart';
 import 'package:zeon/features/profile/model/profile_sort_enum.dart';
+import 'package:zeon/features/route_rules/data/managed_rule_set_sync.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/zeoncore/zeon_core_service.dart';
@@ -39,6 +40,7 @@ abstract interface class ProfileRepository {
     bool directOnly = false,
     bool disableRetry = false,
     bool validateConfigOnImport = true,
+    bool syncManagedRuleSets = true,
   });
   TaskEither<ProfileFailure, Unit> addLocal(String content, {UserOverride? userOverride});
   TaskEither<ProfileFailure, Unit> offlineUpdate(ProfileEntity nProfile, String nContent);
@@ -55,11 +57,13 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
     required ConfigOptionRepository configOptionRepository,
     required ProfileParser profileParser,
     required ProfileConfigStore profileConfigStore,
+    required ManagedRuleSetSyncService managedRuleSetSyncService,
   }) : _profileParser = profileParser,
        _configOptionRepo = configOptionRepository,
        _singbox = singbox,
        _profilePathResolver = profilePathResolver,
        _profileConfigStore = profileConfigStore,
+       _managedRuleSetSyncService = managedRuleSetSyncService,
        _profileDataSource = profileDataSource;
 
   final ProfileDataSource _profileDataSource;
@@ -68,6 +72,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
   final ConfigOptionRepository _configOptionRepo;
   final ProfileParser _profileParser;
   final ProfileConfigStore _profileConfigStore;
+  final ManagedRuleSetSyncService _managedRuleSetSyncService;
 
   @override
   TaskEither<ProfileFailure, Unit> init() {
@@ -148,6 +153,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
     bool directOnly = false,
     bool disableRetry = false,
     bool validateConfigOnImport = true,
+    bool syncManagedRuleSets = true,
   }) => TaskEither.tryCatch(() async {
     final existingProfile = await _profileDataSource.getByUrl(url).then((profEntry) => profEntry?.toEntity());
     final isUpdate = existingProfile != null && existingProfile is RemoteProfileEntity;
@@ -181,6 +187,15 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                 )
                 .run()
                 .then((result) => result.getOrElse((failure) => throw failure));
+
+      // Subscription parsing succeeded. Refresh the optional managed routing
+      // bundle before core validation/config generation so this profile update
+      // can immediately use the newly published policy. The sync service is
+      // deliberately fail-open and never turns a routing outage into a profile
+      // update failure.
+      if (syncManagedRuleSets) {
+        await _managedRuleSetSyncService.sync(force: true, reason: 'subscription_refresh');
+      }
 
       final content = validateConfigOnImport
           ? await _validatedOrPreviousUpdatedConfig(
@@ -281,7 +296,16 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
 
   @override
   TaskEither<ProfileFailure, String> generateConfig(String id) =>
-      getRawConfig(id).flatMap((content) => _singbox.generateFullConfig(content).mapLeft(ProfileFailure.unexpected));
+      TaskEither.tryCatch(() async {
+        // This closes the startup/autoconnect race: config generation waits for a
+        // TTL-governed, fail-open rule-set check without initiating a reconnect.
+        await _managedRuleSetSyncService.sync(reason: 'config_generation');
+        return unit;
+      }, ProfileFailure.unexpected).flatMap(
+        (_) => getRawConfig(
+          id,
+        ).flatMap((content) => _singbox.generateFullConfig(content).mapLeft(ProfileFailure.unexpected)),
+      );
 
   @override
   TaskEither<ProfileFailure, String> getRawConfig(String id) {

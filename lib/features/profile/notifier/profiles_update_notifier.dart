@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dartx/dartx.dart';
 import 'package:meta/meta.dart';
 import 'package:neat_periodic_task/neat_periodic_task.dart';
@@ -11,6 +13,7 @@ import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/data/profile_name_parser.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
+import 'package:zeon/features/route_rules/data/managed_rule_set_sync.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 
 part 'profiles_update_notifier.g.dart';
@@ -24,6 +27,7 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
 
   @override
   Stream<ProfileUpdateStatus?> build() {
+    unawaited(ref.read(managedRuleSetSyncServiceProvider).sync(reason: 'foreground_startup'));
     var cycleCount = 0;
     _scheduler = NeatPeriodicTaskScheduler(
       name: 'profiles update worker',
@@ -60,6 +64,8 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
 
   @visibleForTesting
   Future<void> updateProfiles() async {
+    await ref.read(managedRuleSetSyncServiceProvider).sync(reason: 'foreground_periodic');
+
     var force = false;
     if (_forceNextRun) {
       force = true;
@@ -87,6 +93,7 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
           )
           .first;
       final proxyOnly = ref.read(connectionNotifierProvider).valueOrNull?.isConnected ?? false;
+      var managedRuleSetSyncRequested = false;
 
       await for (final profile in Stream.fromIterable(remoteProfiles)) {
         final normalizedProfileName = parseProfileName(profile.name).trim();
@@ -97,7 +104,7 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
           await ref
               .read(profileRepositoryProvider)
               .requireValue
-              .upsertRemote(profile.url, proxyOnly: proxyOnly)
+              .upsertRemote(profile.url, proxyOnly: proxyOnly, syncManagedRuleSets: !managedRuleSetSyncRequested)
               .mapLeft((l) {
                 loggy.debug("error updating profile [${profile.id}]", l);
                 ref
@@ -115,6 +122,7 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
                 state = AsyncData((name: displayProfileName, success: false));
               })
               .map((_) {
+                managedRuleSetSyncRequested = true;
                 loggy.debug("profile [${profile.id}] updated successfully");
                 ref
                     .read(inAppNotificationControllerProvider)
