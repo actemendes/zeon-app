@@ -279,6 +279,20 @@ Automation misses, в которых Stop не был подтверждён, и
 доступность мобильного data plane и отсутствие тарифицируемого трафика не были
 подтверждены.
 
+Final cleanup выполнялся после PIN keyguard через package-scoped force-stop,
+без `pm clear` и без удаления приложения. После 15 секунд settling:
+
+```text
+VPN NetworkAgent: 0
+TUN links: 0
+foreground ServiceRecord: 0
+ZEON notification records: 0
+package process: 0
+production FATAL EXCEPTION: 0
+production ANR: 0
+SIGSEGV / SIGABRT / Go panic / native panic: 0
+```
+
 ## 17. Russia regression
 
 Validation build, generation `1785504245493461`:
