@@ -121,6 +121,15 @@ var validationDomainSuffixes = []string{
 	// bundled zapret-ru-domains rule set.
 	"ripn.su",
 	"xn--80aa3ak5a.xn--p1ai",
+
+	// Explicit privacy-redacted network diagnostics from the Stage 2.8
+	// Direct/Russia/Global browser matrix. These hosts are not ordinary
+	// browsing history: the validation harness creates and closes one exact
+	// test target for each of them and persists only HMAC IP evidence.
+	"2ip.ru",
+	"ipinfo.io",
+	"test-ipv6.com",
+	"browserleaks.com",
 }
 
 type validationEvent struct {

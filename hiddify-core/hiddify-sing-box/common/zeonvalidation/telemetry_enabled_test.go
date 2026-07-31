@@ -66,6 +66,12 @@ func TestMandatoryValidationServicesAreAllowlisted(t *testing.T) {
 		"Lenta":         "lenta.ru",
 		".su suffix":    "ripn.su",
 		".rf suffix":    "xn--80aa3ak5a.xn--p1ai",
+		"RU public exit": "2ip.ru",
+		"Global exit":    "ipinfo.io",
+		"IPv6":           "test-ipv6.com",
+		"DNS region":     "browserleaks.com/dns",
+		"WebRTC":         "browserleaks.com/webrtc",
+		"Consistency":    "browserleaks.com/javascript",
 	}
 	for service, hostOrURL := range testHosts {
 		host := strings.Split(hostOrURL, "/")[0]
