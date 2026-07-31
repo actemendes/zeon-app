@@ -1,0 +1,6 @@
+"case","before","after","evidence","rollback"
+"Yandex family in Russia","Explicit VPN override","zeon-ru-yandex -> DIRECT/DIRECT_DNS","144 route events; 27 hostnames; visual browser load","git revert ab446d7d"
+"Wildberries family in Russia","Explicit VPN override","zeon-ru-wildberries -> DIRECT/DIRECT_DNS","22 route events; 17 hostnames; visual catalog load","git revert f427499d"
+".ru/.su/.xn--p1ai","Final VPN unless separately overridden","zapret-ru-domains -> DIRECT","Physical suffix captures and per-host route telemetry","Revert bundled RU destination routing commits"
+"Cross-zone hostname on Russian IP","Final VPN","zapret-ru-ip -> DIRECT","Ozon/Avito/2GIS/VK cross-zone browser resources","Revert bundled RU destination routing commits"
+"Global preset","VPN final","VPN final; no RU rule sets installed","Global telemetry uses final/VPN/REMOTE and no RU matched set","No Global behavior change"

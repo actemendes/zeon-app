@@ -1,0 +1,25 @@
+# Stage 2.8 exact artifacts (no credentials, profile names, full IPs, or HMAC key)
+6190b8a5396a105f4f3b9c966dfb340bc8f00045bc49975c9a149d57798eac96  .codex-artifacts/stage2.8-production-07158f91/hiddify-core-production.aar
+adbb338b3312dc39353de7f43bc6c17866263d4fdc0e358872f82e51f64c80d9  .codex-artifacts/stage2.8-production-07158f91/zeon-stage2.8-production-arm64.apk
+04ea72765112d86c7dd83669594d2b5b8342d528e76f476a522456895bc88ded  .codex-artifacts/stage2.8-production-07158f91/zeon-stage2.8-production.aab
+5dffe6e43181613bfb59b9600d9b25f256815e5259794684fdc81be0a4d54619  .codex-artifacts/stage2.8-validation-35e98971/zeon-direct-dns-validation.apk
+1e0f81da0aa0b14a6a0ee3aa8e13130b92afb6845cabc9361aacfe613eb6295e  .codex-artifacts/stage2.8-validation-f9f523ab/hiddify-core-direct-dns-validation.aar
+1f798e19538fdfa05b8e098639374ba95272ff5654879d76eb23e04b61948a51  .codex-artifacts/stage2.8-validation-f9f523ab/zeon-direct-dns-validation.apk
+cc47b3455a9c5b643e5ea23c2bfc1826e830892ca773bf946a26f64e06cbcf62  .codex-artifacts/stage2.8-remote-dns-07158f91/hiddify-core-remote-dns-validation.aar
+052f2f3b8ed509fa130ac97c85c3b2c0935292d647daa37259677873b8efd798  .codex-artifacts/stage2.8-remote-dns-07158f91/zeon-remote-dns-baseline-validation.apk
+
+# Embedded local rule sets
+17f10be4b391d753117c49445852bcc277773c9c98d49228adb062ca2fcecd92  hiddify-core/v2/config/rulesets/manifest.json
+7e231278c6d274428d80da7d92b42a62378a90ceaced913e7c9d69d627ccb37d  hiddify-core/v2/config/rulesets/reference-manifest.json
+311c8f5a2ef10b5ad2d52362db354e42dba45d34993816dae2cbf027867bea1b  hiddify-core/v2/config/rulesets/zapret-ru-domains.json
+a39faeb4a4c894a2ce665b8919322cee626f61dd12c63a63736fcf8b0a433053  hiddify-core/v2/config/rulesets/zapret-ru-domains.srs
+1f4cccc9bb9510bb29d8a4b7d326b869bff94e9911d555acc0570545dabfaa7b  hiddify-core/v2/config/rulesets/zapret-ru-ip.srs
+
+# Redacted physical-browser evidence
+ff2a9ed2343404fa8cbfd704acb14134cb355dca47f18de641008513e253b2f6  out/stage2-8/browser-network-resources.csv
+f1ed76ef5919c5746e85906cf18dcb394e4b6c0e8a334060ebf67327a12c4c46  out/stage2-8/browser-service-matrix.csv
+d2aa546085af6a76bb5b7285d81bf0890c56bafe192c4630aa9662d057ac15dc  out/stage2-8/browser-vpn-detection.csv
+95fe2f33f5e9a3328de929bad3990191a1e038e6734cd1eb2b81c7e8cd51e604  out/stage2-8/cname-cdn-discovery.csv
+f8eb16ded7e9079ba20a153dcd69aef9f0c37173b93f370ed11ebecb283c748f  out/stage2-8/dns-ab.csv
+cfb833858e2d17959690f241ec438fcc0993cef07473c80e3bb5c4b1be78fd53  out/stage2-8/route-match-evidence.csv
+ea112f2c2c5532708f9ee35638c96b2a64c0ca48d3ad532a9163fa7199df5b90  out/stage2-8/routing-before-after.csv
