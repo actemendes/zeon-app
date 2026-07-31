@@ -462,6 +462,37 @@ func TestRussiaDNSABPolicyChangesOnlyServiceAndDomainDNS(t *testing.T) {
 	}
 }
 
+func TestRussiaDNSPolicyRespectsExplicitIPv4Only(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.Region = "ru"
+	hopt.IPv6Mode = option.DomainStrategy(constant.DomainStrategyIPv4Only)
+	hopt.DirectDnsDomainStrategy = option.DomainStrategy(constant.DomainStrategyPreferIPv6)
+	hopt.RemoteDnsDomainStrategy = option.DomainStrategy(constant.DomainStrategyPreferIPv6)
+
+	expectedServer, expectedStrategy := ruDestinationDNSPolicy(hopt)
+	if expectedStrategy != option.DomainStrategy(constant.DomainStrategyIPv4Only) {
+		t.Fatalf("Russia DNS strategy = %s, want explicit IPv4-only", expectedStrategy)
+	}
+
+	opts := option.Options{DNS: &option.DNSOptions{}}
+	if err := setRoutingOptions(&opts, hopt); err != nil {
+		t.Fatalf("setRoutingOptions returned error: %v", err)
+	}
+	for _, tag := range []string{
+		RUYandexRuleSetTag,
+		RUWildberriesRuleSetTag,
+		BundledRUDomainsRuleSetTag,
+	} {
+		index := indexDNSRuleSet(opts.DNS.Rules, tag, expectedServer)
+		if index < 0 {
+			t.Fatalf("%s has no DNS rule through %s", tag, expectedServer)
+		}
+		if strategy := opts.DNS.Rules[index].DefaultOptions.RouteOptions.Strategy; strategy != expectedStrategy {
+			t.Fatalf("%s DNS strategy = %s, want %s", tag, strategy, expectedStrategy)
+		}
+	}
+}
+
 func TestRussiaDNSPreservesReverseMappingWithoutChangingGlobal(t *testing.T) {
 	staticIPs := map[string][]string{}
 

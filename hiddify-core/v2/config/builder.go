@@ -1718,10 +1718,21 @@ func appendRUServiceRoutingPolicy(
 }
 
 func ruDestinationDNSPolicy(hopt *HiddifyOptions) (string, option.DomainStrategy) {
+	var strategy option.DomainStrategy
 	if ruRemoteDNSBaseline {
-		return DNSMultiRemoteTag, hopt.RemoteDnsDomainStrategy
+		strategy = hopt.RemoteDnsDomainStrategy
+	} else {
+		strategy = hopt.DirectDnsDomainStrategy
 	}
-	return DNSMultiDirectTag, hopt.DirectDnsDomainStrategy
+	switch hopt.IPv6Mode {
+	case option.DomainStrategy(C.DomainStrategyIPv4Only),
+		option.DomainStrategy(C.DomainStrategyIPv6Only):
+		strategy = hopt.IPv6Mode
+	}
+	if ruRemoteDNSBaseline {
+		return DNSMultiRemoteTag, strategy
+	}
+	return DNSMultiDirectTag, strategy
 }
 
 func patchHiddifyWarpFromConfig(out *option.Outbound, opt HiddifyOptions) *option.Outbound {
