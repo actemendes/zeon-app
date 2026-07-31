@@ -33,6 +33,7 @@ import 'package:zeon/zeoncore/generated/v2/config/route_rule.pb.dart' as route_r
 import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
+import 'package:zeon/zeoncore/global_data_plane_config_redactor.dart';
 import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/zeoncore/session_generation.dart';
 import 'package:zeon/zeoncore/vpn_diagnostics.dart';
@@ -49,6 +50,7 @@ class ZeonCoreService with InfraLogger {
   static const _debugProfileDnsStrategy = String.fromEnvironment("debug_profile_dns_strategy");
   static const _debugTunImplementation = String.fromEnvironment("debug_tun_implementation");
   static const _routeEvidenceLogcatEnabled = bool.fromEnvironment("route_evidence_logcat_enabled");
+  static const _globalDataPlaneValidationEnabled = bool.fromEnvironment("global_data_plane_validation_enabled");
   // Release builds may receive the authenticated UDP probe settings from CI.
   // The secret is never copied into diagnostic logs or the safe payload dump.
   static const _udpProbeEnabled = bool.fromEnvironment("udp_probe_enabled");
@@ -1098,6 +1100,7 @@ class ZeonCoreService with InfraLogger {
           if (_isStaleOperation(generation, "mark_core_started_result")) return right(unit);
           _connectedGeneration = generation;
           loggy.info(vpnDiagnosticEvent("core_start_success", generation));
+          await _emitRedactedEffectiveConfig(generation, "start");
           await _logRuntimeIndicators(generation, "core_start_success");
         } on GrpcError catch (e) {
           if (_isStaleOperation(generation, "core_start_grpc", error: e)) return right(unit);
@@ -1379,6 +1382,7 @@ class ZeonCoreService with InfraLogger {
           await core.markCoreStarted(generation);
           if (_isStaleOperation(generation, "core_restart_mark_result")) return right(unit);
           _connectedGeneration = generation;
+          await _emitRedactedEffectiveConfig(generation, "restart");
           if (source == "mode_switch") {
             loggy.warning(
               vpnDiagnosticEvent(
@@ -1456,6 +1460,38 @@ class ZeonCoreService with InfraLogger {
       }
     } catch (e, st) {
       loggy.warning("failed to delete core current config snapshot", e, st);
+    }
+  }
+
+  Future<void> _emitRedactedEffectiveConfig(int generation, String phase) async {
+    if (!_globalDataPlaneValidationEnabled || !PlatformUtils.isAndroid) return;
+    try {
+      final directories = ref.read(appDirectoriesProvider).requireValue;
+      final file = File(p.join(directories.workingDir.path, "data", "current-config.json"));
+      if (!await file.exists()) {
+        loggy.warning("Stage 2.9 effective config snapshot is absent");
+        return;
+      }
+      final redacted = GlobalDataPlaneConfigRedactor().redactJson(await file.readAsString());
+      final encoded = base64Url.encode(utf8.encode(redacted));
+      const chunkSize = 5600;
+      final total = (encoded.length / chunkSize).ceil();
+      for (var index = 0; index < total; index++) {
+        final start = index * chunkSize;
+        final end = min(encoded.length, start + chunkSize);
+        final event = jsonEncode({
+          "kind": "effective_config_chunk",
+          "generation": generation.toString(),
+          "phase": phase,
+          "chunk": index + 1,
+          "chunks": total,
+          "encoding": "base64url-utf8",
+          "data": encoded.substring(start, end),
+        });
+        await _platformChannel.invokeMethod<bool>("emit_route_evidence", "ZEON_ROUTE_VALIDATION $event");
+      }
+    } catch (error, stackTrace) {
+      loggy.warning("Stage 2.9 effective config redaction failed", error, stackTrace);
     }
   }
 
