@@ -34,17 +34,12 @@ import com.squareup.wire.GrpcClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.isActive
-
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.ReceiveChannel
-import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.IOException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancelAndJoin
 class ServiceNotification(private val status: MutableLiveData<Status>, private val service: Service) : BroadcastReceiver(){
@@ -271,17 +266,21 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
             Log.d("notification", "startListenSystemInfo-launch")
 
             val coreClient = GrpcClientProvider.grpcClient.create(CoreClient::class)
+            // Keep one HTTP/2 call alive. Reissuing a unary call every second
+            // made OkHttp host canonicalization hot enough to trigger an ART
+            // JIT crash on affected Android builds.
+            val systemInfoStream = coreClient.GetSystemInfoStream()
 
             try {
                 if (!isPollingCurrent(generation, sessionAcceptsOperations, "initial")) return@launch
-                var previous = coreClient.GetSystemInfo().executeBlocking(Empty())
+                val (requests, responses) = systemInfoStream.executeIn(this)
+                requests.send(Empty())
+                requests.close()
 
-                while (isActive) {
-                    delay(1_000) // ✅ coroutine-friendly
-                    if (!isPollingCurrent(generation, sessionAcceptsOperations, "interval")) break
-                    val current = coreClient.GetSystemInfo().executeBlocking(Empty())
+                var previous: SystemInfo? = null
+                for (current in responses) {
                     if (!isPollingCurrent(generation, sessionAcceptsOperations, "result")) break
-                    updateStatus(previous,current)
+                    previous?.let { updateStatus(it, current) }
                     previous = current
                 }
             } catch (e: CancellationException) {
@@ -291,6 +290,8 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
             } catch (e: Exception) {
                 Log.e("notification", "SystemInfo polling failed", e)
                 notification.cancel(notificationId)
+            } finally {
+                systemInfoStream.cancel()
             }
         }
     }
