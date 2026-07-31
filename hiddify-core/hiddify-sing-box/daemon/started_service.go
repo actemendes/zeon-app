@@ -9,7 +9,6 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/urltest"
-	"github.com/sagernet/sing-box/common/zeonvalidation"
 	"github.com/sagernet/sing-box/experimental/clashapi"
 	"github.com/sagernet/sing-box/experimental/clashapi/trafficontrol"
 	"github.com/sagernet/sing-box/experimental/deprecated"
@@ -1063,14 +1062,6 @@ func (s *StartedService) WriteMessage(level log.Level, message string) {
 	}
 	s.logAccess.Unlock()
 	s.logSubscriber.Emit(item)
-	if zeonvalidation.IsLogMessage(message) {
-		if levelWriter, loaded := s.handler.(interface {
-			WriteMessage(log.Level, string)
-		}); loaded {
-			levelWriter.WriteMessage(level, message)
-			return
-		}
-	}
 	if s.debug {
 		s.handler.WriteDebugMessage(message)
 	}
