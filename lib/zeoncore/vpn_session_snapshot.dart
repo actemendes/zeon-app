@@ -34,6 +34,38 @@ enum VpnSessionPhase {
   }
 }
 
+enum VpnStopSource {
+  none,
+  flutter,
+  notification,
+  tile,
+  shortcut,
+  revoke,
+  destroy,
+  internal,
+  unknown;
+
+  static VpnStopSource parse(Object? value) {
+    final normalized = value?.toString().trim().toLowerCase() ?? '';
+    return switch (normalized) {
+      '' => none,
+      'flutter' => flutter,
+      'notification' => notification,
+      'tile' => tile,
+      'shortcut' => shortcut,
+      'revoke' => revoke,
+      'destroy' => destroy,
+      'internal' => internal,
+      _ => unknown,
+    };
+  }
+
+  bool get isExternalIntentional => switch (this) {
+    notification || tile || shortcut || revoke => true,
+    _ => false,
+  };
+}
+
 @immutable
 class VpnSessionSnapshot {
   const VpnSessionSnapshot({
@@ -43,6 +75,7 @@ class VpnSessionSnapshot {
     required this.snapshotVersion,
     required this.phase,
     this.requestedAction = '',
+    this.stopSource = VpnStopSource.none,
     this.coreReady = false,
     this.coreStarted = false,
     this.commandEndpointReady = false,
@@ -78,6 +111,7 @@ class VpnSessionSnapshot {
       snapshotVersion: integer('snapshotVersion'),
       phase: VpnSessionPhase.parse(map['phase']),
       requestedAction: text('requestedAction'),
+      stopSource: VpnStopSource.parse(map['stopSource']),
       coreReady: boolean('coreReady'),
       coreStarted: boolean('coreStarted'),
       commandEndpointReady: boolean('commandEndpointReady'),
@@ -99,6 +133,7 @@ class VpnSessionSnapshot {
   final int snapshotVersion;
   final VpnSessionPhase phase;
   final String requestedAction;
+  final VpnStopSource stopSource;
   final bool coreReady;
   final bool coreStarted;
   final bool commandEndpointReady;
@@ -111,6 +146,10 @@ class VpnSessionSnapshot {
   final String failureCode;
   final String failureOwner;
   final bool recoverable;
+
+  bool get isTerminalStop => phase == VpnSessionPhase.disconnected && requestedAction == 'stop';
+
+  bool get isExternalIntentionalStop => isTerminalStop && stopSource.isExternalIntentional;
 
   bool get provesConnected =>
       generation > 0 &&
@@ -153,7 +192,17 @@ class VpnSessionSnapshotGate {
     if (next.generation < _generation || next.snapshotVersion < _snapshotVersion) {
       return VpnSnapshotDisposition.stale;
     }
-    if (next.generation == _generation && _current != null && _phaseRank(next.phase) < _phaseRank(_current!.phase)) {
+    final sameGenerationConnectAfterPreparationStop =
+        next.generation == _generation &&
+        _current != null &&
+        (_current!.phase == VpnSessionPhase.disconnected || _current!.phase == VpnSessionPhase.failed) &&
+        _phaseRank(next.phase) >= _phaseRank(VpnSessionPhase.startRequested) &&
+        _phaseRank(next.phase) <= _phaseRank(VpnSessionPhase.connected) &&
+        next.requestedAction == 'connect';
+    if (next.generation == _generation &&
+        _current != null &&
+        _phaseRank(next.phase) < _phaseRank(_current!.phase) &&
+        !sameGenerationConnectAfterPreparationStop) {
       return VpnSnapshotDisposition.stale;
     }
     if (next.sequenceNumber == _sequence && next.snapshotVersion == _snapshotVersion) {
@@ -188,6 +237,18 @@ class VpnSessionSnapshotGate {
     _sequence = next.sequenceNumber;
     _snapshotVersion = next.snapshotVersion;
     _current = next;
+  }
+
+  /// Accepts a MethodChannel/authoritative read only when it is not older
+  /// than a snapshot already delivered by the EventChannel. Gaps are allowed
+  /// because the read represents the platform's current complete state.
+  bool acceptResynced(VpnSessionSnapshot next) {
+    final disposition = classify(next);
+    if (disposition == VpnSnapshotDisposition.stale || disposition == VpnSnapshotDisposition.duplicate) {
+      return false;
+    }
+    acceptAuthoritative(next);
+    return true;
   }
 
   bool accept(VpnSessionSnapshot next) {

@@ -55,7 +55,7 @@ class TileService : TileService(), ServiceConnection.Callback {
                 }
             }
             Status.Started -> {
-                BoxService.stop()
+                BoxService.stop(source = VpnStopSource.TILE)
                 qsTile?.apply {
                     state = Tile.STATE_INACTIVE
                     updateTile()

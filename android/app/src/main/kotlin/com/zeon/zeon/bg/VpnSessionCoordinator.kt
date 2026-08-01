@@ -26,6 +26,25 @@ object VpnSessionCoordinator {
         return generation
     }
 
+    /**
+     * Atomically allocates a generation newer than both the current native
+     * owner and [requested]. Used by an explicit preemptive Stop so a tile or
+     * service operation racing with Dart cannot share the same generation and
+     * reopen the TUN after the Stop terminal state.
+     */
+    fun nextAfter(requested: Long, reason: String): Long {
+        while (true) {
+            val current = sequence.get()
+            val requestedFloor = if (requested > 0L) requested else 0L
+            val candidate = maxOf(current + 1L, requestedFloor)
+            if (sequence.compareAndSet(current, candidate)) {
+                publishToNativeProcess(candidate)
+                event("vpn_session_generation", candidate, "reason=$reason")
+                return candidate
+            }
+        }
+    }
+
     fun accept(requested: Long, reason: String): Long {
         if (requested <= 0) return next(reason)
         while (true) {

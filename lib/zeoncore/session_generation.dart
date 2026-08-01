@@ -15,6 +15,16 @@ class SessionGenerationGate {
 
   int next() => ++_current;
 
+  /// Synchronizes with an authoritative platform operation without ever
+  /// moving backwards. The following locally allocated operation is therefore
+  /// strictly newer than an externally initiated terminal generation.
+  int advanceTo(int generation) {
+    if (generation > _current) {
+      _current = generation;
+    }
+    return _current;
+  }
+
   bool isCurrent(int generation, {required String source}) {
     if (generation == _current) return true;
     onStale?.call(generation, _current, source);

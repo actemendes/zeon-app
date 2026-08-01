@@ -9,12 +9,16 @@ VpnSessionSnapshot snapshot({
   String epoch = 'process-a',
   VpnSessionPhase phase = VpnSessionPhase.startingCore,
   bool ready = false,
+  String requestedAction = '',
+  VpnStopSource stopSource = VpnStopSource.none,
 }) => VpnSessionSnapshot(
   generation: generation,
   runtimeEpoch: epoch,
   sequenceNumber: sequence,
   snapshotVersion: version,
   phase: phase,
+  requestedAction: requestedAction,
+  stopSource: stopSource,
   coreReady: ready,
   coreStarted: ready,
   commandEndpointReady: ready,
@@ -43,11 +47,11 @@ void main() {
 
     test('accepts a new runtime epoch after process recreation', () {
       final gate = VpnSessionSnapshotGate()..accept(snapshot(generation: 50, sequence: 20, version: 20));
-      expect(gate.accept(snapshot(generation: 1, sequence: 1, version: 1, epoch: 'process-b')), isTrue);
+      expect(gate.accept(snapshot(epoch: 'process-b')), isTrue);
     });
 
     test('Connected requires every platform gate and an outbound', () {
-      expect(snapshot(phase: VpnSessionPhase.connected, ready: false).toCoreStatus(), isA<CoreStarting>());
+      expect(snapshot(phase: VpnSessionPhase.connected).toCoreStatus(), isA<CoreStarting>());
       expect(snapshot(phase: VpnSessionPhase.connected, ready: true).provesConnected, isTrue);
       expect(snapshot(phase: VpnSessionPhase.connected, ready: true).toCoreStatus(), isA<CoreStarted>());
     });
@@ -55,19 +59,13 @@ void main() {
     test('transient CoreReady cannot replace Connected', () {
       final gate = VpnSessionSnapshotGate()
         ..accept(snapshot(phase: VpnSessionPhase.connected, ready: true, sequence: 5, version: 5));
-      expect(
-        gate.classify(snapshot(phase: VpnSessionPhase.startingCore, sequence: 4, version: 4)),
-        VpnSnapshotDisposition.stale,
-      );
+      expect(gate.classify(snapshot(sequence: 4, version: 4)), VpnSnapshotDisposition.stale);
     });
 
     test('newer transient CoreReady cannot regress Connected', () {
       final gate = VpnSessionSnapshotGate()
         ..accept(snapshot(phase: VpnSessionPhase.connected, ready: true, sequence: 5, version: 5));
-      expect(
-        gate.classify(snapshot(phase: VpnSessionPhase.startingCore, sequence: 6, version: 6)),
-        VpnSnapshotDisposition.stale,
-      );
+      expect(gate.classify(snapshot(sequence: 6, version: 6)), VpnSnapshotDisposition.stale);
     });
 
     test('stop progression after Connected is accepted', () {
@@ -84,6 +82,36 @@ void main() {
         ..accept(snapshot(phase: VpnSessionPhase.disconnected, sequence: 9, version: 9));
       final next = snapshot(generation: 2, phase: VpnSessionPhase.startRequested, sequence: 10, version: 10);
       expect(gate.accept(next), isTrue);
+    });
+
+    test('the same generation may connect after its preparation stop', () {
+      final gate = VpnSessionSnapshotGate()
+        ..accept(snapshot(phase: VpnSessionPhase.disconnected, sequence: 9, version: 9));
+      final start = snapshot(
+        phase: VpnSessionPhase.startRequested,
+        sequence: 10,
+        version: 10,
+        requestedAction: 'connect',
+      );
+
+      expect(gate.accept(start), isTrue);
+      expect(gate.current, same(start));
+    });
+
+    test('authoritative Connected resync may recover a missed same-generation start', () {
+      final gate = VpnSessionSnapshotGate()
+        ..accept(snapshot(phase: VpnSessionPhase.disconnected, sequence: 9, version: 9));
+      final connected = snapshot(
+        phase: VpnSessionPhase.connected,
+        sequence: 12,
+        version: 12,
+        requestedAction: 'connect',
+        ready: true,
+      );
+
+      expect(gate.classify(connected), VpnSnapshotDisposition.gap);
+      gate.acceptAuthoritative(connected);
+      expect(gate.current, same(connected));
     });
 
     test('invalid sequencing metadata is rejected', () {
@@ -132,13 +160,13 @@ void main() {
       final gate = VpnSessionSnapshotGate()
         ..accept(snapshot(generation: 2, phase: VpnSessionPhase.connected, ready: true, sequence: 8, version: 8));
       expect(
-        gate.classify(snapshot(generation: 1, phase: VpnSessionPhase.failed, sequence: 9, version: 9)),
+        gate.classify(snapshot(phase: VpnSessionPhase.failed, sequence: 9, version: 9)),
         VpnSnapshotDisposition.stale,
       );
     });
 
     test('event map parsing is deterministic', () {
-      final parsed = VpnSessionSnapshot.fromEvent({
+      final parsed = VpnSessionSnapshot.fromEvent(const {
         'generation': '7',
         'runtimeEpoch': 'epoch',
         'sequenceNumber': 8,
@@ -149,6 +177,47 @@ void main() {
       expect(parsed.generation, 7);
       expect(parsed.phase, VpnSessionPhase.stopRequested);
       expect(parsed.recoverable, isTrue);
+    });
+
+    test('typed external stop source is preserved and classified', () {
+      final parsed = VpnSessionSnapshot.fromEvent(const {
+        'generation': 11,
+        'runtimeEpoch': 'epoch',
+        'sequenceNumber': 12,
+        'snapshotVersion': 13,
+        'phase': 'disconnected',
+        'requestedAction': 'stop',
+        'stopSource': 'notification',
+      });
+
+      expect(parsed.stopSource, VpnStopSource.notification);
+      expect(parsed.isTerminalStop, isTrue);
+      expect(parsed.isExternalIntentionalStop, isTrue);
+      expect(
+        snapshot(
+          phase: VpnSessionPhase.disconnected,
+          requestedAction: 'stop',
+          stopSource: VpnStopSource.destroy,
+        ).isExternalIntentionalStop,
+        isFalse,
+      );
+    });
+
+    test('late authoritative resync cannot roll back a newer event snapshot', () {
+      final gate = VpnSessionSnapshotGate();
+      final newerEvent = snapshot(
+        generation: 22,
+        sequence: 11,
+        version: 11,
+        phase: VpnSessionPhase.connected,
+        ready: true,
+      );
+      final olderMethodResult = snapshot(generation: 22, sequence: 10, version: 10, phase: VpnSessionPhase.verifying);
+
+      expect(gate.accept(newerEvent), isTrue);
+      expect(gate.acceptResynced(olderMethodResult), isFalse);
+      expect(gate.current, same(newerEvent));
+      expect(gate.current?.toCoreStatus(), isA<CoreStarted>());
     });
   });
 }

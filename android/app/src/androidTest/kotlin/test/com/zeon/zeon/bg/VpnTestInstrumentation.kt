@@ -56,6 +56,12 @@ class VpnTestInstrumentation : Instrumentation() {
             TestCase(generationTests.javaClass.name, "staleExternalGenerationCannotReplaceCurrent") {
                 generationTests.staleExternalGenerationCannotReplaceCurrent()
             },
+            TestCase(
+                generationTests.javaClass.name,
+                "preemptiveStopGenerationIsStrictlyNewerThanNativeAndDartFloors",
+            ) {
+                generationTests.preemptiveStopGenerationIsStrictlyNewerThanNativeAndDartFloors()
+            },
             TestCase(startupTests.javaClass.name, "mobileStartSuccessRequiresEndpointReadiness") {
                 startupTests.mobileStartSuccessRequiresEndpointReadiness()
             },
@@ -98,8 +104,20 @@ class VpnTestInstrumentation : Instrumentation() {
             TestCase(snapshotTests.javaClass.name, "duplicateSelectedOutboundDoesNotPublishANewSnapshot") {
                 snapshotTests.duplicateSelectedOutboundDoesNotPublishANewSnapshot()
             },
+            TestCase(snapshotTests.javaClass.name, "terminalStopIsTypedCleanAndIdempotent") {
+                snapshotTests.terminalStopIsTypedCleanAndIdempotent()
+            },
+            TestCase(snapshotTests.javaClass.name, "repeatedStopPublishesNewestGenerationAndNextStartIsNewer") {
+                snapshotTests.repeatedStopPublishesNewestGenerationAndNextStartIsNewer()
+            },
+            TestCase(snapshotTests.javaClass.name, "alreadyStoppedExternalStopPromotesTheTerminalGeneration") {
+                snapshotTests.alreadyStoppedExternalStopPromotesTheTerminalGeneration()
+            },
             TestCase(shutdownTests.javaClass.name, "nativeCoreCloseNeverRunsOnMainLooper") {
                 shutdownTests.nativeCoreCloseNeverRunsOnMainLooper()
+            },
+            TestCase(shutdownTests.javaClass.name, "hungNativeCloseTimesOutWithoutAllowingConcurrentRestart") {
+                shutdownTests.hungNativeCloseTimesOutWithoutAllowingConcurrentRestart()
             },
         )
         listOf(

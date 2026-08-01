@@ -4,6 +4,10 @@ import com.zeon.zeon.bg.VpnSessionPhase
 import com.zeon.zeon.bg.VpnSessionSnapshot
 import com.zeon.zeon.bg.VpnSessionCoordinator
 import com.zeon.zeon.bg.VpnSessionSnapshotCoordinator
+import com.zeon.zeon.bg.VpnStopSource
+import com.zeon.zeon.Settings
+import com.zeon.zeon.bg.BoxService
+import kotlinx.coroutines.delay
 
 class VpnSessionSnapshotInstrumentedTest {
     private fun snapshot(
@@ -48,4 +52,66 @@ class VpnSessionSnapshotInstrumentedTest {
             "unchanged outbound must not increment snapshot version"
         }
     }
+
+    fun terminalStopIsTypedCleanAndIdempotent() {
+        val generation = VpnSessionCoordinator.next("snapshot_terminal_stop_test")
+        VpnSessionSnapshotCoordinator.begin(generation, "connect")
+        VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.VERIFYING) {
+            it.copy(
+                coreReady = true,
+                coreStarted = true,
+                commandEndpointReady = true,
+                tunnelReady = true,
+                protectSucceeded = true,
+                platformVpnValidated = true,
+                selectedOutboundId = "opaque",
+            )
+        }
+        VpnSessionSnapshotCoordinator.requestStop(generation, VpnStopSource.NOTIFICATION)
+        val first = VpnSessionSnapshotCoordinator.publishDisconnected(generation, VpnStopSource.NOTIFICATION)
+        val second = VpnSessionSnapshotCoordinator.publishDisconnected(generation, VpnStopSource.NOTIFICATION)
+
+        check(first.phase == VpnSessionPhase.DISCONNECTED)
+        check(first.requestedAction == "stop")
+        check(first.stopSource == VpnStopSource.NOTIFICATION)
+        check(first.toEvent()["stopSource"] == "notification")
+        check(!first.coreReady && !first.coreStarted && !first.commandEndpointReady)
+        check(!first.tunnelReady && !first.protectSucceeded && !first.platformVpnValidated)
+        check(first.selectedOutboundId.isEmpty() && first.selectedOutboundLabel.isEmpty())
+        check(second.sequenceNumber == first.sequenceNumber)
+        check(second.snapshotVersion == first.snapshotVersion)
+    }
+
+    fun repeatedStopPublishesNewestGenerationAndNextStartIsNewer() {
+        val firstGeneration = VpnSessionCoordinator.next("snapshot_first_stop_test")
+        VpnSessionSnapshotCoordinator.requestStop(firstGeneration, VpnStopSource.FLUTTER)
+        val repeatedGeneration = VpnSessionCoordinator.next("snapshot_repeated_stop_test")
+        VpnSessionSnapshotCoordinator.requestStop(repeatedGeneration, VpnStopSource.FLUTTER)
+        val terminal = VpnSessionSnapshotCoordinator.publishDisconnected(
+            repeatedGeneration,
+            VpnStopSource.FLUTTER,
+        )
+
+        check(terminal.generation == repeatedGeneration)
+        val nextStartGeneration = VpnSessionCoordinator.next("snapshot_start_after_repeated_stop_test")
+        check(nextStartGeneration > terminal.generation)
+    }
+
+    suspend fun alreadyStoppedExternalStopPromotesTheTerminalGeneration() {
+        Settings.startedByUser = true
+        val generation = VpnSessionCoordinator.next("snapshot_already_stopped_external_stop_test")
+        check(BoxService.stop(generation, VpnStopSource.TILE))
+        check(!Settings.startedByUser)
+
+        repeat(10) {
+            val snapshot = VpnSessionSnapshotCoordinator.current()
+            if (snapshot.generation == generation && snapshot.phase == VpnSessionPhase.DISCONNECTED) {
+                check(snapshot.stopSource == VpnStopSource.TILE)
+                return
+            }
+            delay(100L)
+        }
+        error("already-stopped service did not publish a rebased terminal snapshot")
+    }
+
 }

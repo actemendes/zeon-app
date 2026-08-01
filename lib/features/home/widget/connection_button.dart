@@ -63,6 +63,8 @@ class ConnectionButton extends HookConsumerWidget {
           final activeProfile = await ref.read(activeProfileProvider.future);
           return await ref.read(connectionNotifierProvider.notifier).reconnect(activeProfile);
         },
+        AsyncError() when ref.read(connectionNotifierProvider.notifier).hasPendingStopIntent =>
+          () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
         AsyncData(value: Disconnected()) || AsyncError() => () async {
           if (ref.read(activeProfileProvider).valueOrNull == null) {
             await ref.read(dialogNotifierProvider.notifier).showNoActiveProfile();
@@ -81,10 +83,16 @@ class ConnectionButton extends HookConsumerWidget {
           }
           return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
         },
+        AsyncData(value: Connecting()) ||
+        AsyncData(value: Disconnecting()) => () => ref.read(connectionNotifierProvider.notifier).abortConnection(),
         _ => () {},
       },
       enabled: switch (connectionStatus) {
-        AsyncData(value: Connected()) || AsyncData(value: Disconnected()) || AsyncError() => true,
+        AsyncData(value: Connected()) ||
+        AsyncData(value: Disconnected()) ||
+        AsyncData(value: Connecting()) ||
+        AsyncData(value: Disconnecting()) ||
+        AsyncError() => true,
         _ => false,
       },
       label: switch (resolvedConnectionStatus) {

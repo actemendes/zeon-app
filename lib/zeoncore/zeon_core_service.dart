@@ -37,11 +37,22 @@ import 'package:zeon/zeoncore/global_data_plane_config_redactor.dart';
 import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/zeoncore/session_generation.dart';
 import 'package:zeon/zeoncore/vpn_diagnostics.dart';
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 enum _CoreLifecycleState { stopped, starting, started, stopping }
 
 class ZeonCoreService with InfraLogger {
-  ZeonCoreService(this.ref, {CoreInterface? coreInterface}) : core = coreInterface ?? getCoreInterface();
+  ZeonCoreService(this.ref, {CoreInterface? coreInterface}) : core = coreInterface ?? getCoreInterface() {
+    _platformSnapshotSubscription = core.watchSessionSnapshots().listen(
+      _queuePlatformSessionSnapshot,
+      onError: (Object error, StackTrace stackTrace) {
+        loggy.warning("Android VPN snapshot bridge failed", error, stackTrace);
+      },
+    );
+    ref.onDispose(() {
+      unawaited(_platformSnapshotSubscription.cancel());
+    });
+  }
   final Ref ref;
   static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
   static const _debugNetworkProfile = String.fromEnvironment("debug_network_profile");
@@ -81,6 +92,7 @@ class ZeonCoreService with InfraLogger {
   final Map<String, int> _listenerReconnectAttempt = {};
   final Map<String, Future<void>> _statusListenerRecoveryByKey = {};
   int _stoppingStatusWatchdogGeneration = 0;
+  ({int generation, Future<Either<String, Unit>> future})? _stopInFlight;
   late final SessionGenerationGate _sessionGeneration = SessionGenerationGate(
     onStale: (stale, current, source) {
       loggy.warning(
@@ -89,6 +101,9 @@ class ZeonCoreService with InfraLogger {
     },
   );
   final SerialLifecycleQueue _lifecycleQueue = SerialLifecycleQueue();
+  late final StreamSubscription<VpnSessionSnapshot> _platformSnapshotSubscription;
+  Future<void> _platformSnapshotTail = Future<void>.value();
+  VpnSessionSnapshot? _latestPlatformSnapshot;
   _CoreLifecycleState _lifecycleState = _CoreLifecycleState.stopped;
   int _connectedGeneration = 0;
   ChangeHiddifySettingsRequest? _latestCoreOptionsRequest;
@@ -260,17 +275,108 @@ class ZeonCoreService with InfraLogger {
     }
   }
 
-  Future<CoreStatus> resyncFromPlatform(String source) async {
-    final authoritative = await core.resyncSessionStatus();
-    if (authoritative == null) return currentState;
+  void _queuePlatformSessionSnapshot(VpnSessionSnapshot snapshot) {
+    final previous = _platformSnapshotTail;
+    _platformSnapshotTail = () async {
+      try {
+        await previous;
+      } catch (_) {
+        // A failed preference write must not permanently break the bridge.
+      }
+      try {
+        await _applyPlatformSessionSnapshot(snapshot);
+      } catch (error, stackTrace) {
+        loggy.warning("failed to apply Android VPN snapshot", error, stackTrace);
+      }
+    }();
+  }
+
+  Future<void> _applyPlatformSessionSnapshot(VpnSessionSnapshot snapshot) async {
+    if (snapshot.generation < _sessionGeneration.current) {
+      loggy.warning(
+        vpnDiagnosticEvent(
+          "stale_callback_ignored",
+          snapshot.generation,
+          details:
+              "current_generation=${_sessionGeneration.current} source=android_snapshot_bridge "
+              "phase=${snapshot.phase.name}",
+        ),
+      );
+      return;
+    }
+    _sessionGeneration.advanceTo(snapshot.generation);
+    _latestPlatformSnapshot = snapshot;
+
+    // Synchronize explicit platform stops and platform-owned starts before
+    // their status reaches ConnectionNotifier. Persistence is best-effort and
+    // can never suppress the authoritative state event.
+    await _syncRunningIntentFromPlatformSnapshot(snapshot);
+
+    final authoritative = snapshot.toCoreStatus();
+    if (snapshot.provesConnected) {
+      _connectedGeneration = snapshot.generation;
+    } else if (authoritative is CoreStopped) {
+      _connectedGeneration = 0;
+    }
     currentState = authoritative;
-    _syncLifecycleFromCoreStatus(authoritative, reason: "platform resync/$source");
-    statusController.add(authoritative);
+    _syncLifecycleFromCoreStatus(
+      authoritative,
+      reason: "Android snapshot/${snapshot.phase.name}/${snapshot.stopSource.name}",
+    );
+    if (!statusController.isClosed) {
+      statusController.add(authoritative);
+    }
+    loggy.info(
+      vpnDiagnosticEvent(
+        "vpn_snapshot_applied",
+        snapshot.generation,
+        details:
+            "phase=${snapshot.phase.name} requested_action=${snapshot.requestedAction} "
+            "stop_source=${snapshot.stopSource.name}",
+      ),
+    );
+  }
+
+  bool _platformConfirmsStopped(int generation) {
+    final snapshot = _latestPlatformSnapshot;
+    return snapshot != null && snapshot.generation == generation && snapshot.phase == VpnSessionPhase.disconnected;
+  }
+
+  Future<void> _syncRunningIntentFromPlatformSnapshot(VpnSessionSnapshot snapshot) async {
+    final running = snapshot.provesConnected
+        ? true
+        : snapshot.isExternalIntentionalStop
+        ? false
+        : null;
+    if (running == null) return;
+    try {
+      await ref.read(Preferences.startedByUser.notifier).update(running).timeout(const Duration(seconds: 1));
+    } catch (error, stackTrace) {
+      loggy.warning("failed to persist platform running intent", error, stackTrace);
+    }
+  }
+
+  Future<CoreStatus?> resyncFromPlatform(String source, {bool publish = false}) async {
+    final authoritative = await core.resyncSessionStatus();
+    final snapshot = core.authoritativeSessionSnapshot;
+    if (snapshot != null) {
+      _sessionGeneration.advanceTo(snapshot.generation);
+      _latestPlatformSnapshot = snapshot;
+      await _syncRunningIntentFromPlatformSnapshot(snapshot);
+    } else {
+      _sessionGeneration.advanceTo(core.authoritativeSessionGeneration);
+    }
+    if (authoritative == null) return null;
+    if (publish) {
+      currentState = authoritative;
+      _syncLifecycleFromCoreStatus(authoritative, reason: "platform resync/$source");
+      statusController.add(authoritative);
+    }
     loggy.info(
       vpnDiagnosticEvent(
         "vpn_snapshot_resync",
         _sessionGeneration.current,
-        details: "source=$source status=${authoritative.runtimeType}",
+        details: "source=$source status=${authoritative.runtimeType} published=$publish",
       ),
     );
     return authoritative;
@@ -295,6 +401,9 @@ class ZeonCoreService with InfraLogger {
     }
     return generation;
   }
+
+  bool isVpnOperationCurrent(int generation, {String source = "external_operation_guard"}) =>
+      _sessionGeneration.isCurrent(generation, source: source);
 
   bool _isStaleOperation(int generation, String source, {Object? error}) {
     if (_sessionGeneration.classifyCompletion(generation, source: source) == SessionCompletionDisposition.current) {
@@ -547,9 +656,11 @@ class ZeonCoreService with InfraLogger {
   TaskEither<String, Unit> setup() {
     return TaskEither(() async {
       if (_useMockCore) {
-        currentState = const CoreStatus.stopped();
-        _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock setup");
-        statusController.add(currentState);
+        if (_lifecycleState != _CoreLifecycleState.starting && _lifecycleState != _CoreLifecycleState.stopping) {
+          currentState = const CoreStatus.stopped();
+          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock setup");
+          statusController.add(currentState);
+        }
         return right(unit);
       }
       try {
@@ -572,7 +683,9 @@ class ZeonCoreService with InfraLogger {
         if (bgActive && !core.isSingleChannel()) {
           await startListeningLogs("bg", core.bgClient);
         }
-        if (!core.isSingleChannel()) {
+        final lifecycleIntentReserved =
+            _lifecycleState == _CoreLifecycleState.starting || _lifecycleState == _CoreLifecycleState.stopping;
+        if (!core.isSingleChannel() && !lifecycleIntentReserved) {
           try {
             currentState = bgActive ? const CoreStatus.started() : const CoreStatus.stopped();
             _transitionLifecycle(
@@ -583,7 +696,11 @@ class ZeonCoreService with InfraLogger {
             loggy.warning("failed to detect background core state: $e");
           }
         }
-        statusController.add(currentState);
+        if (!lifecycleIntentReserved) {
+          statusController.add(currentState);
+        } else {
+          loggy.debug("setup background probe preserved reserved lifecycle=${_lifecycleState.name}");
+        }
         if (bgActive) {
           await startListeningStatus("bg", core.bgClient);
         }
@@ -1219,59 +1336,161 @@ class ZeonCoreService with InfraLogger {
 
   TaskEither<String, Unit> stop({bool force = false}) {
     return TaskEither(() {
+      if (!force) {
+        final existing = _stopInFlight;
+        if (existing != null && existing.generation == _sessionGeneration.current) {
+          loggy.debug("stop coalesced with the in-flight stop operation [generation=${existing.generation}]");
+          return existing.future;
+        }
+      }
+      // Reserve the terminal generation before any platform query or queue
+      // wait. This makes Stop immediately supersede an older start/restart.
       final generation = _sessionGeneration.next();
       _connectedGeneration = 0;
-      return _enqueueLifecycle("stop", () async {
-        await core.setSessionGeneration(generation);
-        if (_useMockCore) {
-          _transitionLifecycle(_CoreLifecycleState.stopping, reason: "mock stop");
-          statusController.add(currentState = const CoreStatus.stopping());
-          await Future<void>.delayed(const Duration(milliseconds: 120));
-          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock stop complete");
-          statusController.add(currentState = const CoreStatus.stopped());
-          return right(unit);
+      final operation = _stopInternal(force: force, generation: generation);
+      if (force) return operation;
+      _stopInFlight = (generation: generation, future: operation);
+      return operation.whenComplete(() {
+        if (identical(_stopInFlight?.future, operation)) {
+          _stopInFlight = null;
         }
+      });
+    });
+  }
 
-        if (!force && _lifecycleState == _CoreLifecycleState.stopped && currentState == const CoreStatus.stopped()) {
-          loggy.debug("stop ignored: already stopped");
-          return right(unit);
+  Future<Either<String, Unit>> _stopInternal({required bool force, required int generation}) async {
+    var operationGeneration = generation;
+    var requireNativeStopDespiteLocalState =
+        force || _lifecycleState != _CoreLifecycleState.stopped || currentState != const CoreStatus.stopped();
+    if (!requireNativeStopDespiteLocalState && !core.supportsPreemptivePlatformStop) {
+      CoreStatus? authoritative;
+      try {
+        authoritative = await core.resyncSessionStatus().timeout(const Duration(seconds: 2), onTimeout: () => null);
+        _sessionGeneration.advanceTo(core.authoritativeSessionGeneration);
+      } catch (error, stackTrace) {
+        loggy.warning("stop preflight snapshot failed; issuing an idempotent native stop", error, stackTrace);
+      }
+      if (authoritative is CoreStopped) {
+        loggy.debug("stop ignored: platform confirms already stopped");
+        return right(unit);
+      }
+      if (!core.supportsPreemptivePlatformStop && _isStaleOperation(operationGeneration, "stop_preflight")) {
+        return right(unit);
+      }
+      requireNativeStopDespiteLocalState = true;
+      loggy.warning(
+        "local lifecycle was stopped but platform state is "
+        "${authoritative?.runtimeType ?? "unavailable"}; stopping",
+      );
+    }
+    if (!core.supportsPreemptivePlatformStop &&
+        _isStaleOperation(operationGeneration, "stop_before_platform_request")) {
+      return right(unit);
+    }
+    if (!_useMockCore && core.supportsPreemptivePlatformStop) {
+      _transitionLifecycle(_CoreLifecycleState.stopping, reason: "preemptive Android stop requested");
+      statusController.add(currentState = const CoreStatus.stopping());
+      try {
+        final acceptedGeneration = await core
+            .requestPlatformStop(generation: operationGeneration)
+            .timeout(const Duration(seconds: 3));
+        if (acceptedGeneration > operationGeneration) {
+          final existing = _stopInFlight;
+          if (existing != null && existing.generation == operationGeneration) {
+            _stopInFlight = (generation: acceptedGeneration, future: existing.future);
+          }
+          operationGeneration = acceptedGeneration;
+          _sessionGeneration.advanceTo(acceptedGeneration);
         }
+        requireNativeStopDespiteLocalState = true;
+      } catch (error, stackTrace) {
+        // The serialized cleanup below retries the idempotent native stop.
+        loggy.warning("preemptive Android VPN stop request failed; queued cleanup will retry", error, stackTrace);
+      }
+    }
+    return await _enqueueLifecycle("stop", () async {
+      if (_isStaleOperation(operationGeneration, "stop_queue_entry")) return right(unit);
+      try {
+        await core.setSessionGeneration(operationGeneration);
+      } catch (error) {
+        if (_isStaleOperation(operationGeneration, "stop_set_generation", error: error)) return right(unit);
+        loggy.error("failed to synchronize native stop generation", error);
+        return left("failed to synchronize VPN stop generation (${error.runtimeType})");
+      }
+      if (_useMockCore) {
+        _transitionLifecycle(_CoreLifecycleState.stopping, reason: "mock stop");
+        statusController.add(currentState = const CoreStatus.stopping());
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock stop complete");
+        statusController.add(currentState = const CoreStatus.stopped());
+        return right(unit);
+      }
 
+      if (!requireNativeStopDespiteLocalState &&
+          _lifecycleState == _CoreLifecycleState.stopped &&
+          currentState == const CoreStatus.stopped()) {
+        loggy.debug("stop ignored: already stopped");
+        return right(unit);
+      }
+
+      var platformStopped = _platformConfirmsStopped(operationGeneration);
+      if (!platformStopped) {
         _transitionLifecycle(_CoreLifecycleState.stopping, reason: "stop requested");
         statusController.add(currentState = const CoreStatus.stopping());
-        loggy.debug("stopping");
+      }
+      loggy.debug("stopping");
 
-        var errMsg = "";
-        try {
-          await _logRuntimeIndicators(generation, "before_stop");
-          await _closeSessionListeners(generation);
+      var errMsg = "";
+      GrpcError? grpcStopError;
+      try {
+        await _logRuntimeIndicators(operationGeneration, "before_stop");
+        await _closeSessionListeners(operationGeneration);
+        platformStopped = _platformConfirmsStopped(operationGeneration);
+        if (!platformStopped) {
           await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
-        } on GrpcError catch (e) {
-          if (!_isTransientGrpcTransportClose(e)) {
-            errMsg = e.message ?? "failed to stop core: $e";
-            loggy.error("failed to stop bg core: $e");
-          }
-        } catch (e) {
-          loggy.error("failed to stop bg core: $e");
         }
-        var nativeStopped = true;
-        try {
-          nativeStopped = await core
-              .stop(generation: generation)
-              .timeout(const Duration(seconds: 14), onTimeout: () => false);
-        } finally {
-          await _deleteCoreCurrentConfigSnapshot();
+      } on GrpcError catch (e) {
+        if (!_isTransientGrpcFailure(e)) {
+          grpcStopError = e;
+          loggy.warning("background core stop failed before native terminal confirmation", e);
         }
+      } catch (e) {
+        loggy.error("failed to stop bg core: $e");
+      }
+      var nativeStopped = platformStopped || _platformConfirmsStopped(operationGeneration);
+      try {
         if (!nativeStopped) {
-          loggy.warning("native core stop timed out; forcing local stopped state");
+          nativeStopped = await core
+              .stop(generation: operationGeneration)
+              .timeout(const Duration(seconds: 14), onTimeout: () => false);
         }
+      } catch (error, stackTrace) {
+        nativeStopped = false;
+        if (errMsg.isEmpty) {
+          errMsg = "native VPN service stop failed (${error.runtimeType})";
+        }
+        loggy.error("native VPN service stop failed", error, stackTrace);
+      } finally {
+        await _deleteCoreCurrentConfigSnapshot();
+      }
+      if (_isStaleOperation(operationGeneration, "stop_native_result")) return right(unit);
+      if (!nativeStopped && grpcStopError != null && errMsg.isEmpty) {
+        errMsg = grpcStopError.message ?? "failed to stop background core";
+      }
+      if (!nativeStopped) {
+        loggy.warning("native core stop timed out; forcing local stopped state");
+        if (errMsg.isEmpty) {
+          errMsg = "native VPN service did not confirm stop";
+        }
+      }
 
-        _transitionLifecycle(_CoreLifecycleState.stopped, reason: "stop complete");
-        _clearRuntimeOutboundSnapshot("stop complete");
+      _transitionLifecycle(_CoreLifecycleState.stopped, reason: "stop complete");
+      _clearRuntimeOutboundSnapshot("stop complete");
+      if (currentState is! CoreStopped) {
         statusController.add(currentState = const CoreStatus.stopped());
-        if (errMsg.isNotEmpty) return left(errMsg);
-        return right(unit);
-      });
+      }
+      if (errMsg.isNotEmpty) return left(errMsg);
+      return right(unit);
     });
   }
 
@@ -2012,7 +2231,7 @@ class ZeonCoreService with InfraLogger {
     // Cancel and remove
     for (final k in keysToRemove) {
       final sub = subscriptions[k];
-      await sub?.cancel(); // cancel the subscription
+      await _cancelSubscriptionBounded(sub, k);
 
       subscriptions.remove(k);
       _listenerReconnectAttempt.remove(k);
@@ -2024,12 +2243,23 @@ class ZeonCoreService with InfraLogger {
     final keys = subscriptions.keys.toList(growable: false);
     for (final key in keys) {
       final subscription = subscriptions.remove(key);
-      await subscription?.cancel();
+      await _cancelSubscriptionBounded(subscription, key);
     }
     _listenerReconnectAttempt.clear();
     _statusListenerRecoveryByKey.clear();
     _stoppingStatusWatchdogGeneration++;
     loggy.debug(vpnDiagnosticEvent("session_close_completed", generation, details: "owner=flutter_listeners"));
+  }
+
+  Future<void> _cancelSubscriptionBounded(StreamSubscription<dynamic>? subscription, String key) async {
+    if (subscription == null) return;
+    try {
+      await subscription.cancel().timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      loggy.warning("listener cancellation timed out [$key]; lifecycle cleanup will continue");
+    } catch (error, stackTrace) {
+      loggy.warning("listener cancellation failed [$key]; lifecycle cleanup will continue", error, stackTrace);
+    }
   }
 
   Future<void> _logRuntimeIndicators(int generation, String source) async {

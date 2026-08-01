@@ -15,9 +15,10 @@ import com.zeon.zeon.bg.Bugs
 import com.zeon.zeon.bg.VpnSessionCoordinator
 import com.zeon.zeon.bg.StartPermissionRequestCoordinator
 import com.zeon.zeon.bg.VpnSessionSnapshotCoordinator
+import com.zeon.zeon.bg.VpnStopSource
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -190,9 +191,27 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         }
                         val args = call.arguments as? Map<*, *>
                         val generation = (args?.get("generation") as Number?)?.toLong() ?: 0L
-                        val acceptedGeneration = VpnSessionCoordinator.accept(generation, "flutter_stop")
-                        BoxService.stop(acceptedGeneration)
-                        success(acceptedGeneration)
+                        val preemptive = args?.get("preemptive") as? Boolean ?: false
+                        val currentGeneration = VpnSessionCoordinator.current()
+                        if (preemptive) {
+                            // This method call is the newest explicit user Stop
+                            // to reach Android. Rebase it above any tile/service
+                            // generation Dart has not observed yet, then stop
+                            // the current owner atomically.
+                            val acceptedGeneration = VpnSessionCoordinator.nextAfter(
+                                generation,
+                                "flutter_stop_preemptive_rebase",
+                            )
+                            BoxService.stop(acceptedGeneration, VpnStopSource.FLUTTER)
+                            success(acceptedGeneration)
+                        } else if (generation > 0L && generation < currentGeneration) {
+                            VpnSessionCoordinator.stale(generation, "flutter_stop")
+                            success(currentGeneration)
+                        } else {
+                            val acceptedGeneration = VpnSessionCoordinator.accept(generation, "flutter_stop")
+                            BoxService.stop(acceptedGeneration, VpnStopSource.FLUTTER)
+                            success(acceptedGeneration)
+                        }
                     }
                 }
             }
@@ -267,4 +286,5 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             else -> result.notImplemented()
         }
     }
+
 }

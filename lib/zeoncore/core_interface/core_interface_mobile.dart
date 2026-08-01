@@ -35,7 +35,9 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   bool _isBgClientAvailable = false;
   bool _debug = false;
   int _sessionGeneration = 0;
+  VpnSessionSnapshot? _authoritativeSessionSnapshot;
   final VpnSessionSnapshotGate _snapshotGate = VpnSessionSnapshotGate();
+  final BehaviorSubject<VpnSessionSnapshot> _sessionSnapshots = BehaviorSubject<VpnSessionSnapshot>();
 
   late LastStream<CoreStatus> _status;
   @override
@@ -121,14 +123,50 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
       if (disposition == VpnSnapshotDisposition.gap) {
         final resynced = await _getAuthoritativeSnapshot();
         if (resynced == null) continue;
-        _snapshotGate.acceptAuthoritative(resynced);
-        yield resynced.toCoreStatus();
+        final accepted = _acceptResyncedSnapshot(resynced, publish: true);
+        if (accepted != null) yield accepted.toCoreStatus();
         continue;
       }
-      _snapshotGate.acceptAuthoritative(incoming);
-      _sessionGeneration = max(_sessionGeneration, incoming.generation);
+      _acceptAuthoritativeSnapshot(incoming, publish: true);
       yield incoming.toCoreStatus();
     }
+  }
+
+  void _acceptAuthoritativeSnapshot(VpnSessionSnapshot snapshot, {required bool publish}) {
+    _snapshotGate.acceptAuthoritative(snapshot);
+    _recordAcceptedSnapshot(snapshot, publish: publish);
+  }
+
+  void _recordAcceptedSnapshot(VpnSessionSnapshot snapshot, {required bool publish}) {
+    _sessionGeneration = max(_sessionGeneration, snapshot.generation);
+    _authoritativeSessionSnapshot = snapshot;
+    if (!publish) return;
+    if (_sessionSnapshots.hasValue) {
+      final previous = _sessionSnapshots.value;
+      if (previous.runtimeEpoch == snapshot.runtimeEpoch &&
+          previous.sequenceNumber == snapshot.sequenceNumber &&
+          previous.snapshotVersion == snapshot.snapshotVersion) {
+        return;
+      }
+    }
+    _sessionSnapshots.add(snapshot);
+  }
+
+  VpnSessionSnapshot? _acceptResyncedSnapshot(VpnSessionSnapshot snapshot, {required bool publish}) {
+    final disposition = _snapshotGate.classify(snapshot);
+    if (!_snapshotGate.acceptResynced(snapshot)) {
+      loggy.info(
+        "event=vpn_snapshot_resync_ignored generation=${snapshot.generation} "
+        "sequence=${snapshot.sequenceNumber} disposition=${disposition.name}",
+      );
+      return _snapshotGate.current;
+    }
+    // A MethodChannel read is the platform's current authoritative value. A
+    // sequence gap therefore advances the gate just like a normal accepted
+    // snapshot, but it must never roll the gate back behind an EventChannel
+    // value that won the race while the method call was in flight.
+    _recordAcceptedSnapshot(snapshot, publish: publish);
+    return snapshot;
   }
 
   Future<VpnSessionSnapshot?> _getAuthoritativeSnapshot() async {
@@ -141,14 +179,35 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   Future<CoreStatus?> resyncSessionStatus() async {
     final snapshot = await _getAuthoritativeSnapshot();
     if (snapshot == null) return null;
-    _snapshotGate.acceptAuthoritative(snapshot);
-    _sessionGeneration = max(_sessionGeneration, snapshot.generation);
+    final accepted = _acceptResyncedSnapshot(snapshot, publish: false);
+    if (accepted == null) return null;
     loggy.info(
-      "event=vpn_snapshot_resync generation=${snapshot.generation} "
-      "sequence=${snapshot.sequenceNumber} phase=${snapshot.phase.name}",
+      "event=vpn_snapshot_resync generation=${accepted.generation} "
+      "sequence=${accepted.sequenceNumber} phase=${accepted.phase.name}",
     );
-    return snapshot.toCoreStatus();
+    return accepted.toCoreStatus();
   }
+
+  @override
+  int get authoritativeSessionGeneration => _sessionGeneration;
+
+  @override
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _authoritativeSessionSnapshot;
+
+  @override
+  Stream<VpnSessionSnapshot> watchSessionSnapshots() => _sessionSnapshots.stream;
+
+  @override
+  Future<int> requestPlatformStop({required int generation}) {
+    // Do not call setSessionGeneration first: Android may have advanced its
+    // process-local generation (tile/notification/service recovery) before the
+    // snapshot reached Dart. A preemptive user Stop must atomically rebase
+    // above that native generation and stop the current service.
+    return stopMethodChannel(generation: generation, preemptive: true);
+  }
+
+  @override
+  bool get supportsPreemptivePlatformStop => Platform.isAndroid;
 
   Future<HelloResponse> _sayHelloWhenReady(HelloClient client) async {
     const maxAttempts = 10;
@@ -234,11 +293,11 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     if (generation > 0) {
       await setSessionGeneration(generation);
     }
-    await stopMethodChannel().timeout(const Duration(seconds: 3), onTimeout: () {});
+    await stopMethodChannel(generation: generation).timeout(const Duration(seconds: 3), onTimeout: () => generation);
     final stopped = await waitUntilPort(
       portBack,
       false,
-      stopMethodChannel,
+      () => stopMethodChannel(generation: generation),
       baseDelay: const Duration(milliseconds: 160),
       maxDelay: const Duration(milliseconds: 900),
     ).timeout(const Duration(seconds: 12), onTimeout: () => false);
@@ -246,20 +305,42 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     if (!stopped) {
       return false;
     }
-
-    return true;
+    if (!Platform.isAndroid) return true;
+    for (var attempt = 0; attempt < 10; attempt++) {
+      try {
+        await resyncSessionStatus();
+        final snapshot = _authoritativeSessionSnapshot;
+        if (snapshot != null && snapshot.generation >= generation && snapshot.phase == VpnSessionPhase.disconnected) {
+          return true;
+        }
+      } catch (error, stackTrace) {
+        loggy.debug("Android terminal stop snapshot poll failed", error, stackTrace);
+      }
+      if (attempt < 9) {
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+    }
+    return false;
   }
 
-  Future stopMethodChannel() async {
-    await methodChannel.invokeMethod("stop", {"generation": _sessionGeneration});
+  Future<int> stopMethodChannel({int? generation, bool preemptive = false}) async {
+    final requested = generation ?? _sessionGeneration;
+    final accepted =
+        await methodChannel.invokeMethod<int>("stop", {"generation": requested, "preemptive": preemptive}) ?? requested;
+    _sessionGeneration = max(_sessionGeneration, accepted);
+    return accepted;
   }
 
   @override
   Future<void> setSessionGeneration(int generation) async {
     if (generation <= 0 || generation == _sessionGeneration) return;
+    if (generation < _sessionGeneration) {
+      throw StateError("stale VPN session generation: requested=$generation current=$_sessionGeneration");
+    }
     _sessionGeneration = generation;
     final accepted = await methodChannel.invokeMethod<int>("set_session_generation", {"generation": generation});
     if (accepted != null && accepted != generation) {
+      _sessionGeneration = max(_sessionGeneration, accepted);
       throw StateError("stale VPN session generation: requested=$generation current=$accepted");
     }
   }

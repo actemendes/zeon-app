@@ -19,4 +19,21 @@ class VpnSessionCoordinatorInstrumentedTest {
         check(current == accepted)
         check(current == VpnSessionCoordinator.current())
     }
+
+    fun preemptiveStopGenerationIsStrictlyNewerThanNativeAndDartFloors() {
+        val nativeCurrent = VpnSessionCoordinator.next("instrumented_native_ahead")
+        val rebasedFromStaleDart = VpnSessionCoordinator.nextAfter(
+            nativeCurrent - 1,
+            "instrumented_preemptive_stop_stale_dart",
+        )
+        check(rebasedFromStaleDart > nativeCurrent)
+
+        val requestedFutureFloor = rebasedFromStaleDart + 50
+        val rebasedFromFutureDart = VpnSessionCoordinator.nextAfter(
+            requestedFutureFloor,
+            "instrumented_preemptive_stop_future_dart",
+        )
+        check(rebasedFromFutureDart >= requestedFutureFloor)
+        check(VpnSessionCoordinator.isCurrent(rebasedFromFutureDart))
+    }
 }

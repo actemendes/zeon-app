@@ -13,8 +13,11 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.VpnService as AndroidVpnService
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
@@ -67,6 +70,11 @@ class BoxService(
         private const val OUTBOUND_SELECTOR_TAG = "select"
         private const val AUTO_BALANCER_TAG = "balance"
         const val EXTRA_SESSION_GENERATION = "com.zeon.zeon.extra.SESSION_GENERATION"
+        const val EXTRA_STOP_SOURCE = "com.zeon.zeon.extra.STOP_SOURCE"
+        private const val STOP_FALLBACK_INITIAL_DELAY_MILLIS = 300L
+        private const val STOP_FALLBACK_POLL_MILLIS = 200L
+        private const val STOP_FALLBACK_TIMEOUT_MILLIS = 10_000L
+        private val stopFallbackHandler = Handler(Looper.getMainLooper())
 
         private var initializeOnce = false
         private lateinit var workingDir: File
@@ -111,12 +119,75 @@ class BoxService(
             ContextCompat.startForegroundService(Application.application, intent)
         }
 
-        fun stop(generation: Long = VpnSessionCoordinator.next("box_service_stop")) {
+        fun stop(
+            generation: Long = VpnSessionCoordinator.next("box_service_stop"),
+            source: VpnStopSource = VpnStopSource.INTERNAL,
+        ): Boolean {
+            val currentGeneration = VpnSessionCoordinator.current()
+            if (generation > 0L && generation < currentGeneration) {
+                VpnSessionCoordinator.stale(generation, "box_service_stop/${source.wireValue}")
+                return false
+            }
+            val acceptedGeneration = VpnSessionCoordinator.accept(
+                generation,
+                "box_service_stop/${source.wireValue}",
+            )
+            if (source.clearsExpectedRunning) {
+                Settings.startedByUser = false
+            }
+            // Keep this package-scoped broadcast: during a service-mode switch
+            // VPNService and ProxyService can briefly coexist. A single global
+            // activeInstance pointer cannot safely identify every TUN/core
+            // owner that must observe Stop.
             Application.application.sendBroadcast(
                 Intent(Action.SERVICE_CLOSE)
                     .setPackage(Application.application.packageName)
-                    .putExtra(EXTRA_SESSION_GENERATION, generation),
+                    .putExtra(EXTRA_SESSION_GENERATION, acceptedGeneration)
+                    .putExtra(EXTRA_STOP_SOURCE, source.wireValue),
             )
+            scheduleTerminalFallback(acceptedGeneration, source)
+            return true
+        }
+
+        private fun scheduleTerminalFallback(generation: Long, source: VpnStopSource) {
+            val deadline = SystemClock.elapsedRealtime() + STOP_FALLBACK_TIMEOUT_MILLIS
+            lateinit var probe: Runnable
+            probe = Runnable {
+                if (!VpnSessionCoordinator.isCurrent(generation)) return@Runnable
+
+                val snapshot = VpnSessionSnapshotCoordinator.current()
+                when {
+                    snapshot.generation >= generation -> {
+                        // The dynamic receiver acknowledged this generation,
+                        // or a newer operation has already published state.
+                    }
+
+                    snapshot.phase == VpnSessionPhase.IDLE ||
+                        snapshot.phase == VpnSessionPhase.DISCONNECTED -> {
+                        if (!VpnSessionCoordinator.isCurrent(generation)) return@Runnable
+                        VpnSessionCoordinator.event(
+                            "stop_without_service_owner",
+                            generation,
+                            "source=${source.wireValue} action=publish_disconnected",
+                        )
+                        VpnSessionSnapshotCoordinator.publishDisconnected(generation, source)
+                    }
+
+                    SystemClock.elapsedRealtime() < deadline -> {
+                        stopFallbackHandler.postDelayed(probe, STOP_FALLBACK_POLL_MILLIS)
+                    }
+
+                    else -> {
+                        VpnSessionCoordinator.event(
+                            "stop_terminal_fallback_expired",
+                            generation,
+                            "source=${source.wireValue} phase=${snapshot.phase.name}",
+                            Log.WARN,
+                        )
+                    }
+                }
+            }
+            stopFallbackHandler.postDelayed(probe, STOP_FALLBACK_INITIAL_DELAY_MILLIS)
         }
 
         @Volatile
@@ -140,6 +211,8 @@ class BoxService(
 
     @Volatile
     private var sessionGeneration: Long = 0L
+    @Volatile
+    private var terminalStop = TerminalStop()
     private val tunOwner = TunDescriptorOwner()
     @Volatile
     private var activeSession: ActiveSession? = null
@@ -158,7 +231,16 @@ class BoxService(
             when (intent.action) {
                 Action.SERVICE_CLOSE -> {
                     val generation = intent.getLongExtra(EXTRA_SESSION_GENERATION, 0L)
-                    stopService(VpnSessionCoordinator.accept(generation, "close_broadcast"))
+                    if (generation > 0L && generation < VpnSessionCoordinator.current()) {
+                        VpnSessionCoordinator.stale(generation, "close_broadcast")
+                        return
+                    }
+                    val source = intent.getStringExtra(EXTRA_STOP_SOURCE)?.let(VpnStopSource::fromWireValue)
+                        ?: VpnStopSource.NOTIFICATION
+                    stopService(
+                        VpnSessionCoordinator.accept(generation, "close_broadcast/${source.wireValue}"),
+                        source,
+                    )
                 }
 
                 Action.SERVICE_REPING -> {
@@ -249,6 +331,17 @@ class BoxService(
             val selectedConfigPath = Settings.activeConfigPath
             if (selectedConfigPath.isBlank()) {
                 stopAndAlert(generation, Alert.EmptyConfiguration)
+                return
+            }
+
+            if (!CoreShutdownDispatcher.awaitSettled()) {
+                VpnSessionCoordinator.event(
+                    "core_start_failure",
+                    generation,
+                    "error=previous_core_shutdown_timeout",
+                    Log.ERROR,
+                )
+                stopAndAlert(generation, Alert.StartService, "previous core shutdown is still running")
                 return
             }
 
@@ -365,6 +458,7 @@ class BoxService(
         val previousSession = activeSession
         val generation = VpnSessionCoordinator.next("service_reload")
         sessionGeneration = generation
+        terminalStop = TerminalStop()
         if (previousSession != null) {
             closeSession(previousSession, "service_reload")
         }
@@ -413,11 +507,33 @@ class BoxService(
         }
     }
 
-    private fun stopService(generation: Long = VpnSessionCoordinator.next("box_service_stop_internal")) {
+    private fun stopService(
+        generation: Long = VpnSessionCoordinator.next("box_service_stop_internal"),
+        source: VpnStopSource = VpnStopSource.INTERNAL,
+    ) {
+        if (generation > 0L && generation < VpnSessionCoordinator.current()) {
+            VpnSessionCoordinator.stale(generation, "stop_service/${source.wireValue}")
+            return
+        }
         val closingSession = activeSession
         sessionGeneration = VpnSessionCoordinator.accept(generation, "stop_service")
-        if (status.value == Status.Stopped && closingSession == null) return
-        VpnSessionSnapshotCoordinator.transition(sessionGeneration, VpnSessionPhase.STOP_REQUESTED)
+        if (status.value == Status.Stopping) {
+            val preservedSource = terminalStop.source.takeUnless { it == VpnStopSource.NONE } ?: source
+            terminalStop = TerminalStop(sessionGeneration, preservedSource)
+            VpnSessionSnapshotCoordinator.requestStop(sessionGeneration, preservedSource)
+            VpnSessionSnapshotCoordinator.transition(sessionGeneration, VpnSessionPhase.STOPPING)
+            return
+        }
+        terminalStop = TerminalStop(sessionGeneration, source)
+        if (status.value == Status.Stopped && closingSession == null) {
+            Settings.startedByUser = false
+            notification.close()
+            publishStatus(Status.Stopped, sessionGeneration, "stop_already_complete/${source.wireValue}")
+            VpnSessionSnapshotCoordinator.publishDisconnected(sessionGeneration, source)
+            service.stopSelf()
+            return
+        }
+        VpnSessionSnapshotCoordinator.requestStop(sessionGeneration, source)
         status.value = Status.Stopping
         VpnSessionSnapshotCoordinator.transition(sessionGeneration, VpnSessionPhase.STOPPING)
         if (receiverRegistered) {
@@ -431,8 +547,9 @@ class BoxService(
             notification.close()
             Settings.startedByUser = false
             withContext(Dispatchers.Main) {
-                publishStatus(Status.Stopped, sessionGeneration, "stop_complete")
-                VpnSessionSnapshotCoordinator.transition(sessionGeneration, VpnSessionPhase.DISCONNECTED)
+                val completedStop = terminalStop
+                publishStatus(Status.Stopped, completedStop.generation, "stop_complete/${completedStop.source.wireValue}")
+                VpnSessionSnapshotCoordinator.publishDisconnected(completedStop.generation, completedStop.source)
                 service.stopSelf()
             }
             notification.close()
@@ -478,6 +595,7 @@ class BoxService(
             return Service.START_NOT_STICKY
         }
         sessionGeneration = generation
+        terminalStop = TerminalStop()
         if (status.value != Status.Stopped || activeSession?.acceptsOperations() == true) {
             VpnSessionCoordinator.event(
                 "core_already_started_conflict",
@@ -526,23 +644,32 @@ class BoxService(
 
     fun onDestroy() {
         val closingSession = activeSession
-        if (closingSession != null) {
+        val terminalSnapshot = VpnSessionSnapshotCoordinator.current()
+        val terminalAlreadyPublished =
+            terminalSnapshot.phase == VpnSessionPhase.DISCONNECTED || terminalSnapshot.phase == VpnSessionPhase.FAILED
+        if (!terminalAlreadyPublished) {
             val destroyGeneration = VpnSessionCoordinator.next("service_destroy")
             sessionGeneration = destroyGeneration
+            VpnSessionSnapshotCoordinator.requestStop(destroyGeneration, VpnStopSource.DESTROY)
+            VpnSessionSnapshotCoordinator.transition(destroyGeneration, VpnSessionPhase.STOPPING)
             runBlocking {
                 val completed = withTimeoutOrNull(12_000) {
-                    closeSession(closingSession, "on_destroy")
+                    if (closingSession != null) {
+                        closeSession(closingSession, "on_destroy")
+                    }
                     true
                 } ?: false
                 if (!completed) {
                     VpnSessionCoordinator.event(
                         "terminal_failure",
-                        closingSession.generation,
+                        destroyGeneration,
                         "phase=on_destroy error=teardown_timeout",
                         Log.ERROR,
                     )
                 }
             }
+            status.postValue(Status.Stopped)
+            VpnSessionSnapshotCoordinator.publishDisconnected(destroyGeneration, VpnStopSource.DESTROY)
         }
         if (receiverRegistered) {
             runCatching { service.unregisterReceiver(receiver) }
@@ -558,10 +685,15 @@ class BoxService(
     }
 
     fun onRevoke() {
-        stopService(VpnSessionCoordinator.next("vpn_revoke"))
+        stopService(VpnSessionCoordinator.next("vpn_revoke"), VpnStopSource.REVOKE)
     }
 
     internal fun currentSessionGeneration(): Long = sessionGeneration
+
+    private data class TerminalStop(
+        val generation: Long = 0L,
+        val source: VpnStopSource = VpnStopSource.NONE,
+    )
 
     internal fun openTun(
         generation: Long,
@@ -711,8 +843,11 @@ class BoxService(
                 DefaultNetworkMonitor.setListener(null)
             },
             stopCore = {
-                CoreShutdownDispatcher.close {
+                val completed = CoreShutdownDispatcher.close {
                     Mobile.close(4L)
+                }
+                if (!completed) {
+                    error("native core close timeout")
                 }
             },
             closeCommandServer = { server ->

@@ -1,6 +1,7 @@
 import 'package:zeon/core/model/directories.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 class CoreInterface {
   late CoreClient fgClient;
@@ -32,9 +33,26 @@ class CoreInterface {
 
   Future<void> setSessionGeneration(int generation) async {}
 
+  /// Sends the platform-owned VPN service a lightweight stop request. The
+  /// caller performs slower gRPC/listener cleanup separately.
+  Future<int> requestPlatformStop({required int generation}) async {
+    await setSessionGeneration(generation);
+    return generation;
+  }
+
+  bool get supportsPreemptivePlatformStop => false;
+
   Future<void> markCoreStarted(int generation) async {}
 
   Future<CoreStatus?> resyncSessionStatus() async => null;
+
+  /// Highest authoritative platform generation observed while resyncing.
+  /// Reading this value has no UI publication side effect.
+  int get authoritativeSessionGeneration => 0;
+
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => null;
+
+  Stream<VpnSessionSnapshot> watchSessionSnapshots() => const Stream<VpnSessionSnapshot>.empty();
 
   bool isSingleChannel() {
     // return true;

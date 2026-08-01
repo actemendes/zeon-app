@@ -87,9 +87,16 @@ class _ConnectionWrapperState extends ConsumerState<ConnectionWrapper> with AppL
   void _syncHttpVpnState(AsyncValue<ConnectionStatus> next) {
     final status = next.asData?.value;
     if (status != null) {
-      ref.read(httpClientProvider).setVpnActive(status is! Disconnected);
+      ref.read(httpClientProvider).setVpnActive(hasStableVpnTransport(status));
     } else if (next.hasError) {
       ref.read(httpClientProvider).setVpnActive(false);
     }
   }
 }
+
+/// Whether control-plane HTTP requests may safely require the local proxy.
+///
+/// During connect and disconnect the previous proxy may already be gone while
+/// the replacement is not ready yet. Only the terminal Connected state proves
+/// that the proxy is available.
+bool hasStableVpnTransport(ConnectionStatus status) => status is Connected;

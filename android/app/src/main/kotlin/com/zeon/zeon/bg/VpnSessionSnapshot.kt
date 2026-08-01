@@ -22,6 +22,26 @@ enum class VpnSessionPhase {
     FAILED,
 }
 
+enum class VpnStopSource(
+    val wireValue: String,
+    val clearsExpectedRunning: Boolean,
+) {
+    NONE("", false),
+    FLUTTER("flutter", true),
+    NOTIFICATION("notification", true),
+    TILE("tile", true),
+    SHORTCUT("shortcut", true),
+    REVOKE("revoke", true),
+    DESTROY("destroy", false),
+    INTERNAL("internal", true),
+    UNKNOWN("unknown", false);
+
+    companion object {
+        fun fromWireValue(value: String?): VpnStopSource =
+            entries.firstOrNull { it.wireValue == value?.trim()?.lowercase() } ?: UNKNOWN
+    }
+}
+
 data class VpnSessionSnapshot(
     val generation: Long,
     val runtimeEpoch: String,
@@ -29,6 +49,7 @@ data class VpnSessionSnapshot(
     val snapshotVersion: Long,
     val phase: VpnSessionPhase,
     val requestedAction: String = "",
+    val stopSource: VpnStopSource = VpnStopSource.NONE,
     val coreReady: Boolean = false,
     val coreStarted: Boolean = false,
     val commandEndpointReady: Boolean = false,
@@ -60,6 +81,7 @@ data class VpnSessionSnapshot(
         "snapshotVersion" to snapshotVersion,
         "phase" to phase.name.lowercase(),
         "requestedAction" to requestedAction,
+        "stopSource" to stopSource.wireValue,
         "coreReady" to coreReady,
         "coreStarted" to coreStarted,
         "commandEndpointReady" to commandEndpointReady,
@@ -145,6 +167,43 @@ object VpnSessionSnapshotCoordinator {
             failureCode = code.take(96),
             failureOwner = owner.take(48),
             recoverable = recoverable,
+        )
+    }
+
+    fun requestStop(
+        generation: Long,
+        source: VpnStopSource,
+    ): VpnSessionSnapshot = transition(generation, VpnSessionPhase.STOP_REQUESTED) {
+        it.copy(
+            requestedAction = "stop",
+            stopSource = source,
+        )
+    }
+
+    /**
+     * Publishes a clean terminal state. Repeating the same already-stopped
+     * request is intentionally idempotent and does not advance sequence/version.
+     */
+    fun publishDisconnected(
+        generation: Long,
+        source: VpnStopSource,
+    ): VpnSessionSnapshot = update(generation) { previous ->
+        previous.copy(
+            phase = VpnSessionPhase.DISCONNECTED,
+            requestedAction = "stop",
+            stopSource = source,
+            coreReady = false,
+            coreStarted = false,
+            commandEndpointReady = false,
+            tunnelReady = false,
+            protectSucceeded = false,
+            platformVpnValidated = false,
+            selectedOutboundId = "",
+            selectedOutboundLabel = "",
+            strategy = "",
+            failureCode = "",
+            failureOwner = "",
+            recoverable = false,
         )
     }
 

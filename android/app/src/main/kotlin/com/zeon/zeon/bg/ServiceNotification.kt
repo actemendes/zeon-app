@@ -94,6 +94,9 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
                                     0,
                                     Intent(Action.SERVICE_CLOSE).setPackage(
                                         Application.application.packageName
+                                    ).putExtra(
+                                        BoxService.EXTRA_STOP_SOURCE,
+                                        VpnStopSource.NOTIFICATION.wireValue,
                                     ),
                                     flags
                             )
