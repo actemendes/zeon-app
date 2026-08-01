@@ -17,11 +17,11 @@ class PlatformFile {
 
   factory PlatformFile.fromMap(Map data, {Stream<List<int>>? readStream}) {
     return PlatformFile(
-      name: data['name'],
-      path: data['path'],
-      bytes: data['bytes'],
-      size: data['size'],
-      identifier: data['identifier'],
+      name: data['name'] as String,
+      path: data['path'] as String?,
+      bytes: data['bytes'] as Uint8List?,
+      size: data['size'] as int,
+      identifier: data['identifier'] as String?,
       readStream: readStream,
     );
   }

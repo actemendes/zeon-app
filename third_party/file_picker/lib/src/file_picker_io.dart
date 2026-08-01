@@ -119,7 +119,7 @@ class FilePickerIO extends FilePicker {
           PlatformFile.fromMap(
             platformFileMap,
             readStream: withReadStream!
-                ? File(platformFileMap['path']).openRead()
+                ? File(platformFileMap['path'] as String).openRead()
                 : null,
           ),
         );
