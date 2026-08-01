@@ -149,6 +149,26 @@ object VpnLifecycleIntentCoordinator {
         }
     }
 
+    fun replacementStopNeedsFallback(generation: Long): Boolean = synchronized(lock) {
+        val current = replacementCleanup
+        current?.generation == generation &&
+            current.state == ReplacementCleanupState.PENDING &&
+            generation > latestStopGeneration &&
+            VpnSessionCoordinator.isCurrent(generation)
+    }
+
+    /** Executes a timeout publication only if replacement teardown is still pending. */
+    fun runIfReplacementStopPending(
+        generation: Long,
+        action: () -> Unit,
+    ): Boolean = synchronized(lock) {
+        if (!replacementStopNeedsFallback(generation)) {
+            return@synchronized false
+        }
+        action()
+        true
+    }
+
     fun reserveReload(
         ownerToken: Any,
         sessionGeneration: Long,

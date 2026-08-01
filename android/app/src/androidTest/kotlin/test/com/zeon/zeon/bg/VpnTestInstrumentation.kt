@@ -101,6 +101,12 @@ class VpnTestInstrumentation : Instrumentation() {
             },
             TestCase(
                 generationTests.javaClass.name,
+                "completedReplacementCannotPublishALateFallbackFailure",
+            ) {
+                generationTests.completedReplacementCannotPublishALateFallbackFailure()
+            },
+            TestCase(
+                generationTests.javaClass.name,
                 "explicitStopSourceDominatesReplacementCleanup",
             ) {
                 generationTests.explicitStopSourceDominatesReplacementCleanup()

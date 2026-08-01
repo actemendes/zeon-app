@@ -244,6 +244,32 @@ class VpnSessionCoordinatorInstrumentedTest {
         check(startCommitted.get())
     }
 
+    fun completedReplacementCannotPublishALateFallbackFailure() {
+        val generation = VpnSessionCoordinator.next("instrumented_replacement_late_fallback")
+        check(
+            VpnLifecycleIntentCoordinator.reserveReplacementStop(generation) ==
+                VpnLifecycleIntentCoordinator.ReplacementStopDecision.DISPATCH,
+        )
+        check(VpnLifecycleIntentCoordinator.replacementStopNeedsFallback(generation))
+        var disconnectedPublished = false
+        check(
+            VpnLifecycleIntentCoordinator.completeReplacementStop(generation) {
+                disconnectedPublished = true
+            },
+        )
+        check(disconnectedPublished)
+        check(!VpnLifecycleIntentCoordinator.replacementStopNeedsFallback(generation))
+        check(VpnLifecycleIntentCoordinator.commitStart(generation) { true })
+
+        var lateFailurePublished = false
+        check(
+            !VpnLifecycleIntentCoordinator.runIfReplacementStopPending(generation) {
+                lateFailurePublished = true
+            },
+        )
+        check(!lateFailurePublished) { "completed replacement published a late timeout failure" }
+    }
+
     fun explicitStopSourceDominatesReplacementCleanup() {
         check(
             BoxService.newestStopSource(VpnStopSource.REPLACEMENT, VpnStopSource.NOTIFICATION) ==

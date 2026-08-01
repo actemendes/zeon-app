@@ -255,6 +255,12 @@ class BoxService(
             lateinit var probe: Runnable
             probe = Runnable {
                 if (!VpnSessionCoordinator.isCurrent(generation)) return@Runnable
+                if (
+                    source == VpnStopSource.REPLACEMENT &&
+                    !VpnLifecycleIntentCoordinator.replacementStopNeedsFallback(generation)
+                ) {
+                    return@Runnable
+                }
 
                 val snapshot = VpnSessionSnapshotCoordinator.current()
                 when {
@@ -297,6 +303,20 @@ class BoxService(
         }
 
         private fun publishTeardownTimeout(
+            generation: Long,
+            source: VpnStopSource,
+            phase: VpnSessionPhase,
+        ) {
+            if (source == VpnStopSource.REPLACEMENT) {
+                VpnLifecycleIntentCoordinator.runIfReplacementStopPending(generation) {
+                    publishTeardownTimeoutSnapshot(generation, source, phase)
+                }
+                return
+            }
+            publishTeardownTimeoutSnapshot(generation, source, phase)
+        }
+
+        private fun publishTeardownTimeoutSnapshot(
             generation: Long,
             source: VpnStopSource,
             phase: VpnSessionPhase,
