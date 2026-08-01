@@ -13,9 +13,6 @@ import com.hiddify.core.libbox.Notification
 import com.zeon.zeon.constant.PerAppProxyMode
 import com.zeon.zeon.ktx.toIpPrefix
 import com.hiddify.core.libbox.TunOptions
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import java.net.DatagramSocket
 import java.net.InetSocketAddress
 
@@ -59,11 +56,7 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     override fun onRevoke() {
-        runBlocking {
-            withContext(Dispatchers.Main) {
-                service.onRevoke()
-            }
-        }
+        service.onRevoke()
     }
 
     override fun autoDetectInterfaceControl(fd: Int) {

@@ -41,15 +41,32 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.withTimeoutOrNull
 class ServiceNotification(private val status: MutableLiveData<Status>, private val service: Service) : BroadcastReceiver(){
+    data class DetachedSystemInfoListener internal constructor(
+        val generation: Long,
+        internal val job: Job?,
+    )
+
     companion object {
+        private data class ForegroundOwner(
+            val notification: ServiceNotification,
+            val generation: Long,
+        )
+
         private const val notificationId = 1
         private const val notificationChannel = "service"
         private const val AUTO_BALANCER_TAG = "balance"
+        private val foregroundLock = Any()
+        private var foregroundOwner: ForegroundOwner? = null
         var coreClient: CoreClient?=null
-        val flags =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+
+        internal fun stopIntent(context: Context): Intent =
+            Intent(context, VpnNotificationActionReceiver::class.java)
+                .setAction(Action.SERVICE_CLOSE_REQUEST)
 
         fun checkPermission(): Boolean {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
@@ -59,6 +76,9 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
         }
     }
     val streamingCoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val notificationLock = Any()
+    @Volatile
+    private var notificationGeneration = 0L
 
 
 //
@@ -92,12 +112,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
                                     0, service.getText(R.string.stop), PendingIntent.getBroadcast(
                                     service,
                                     0,
-                                    Intent(Action.SERVICE_CLOSE).setPackage(
-                                        Application.application.packageName
-                                    ).putExtra(
-                                        BoxService.EXTRA_STOP_SOURCE,
-                                        VpnStopSource.NOTIFICATION.wireValue,
-                                    ),
+                                    stopIntent(service),
                                     flags
                             )
                             ).build()
@@ -118,33 +133,70 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     }
 
     fun show(profileName: String, snapshot: VpnSessionSnapshot) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Application.notification.createNotificationChannel(
-                NotificationChannel(
-                    notificationChannel,
-                    service.getString(R.string.notification_channel_connection),
-                    NotificationManager.IMPORTANCE_LOW,
-                ).apply {
-                    description = service.getString(R.string.notification_channel_connection_description)
+        synchronized(foregroundLock) {
+            val processOwner = foregroundOwner
+            if (processOwner != null && snapshot.generation < processOwner.generation) return
+            synchronized(notificationLock) {
+                if (snapshot.generation < notificationGeneration) return
+                notificationGeneration = snapshot.generation
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    Application.notification.createNotificationChannel(
+                        NotificationChannel(
+                            notificationChannel,
+                            service.getString(R.string.notification_channel_connection),
+                            NotificationManager.IMPORTANCE_LOW,
+                        ).apply {
+                            description = service.getString(R.string.notification_channel_connection_description)
+                        }
+                    )
                 }
-            )
+                service.startForeground(
+                    notificationId, notificationBuilder
+                        .setContentTitle(profileName.takeIf { it.isNotBlank() } ?: service.getString(R.string.app_name))
+                        .setContentText(
+                            service.getString(
+                                if (snapshot.provesConnected()) R.string.status_started else R.string.status_starting,
+                            ),
+                        ).build()
+                )
+                foregroundOwner = ForegroundOwner(this, snapshot.generation)
+            }
         }
-        service.startForeground(
-            notificationId, notificationBuilder
-                .setContentTitle(profileName.takeIf { it.isNotBlank() } ?: service.getString(R.string.app_name))
-                .setContentText(
-                    service.getString(
-                        if (snapshot.provesConnected()) R.string.status_started else R.string.status_starting,
-                    ),
-                ).build()
+    }
+
+    fun showStarting(profileName: String, generation: Long) {
+        val current = VpnSessionSnapshotCoordinator.current()
+        show(
+            profileName,
+            current.copy(
+                generation = generation,
+                phase = VpnSessionPhase.STARTING_PLATFORM,
+                coreReady = false,
+                coreStarted = false,
+                commandEndpointReady = false,
+                tunnelReady = false,
+                protectSucceeded = false,
+                platformVpnValidated = false,
+            ),
         )
     }
 
 
     suspend fun start(generation: Long, sessionAcceptsOperations: () -> Boolean) {
-        stopListenSystemInfoAndJoin()
-        activeGeneration = generation
-        activeSessionAcceptsOperations = sessionAcceptsOperations
+        awaitDetachedSystemInfoListener(
+            detachSystemInfoListener(maximumGeneration = generation),
+        )
+        if (!VpnSessionCoordinator.isCurrent(generation)) return
+        val installed = synchronized(streamLock) {
+            if (activeGeneration > generation) {
+                false
+            } else {
+                activeGeneration = generation
+                activeSessionAcceptsOperations = sessionAcceptsOperations
+                true
+            }
+        }
+        if (!installed) return
         if (Settings.dynamicNotification && checkPermission()) {
 //            commandClient.connect()
             startListenSystemInfo(generation, sessionAcceptsOperations)
@@ -243,17 +295,37 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
         }
     }
 
-    fun close() {
-        activeGeneration = 0L
-        activeSessionAcceptsOperations = null
-        stopListenSystemInfo()
-        ServiceCompat.stopForeground(service, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        if (receiverRegistered) {
-            service.unregisterReceiver(this)
-            receiverRegistered = false
+    fun close(maximumGeneration: Long? = null): Boolean {
+        synchronized(foregroundLock) {
+            synchronized(notificationLock) {
+                val processOwner = foregroundOwner
+                if (
+                    maximumGeneration != null &&
+                    (notificationGeneration > maximumGeneration ||
+                        (processOwner?.notification === this && processOwner.generation > maximumGeneration))
+                ) {
+                    return false
+                }
+                notificationGeneration = 0L
+                detachSystemInfoListener(maximumGeneration = maximumGeneration)?.job?.cancel()
+                if (processOwner?.notification === this) {
+                    foregroundOwner = null
+                    ServiceCompat.stopForeground(service, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                } else {
+                    // The notification ID is process-wide. Detach this stale
+                    // service without removing the newer owner's notification.
+                    ServiceCompat.stopForeground(service, ServiceCompat.STOP_FOREGROUND_DETACH)
+                }
+                if (receiverRegistered) {
+                    service.unregisterReceiver(this)
+                    receiverRegistered = false
+                }
+                return true
+            }
         }
     }
 
+    private val streamLock = Any()
     private var streamingJob: Job? = null
     @Volatile
     private var activeGeneration: Long = 0L
@@ -261,11 +333,8 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     private var activeSessionAcceptsOperations: (() -> Boolean)? = null
 
     private fun startListenSystemInfo(generation: Long, sessionAcceptsOperations: () -> Boolean) {
-        // Cancel any previous stream if still running
         Log.d("notification","startListenSystemInfo")
-        streamingJob?.cancel()
-
-        streamingJob = streamingCoroutineScope.launch(Dispatchers.IO) {
+        val job = streamingCoroutineScope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
             Log.d("notification", "startListenSystemInfo-launch")
 
             val coreClient = GrpcClientProvider.grpcClient.create(CoreClient::class)
@@ -289,14 +358,28 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
             } catch (e: CancellationException) {
                 // coroutine cancelled normally
                 Log.d("notification", "SystemInfo polling cancelled")
-                notification.cancel(notificationId)
             } catch (e: Exception) {
                 Log.e("notification", "SystemInfo polling failed", e)
-                notification.cancel(notificationId)
+                if (generation == activeGeneration) {
+                    notification.cancel(notificationId)
+                }
             } finally {
                 systemInfoStream.cancel()
             }
         }
+        val previous = synchronized(streamLock) {
+            if (activeGeneration != generation) {
+                null
+            } else {
+                streamingJob.also { streamingJob = job }
+            }
+        }
+        if (generation != activeGeneration) {
+            job.cancel()
+            return
+        }
+        previous?.cancel()
+        job.start()
     }
     private fun isPollingCurrent(
         generation: Long,
@@ -317,19 +400,62 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
         return current
     }
 
-    suspend fun stopListenSystemInfoAndJoin() {
+    fun detachSystemInfoListener(
+        expectedGeneration: Long? = null,
+        maximumGeneration: Long? = null,
+    ): DetachedSystemInfoListener? = synchronized(streamLock) {
+        if (expectedGeneration != null && activeGeneration != expectedGeneration) {
+            return@synchronized null
+        }
+        if (maximumGeneration != null && activeGeneration > maximumGeneration) {
+            return@synchronized null
+        }
+        val generation = activeGeneration
+        val job = streamingJob
         activeGeneration = 0L
         activeSessionAcceptsOperations = null
-        val job = streamingJob
         streamingJob = null
-        job?.cancelAndJoin()
+        job?.cancel()
+        DetachedSystemInfoListener(generation, job)
+    }
+
+    suspend fun awaitDetachedSystemInfoListener(handle: DetachedSystemInfoListener?) {
+        val job = handle?.job
+        if (job != null) {
+            val joined = withTimeoutOrNull(750L) {
+                job.join()
+                true
+            } ?: false
+            if (!joined) {
+                VpnSessionCoordinator.event(
+                    "terminal_failure",
+                    handle.generation,
+                    "phase=session_close resource=notification_listener error=timeout",
+                    Log.ERROR,
+                )
+            }
+        }
+    }
+
+    suspend fun stopListenSystemInfoAndJoin() {
+        awaitDetachedSystemInfoListener(detachSystemInfoListener())
     }
 
     fun stopListenSystemInfo(){
         try {
-            streamingJob?.cancel()
+            synchronized(streamLock) { streamingJob }?.cancel()
         }catch (e: Exception){
             Log.d("notification", "Exception ${e}")
         }
     }
+
+    internal fun installSystemInfoGenerationForTesting(generation: Long) {
+        synchronized(streamLock) {
+            activeGeneration = generation
+            activeSessionAcceptsOperations = { true }
+            streamingJob = null
+        }
+    }
+
+    internal fun activeSystemInfoGenerationForTesting(): Long = activeGeneration
 }

@@ -2,6 +2,9 @@ package com.zeon.zeon.bg
 
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -11,6 +14,27 @@ import java.util.concurrent.atomic.AtomicLong
  * does not transfer ownership of this ParcelFileDescriptor back to Go.
  */
 class TunDescriptorOwner {
+    companion object {
+        private val processIdentities = AtomicLong(0L)
+        private val processOwnershipLock = Any()
+        private val processOwnedIdentities = ConcurrentHashMap.newKeySet<String>()
+
+        @Volatile
+        private var ownershipSettledListener: (() -> Unit)? = null
+
+        fun hasProcessWideOwnership(): Boolean = processOwnedIdentities.isNotEmpty()
+
+        suspend fun awaitProcessSettled(timeoutMillis: Long = 3_000L): Boolean =
+            withTimeoutOrNull(timeoutMillis) {
+                while (hasProcessWideOwnership()) delay(25L)
+                true
+            } ?: false
+
+        fun setOwnershipSettledListener(listener: () -> Unit) {
+            ownershipSettledListener = listener
+        }
+    }
+
     private data class OwnedDescriptor(
         val generation: Long,
         val identity: String,
@@ -18,8 +42,8 @@ class TunDescriptorOwner {
     )
 
     private val lock = Any()
-    private val identities = AtomicLong(0)
     private var owned: OwnedDescriptor? = null
+    private var closingGeneration = 0L
     private var lastOpenedGeneration = 0L
 
     fun open(
@@ -46,7 +70,7 @@ class TunDescriptorOwner {
                 VpnSessionCoordinator.stale(generation, "tun_open")
                 error("stale VPN session attempted to open TUN")
             }
-            if (owned != null || lastOpenedGeneration == generation) {
+            if (owned != null || closingGeneration != 0L || lastOpenedGeneration == generation) {
                 descriptor.closeQuietly()
                 VpnSessionCoordinator.event(
                     "tun_open_rejected_duplicate",
@@ -57,7 +81,19 @@ class TunDescriptorOwner {
                 error("VPN session generation already opened a TUN descriptor")
             }
 
-            val identity = "tun-${identities.incrementAndGet()}"
+            val identity = synchronized(processOwnershipLock) {
+                if (processOwnedIdentities.isNotEmpty()) {
+                    descriptor.closeQuietly()
+                    VpnSessionCoordinator.event(
+                        "tun_open_rejected_process_owner",
+                        generation,
+                        "identity=pending",
+                        Log.ERROR,
+                    )
+                    error("another process-wide TUN owner is still active")
+                }
+                "tun-${processIdentities.incrementAndGet()}".also(processOwnedIdentities::add)
+            }
             owned = OwnedDescriptor(generation, identity, descriptor)
             lastOpenedGeneration = generation
             VpnSessionCoordinator.event("tun_open_success", generation, "identity=$identity")
@@ -73,20 +109,41 @@ class TunDescriptorOwner {
                 return false
             }
             owned = null
+            closingGeneration = generation
             current
         }
-        closing.descriptor.closeQuietly()
-        VpnSessionCoordinator.event(
-            "tun_close",
-            generation,
-            "identity=${closing.identity} reason=$reason",
-        )
+        try {
+            closing.descriptor.closeQuietly()
+            VpnSessionCoordinator.event(
+                "tun_close",
+                generation,
+                "identity=${closing.identity} reason=$reason",
+            )
+        } finally {
+            synchronized(lock) {
+                if (closingGeneration == generation) closingGeneration = 0L
+            }
+            synchronized(processOwnershipLock) {
+                processOwnedIdentities.remove(closing.identity)
+            }
+            ownershipSettledListener?.invoke()
+        }
         return true
     }
 
     fun hasOpenDescriptor(generation: Long): Boolean = synchronized(lock) {
         owned?.generation == generation
     }
+
+    fun hasOwnership(): Boolean = synchronized(lock) {
+        owned != null || closingGeneration != 0L
+    }
+
+    suspend fun awaitSettled(timeoutMillis: Long = 3_000L): Boolean =
+        withTimeoutOrNull(timeoutMillis) {
+            while (hasOwnership()) delay(25L)
+            true
+        } ?: false
 
     private fun ParcelFileDescriptor.closeQuietly() {
         runCatching { close() }

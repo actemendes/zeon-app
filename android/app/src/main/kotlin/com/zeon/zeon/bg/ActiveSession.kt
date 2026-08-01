@@ -9,6 +9,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -22,6 +23,13 @@ class ActiveSession(
     val platformInterface: PlatformInterface,
     val tunOwner: TunDescriptorOwner,
 ) {
+    companion object {
+        private const val ALREADY_CLOSING_TIMEOUT_MILLIS = 11_500L
+        private const val COMMAND_CLIENTS_TIMEOUT_MILLIS = 1_000L
+        private const val CORE_TIMEOUT_MILLIS = 8_500L
+        private const val SHORT_STEP_TIMEOUT_MILLIS = 500L
+    }
+
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile
@@ -69,7 +77,18 @@ class ActiveSession(
         clearNetwork: suspend () -> Unit,
     ) {
         if (!closing.compareAndSet(false, true)) {
-            closed.await()
+            val completed = withTimeoutOrNull(ALREADY_CLOSING_TIMEOUT_MILLIS) {
+                closed.await()
+                true
+            } ?: false
+            if (!completed) {
+                VpnSessionCoordinator.event(
+                    "terminal_failure",
+                    generation,
+                    "phase=session_close resource=existing_close error=timeout",
+                    android.util.Log.ERROR,
+                )
+            }
             return
         }
 
@@ -81,17 +100,27 @@ class ActiveSession(
             )
             try {
                 scope.cancel("VPN session closing: $reason")
-                closeStep("command_clients", closeCommandClientsAndListeners)
-                closeStep("core", stopCore)
-                closeStep("command_server") {
+                closeStep(
+                    "command_clients",
+                    COMMAND_CLIENTS_TIMEOUT_MILLIS,
+                    closeCommandClientsAndListeners,
+                )
+                closeStep("core", CORE_TIMEOUT_MILLIS, stopCore)
+                closeStep("command_server", SHORT_STEP_TIMEOUT_MILLIS) {
                     val server = commandServer
                     commandServer = null
                     closeCommandServer(server)
                 }
-                closeStep("platform") { closePlatform(platformInterface) }
-                closeStep("tun") { tunOwner.close(generation, reason) }
-                closeStep("network") { clearNetwork() }
+                closeStep("platform", SHORT_STEP_TIMEOUT_MILLIS) {
+                    closePlatform(platformInterface)
+                }
             } finally {
+                // TUN and Android network ownership must always be attempted,
+                // even if an earlier native/listener step timed out.
+                closeStep("tun", SHORT_STEP_TIMEOUT_MILLIS) {
+                    tunOwner.close(generation, reason)
+                }
+                closeStep("network", SHORT_STEP_TIMEOUT_MILLIS, clearNetwork)
                 closed.complete(Unit)
                 VpnSessionCoordinator.event(
                     "session_close_completed",
@@ -102,9 +131,21 @@ class ActiveSession(
         }
     }
 
-    private suspend fun closeStep(name: String, action: suspend () -> Unit) {
-        runCatching { action() }
-            .onFailure {
+    private suspend fun closeStep(
+        name: String,
+        timeoutMillis: Long,
+        action: suspend () -> Unit,
+    ) {
+        val result = SessionCloseDispatcher.runStep(timeoutMillis, action)
+        if (result == null) {
+            VpnSessionCoordinator.event(
+                "terminal_failure",
+                generation,
+                "phase=session_close resource=$name error=timeout",
+                android.util.Log.ERROR,
+            )
+        } else {
+            result.onFailure {
                 VpnSessionCoordinator.event(
                     "terminal_failure",
                     generation,
@@ -112,5 +153,6 @@ class ActiveSession(
                     android.util.Log.ERROR,
                 )
             }
+        }
     }
 }

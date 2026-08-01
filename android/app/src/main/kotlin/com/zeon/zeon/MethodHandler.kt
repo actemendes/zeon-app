@@ -12,6 +12,8 @@ import com.hiddify.core.libbox.Libbox
 import com.hiddify.core.mobile.Mobile
 import com.hiddify.core.mobile.SetupOptions
 import com.zeon.zeon.bg.Bugs
+import com.zeon.zeon.bg.CoreNativeOperationCoordinator
+import com.zeon.zeon.bg.CoreShutdownDispatcher
 import com.zeon.zeon.bg.VpnSessionCoordinator
 import com.zeon.zeon.bg.StartPermissionRequestCoordinator
 import com.zeon.zeon.bg.VpnSessionSnapshotCoordinator
@@ -92,17 +94,25 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         val grpcPort = args["grpcPort"] as Int
                         Log.d("debugmode","${Settings.debugMode}")
                         runCatching {
-                            Mobile.setup(
-                                SetupOptions().also {
-                                    it.basePath = Settings.baseDir
-                                    it.workingDir = Settings.workingDir
-                                    it.tempDir = Settings.tempDir
-                                    it.fixAndroidStack = Bugs.fixAndroidStack
-                                    it.mode=mode.toLong()
-                                    it.listen= "127.0.0.1:" + grpcPort
-                                    it.secret=""
-                                    it.debug = Settings.debugMode
-                                },null)
+                            if (!CoreShutdownDispatcher.awaitSettled()) {
+                                error("native core shutdown is still in progress")
+                            }
+                            CoreNativeOperationCoordinator.exclusive {
+                                if (!CoreShutdownDispatcher.awaitSettled()) {
+                                    error("native core shutdown started while setup was queued")
+                                }
+                                Mobile.setup(
+                                    SetupOptions().also {
+                                        it.basePath = Settings.baseDir
+                                        it.workingDir = Settings.workingDir
+                                        it.tempDir = Settings.tempDir
+                                        it.fixAndroidStack = Bugs.fixAndroidStack
+                                        it.mode=mode.toLong()
+                                        it.listen= "127.0.0.1:" + grpcPort
+                                        it.secret=""
+                                        it.debug = Settings.debugMode
+                                    },null)
+                            }
 
 //                            Libbox.setup(Settings.baseDir, Settings.workingDir, Settings.tempDir, false)
                             Libbox.redirectStderr(File(Settings.workingDir, "stderr2.log").path)
@@ -195,14 +205,13 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         val currentGeneration = VpnSessionCoordinator.current()
                         if (preemptive) {
                             // This method call is the newest explicit user Stop
-                            // to reach Android. Rebase it above any tile/service
-                            // generation Dart has not observed yet, then stop
-                            // the current owner atomically.
-                            val acceptedGeneration = VpnSessionCoordinator.nextAfter(
+                            // to reach Android. Reserve the generation and the
+                            // terminal lifecycle fence atomically so an internal
+                            // serviceReload cannot supersede it before dispatch.
+                            val acceptedGeneration = BoxService.stopPreemptively(
                                 generation,
-                                "flutter_stop_preemptive_rebase",
+                                VpnStopSource.FLUTTER,
                             )
-                            BoxService.stop(acceptedGeneration, VpnStopSource.FLUTTER)
                             success(acceptedGeneration)
                         } else if (generation > 0L && generation < currentGeneration) {
                             VpnSessionCoordinator.stale(generation, "flutter_stop")

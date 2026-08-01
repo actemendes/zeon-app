@@ -48,6 +48,7 @@ class VpnTestInstrumentation : Instrumentation() {
         val startPermissionTests = StartPermissionRequestCoordinatorInstrumentedTest()
         val snapshotTests = VpnSessionSnapshotInstrumentedTest()
         val shutdownTests = CoreShutdownDispatcherInstrumentedTest()
+        val notificationTests = ServiceNotificationInstrumentedTest()
         val bitmapTests = SampledBitmapDecoderInstrumentedTest(targetContext)
         val tests = mutableListOf(
             TestCase(generationTests.javaClass.name, "generationIsStrictlyMonotonic") {
@@ -61,6 +62,36 @@ class VpnTestInstrumentation : Instrumentation() {
                 "preemptiveStopGenerationIsStrictlyNewerThanNativeAndDartFloors",
             ) {
                 generationTests.preemptiveStopGenerationIsStrictlyNewerThanNativeAndDartFloors()
+            },
+            TestCase(
+                generationTests.javaClass.name,
+                "terminalStopBlocksInternalReloadUntilAnExplicitNewConnect",
+            ) {
+                generationTests.terminalStopBlocksInternalReloadUntilAnExplicitNewConnect()
+            },
+            TestCase(
+                generationTests.javaClass.name,
+                "processCoreOwnerIsExclusiveAcrossServiceInstances",
+            ) {
+                generationTests.processCoreOwnerIsExclusiveAcrossServiceInstances()
+            },
+            TestCase(
+                generationTests.javaClass.name,
+                "destroyCancelsReservedReloadBeforeItCanCommit",
+            ) {
+                generationTests.destroyCancelsReservedReloadBeforeItCanCommit()
+            },
+            TestCase(
+                generationTests.javaClass.name,
+                "oldOwnerDestroyCannotSupersedeNewExplicitConnect",
+            ) {
+                generationTests.oldOwnerDestroyCannotSupersedeNewExplicitConnect()
+            },
+            TestCase(
+                generationTests.javaClass.name,
+                "destroyAndReloadCommitCannotLeaveALateSessionOwner",
+            ) {
+                generationTests.destroyAndReloadCommitCannotLeaveALateSessionOwner()
             },
             TestCase(startupTests.javaClass.name, "mobileStartSuccessRequiresEndpointReadiness") {
                 startupTests.mobileStartSuccessRequiresEndpointReadiness()
@@ -92,6 +123,9 @@ class VpnTestInstrumentation : Instrumentation() {
             TestCase(tunTests.javaClass.name, "rapidRestartIsIdempotent") {
                 tunTests.rapidRestartIsIdempotent()
             },
+            TestCase(tunTests.javaClass.name, "twoServiceOwnersCannotOpenConcurrentProcessTuns") {
+                tunTests.twoServiceOwnersCannotOpenConcurrentProcessTuns()
+            },
             TestCase(activeSessionTests.javaClass.name, "teardownOrderIsStableAndCloseIsIdempotent") {
                 activeSessionTests.teardownOrderIsStableAndCloseIsIdempotent()
             },
@@ -110,14 +144,44 @@ class VpnTestInstrumentation : Instrumentation() {
             TestCase(snapshotTests.javaClass.name, "repeatedStopPublishesNewestGenerationAndNextStartIsNewer") {
                 snapshotTests.repeatedStopPublishesNewestGenerationAndNextStartIsNewer()
             },
+            TestCase(snapshotTests.javaClass.name, "lateFirstStopCannotOverrideReconnectAndSecondStop") {
+                snapshotTests.lateFirstStopCannotOverrideReconnectAndSecondStop()
+            },
             TestCase(snapshotTests.javaClass.name, "alreadyStoppedExternalStopPromotesTheTerminalGeneration") {
                 snapshotTests.alreadyStoppedExternalStopPromotesTheTerminalGeneration()
+            },
+            TestCase(
+                snapshotTests.javaClass.name,
+                "repeatedStopAfterFailurePublishesDisconnectedWithoutAReceiver",
+            ) {
+                snapshotTests.repeatedStopAfterFailurePublishesDisconnectedWithoutAReceiver()
             },
             TestCase(shutdownTests.javaClass.name, "nativeCoreCloseNeverRunsOnMainLooper") {
                 shutdownTests.nativeCoreCloseNeverRunsOnMainLooper()
             },
             TestCase(shutdownTests.javaClass.name, "hungNativeCloseTimesOutWithoutAllowingConcurrentRestart") {
                 shutdownTests.hungNativeCloseTimesOutWithoutAllowingConcurrentRestart()
+            },
+            TestCase(shutdownTests.javaClass.name, "nativeStartAndCloseOperationsAreMutuallyExclusive") {
+                shutdownTests.nativeStartAndCloseOperationsAreMutuallyExclusive()
+            },
+            TestCase(
+                shutdownTests.javaClass.name,
+                "hungListenerStepCannotPreventFollowingTunCleanupStep",
+            ) {
+                shutdownTests.hungListenerStepCannotPreventFollowingTunCleanupStep()
+            },
+            TestCase(
+                notificationTests.javaClass.name,
+                "staleCleanupCannotDetachANewerGeneration",
+            ) {
+                notificationTests.staleCleanupCannotDetachANewerGeneration()
+            },
+            TestCase(
+                notificationTests.javaClass.name,
+                "notificationStopUsesOneExplicitProcessReceiverAndOneGeneration",
+            ) {
+                notificationTests.notificationStopUsesOneExplicitProcessReceiverAndOneGeneration()
             },
         )
         listOf(

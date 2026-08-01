@@ -15,12 +15,14 @@ class TunDescriptorOwnerInstrumentedTest {
         val first = descriptor()
         val duplicate = descriptor()
         owner.open(generation, first)
+        check(TunDescriptorOwner.hasProcessWideOwnership())
 
         check(runCatching { owner.open(generation, duplicate) }.isFailure)
         check(!duplicate.fileDescriptor.valid())
         check(owner.hasOpenDescriptor(generation))
         check(owner.close(generation, "test"))
         check(!first.fileDescriptor.valid())
+        check(!TunDescriptorOwner.hasProcessWideOwnership())
     }
 
     fun validationFailureClosesEstablishedDescriptor() {
@@ -96,6 +98,24 @@ class TunDescriptorOwnerInstrumentedTest {
             check(owner.close(generation, "restart"))
             check(!owner.close(generation, "restart_duplicate"))
         }
+    }
+
+    fun twoServiceOwnersCannotOpenConcurrentProcessTuns() {
+        val firstOwner = TunDescriptorOwner()
+        val secondOwner = TunDescriptorOwner()
+        val firstGeneration = VpnSessionCoordinator.next("tun_process_owner_first")
+        firstOwner.open(firstGeneration, descriptor())
+
+        val secondGeneration = VpnSessionCoordinator.next("tun_process_owner_second")
+        val rejected = descriptor()
+        check(runCatching { secondOwner.open(secondGeneration, rejected) }.isFailure)
+        check(!rejected.fileDescriptor.valid())
+
+        check(firstOwner.close(firstGeneration, "process_owner_transfer"))
+        val accepted = descriptor()
+        secondOwner.open(secondGeneration, accepted)
+        check(secondOwner.close(secondGeneration, "process_owner_transfer_complete"))
+        check(!TunDescriptorOwner.hasProcessWideOwnership())
     }
 
     private fun descriptor(): ParcelFileDescriptor {

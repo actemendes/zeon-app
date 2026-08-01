@@ -5,6 +5,9 @@ import com.zeon.zeon.bg.VpnSessionSnapshot
 import com.zeon.zeon.bg.VpnSessionCoordinator
 import com.zeon.zeon.bg.VpnSessionSnapshotCoordinator
 import com.zeon.zeon.bg.VpnStopSource
+import com.zeon.zeon.bg.VpnLifecycleIntentCoordinator
+import com.zeon.zeon.bg.CoreProcessOwnerCoordinator
+import com.zeon.zeon.bg.TunDescriptorOwner
 import com.zeon.zeon.Settings
 import com.zeon.zeon.bg.BoxService
 import kotlinx.coroutines.delay
@@ -97,6 +100,49 @@ class VpnSessionSnapshotInstrumentedTest {
         check(nextStartGeneration > terminal.generation)
     }
 
+    fun lateFirstStopCannotOverrideReconnectAndSecondStop() {
+        val initial = VpnSessionCoordinator.next("snapshot_stop_race_initial")
+        VpnSessionSnapshotCoordinator.begin(initial, "connect")
+        val firstStop = requireNotNull(
+            VpnLifecycleIntentCoordinator.reserveStop(
+                requestedGeneration = initial,
+                preemptive = true,
+                reason = "snapshot_stop_race_first",
+            ),
+        )
+        VpnSessionSnapshotCoordinator.requestStop(firstStop, VpnStopSource.FLUTTER)
+
+        val reconnect = VpnSessionCoordinator.next("snapshot_stop_race_reconnect")
+        check(VpnLifecycleIntentCoordinator.commitStart(reconnect) { true })
+        VpnSessionSnapshotCoordinator.begin(reconnect, "connect")
+        val secondStop = requireNotNull(
+            VpnLifecycleIntentCoordinator.reserveStop(
+                requestedGeneration = reconnect,
+                preemptive = true,
+                reason = "snapshot_stop_race_second",
+            ),
+        )
+        VpnSessionSnapshotCoordinator.requestStop(secondStop, VpnStopSource.NOTIFICATION)
+
+        val afterLateFirstCompletion = VpnSessionSnapshotCoordinator.publishDisconnected(
+            firstStop,
+            VpnStopSource.FLUTTER,
+        )
+        check(afterLateFirstCompletion.generation == secondStop)
+        check(afterLateFirstCompletion.phase == VpnSessionPhase.STOP_REQUESTED)
+        check(afterLateFirstCompletion.stopSource == VpnStopSource.NOTIFICATION)
+
+        val terminal = VpnSessionSnapshotCoordinator.publishDisconnected(
+            secondStop,
+            VpnStopSource.NOTIFICATION,
+        )
+        check(terminal.generation == secondStop)
+        check(terminal.phase == VpnSessionPhase.DISCONNECTED)
+        check(terminal.stopSource == VpnStopSource.NOTIFICATION)
+        check(!CoreProcessOwnerCoordinator.hasOwner())
+        check(!TunDescriptorOwner.hasProcessWideOwnership())
+    }
+
     suspend fun alreadyStoppedExternalStopPromotesTheTerminalGeneration() {
         Settings.startedByUser = true
         val generation = VpnSessionCoordinator.next("snapshot_already_stopped_external_stop_test")
@@ -112,6 +158,35 @@ class VpnSessionSnapshotInstrumentedTest {
             delay(100L)
         }
         error("already-stopped service did not publish a rebased terminal snapshot")
+    }
+
+    suspend fun repeatedStopAfterFailurePublishesDisconnectedWithoutAReceiver() {
+        val failedGeneration = VpnSessionCoordinator.next("snapshot_failed_without_receiver_test")
+        VpnSessionSnapshotCoordinator.begin(failedGeneration, "connect")
+        VpnSessionSnapshotCoordinator.failure(
+            failedGeneration,
+            code = "test_start_failure",
+            owner = "instrumentation",
+            recoverable = true,
+        )
+        Settings.startedByUser = true
+        check(BoxService.stop(source = VpnStopSource.FLUTTER))
+        val stopGeneration = VpnSessionCoordinator.current()
+        check(stopGeneration > failedGeneration)
+        check(!Settings.startedByUser)
+
+        repeat(20) {
+            val snapshot = VpnSessionSnapshotCoordinator.current()
+            if (
+                snapshot.generation == stopGeneration &&
+                snapshot.phase == VpnSessionPhase.DISCONNECTED
+            ) {
+                check(snapshot.stopSource == VpnStopSource.FLUTTER)
+                return
+            }
+            delay(100L)
+        }
+        error("Stop after FAILED/no-receiver did not publish DISCONNECTED")
     }
 
 }

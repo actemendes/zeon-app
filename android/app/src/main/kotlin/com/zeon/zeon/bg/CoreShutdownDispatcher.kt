@@ -21,7 +21,7 @@ object CoreShutdownDispatcher {
 
     suspend fun close(
         timeoutMillis: Long = DEFAULT_CLOSE_TIMEOUT_MILLIS,
-        closeCore: () -> Unit,
+        closeCore: suspend () -> Unit,
     ): Boolean {
         val close = synchronized(lock) {
             activeClose?.takeUnless { it.isCompleted } ?: scope.async(start = CoroutineStart.LAZY) {
