@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:accessibility_tools/accessibility_tools.dart';
-import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +20,7 @@ import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/router/go_router/go_router_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/theme/app_theme.dart';
+import 'package:zeon/core/theme/system_bars_style.dart';
 import 'package:zeon/core/theme/theme_preferences.dart';
 import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/features/connection/widget/connection_wrapper.dart';
@@ -110,43 +110,32 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
       ShortcutWrapper(
         ToastificationWrapper(
           child: ConnectionWrapper(
-            DynamicColorBuilder(
-              builder: (ColorScheme? lightColorScheme, ColorScheme? darkColorScheme) {
-                return MaterialApp.router(
-                  routerConfig: router,
-                  locale: locale.flutterLocale,
-                  supportedLocales: AppLocaleUtils.supportedLocales,
-                  localizationsDelegates: GlobalMaterialLocalizations.delegates,
-                  debugShowCheckedModeBanner: false,
-                  themeMode: themeMode.flutterThemeMode,
-                  theme: theme.lightTheme(lightColorScheme),
-                  darkTheme: theme.darkTheme(darkColorScheme),
-                  title: Constants.appName,
-                  builder: (context, child) {
-                    final theme = Theme.of(context);
-                    var appChild = child ?? const SizedBox();
-                    if (upgrader != null) {
-                      appChild = UpgradeAlert(
-                        upgrader: upgrader,
-                        navigatorKey: router.routerDelegate.navigatorKey,
-                        child: appChild,
-                      );
-                    }
-                    if (kDebugMode && _debugAccessibility) {
-                      return AccessibilityTools(checkFontOverflows: true, child: appChild);
-                    }
-                    final isDark = theme.brightness == Brightness.dark;
-                    return AnnotatedRegion<SystemUiOverlayStyle>(
-                      value: SystemUiOverlayStyle(
-                        statusBarColor: theme.scaffoldBackgroundColor,
-                        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-                        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-                        systemNavigationBarColor: theme.scaffoldBackgroundColor,
-                        systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-                      ),
-                      child: appChild,
-                    );
-                  },
+            MaterialApp.router(
+              routerConfig: router,
+              locale: locale.flutterLocale,
+              supportedLocales: AppLocaleUtils.supportedLocales,
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
+              debugShowCheckedModeBanner: false,
+              themeMode: themeMode.flutterThemeMode,
+              theme: theme.lightTheme(null),
+              darkTheme: theme.darkTheme(null),
+              title: Constants.appName,
+              builder: (context, child) {
+                final theme = Theme.of(context);
+                var appChild = child ?? const SizedBox();
+                if (upgrader != null) {
+                  appChild = UpgradeAlert(
+                    upgrader: upgrader,
+                    navigatorKey: router.routerDelegate.navigatorKey,
+                    child: appChild,
+                  );
+                }
+                if (kDebugMode && _debugAccessibility) {
+                  return AccessibilityTools(checkFontOverflows: true, child: appChild);
+                }
+                return AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: systemBarsStyleFor(theme.brightness),
+                  child: appChild,
                 );
               },
             ),
@@ -155,68 +144,6 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
       ),
     );
   }
-
-  // @override
-  // Widget build1(BuildContext context, WidgetRef ref) {
-  //   setupStateListener(ref);
-  //   // setupQuickSettings(ref);
-  //   final router = ref.watch(routerProvider);
-  //   final locale = ref.watch(localePreferencesProvider);
-  //   final themeMode = ref.watch(themePreferencesProvider);
-  //   final theme = AppTheme(themeMode, locale.preferredFontFamily);
-  //   final upgrader = ref.watch(upgraderProvider);
-
-  //   ref.listen(foregroundProfilesUpdateNotifierProvider, (_, __) {});
-
-  //   return WindowWrapper(
-  //     TrayWrapper(
-  //       ShortcutWrapper(
-  //         ConnectionWrapper(
-  //           PlatformProvider(
-  //               settings: PlatformSettingsData(
-  //                 iosUsesMaterialWidgets: true,
-  //               ),
-  //               builder: (context) => DynamicColorBuilder(
-  //                     builder: (ColorScheme? lightColorScheme, ColorScheme? darkColorScheme) {
-  //                       return PlatformApp.router(
-  //                         routerConfig: router,
-  //                         locale: locale.flutterLocale,
-  //                         supportedLocales: AppLocaleUtils.supportedLocales,
-  //                         localizationsDelegates: GlobalMaterialLocalizations.delegates,
-  //                         debugShowCheckedModeBanner: false,
-  //                         material: (context, platform) => MaterialAppRouterData(
-  //                           theme: theme.lightTheme(lightColorScheme),
-  //                           darkTheme: theme.darkTheme(darkColorScheme),
-  //                           themeMode: themeMode.flutterThemeMode,
-  //                         ),
-  //                         cupertino: (context, platform) {
-  //                           final sysDark = MediaQuery.of(context).platformBrightness == Brightness.dark;
-
-  //                           return CupertinoAppRouterData(theme: theme.cupertinoThemeData(sysDark, lightColorScheme, darkColorScheme));
-  //                         },
-  //                         title: Constants.appName,
-  //                         builder: (context, child) {
-  //                           child = UpgradeAlert(
-  //                             upgrader: upgrader,
-  //                             navigatorKey: router.routerDelegate.navigatorKey,
-  //                             child: child ?? const SizedBox(),
-  //                           );
-  //                           if (kDebugMode && _debugAccessibility) {
-  //                             return AccessibilityTools(
-  //                               checkFontOverflows: true,
-  //                               child: child,
-  //                             );
-  //                           }
-  //                           return child;
-  //                         },
-  //                       );
-  //                     },
-  //                   )),
-  //         ),
-  //       ),
-  //     ),
-  //   );
-  // }
 
   void setupStateListener(WidgetRef ref) {
     final appLifecycleState = useAppLifecycleState();

@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:zeon/core/theme/app_color_tokens.dart';
 import 'package:zeon/core/theme/app_theme_mode.dart';
+import 'package:zeon/core/theme/system_bars_style.dart';
 import 'package:zeon/core/theme/theme_extensions.dart';
 
 const Color _lightBackground = AppColorTokens.lightBackground;
@@ -150,9 +150,6 @@ class AppTheme {
     required Color navBarUnselectedColor,
     required Color navBarIndicatorColor,
   }) {
-    final isDark = scheme.brightness == Brightness.dark;
-    final statusBarIconBrightness = isDark ? Brightness.light : Brightness.dark;
-    final statusBarBrightness = isDark ? Brightness.dark : Brightness.light;
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
@@ -176,13 +173,7 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: statusBarIconBrightness,
-          statusBarBrightness: statusBarBrightness,
-          systemNavigationBarColor: scheme.background,
-          systemNavigationBarIconBrightness: statusBarIconBrightness,
-        ),
+        systemOverlayStyle: systemBarsStyleFor(scheme.brightness),
         iconTheme: IconThemeData(color: scheme.onSurface),
         actionsIconTheme: IconThemeData(color: scheme.onSurface),
         titleTextStyle: textTheme.titleMedium?.copyWith(

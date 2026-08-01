@@ -5,8 +5,10 @@ import android.Manifest
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
 import com.zeon.zeon.bg.BoxService
@@ -39,6 +41,16 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     val serviceAlerts = MutableLiveData<ServiceEvent?>(null)
     private val startPermissionRequests = StartPermissionRequestCoordinator()
     private var serviceLaunchGeneration = 0L
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Flutter's targetSdk 36 path is enforced edge-to-edge by Android on
+        // API 35+. Enable the same layout once for older supported releases;
+        // no lifecycle or Flutter rebuild reapplication is needed.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

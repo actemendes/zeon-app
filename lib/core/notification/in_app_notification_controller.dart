@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:zeon/core/router/dialog/widgets/custom_alert_dialog.dart';
-import 'package:zeon/core/router/go_router/go_router_notifier.dart';
-import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:toastification/toastification.dart';
+import 'package:zeon/core/router/dialog/widgets/custom_alert_dialog.dart';
+import 'package:zeon/core/router/go_router/go_router_notifier.dart';
+import 'package:zeon/utils/utils.dart';
 
 part 'in_app_notification_controller.g.dart';
 
@@ -148,8 +148,10 @@ class _RemoteNotificationFallbackToast extends StatelessWidget {
     final backgroundColor = Color.alphaBlend(scheme.primary.withValues(alpha: isDark ? .10 : .08), scheme.surface);
     final borderColor = scheme.primary.withValues(alpha: isDark ? .55 : .42);
 
-    return SafeArea(
-      minimum: const EdgeInsets.all(12),
+    // Toastification already adds viewPadding and viewInsets to its overlay
+    // margin. A nested SafeArea would double the system-bar/IME inset.
+    return Padding(
+      padding: const EdgeInsets.all(12),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: Material(

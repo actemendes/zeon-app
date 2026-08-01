@@ -152,6 +152,34 @@ class BoxService(
             source: VpnStopSource,
         ): Long = requireNotNull(requestStop(requestedGeneration, source, preemptive = true))
 
+        fun stopForReplacement(generation: Long): Boolean {
+            return when (VpnLifecycleIntentCoordinator.reserveReplacementStop(generation)) {
+                VpnLifecycleIntentCoordinator.ReplacementStopDecision.REJECTED -> false
+                VpnLifecycleIntentCoordinator.ReplacementStopDecision.ALREADY_ACCEPTED -> true
+                VpnLifecycleIntentCoordinator.ReplacementStopDecision.DISPATCH -> {
+                    val source = VpnStopSource.REPLACEMENT
+                    dispatchStopToActiveOwners(generation, source)
+                    Application.application.sendBroadcast(
+                        Intent(Action.SERVICE_CLOSE)
+                            .setPackage(Application.application.packageName)
+                            .putExtra(EXTRA_SESSION_GENERATION, generation)
+                            .putExtra(EXTRA_STOP_SOURCE, source.wireValue),
+                    )
+                    scheduleTerminalFallback(generation, source)
+                    true
+                }
+            }
+        }
+
+        internal fun newestStopSource(
+            previous: VpnStopSource,
+            incoming: VpnStopSource,
+        ): VpnStopSource = when {
+            incoming == VpnStopSource.NONE -> previous
+            incoming == VpnStopSource.REPLACEMENT && previous.clearsExpectedRunning -> previous
+            else -> incoming
+        }
+
         private fun requestStop(
             requestedGeneration: Long,
             source: VpnStopSource,
@@ -208,6 +236,15 @@ class BoxService(
                     "source=${source.wireValue} remaining_owners=$owningServices tun_owned=$processTunOwned core_owned=$processCoreOwned",
                 )
                 return false
+            }
+            if (source == VpnStopSource.REPLACEMENT) {
+                val completed = VpnLifecycleIntentCoordinator.completeReplacementStop(generation) {
+                    VpnSessionSnapshotCoordinator.publishDisconnected(generation, source)
+                }
+                if (!completed) {
+                    VpnSessionCoordinator.stale(generation, "replacement_terminal_after_start")
+                }
+                return completed
             }
             VpnSessionSnapshotCoordinator.publishDisconnected(generation, source)
             return true
@@ -349,6 +386,24 @@ class BoxService(
     }
 
     private fun receiveStop(generation: Long, source: VpnStopSource, dispatchSource: String) {
+        if (source == VpnStopSource.REPLACEMENT) {
+            val handled = VpnLifecycleIntentCoordinator.dispatchReplacementStop(generation) {
+                val ownerGeneration = activeSession?.generation
+                if (
+                    (ownerGeneration != null && ownerGeneration >= generation) ||
+                    (ownerGeneration == null && sessionGeneration >= generation && status.value != Status.Stopped)
+                ) {
+                    false
+                } else {
+                    stopService(generation, source)
+                    true
+                }
+            }
+            if (!handled) {
+                VpnSessionCoordinator.stale(generation, "$dispatchSource/replacement")
+            }
+            return
+        }
         if (generation > 0L && generation < VpnSessionCoordinator.current()) {
             VpnSessionCoordinator.stale(generation, dispatchSource)
             return
@@ -709,15 +764,15 @@ class BoxService(
         val closingSession = activeSession
         sessionGeneration = VpnSessionCoordinator.accept(generation, "stop_service")
         if (status.value == Status.Stopping) {
-            val preservedSource = terminalStop.source.takeUnless { it == VpnStopSource.NONE } ?: source
-            terminalStop = TerminalStop(sessionGeneration, preservedSource)
-            VpnSessionSnapshotCoordinator.requestStop(sessionGeneration, preservedSource)
+            val newestSource = newestStopSource(terminalStop.source, source)
+            terminalStop = TerminalStop(sessionGeneration, newestSource)
+            VpnSessionSnapshotCoordinator.requestStop(sessionGeneration, newestSource)
             VpnSessionSnapshotCoordinator.transition(sessionGeneration, VpnSessionPhase.STOPPING)
             return
         }
         terminalStop = TerminalStop(sessionGeneration, source)
         if (status.value == Status.Stopped && closingSession == null) {
-            Settings.startedByUser = false
+            if (source.clearsExpectedRunning) Settings.startedByUser = false
             notification.close(sessionGeneration)
             status.value = Status.Stopped
             publishStatus(Status.Stopped, sessionGeneration, "stop_already_complete/${source.wireValue}")
@@ -749,7 +804,7 @@ class BoxService(
                     return@withContext
                 }
                 notification.close(completedStop.generation)
-                Settings.startedByUser = false
+                if (completedStop.source.clearsExpectedRunning) Settings.startedByUser = false
                 status.value = Status.Stopped
                 publishStatus(Status.Stopped, completedStop.generation, "stop_complete/${completedStop.source.wireValue}")
                 publishTerminalIfOwnersSettled(completedStop.generation, completedStop.source)

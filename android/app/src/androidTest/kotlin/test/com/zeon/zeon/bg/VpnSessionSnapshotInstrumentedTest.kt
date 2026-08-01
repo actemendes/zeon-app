@@ -160,6 +160,31 @@ class VpnSessionSnapshotInstrumentedTest {
         error("already-stopped service did not publish a rebased terminal snapshot")
     }
 
+    suspend fun replacementCleanupPreservesExpectedRunningAndPublishesDisconnected() {
+        Settings.startedByUser = true
+        val generation = VpnSessionCoordinator.next("snapshot_replacement_cleanup")
+        VpnSessionSnapshotCoordinator.begin(generation, "connect")
+        check(BoxService.stopForReplacement(generation))
+
+        repeat(20) {
+            val snapshot = VpnSessionSnapshotCoordinator.current()
+            if (snapshot.generation == generation && snapshot.phase == VpnSessionPhase.DISCONNECTED) {
+                check(snapshot.stopSource == VpnStopSource.REPLACEMENT)
+                check(Settings.startedByUser) {
+                    "replacement cleanup cleared the user's expected-running state"
+                }
+                check(VpnLifecycleIntentCoordinator.acceptsStart(generation))
+                check(VpnLifecycleIntentCoordinator.commitStart(generation) { true })
+                check(!BoxService.stopForReplacement(generation)) {
+                    "late replacement cleanup was accepted after same-generation Start"
+                }
+                return
+            }
+            delay(100L)
+        }
+        error("replacement cleanup did not publish same-generation DISCONNECTED")
+    }
+
     suspend fun repeatedStopAfterFailurePublishesDisconnectedWithoutAReceiver() {
         val failedGeneration = VpnSessionCoordinator.next("snapshot_failed_without_receiver_test")
         VpnSessionSnapshotCoordinator.begin(failedGeneration, "connect")

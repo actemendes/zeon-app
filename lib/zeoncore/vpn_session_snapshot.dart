@@ -42,6 +42,7 @@ enum VpnStopSource {
   shortcut,
   revoke,
   destroy,
+  replacement,
   internal,
   unknown;
 
@@ -55,6 +56,7 @@ enum VpnStopSource {
       'shortcut' => shortcut,
       'revoke' => revoke,
       'destroy' => destroy,
+      'replacement' => replacement,
       'internal' => internal,
       _ => unknown,
     };

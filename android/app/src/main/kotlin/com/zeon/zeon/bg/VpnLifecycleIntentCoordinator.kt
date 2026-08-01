@@ -9,6 +9,22 @@ package com.zeon.zeon.bg
  */
 object VpnLifecycleIntentCoordinator {
     private data class PendingReload(val ownerToken: Any, val generation: Long)
+    private data class ReplacementCleanup(
+        val generation: Long,
+        val state: ReplacementCleanupState,
+    )
+
+    private enum class ReplacementCleanupState {
+        PENDING,
+        COMPLETED,
+        CONSUMED,
+    }
+
+    enum class ReplacementStopDecision {
+        DISPATCH,
+        ALREADY_ACCEPTED,
+        REJECTED,
+    }
 
     data class OwnerDestruction<T>(
         val pendingReloadGeneration: Long?,
@@ -17,6 +33,7 @@ object VpnLifecycleIntentCoordinator {
 
     private val lock = Any()
     private var pendingReload: PendingReload? = null
+    private var replacementCleanup: ReplacementCleanup? = null
 
     @Volatile
     private var latestStopGeneration = 0L
@@ -38,6 +55,7 @@ object VpnLifecycleIntentCoordinator {
         }
         latestStopGeneration = maxOf(latestStopGeneration, generation)
         pendingReload = null
+        replacementCleanup = null
         generation
     }
 
@@ -56,6 +74,78 @@ object VpnLifecycleIntentCoordinator {
         VpnSessionCoordinator.next(reason).also { generation ->
             latestStopGeneration = maxOf(latestStopGeneration, generation)
             pendingReload = null
+            replacementCleanup = null
+        }
+    }
+
+    /**
+     * Accepts same-generation cleanup performed immediately before a Start or
+     * restart. It closes an old owner but deliberately does not create a
+     * terminal Stop fence for the replacement generation.
+     */
+    fun reserveReplacementStop(generation: Long): ReplacementStopDecision = synchronized(lock) {
+        if (
+            generation <= latestStopGeneration ||
+            !VpnSessionCoordinator.isCurrent(generation)
+        ) {
+            return@synchronized ReplacementStopDecision.REJECTED
+        }
+        val current = replacementCleanup
+        if (current?.generation == generation) {
+            return@synchronized when (current.state) {
+                ReplacementCleanupState.PENDING,
+                ReplacementCleanupState.COMPLETED -> ReplacementStopDecision.ALREADY_ACCEPTED
+                ReplacementCleanupState.CONSUMED -> ReplacementStopDecision.REJECTED
+            }
+        }
+        if (current != null && current.generation > generation) {
+            return@synchronized ReplacementStopDecision.REJECTED
+        }
+        pendingReload = null
+        replacementCleanup = ReplacementCleanup(generation, ReplacementCleanupState.PENDING)
+        ReplacementStopDecision.DISPATCH
+    }
+
+    /** Runs an owner stop only while this cleanup generation is still pending. */
+    fun dispatchReplacementStop(generation: Long, stopOwner: () -> Boolean): Boolean = synchronized(lock) {
+        val current = replacementCleanup
+        if (
+            current?.generation != generation ||
+            current.state != ReplacementCleanupState.PENDING ||
+            generation <= latestStopGeneration ||
+            !VpnSessionCoordinator.isCurrent(generation)
+        ) {
+            return@synchronized false
+        }
+        stopOwner()
+    }
+
+    /**
+     * Publishes the replacement terminal snapshot while Start is still fenced,
+     * then makes the generation available for its replacement owner. Keeping
+     * both operations under this lock prevents a same-generation Start from
+     * publishing STARTING before a late DISCONNECTED snapshot.
+     */
+    fun completeReplacementStop(
+        generation: Long,
+        publishDisconnected: () -> Unit,
+    ): Boolean = synchronized(lock) {
+        val current = replacementCleanup
+        if (
+            current?.generation != generation ||
+            generation <= latestStopGeneration ||
+            !VpnSessionCoordinator.isCurrent(generation)
+        ) {
+            return@synchronized false
+        }
+        when (current.state) {
+            ReplacementCleanupState.PENDING -> {
+                publishDisconnected()
+                replacementCleanup = current.copy(state = ReplacementCleanupState.COMPLETED)
+                true
+            }
+            ReplacementCleanupState.COMPLETED -> true
+            ReplacementCleanupState.CONSUMED -> false
         }
     }
 
@@ -76,19 +166,39 @@ object VpnLifecycleIntentCoordinator {
         }
         VpnSessionCoordinator.next(reason).also { generation ->
             pendingReload = PendingReload(ownerToken, generation)
+            replacementCleanup = null
         }
     }
 
     fun acceptsStart(generation: Long): Boolean = synchronized(lock) {
-        generation > latestStopGeneration
+        generation > latestStopGeneration &&
+            VpnSessionCoordinator.isCurrent(generation) &&
+            replacementCleanup?.let {
+                it.generation != generation || it.state == ReplacementCleanupState.COMPLETED
+            } != false
     }
 
     fun commitStart(generation: Long, commit: () -> Boolean): Boolean = synchronized(lock) {
         if (generation <= latestStopGeneration || !VpnSessionCoordinator.isCurrent(generation)) {
             return@synchronized false
         }
+        val replacement = replacementCleanup
+        if (
+            replacement?.generation == generation &&
+            replacement.state != ReplacementCleanupState.COMPLETED
+        ) {
+            return@synchronized false
+        }
         pendingReload = null
-        commit()
+        val committed = commit()
+        if (committed) {
+            replacementCleanup = if (replacement?.generation == generation) {
+                replacement.copy(state = ReplacementCleanupState.CONSUMED)
+            } else {
+                null
+            }
+        }
+        committed
     }
 
     /**
@@ -111,6 +221,7 @@ object VpnLifecycleIntentCoordinator {
         }
         val committed = commit()
         pendingReload = null
+        if (committed) replacementCleanup = null
         committed
     }
 

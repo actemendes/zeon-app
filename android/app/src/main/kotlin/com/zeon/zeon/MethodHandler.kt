@@ -202,8 +202,20 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         val args = call.arguments as? Map<*, *>
                         val generation = (args?.get("generation") as Number?)?.toLong() ?: 0L
                         val preemptive = args?.get("preemptive") as? Boolean ?: false
+                        val replacement = args?.get("replacement") as? Boolean ?: false
                         val currentGeneration = VpnSessionCoordinator.current()
-                        if (preemptive) {
+                        if (replacement) {
+                            if (generation <= 0L) {
+                                result.error(
+                                    "vpn_operation_invalid",
+                                    "replacement cleanup requires a positive generation",
+                                    null,
+                                )
+                                return@launch
+                            }
+                            val accepted = BoxService.stopForReplacement(generation)
+                            success(if (accepted) generation else VpnSessionCoordinator.current())
+                        } else if (preemptive) {
                             // This method call is the newest explicit user Stop
                             // to reach Android. Reserve the generation and the
                             // terminal lifecycle fence atomically so an internal

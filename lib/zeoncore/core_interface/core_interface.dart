@@ -27,6 +27,11 @@ class CoreInterface {
     return false;
   }
 
+  /// Closes the previous platform owner without making the replacement
+  /// generation terminal. Android Start/restart calls this before installing
+  /// the new owner for the same generation.
+  Future<bool> stopForReplacement({int generation = 0}) => stop(generation: generation);
+
   Future<bool> isBgClientAvailable() async {
     return true;
   }

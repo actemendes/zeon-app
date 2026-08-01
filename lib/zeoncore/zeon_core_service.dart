@@ -1539,7 +1539,7 @@ class ZeonCoreService with InfraLogger {
             if (!_isTransientGrpcTransportClose(error)) rethrow;
           }
           final oldClosed = await core
-              .stop(generation: generation)
+              .stopForReplacement(generation: generation)
               .timeout(const Duration(seconds: 14), onTimeout: () => false);
           if (_isStaleOperation(generation, "mode_switch_old_close")) return right(unit);
           if (!oldClosed) {

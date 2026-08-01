@@ -19,6 +19,10 @@ import 'package:zeon/zeoncore/generated/v2/hello/hello_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 class CoreInterfaceMobile extends CoreInterface with InfraLogger {
+  CoreInterfaceMobile({bool? androidOverride, Future<bool> Function(String, int)? portProbe})
+    : _isAndroid = androidOverride ?? Platform.isAndroid,
+      _portProbe = portProbe ?? isPortOpen;
+
   static const channelPrefix = "com.zeon.app";
   static const methodChannel = MethodChannel("$channelPrefix/method");
   static const statusChannel = EventChannel("$channelPrefix/service.status", JSONMethodCodec());
@@ -34,6 +38,8 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
   bool _isBgClientAvailable = false;
   bool _debug = false;
+  final bool _isAndroid;
+  final Future<bool> Function(String, int) _portProbe;
   int _sessionGeneration = 0;
   VpnSessionSnapshot? _authoritativeSessionSnapshot;
   final VpnSessionSnapshotGate _snapshotGate = VpnSessionSnapshotGate();
@@ -53,7 +59,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
         options: ChannelOptions(credentials: channelOption),
       ),
     );
-    final status = Platform.isAndroid
+    final status = _isAndroid
         ? _androidSnapshotStatuses()
         : statusChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent);
     final alerts = Platform.isAndroid
@@ -170,7 +176,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   Future<VpnSessionSnapshot?> _getAuthoritativeSnapshot() async {
-    if (!Platform.isAndroid) return null;
+    if (!_isAndroid) return null;
     final event = await methodChannel.invokeMethod<Object?>("get_vpn_session_snapshot");
     return VpnSessionSnapshot.fromEvent(event);
   }
@@ -240,7 +246,9 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   Future<CoreStatus> setupBackground(String path, String name, {int generation = 0}) async {
     await setSessionGeneration(generation);
     // if (!await waitUntilPort(portBack, false, stop)) return const CoreStatus.stopped(alert: CoreAlert.createService);
-    if (!await stop(generation: generation)) return const CoreStatus.stopped(alert: CoreAlert.createService);
+    if (!await stopForReplacement(generation: generation)) {
+      return const CoreStatus.stopped(alert: CoreAlert.createService);
+    }
     _status.clean();
     await methodChannel.invokeMethod("start", {
       "path": path,
@@ -289,28 +297,43 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   @override
-  Future<bool> stop({int generation = 0}) async {
+  Future<bool> stop({int generation = 0}) => _stopPlatform(generation: generation, replacement: false);
+
+  @override
+  Future<bool> stopForReplacement({int generation = 0}) => _stopPlatform(generation: generation, replacement: true);
+
+  Future<bool> _stopPlatform({required int generation, required bool replacement}) async {
     if (generation > 0) {
       await setSessionGeneration(generation);
     }
-    await stopMethodChannel(generation: generation).timeout(const Duration(seconds: 3), onTimeout: () => generation);
+    final acceptedGeneration = await stopMethodChannel(
+      generation: generation,
+      replacement: replacement,
+    ).timeout(const Duration(seconds: 3), onTimeout: () => generation);
+    if (replacement && acceptedGeneration != generation) {
+      return false;
+    }
     final stopped = await waitUntilPort(
       portBack,
       false,
-      () => stopMethodChannel(generation: generation),
+      () => stopMethodChannel(generation: generation, replacement: replacement),
       baseDelay: const Duration(milliseconds: 160),
       maxDelay: const Duration(milliseconds: 900),
+      portProbe: _portProbe,
     ).timeout(const Duration(seconds: 12), onTimeout: () => false);
     _isBgClientAvailable = false;
     if (!stopped) {
       return false;
     }
-    if (!Platform.isAndroid) return true;
+    if (!_isAndroid) return true;
     for (var attempt = 0; attempt < 10; attempt++) {
       try {
         await resyncSessionStatus();
         final snapshot = _authoritativeSessionSnapshot;
-        if (snapshot != null && snapshot.generation >= generation && snapshot.phase == VpnSessionPhase.disconnected) {
+        final terminalGenerationMatches = replacement
+            ? snapshot?.generation == generation && snapshot?.stopSource == VpnStopSource.replacement
+            : (snapshot?.generation ?? 0) >= generation;
+        if (terminalGenerationMatches && snapshot?.phase == VpnSessionPhase.disconnected) {
           return true;
         }
       } catch (error, stackTrace) {
@@ -323,10 +346,15 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     return false;
   }
 
-  Future<int> stopMethodChannel({int? generation, bool preemptive = false}) async {
+  Future<int> stopMethodChannel({int? generation, bool preemptive = false, bool replacement = false}) async {
     final requested = generation ?? _sessionGeneration;
     final accepted =
-        await methodChannel.invokeMethod<int>("stop", {"generation": requested, "preemptive": preemptive}) ?? requested;
+        await methodChannel.invokeMethod<int>("stop", {
+          "generation": requested,
+          "preemptive": preemptive,
+          "replacement": replacement,
+        }) ??
+        requested;
     _sessionGeneration = max(_sessionGeneration, accepted);
     return accepted;
   }
@@ -411,11 +439,12 @@ Future<bool> waitUntilPort(
   Duration baseDelay = const Duration(milliseconds: 200),
   Duration maxDelay = const Duration(milliseconds: 1500),
   double factor = 1.8,
+  Future<bool> Function(String, int)? portProbe,
 }) async {
   var delay = baseDelay;
   final random = Random();
   for (var i = 0; i < maxTry; i++) {
-    if (await isPortOpen("127.0.0.1", portNumber) == isOpen) {
+    if (await (portProbe ?? isPortOpen)("127.0.0.1", portNumber) == isOpen) {
       return true;
     }
     if (callFunctionAfterEachFail != null) {

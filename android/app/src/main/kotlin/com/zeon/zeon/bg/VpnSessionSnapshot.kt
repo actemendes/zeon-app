@@ -33,6 +33,7 @@ enum class VpnStopSource(
     SHORTCUT("shortcut", true),
     REVOKE("revoke", true),
     DESTROY("destroy", false),
+    REPLACEMENT("replacement", false),
     INTERNAL("internal", true),
     UNKNOWN("unknown", false);
 

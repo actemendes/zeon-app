@@ -1,16 +1,20 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface.dart';
+import 'package:zeon/zeoncore/core_interface/core_interface_mobile.dart';
 import 'package:zeon/zeoncore/session_generation.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 import 'package:zeon/zeoncore/zeon_core_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('SessionGenerationGate', () {
     test('start then restart makes the start callback stale', () {
       final stale = <String>[];
@@ -186,6 +190,121 @@ void main() {
       }
       expect(selectedGeneration, latest);
     });
+  });
+
+  test('Android replacement cleanup is typed separately from terminal Stop', () async {
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      CoreInterfaceMobile.methodChannel,
+      (call) async {
+        calls.add(call);
+        return (call.arguments as Map<Object?, Object?>)['generation'];
+      },
+    );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        CoreInterfaceMobile.methodChannel,
+        null,
+      ),
+    );
+
+    final core = CoreInterfaceMobile();
+    await core.stopMethodChannel(generation: 9001, replacement: true);
+    await core.stopMethodChannel(generation: 9002, preemptive: true);
+
+    expect(calls, hasLength(2));
+    expect(calls[0].method, 'stop');
+    expect(calls[0].arguments, {'generation': 9001, 'preemptive': false, 'replacement': true});
+    expect(calls[1].arguments, {'generation': 9002, 'preemptive': true, 'replacement': false});
+  });
+
+  test('Android replacement cleanup waits for its exact terminal snapshot before continuing', () async {
+    const generation = 9101;
+    var snapshotPolls = 0;
+    var completed = false;
+    var snapshot = _androidSnapshotEvent(
+      generation: generation,
+      sequenceNumber: 1,
+      phase: VpnSessionPhase.stopping,
+      stopSource: VpnStopSource.replacement,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      CoreInterfaceMobile.methodChannel,
+      (call) async {
+        switch (call.method) {
+          case 'set_session_generation':
+          case 'stop':
+            return generation;
+          case 'get_vpn_session_snapshot':
+            snapshotPolls++;
+            return snapshot;
+          default:
+            throw StateError('unexpected platform call: ${call.method}');
+        }
+      },
+    );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        CoreInterfaceMobile.methodChannel,
+        null,
+      ),
+    );
+
+    final core = CoreInterfaceMobile(androidOverride: true, portProbe: (_, _) async => false);
+    final cleanup = core.stopForReplacement(generation: generation).then((value) {
+      completed = true;
+      return value;
+    });
+    for (var attempt = 0; attempt < 20 && snapshotPolls == 0; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(snapshotPolls, greaterThan(0));
+    expect(completed, isFalse);
+
+    snapshot = _androidSnapshotEvent(
+      generation: generation,
+      sequenceNumber: 2,
+      phase: VpnSessionPhase.disconnected,
+      stopSource: VpnStopSource.replacement,
+    );
+    expect(await cleanup.timeout(const Duration(seconds: 3)), isTrue);
+  });
+
+  test('newer explicit terminal Stop cannot satisfy replacement cleanup', () async {
+    const generation = 9201;
+    var startCalls = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      CoreInterfaceMobile.methodChannel,
+      (call) async {
+        switch (call.method) {
+          case 'set_session_generation':
+          case 'stop':
+            return generation;
+          case 'get_vpn_session_snapshot':
+            return _androidSnapshotEvent(
+              generation: generation + 1,
+              sequenceNumber: 1,
+              phase: VpnSessionPhase.disconnected,
+              stopSource: VpnStopSource.notification,
+            );
+          case 'start':
+            startCalls++;
+            return generation;
+          default:
+            throw StateError('unexpected platform call: ${call.method}');
+        }
+      },
+    );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        CoreInterfaceMobile.methodChannel,
+        null,
+      ),
+    );
+
+    final core = CoreInterfaceMobile(androidOverride: true, portProbe: (_, _) async => false);
+    expect(await core.stopForReplacement(generation: generation).timeout(const Duration(seconds: 3)), isFalse);
+    expect(startCalls, 0);
   });
 
   test('repeated stop confirmed by the platform does not dispatch another native stop', () async {
@@ -493,6 +612,59 @@ void main() {
 
     expect(preferences.getBool('started_by_user'), isTrue);
   });
+
+  test('replacement snapshot preserves running intent and accepts same-generation start', () async {
+    SharedPreferences.setMockInitialValues({'started_by_user': true});
+    final preferences = await SharedPreferences.getInstance();
+    final core = _SnapshotCoreInterface();
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final container = ProviderContainer(overrides: [sharedPreferencesProvider.overrideWith((ref) => preferences)]);
+    addTearDown(() async {
+      container.dispose();
+      await core.close();
+    });
+    await container.read(sharedPreferencesProvider.future);
+    final service = container.read(provider);
+    const generation = 1 << 60;
+
+    final stopped = service.statusController.stream.firstWhere((status) => status is CoreStopped);
+    core.add(
+      _platformSnapshot(
+        generation: generation,
+        sequenceNumber: 1,
+        phase: VpnSessionPhase.disconnected,
+        requestedAction: 'stop',
+        stopSource: VpnStopSource.replacement,
+      ),
+    );
+    await stopped.timeout(const Duration(seconds: 2));
+    expect(preferences.getBool('started_by_user'), isTrue);
+
+    final starting = service.statusController.stream.firstWhere((status) => status is CoreStarting);
+    core.add(
+      _platformSnapshot(
+        generation: generation,
+        sequenceNumber: 2,
+        phase: VpnSessionPhase.startRequested,
+        requestedAction: 'connect',
+      ),
+    );
+    await starting.timeout(const Duration(seconds: 2));
+
+    final connected = service.statusController.stream.firstWhere((status) => status is CoreStarted);
+    core.add(
+      _platformSnapshot(
+        generation: generation,
+        sequenceNumber: 3,
+        phase: VpnSessionPhase.connected,
+        requestedAction: 'connect',
+        ready: true,
+      ),
+    );
+    await connected.timeout(const Duration(seconds: 2));
+    expect(preferences.getBool('started_by_user'), isTrue);
+    expect(service.currentState, isA<CoreStarted>());
+  });
 }
 
 class _StoppedCoreInterface extends CoreInterface {
@@ -677,14 +849,15 @@ class _RebasedPreemptiveStopCoreInterface extends CoreInterface {
 VpnSessionSnapshot _platformSnapshot({
   required int generation,
   required VpnSessionPhase phase,
+  int? sequenceNumber,
   bool ready = false,
   String requestedAction = '',
   VpnStopSource stopSource = VpnStopSource.none,
 }) => VpnSessionSnapshot(
   generation: generation,
   runtimeEpoch: 'android-process',
-  sequenceNumber: generation,
-  snapshotVersion: generation,
+  sequenceNumber: sequenceNumber ?? generation,
+  snapshotVersion: sequenceNumber ?? generation,
   phase: phase,
   requestedAction: requestedAction,
   stopSource: stopSource,
@@ -696,3 +869,18 @@ VpnSessionSnapshot _platformSnapshot({
   platformVpnValidated: ready,
   selectedOutboundId: ready ? 'opaque-outbound' : '',
 );
+
+Map<String, Object?> _androidSnapshotEvent({
+  required int generation,
+  required int sequenceNumber,
+  required VpnSessionPhase phase,
+  required VpnStopSource stopSource,
+}) => {
+  'generation': generation,
+  'runtimeEpoch': 'android-test-process',
+  'sequenceNumber': sequenceNumber,
+  'snapshotVersion': sequenceNumber,
+  'phase': phase.name,
+  'requestedAction': 'stop',
+  'stopSource': stopSource.name,
+};

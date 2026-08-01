@@ -201,6 +201,18 @@ void main() {
         ).isExternalIntentionalStop,
         isFalse,
       );
+
+      final replacement = VpnSessionSnapshot.fromEvent(const {
+        'generation': 14,
+        'runtimeEpoch': 'epoch',
+        'sequenceNumber': 15,
+        'snapshotVersion': 16,
+        'phase': 'disconnected',
+        'requestedAction': 'stop',
+        'stopSource': 'replacement',
+      });
+      expect(replacement.stopSource, VpnStopSource.replacement);
+      expect(replacement.isExternalIntentionalStop, isFalse);
     });
 
     test('late authoritative resync cannot roll back a newer event snapshot', () {

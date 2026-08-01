@@ -3,6 +3,8 @@ package test.com.zeon.zeon.bg
 import com.zeon.zeon.bg.VpnSessionCoordinator
 import com.zeon.zeon.bg.VpnLifecycleIntentCoordinator
 import com.zeon.zeon.bg.CoreProcessOwnerCoordinator
+import com.zeon.zeon.bg.BoxService
+import com.zeon.zeon.bg.VpnStopSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -161,6 +163,100 @@ class VpnSessionCoordinatorInstrumentedTest {
             ) == null,
         ) { "destroyed old owner allocated a Stop over the replacement Connect" }
         check(VpnSessionCoordinator.current() == replacementGeneration)
+    }
+
+    fun replacementCleanupDoesNotFenceItsStartGeneration() {
+        val replacementGeneration = VpnSessionCoordinator.next("instrumented_replacement_cleanup")
+        check(
+            VpnLifecycleIntentCoordinator.reserveReplacementStop(replacementGeneration) ==
+                VpnLifecycleIntentCoordinator.ReplacementStopDecision.DISPATCH,
+        )
+        check(
+            VpnLifecycleIntentCoordinator.reserveReplacementStop(replacementGeneration) ==
+                VpnLifecycleIntentCoordinator.ReplacementStopDecision.ALREADY_ACCEPTED,
+        )
+        check(!VpnLifecycleIntentCoordinator.acceptsStart(replacementGeneration)) {
+            "Start was accepted before replacement teardown completed"
+        }
+        check(!VpnLifecycleIntentCoordinator.commitStart(replacementGeneration) { true })
+
+        var disconnectedPublished = false
+        check(
+            VpnLifecycleIntentCoordinator.completeReplacementStop(replacementGeneration) {
+                disconnectedPublished = true
+            },
+        )
+        check(disconnectedPublished)
+        check(VpnLifecycleIntentCoordinator.acceptsStart(replacementGeneration))
+        check(VpnLifecycleIntentCoordinator.commitStart(replacementGeneration) { true })
+        check(
+            VpnLifecycleIntentCoordinator.reserveReplacementStop(replacementGeneration) ==
+                VpnLifecycleIntentCoordinator.ReplacementStopDecision.REJECTED,
+        ) { "late replacement cleanup was accepted after the new owner committed" }
+
+        val terminalStop = requireNotNull(
+            VpnLifecycleIntentCoordinator.reserveStop(
+                requestedGeneration = replacementGeneration,
+                preemptive = true,
+                reason = "instrumented_terminal_after_replacement",
+            ),
+        )
+        check(terminalStop > replacementGeneration)
+        check(
+            VpnLifecycleIntentCoordinator.reserveReplacementStop(replacementGeneration) ==
+                VpnLifecycleIntentCoordinator.ReplacementStopDecision.REJECTED,
+        ) {
+            "stale replacement cleanup overrode a newer explicit Stop"
+        }
+    }
+
+    suspend fun replacementTerminalPublicationPrecedesStartCommit() = coroutineScope {
+        val generation = VpnSessionCoordinator.next("instrumented_replacement_atomic_publication")
+        check(
+            VpnLifecycleIntentCoordinator.reserveReplacementStop(generation) ==
+                VpnLifecycleIntentCoordinator.ReplacementStopDecision.DISPATCH,
+        )
+        val publicationEntered = CountDownLatch(1)
+        val releasePublication = CountDownLatch(1)
+        val published = AtomicBoolean(false)
+        val startCommitted = AtomicBoolean(false)
+
+        val completion = async(Dispatchers.Default) {
+            VpnLifecycleIntentCoordinator.completeReplacementStop(generation) {
+                publicationEntered.countDown()
+                releasePublication.await()
+                published.set(true)
+            }
+        }
+        publicationEntered.await()
+        val start = async(Dispatchers.Default) {
+            VpnLifecycleIntentCoordinator.commitStart(generation) {
+                check(published.get()) { "Start committed before DISCONNECTED was published" }
+                startCommitted.set(true)
+                true
+            }
+        }
+        check(!startCommitted.get())
+        releasePublication.countDown()
+
+        check(completion.await())
+        check(start.await())
+        check(startCommitted.get())
+    }
+
+    fun explicitStopSourceDominatesReplacementCleanup() {
+        check(
+            BoxService.newestStopSource(VpnStopSource.REPLACEMENT, VpnStopSource.NOTIFICATION) ==
+                VpnStopSource.NOTIFICATION,
+        )
+        check(
+            BoxService.newestStopSource(VpnStopSource.NOTIFICATION, VpnStopSource.REPLACEMENT) ==
+                VpnStopSource.NOTIFICATION,
+        )
+        check(
+            BoxService.newestStopSource(VpnStopSource.FLUTTER, VpnStopSource.TILE) ==
+                VpnStopSource.TILE,
+        )
     }
 
     suspend fun destroyAndReloadCommitCannotLeaveALateSessionOwner() = coroutineScope {

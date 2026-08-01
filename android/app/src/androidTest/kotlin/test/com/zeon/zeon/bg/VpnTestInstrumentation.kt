@@ -89,6 +89,24 @@ class VpnTestInstrumentation : Instrumentation() {
             },
             TestCase(
                 generationTests.javaClass.name,
+                "replacementCleanupDoesNotFenceItsStartGeneration",
+            ) {
+                generationTests.replacementCleanupDoesNotFenceItsStartGeneration()
+            },
+            TestCase(
+                generationTests.javaClass.name,
+                "replacementTerminalPublicationPrecedesStartCommit",
+            ) {
+                generationTests.replacementTerminalPublicationPrecedesStartCommit()
+            },
+            TestCase(
+                generationTests.javaClass.name,
+                "explicitStopSourceDominatesReplacementCleanup",
+            ) {
+                generationTests.explicitStopSourceDominatesReplacementCleanup()
+            },
+            TestCase(
+                generationTests.javaClass.name,
                 "destroyAndReloadCommitCannotLeaveALateSessionOwner",
             ) {
                 generationTests.destroyAndReloadCommitCannotLeaveALateSessionOwner()
@@ -149,6 +167,12 @@ class VpnTestInstrumentation : Instrumentation() {
             },
             TestCase(snapshotTests.javaClass.name, "alreadyStoppedExternalStopPromotesTheTerminalGeneration") {
                 snapshotTests.alreadyStoppedExternalStopPromotesTheTerminalGeneration()
+            },
+            TestCase(
+                snapshotTests.javaClass.name,
+                "replacementCleanupPreservesExpectedRunningAndPublishesDisconnected",
+            ) {
+                snapshotTests.replacementCleanupPreservesExpectedRunningAndPublishesDisconnected()
             },
             TestCase(
                 snapshotTests.javaClass.name,
