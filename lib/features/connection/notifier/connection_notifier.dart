@@ -17,6 +17,8 @@ import 'package:zeon/features/connection/data/connection_repository.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/diagnostics/data/diagnostics_providers.dart';
+import 'package:zeon/features/home/model/main_vpn_button_state.dart';
+import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
 import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:zeon/features/profile/data/profile_data_mapper.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
@@ -65,6 +67,8 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   bool? _desiredRunning;
   int? _timedOutConnectingIntentEpoch;
   int? _timedOutDisconnectingIntentEpoch;
+  bool _mainButtonStartInFlight = false;
+  bool _mainButtonStopInFlight = false;
 
   @override
   Stream<ConnectionStatus> build() async* {
@@ -424,6 +428,75 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
           _markUserAction('retry_disconnect', expectsStop: true);
           await _dispatchStopIntent(intentEpoch, haptic: haptic.mediumImpact);
       }
+    }
+  }
+
+  Future<void> handleMainVpnButtonTap(
+    MainVpnButtonState displayedState, {
+    Future<bool> Function()? confirmStart,
+  }) async {
+    final authoritative = await _authoritativeMainButtonState('main_button_tap');
+    if (authoritative == null) return;
+    if (authoritative != displayedState) {
+      loggy.info(
+        'event=main_button_snapshot_resync '
+        'displayed=${displayedState.phase.name}/${displayedState.generation} '
+        'authoritative=${authoritative.phase.name}/${authoritative.generation}',
+      );
+    }
+
+    switch (authoritative.action) {
+      case MainVpnButtonAction.start:
+        if (authoritative.blocksStart || _mainButtonStartInFlight) return;
+        _mainButtonStartInFlight = true;
+        try {
+          if (confirmStart != null && !await confirmStart()) return;
+          // Dialogs/profile selection are asynchronous. Re-read Android after
+          // them so a notification/tile start cannot be followed by a stale
+          // second START from this tap.
+          final afterConfirmation = await _authoritativeMainButtonState('main_button_before_start');
+          if (afterConfirmation == null ||
+              afterConfirmation.action != MainVpnButtonAction.start ||
+              afterConfirmation.blocksStart) {
+            return;
+          }
+          final intentEpoch = _beginConnectionIntent(running: true);
+          await ref.read(hapticServiceProvider.notifier).lightImpact();
+          if (!_isCurrentIntent(intentEpoch, running: true)) return;
+          _markUserAction('manual_connect');
+          await ref.read(Preferences.startedByUser.notifier).update(true);
+          if (!_isCurrentIntent(intentEpoch, running: true)) return;
+          await _connect(intentEpoch);
+        } finally {
+          _mainButtonStartInFlight = false;
+        }
+        return;
+      case MainVpnButtonAction.stop:
+        if (_mainButtonStopInFlight) return;
+        _mainButtonStopInFlight = true;
+        try {
+          final intentEpoch = _beginStopIntent();
+          _markUserAction(authoritative.isStarting ? 'cancel_pending_connect' : 'manual_disconnect', expectsStop: true);
+          await _dispatchStopIntent(intentEpoch, haptic: ref.read(hapticServiceProvider.notifier).mediumImpact);
+        } finally {
+          _mainButtonStopInFlight = false;
+        }
+        return;
+      case MainVpnButtonAction.none:
+        return;
+    }
+  }
+
+  Future<MainVpnButtonState?> _authoritativeMainButtonState(String source) async {
+    final snapshotSource = ref.read(vpnSessionSnapshotSourceProvider);
+    try {
+      final snapshot = await snapshotSource.resync(source).timeout(_platformResyncTimeout);
+      return snapshot == null ? null : MainVpnButtonState.fromSnapshot(snapshot);
+    } catch (error, stackTrace) {
+      loggy.warning('main VPN button snapshot resync failed [$source]', error, stackTrace);
+      // Fail closed. A cached DISCONNECTED value is not sufficient proof that
+      // Android may accept a new generation after a failed authoritative read.
+      return null;
     }
   }
 

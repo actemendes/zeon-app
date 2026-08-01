@@ -641,6 +641,9 @@
   },
   "connection": {
     "tapToConnect": "點擊連線",
+    "tapToDisconnect": "點擊中斷連線",
+    "connectingSemantics": "正在連線",
+    "disconnectingSemantics": "正在中斷連線",
     "connect": "連線",
     "connecting": "連線中...",
     "connected": "已連線",

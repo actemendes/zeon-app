@@ -716,6 +716,9 @@
   },
   "connection": {
     "tapToConnect": "Нажмите для подключения",
+    "tapToDisconnect": "Нажмите для отключения",
+    "connectingSemantics": "Подключение выполняется",
+    "disconnectingSemantics": "Отключение выполняется",
     "connect": "Подключить",
     "connecting": "Подключение...",
     "connected": "Подключено",

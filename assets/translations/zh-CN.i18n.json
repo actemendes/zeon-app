@@ -641,6 +641,9 @@
   },
   "connection": {
     "tapToConnect": "点击连接",
+    "tapToDisconnect": "点击断开连接",
+    "connectingSemantics": "正在连接",
+    "disconnectingSemantics": "正在断开连接",
     "connect": "连接",
     "connecting": "连接中...",
     "connected": "已连接",

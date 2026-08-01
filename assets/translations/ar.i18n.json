@@ -651,6 +651,9 @@
   },
   "connection": {
     "tapToConnect": "انقر للاتصال",
+    "tapToDisconnect": "انقر لقطع الاتصال",
+    "connectingSemantics": "الاتصال قيد التنفيذ",
+    "disconnectingSemantics": "قطع الاتصال قيد التنفيذ",
     "connect": "اتصال",
     "connecting": "جار الاتصال...",
     "connected": "متصل",

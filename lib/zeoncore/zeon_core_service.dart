@@ -51,6 +51,7 @@ class ZeonCoreService with InfraLogger {
     );
     ref.onDispose(() {
       unawaited(_platformSnapshotSubscription.cancel());
+      unawaited(_authoritativeSnapshotController.close());
     });
   }
   final Ref ref;
@@ -104,6 +105,7 @@ class ZeonCoreService with InfraLogger {
   late final StreamSubscription<VpnSessionSnapshot> _platformSnapshotSubscription;
   Future<void> _platformSnapshotTail = Future<void>.value();
   VpnSessionSnapshot? _latestPlatformSnapshot;
+  final BehaviorSubject<VpnSessionSnapshot> _authoritativeSnapshotController = BehaviorSubject<VpnSessionSnapshot>();
   _CoreLifecycleState _lifecycleState = _CoreLifecycleState.stopped;
   int _connectedGeneration = 0;
   ChangeHiddifySettingsRequest? _latestCoreOptionsRequest;
@@ -306,6 +308,7 @@ class ZeonCoreService with InfraLogger {
     }
     _sessionGeneration.advanceTo(snapshot.generation);
     _latestPlatformSnapshot = snapshot;
+    _publishAuthoritativeSnapshot(snapshot);
 
     // Synchronize explicit platform stops and platform-owned starts before
     // their status reaches ConnectionNotifier. Persistence is best-effort and
@@ -362,6 +365,7 @@ class ZeonCoreService with InfraLogger {
     if (snapshot != null) {
       _sessionGeneration.advanceTo(snapshot.generation);
       _latestPlatformSnapshot = snapshot;
+      _publishAuthoritativeSnapshot(snapshot);
       await _syncRunningIntentFromPlatformSnapshot(snapshot);
     } else {
       _sessionGeneration.advanceTo(core.authoritativeSessionGeneration);
@@ -380,6 +384,29 @@ class ZeonCoreService with InfraLogger {
       ),
     );
     return authoritative;
+  }
+
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _latestPlatformSnapshot ?? core.authoritativeSessionSnapshot;
+
+  Stream<VpnSessionSnapshot> watchAuthoritativeSessionSnapshots() => _authoritativeSnapshotController.stream;
+
+  Future<VpnSessionSnapshot?> resyncSessionSnapshot(String source) async {
+    await resyncFromPlatform(source);
+    return authoritativeSessionSnapshot;
+  }
+
+  void _publishAuthoritativeSnapshot(VpnSessionSnapshot snapshot) {
+    if (_authoritativeSnapshotController.isClosed) return;
+    if (_authoritativeSnapshotController.hasValue) {
+      final previous = _authoritativeSnapshotController.value;
+      if (previous.runtimeEpoch == snapshot.runtimeEpoch &&
+          previous.generation == snapshot.generation &&
+          previous.sequenceNumber == snapshot.sequenceNumber &&
+          previous.snapshotVersion == snapshot.snapshotVersion) {
+        return;
+      }
+    }
+    _authoritativeSnapshotController.add(snapshot);
   }
 
   int beginVpnOperation(String source) {

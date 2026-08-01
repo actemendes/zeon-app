@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gap/gap.dart';
@@ -11,154 +10,111 @@ import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/widget/animated_text.dart';
-import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/features/home/model/main_vpn_button_state.dart';
+import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
-import 'package:zeon/features/settings/notifier/config_option/config_option_notifier.dart';
 import 'package:zeon/gen/assets.gen.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
+import 'package:zeon/utils/platform_utils.dart';
 
-class ConnectionButton extends HookConsumerWidget {
+class ConnectionButton extends ConsumerWidget {
   const ConnectionButton({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final connectionStatus = ref.watch(connectionNotifierProvider);
-    final resolvedConnectionStatus = connectionStatus.valueOrNull;
-    final lastSettledConnectionStatus = useRef<ConnectionStatus?>(null);
-    if (resolvedConnectionStatus case Connected() || Disconnected()) {
-      lastSettledConnectionStatus.value = resolvedConnectionStatus;
-    }
-    final visualConnectionStatus = resolvedConnectionStatus ?? lastSettledConnectionStatus.value;
+    final snapshotButtonState = ref.watch(mainVpnButtonStateProvider);
+    final buttonState = PlatformUtils.isAndroid
+        ? snapshotButtonState.valueOrNull ?? const MainVpnButtonState.loading()
+        : MainVpnButtonState.fromLegacyConnectionStatus(connectionStatus.valueOrNull);
     final activeProxy = ref.watch(activeProxyNotifierProvider);
     final delay = activeProxy.valueOrNull?.urlTestDelay ?? 0;
     final hasValidDelay = delay > 0 && delay < 65000;
 
-    final requiresReconnect = ref.watch(configOptionNotifierProvider).valueOrNull;
     final today = DateTime.now();
 
     var secureLabel =
         (ref.watch(ConfigOptions.enableWarp) && ref.watch(ConfigOptions.warpDetourMode) == WarpDetourMode.warpOverProxy)
         ? t.connection.secure
         : "";
-    if (!hasValidDelay || resolvedConnectionStatus != const Connected()) {
+    if (!hasValidDelay || !buttonState.isConnected) {
       secureLabel = "";
     }
 
-    final isInitialConnectionLoad = connectionStatus.isLoading && resolvedConnectionStatus == null;
+    final presentation = buttonState.present(t);
 
-    final visualState = switch (visualConnectionStatus) {
-      Connecting() || Disconnecting() => _ConnectionButtonVisualState.loading,
-      Connected() => _ConnectionButtonVisualState.connected,
-      _ when isInitialConnectionLoad => _ConnectionButtonVisualState.loading,
-      _ => _ConnectionButtonVisualState.off,
-    };
-
-    return _ConnectionButton(
-      onTap: switch (connectionStatus) {
-        AsyncData(value: Connected()) when requiresReconnect == true => () async {
-          final activeProfile = await ref.read(activeProfileProvider.future);
-          return await ref.read(connectionNotifierProvider.notifier).reconnect(activeProfile);
-        },
-        AsyncError() when ref.read(connectionNotifierProvider.notifier).hasPendingStopIntent =>
-          () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
-        AsyncData(value: Disconnected()) || AsyncError() => () async {
-          if (ref.read(activeProfileProvider).valueOrNull == null) {
-            await ref.read(dialogNotifierProvider.notifier).showNoActiveProfile();
-            await ref.read(bottomSheetsNotifierProvider.notifier).showProfilesOverview();
-          }
-          if (await ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice()) {
-            return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
-          }
-        },
-        AsyncData(value: Connected()) => () async {
-          if (requiresReconnect == true &&
-              await ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice()) {
-            return await ref
+    return MainVpnButtonView(
+      onTap: buttonState.enabled
+          ? () => ref
                 .read(connectionNotifierProvider.notifier)
-                .reconnect(await ref.read(activeProfileProvider.future));
-          }
-          return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
-        },
-        AsyncData(value: Connecting()) ||
-        AsyncData(value: Disconnecting()) => () => ref.read(connectionNotifierProvider.notifier).abortConnection(),
-        _ => () {},
-      },
-      enabled: switch (connectionStatus) {
-        AsyncData(value: Connected()) ||
-        AsyncData(value: Disconnected()) ||
-        AsyncData(value: Connecting()) ||
-        AsyncData(value: Disconnecting()) ||
-        AsyncError() => true,
-        _ => false,
-      },
-      label: switch (resolvedConnectionStatus) {
-        Connected() when requiresReconnect == true => t.connection.reconnect,
-        final status? => status.present(t),
-        _ when connectionStatus.hasError => t.errors.connection.connectionError,
-        _ => "",
-      },
-      image: switch (resolvedConnectionStatus) {
-        Connected() => Assets.images.connectNorouz,
-        _ => Assets.images.disconnectNorouz,
-      },
-      visualState: visualState,
+                .handleMainVpnButtonTap(
+                  buttonState,
+                  confirmStart: () async {
+                    if (ref.read(activeProfileProvider).valueOrNull == null) {
+                      await ref.read(dialogNotifierProvider.notifier).showNoActiveProfile();
+                      await ref.read(bottomSheetsNotifierProvider.notifier).showProfilesOverview();
+                    }
+                    return ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice();
+                  },
+                )
+          : null,
+      presentation: presentation,
+      image: buttonState.isConnected ? Assets.images.connectNorouz : Assets.images.disconnectNorouz,
       useImage: today.day >= 19 && today.day <= 23 && today.month == 3,
       secureLabel: secureLabel,
     );
   }
 }
 
-class _ConnectionButton extends StatelessWidget {
-  const _ConnectionButton({
+class MainVpnButtonView extends StatelessWidget {
+  const MainVpnButtonView({
+    super.key,
     required this.onTap,
-    required this.enabled,
-    required this.label,
+    required this.presentation,
     required this.image,
     required this.useImage,
     required this.secureLabel,
-    required this.visualState,
   });
 
-  final VoidCallback onTap;
-  final bool enabled;
-  final String label;
+  final VoidCallback? onTap;
+  final MainVpnButtonPresentation presentation;
   final AssetGenImage image;
   final bool useImage;
   final String secureLabel;
-  final _ConnectionButtonVisualState visualState;
 
   @override
   Widget build(BuildContext context) {
+    final state = presentation.state;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Semantics(
           button: true,
-          enabled: enabled,
-          label: label,
+          enabled: state.enabled,
+          label: presentation.semanticsLabel,
           child: Container(
             decoration: const BoxDecoration(shape: BoxShape.circle),
             width: _ConnectionButtonFace.outerSize,
             height: _ConnectionButtonFace.outerSize,
             child: _ConnectionButtonFace(
               onTap: onTap,
-              enabled: enabled,
+              enabled: state.enabled,
               image: image,
               useImage: useImage,
-              visualState: visualState,
-            ).animate(target: enabled ? 0 : 1).blurXY(end: 1),
-          ).animate(target: enabled ? 0 : 1).scaleXY(end: .88, curve: Curves.easeIn),
+              visualState: state.visualState,
+            ).animate(target: state.enabled ? 0 : 1).blurXY(end: 1),
+          ).animate(target: state.enabled ? 0 : 1).scaleXY(end: .88, curve: Curves.easeIn),
         ),
         const Gap(16),
         ExcludeSemantics(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AnimatedText(label, style: Theme.of(context).textTheme.titleMedium),
+              AnimatedText(presentation.label, style: Theme.of(context).textTheme.titleMedium),
               if (secureLabel.isNotEmpty) ...[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -182,8 +138,6 @@ class _ConnectionButton extends StatelessWidget {
   }
 }
 
-enum _ConnectionButtonVisualState { off, loading, connected }
-
 class _ConnectionButtonFace extends StatefulWidget {
   const _ConnectionButtonFace({
     required this.onTap,
@@ -197,11 +151,11 @@ class _ConnectionButtonFace extends StatefulWidget {
   static const double innerCircleDiameter = 135;
   static const double glyphDiameter = 47;
 
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool enabled;
   final AssetGenImage image;
   final bool useImage;
-  final _ConnectionButtonVisualState visualState;
+  final MainVpnButtonVisualState visualState;
 
   @override
   State<_ConnectionButtonFace> createState() => _ConnectionButtonFaceState();
@@ -245,9 +199,9 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
     }
   }
 
-  void _applyVisualState(_ConnectionButtonVisualState state, {required bool animate}) {
-    final loadingTarget = state == _ConnectionButtonVisualState.loading ? 1.0 : 0.0;
-    final connectedTarget = state == _ConnectionButtonVisualState.connected ? 1.0 : 0.0;
+  void _applyVisualState(MainVpnButtonVisualState state, {required bool animate}) {
+    final loadingTarget = state == MainVpnButtonVisualState.loading ? 1.0 : 0.0;
+    final connectedTarget = state == MainVpnButtonVisualState.connected ? 1.0 : 0.0;
 
     if (animate) {
       if (loadingTarget > _loadingController.value) {
@@ -289,7 +243,7 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
         customBorder: const CircleBorder(),
         splashColor: Colors.white.withValues(alpha: .12),
         highlightColor: Colors.transparent,
-        onTap: widget.onTap,
+        onTap: widget.enabled ? widget.onTap : null,
         onTapDown: widget.enabled
             ? (_) => setState(() {
                 _pressed = true;

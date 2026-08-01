@@ -12,9 +12,12 @@ import 'package:zeon/features/connection/data/connection_repository.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/features/home/model/main_vpn_button_state.dart';
+import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/singbox/model/singbox_config_option.dart';
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 void main() {
   group('shouldReconnectForActiveProfileChange', () {
@@ -332,6 +335,87 @@ void main() {
       expect(setup.status, const Connected());
     });
   });
+
+  group('authoritative main VPN button', () {
+    testWidgets('CONNECTED snapshot dispatches STOP once and never START', (tester) async {
+      final repository = _FakeConnectionRepository()..disconnectBarrier = Completer<void>();
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.connected));
+      final setup = await _createContainer(repository, snapshotSource: snapshots);
+      addTearDown(setup.dispose);
+      final displayed = MainVpnButtonState.fromSnapshot(snapshots.current!);
+
+      final first = setup.notifier.handleMainVpnButtonTap(displayed);
+      await _pumpUntil(tester, () => repository.disconnectCalls == 1);
+      final second = setup.notifier.handleMainVpnButtonTap(displayed);
+      await tester.pump();
+
+      expect(repository.disconnectCalls, 1);
+      expect(repository.connectCalls, 0);
+      repository.authoritativeStatus = const Disconnected();
+      repository.disconnectBarrier!.complete();
+      await Future.wait([first, second]);
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('stale displayed START resyncs CONNECTED and dispatches STOP', (tester) async {
+      final repository = _FakeConnectionRepository()..authoritativeStatus = const Disconnected();
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.connected));
+      final setup = await _createContainer(repository, snapshotSource: snapshots);
+      addTearDown(setup.dispose);
+      final staleDisplayed = MainVpnButtonState.fromSnapshot(_snapshot(VpnSessionPhase.disconnected));
+
+      await setup.notifier.handleMainVpnButtonTap(staleDisplayed);
+
+      expect(snapshots.resyncSources, contains('main_button_tap'));
+      expect(repository.disconnectCalls, 1);
+      expect(repository.connectCalls, 0);
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('DISCONNECTED snapshot dispatches START exactly once', (tester) async {
+      final repository = _FakeConnectionRepository()
+        ..initialStatus = const Disconnected()
+        ..authoritativeStatus = const Connected();
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.disconnected));
+      final setup = await _createContainer(repository, snapshotSource: snapshots, startedByUser: false);
+      addTearDown(setup.dispose);
+      final displayed = MainVpnButtonState.fromSnapshot(snapshots.current!);
+
+      await setup.notifier.handleMainVpnButtonTap(displayed, confirmStart: () async => true);
+
+      expect(repository.connectCalls, 1);
+      expect(repository.disconnectCalls, 0);
+      expect(snapshots.resyncSources, ['main_button_tap', 'main_button_before_start']);
+      await tester.pump(const Duration(seconds: 12));
+    });
+
+    testWidgets('STOPPING authoritative snapshot blocks every command', (tester) async {
+      final repository = _FakeConnectionRepository();
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.stopping));
+      final setup = await _createContainer(repository, snapshotSource: snapshots);
+      addTearDown(setup.dispose);
+
+      await setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+
+      expect(repository.connectCalls, 0);
+      expect(repository.disconnectCalls, 0);
+    });
+
+    testWidgets('notification/resume resync to CONNECTED makes a stale button stop', (tester) async {
+      final repository = _FakeConnectionRepository()..authoritativeStatus = const Disconnected();
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.disconnected));
+      final setup = await _createContainer(repository, snapshotSource: snapshots);
+      addTearDown(setup.dispose);
+      final beforeResume = MainVpnButtonState.fromSnapshot(snapshots.current!);
+      snapshots.currentSnapshot = _snapshot(VpnSessionPhase.connected, sequence: 2, version: 2);
+
+      await setup.notifier.handleMainVpnButtonTap(beforeResume);
+
+      expect(repository.disconnectCalls, 1);
+      expect(repository.connectCalls, 0);
+      await tester.pump(const Duration(seconds: 2));
+    });
+  });
 }
 
 Future<_ConnectionTestSetup> _createContainer(
@@ -339,6 +423,7 @@ Future<_ConnectionTestSetup> _createContainer(
   bool startedByUser = true,
   Completer<void>? hapticBarrier,
   bool activeProfileMissing = false,
+  VpnSessionSnapshotSource? snapshotSource,
 }) async {
   SharedPreferences.setMockInitialValues({'haptic_feedback': false, 'started_by_user': startedByUser});
   final preferences = await SharedPreferences.getInstance();
@@ -353,6 +438,7 @@ Future<_ConnectionTestSetup> _createContainer(
       sharedPreferencesProvider.overrideWith((ref) => preferences),
       connectionRepositoryProvider.overrideWith((ref) => repository),
       activeProfileProvider.overrideWith(() => _TestActiveProfile(activeProfileMissing ? null : profile)),
+      if (snapshotSource != null) vpnSessionSnapshotSourceProvider.overrideWithValue(snapshotSource),
       if (hapticBarrier != null) hapticServiceProvider.overrideWith(() => _TestHapticService(hapticBarrier)),
     ],
   );
@@ -515,4 +601,39 @@ class _FakeConnectionRepository implements ConnectionRepository {
   TaskEither<ConnectionFailure, Unit> setup() => TaskEither.of(unit);
 
   Future<void> dispose() => _events.close();
+}
+
+class _FakeSnapshotSource implements VpnSessionSnapshotSource {
+  _FakeSnapshotSource(this.currentSnapshot);
+
+  VpnSessionSnapshot? currentSnapshot;
+  final resyncSources = <String>[];
+  final _events = StreamController<VpnSessionSnapshot>.broadcast();
+
+  @override
+  VpnSessionSnapshot? get current => currentSnapshot;
+
+  @override
+  Future<VpnSessionSnapshot?> resync(String source) async {
+    resyncSources.add(source);
+    return currentSnapshot;
+  }
+
+  @override
+  Stream<VpnSessionSnapshot> watch() => _events.stream;
+}
+
+VpnSessionSnapshot _snapshot(VpnSessionPhase phase, {int sequence = 1, int version = 1}) {
+  return VpnSessionSnapshot(
+    generation: 50,
+    runtimeEpoch: 'runtime-main-button',
+    sequenceNumber: sequence,
+    snapshotVersion: version,
+    phase: phase,
+    requestedAction: switch (phase) {
+      VpnSessionPhase.stopRequested || VpnSessionPhase.stopping || VpnSessionPhase.disconnected => 'stop',
+      _ => 'connect',
+    },
+    recoverable: true,
+  );
 }
