@@ -1,7 +1,9 @@
 package config
 
 import (
+	"bytes"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -9,10 +11,12 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/sagernet/sing-box/common/srs"
 	C "github.com/sagernet/sing-box/constant"
 	sdns "github.com/sagernet/sing-box/dns"
 	"github.com/sagernet/sing-box/option"
@@ -21,10 +25,22 @@ import (
 const (
 	ManagedRURuleSetBundlePath = "data/rule-sets/managed/active.json"
 	managedRURuleSetTagPrefix  = "zeon-managed-"
+	embeddedAdsRuleSetTag      = "zeon-embedded-ads"
 	managedRUMaxBundleBytes    = 4 << 20
 	managedRUMaxRuleSets       = 32
 	managedRUMaxEntries        = 100_000
 )
+
+// embeddedAdsSRS is a pinned bootstrap snapshot. Admin-managed active/LKG
+// releases always take priority; this file only prevents a first/offline
+// install from falling back to the deliberately small hardcoded list.
+//
+// Source commit: hiddify/hiddify-geo@8618bcb3b2c105100f8597b49e86187cd4fc8ba0
+// ZEON overlay v1: the five release acceptance-test domains.
+// SHA-256: 2c9fd6da2bc1af4185c0182b277a5abf654f93848933b5b900b5d8a2156663bc
+//
+//go:embed assets/geosite-category-ads-all-8618bcb3.srs
+var embeddedAdsSRS []byte
 
 var managedRURuleSetIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
@@ -45,8 +61,9 @@ type managedRURuleSetBundle struct {
 }
 
 type managedRURuleSet struct {
-	Metadata managedRURuleSetMetadata `json:"metadata"`
-	Payload  managedRURuleSetPayload  `json:"payload"`
+	Metadata     managedRURuleSetMetadata `json:"metadata"`
+	Payload      managedRURuleSetPayload  `json:"payload"`
+	ArtifactPath string                   `json:"-"`
 }
 
 type managedRURuleSetMetadata struct {
@@ -62,11 +79,14 @@ type managedRURuleSetMetadata struct {
 	Priority         int    `json:"priority"`
 	Action           string `json:"action"`
 	ApplicablePreset string `json:"applicablePreset"`
+	Format           string `json:"format"`
+	Size             int    `json:"size"`
 }
 
 type managedRURuleSetPayload struct {
 	DomainSuffix []string `json:"domainSuffix"`
 	IPCIDR       []string `json:"ipCidr"`
+	SRSBase64    string   `json:"srsBase64,omitempty"`
 }
 
 func readManagedRURuleSets(path string) ([]managedRURuleSet, error) {
@@ -115,7 +135,7 @@ func readManagedRURuleSets(path string) ([]managedRURuleSet, error) {
 	entryActions := make(map[string]string)
 	for index := range bundle.RuleSets {
 		ruleSet := &bundle.RuleSets[index]
-		if err := validateManagedRURuleSet(*ruleSet); err != nil {
+		if err := validateManagedRURuleSet(ruleSet, filepath.Dir(path)); err != nil {
 			return nil, fmt.Errorf("validate managed RU rule-set %d: %w", index, err)
 		}
 		if _, exists := seenIDs[ruleSet.Metadata.ID]; exists {
@@ -159,7 +179,7 @@ func decodeManagedRUPayload(value string) ([]byte, error) {
 	return payload, nil
 }
 
-func validateManagedRURuleSet(ruleSet managedRURuleSet) error {
+func validateManagedRURuleSet(ruleSet *managedRURuleSet, bundleDirectory string) error {
 	metadata := ruleSet.Metadata
 	if !managedRURuleSetIDPattern.MatchString(metadata.ID) {
 		return fmt.Errorf("invalid id %q", metadata.ID)
@@ -172,6 +192,13 @@ func validateManagedRURuleSet(ruleSet managedRURuleSet) error {
 	}
 	if metadata.ApplicablePreset != "russia" && metadata.ApplicablePreset != "all" {
 		return fmt.Errorf("unsupported preset %q", metadata.ApplicablePreset)
+	}
+	if metadata.Format == "" {
+		metadata.Format = "json"
+		ruleSet.Metadata.Format = "json"
+	}
+	if metadata.Format != "json" && metadata.Format != "srs" {
+		return fmt.Errorf("unsupported rule-set format %q", metadata.Format)
 	}
 	switch metadata.Action {
 	case "VPN", "DIRECT", "BLOCK":
@@ -191,6 +218,43 @@ func validateManagedRURuleSet(ruleSet managedRURuleSet) error {
 		if _, err := netip.ParsePrefix(cidr); err != nil {
 			return fmt.Errorf("invalid CIDR %q", cidr)
 		}
+	}
+	if metadata.Format == "srs" {
+		if metadata.ID != "ads" || metadata.Action != "BLOCK" || metadata.ApplicablePreset != "all" ||
+			len(ruleSet.Payload.DomainSuffix) != 0 || len(ruleSet.Payload.IPCIDR) != 0 || ruleSet.Payload.SRSBase64 == "" {
+			return fmt.Errorf("invalid managed ads rule set")
+		}
+		artifact, err := base64.StdEncoding.DecodeString(ruleSet.Payload.SRSBase64)
+		if err != nil || base64.StdEncoding.EncodeToString(artifact) != ruleSet.Payload.SRSBase64 {
+			return fmt.Errorf("invalid managed ads base64")
+		}
+		if metadata.Size != len(artifact) {
+			return fmt.Errorf("managed ads size mismatch")
+		}
+		digest := sha256.Sum256(artifact)
+		if !strings.EqualFold(hex.EncodeToString(digest[:]), metadata.Checksum) {
+			return fmt.Errorf("managed ads checksum mismatch")
+		}
+		if _, err := srs.Read(bytes.NewReader(artifact), false); err != nil {
+			return fmt.Errorf("invalid managed ads SRS: %w", err)
+		}
+		artifactPath := filepath.Join(bundleDirectory, "artifacts", metadata.ID+"-"+strings.ToLower(metadata.Checksum)+".srs")
+		storedArtifact, err := os.ReadFile(artifactPath)
+		if err != nil {
+			return fmt.Errorf("read managed ads artifact: %w", err)
+		}
+		storedDigest := sha256.Sum256(storedArtifact)
+		if len(storedArtifact) != metadata.Size || !bytes.Equal(storedDigest[:], digest[:]) {
+			return fmt.Errorf("managed ads cached artifact mismatch")
+		}
+		if _, err := srs.Read(bytes.NewReader(storedArtifact), false); err != nil {
+			return fmt.Errorf("invalid cached managed ads SRS: %w", err)
+		}
+		ruleSet.ArtifactPath = artifactPath
+		return nil
+	}
+	if ruleSet.Payload.SRSBase64 != "" {
+		return fmt.Errorf("unexpected SRS payload")
 	}
 	canonical, err := json.Marshal(ruleSet.Payload)
 	if err != nil {
@@ -219,6 +283,9 @@ func appendManagedRURouting(
 	managed []managedRURuleSet,
 ) {
 	for _, managedSet := range managed {
+		if managedSet.Metadata.Format != "json" || managedSet.Metadata.ApplicablePreset != "russia" {
+			continue
+		}
 		if len(managedSet.Payload.DomainSuffix)+len(managedSet.Payload.IPCIDR) == 0 {
 			continue
 		}
@@ -253,6 +320,40 @@ func appendManagedRURouting(
 		}
 		*routeRules = append(*routeRules, managedRURouteRule(tag, managedSet.Metadata.Action))
 	}
+}
+
+func appendManagedAdsRuleSet(ruleSets *[]option.RuleSet, managed []managedRURuleSet) string {
+	for _, managedSet := range managed {
+		if managedSet.Metadata.ID != "ads" || managedSet.Metadata.Format != "srs" || managedSet.ArtifactPath == "" {
+			continue
+		}
+		tag := managedRURuleSetTagPrefix + managedSet.Metadata.ID
+		*ruleSets = append(*ruleSets, option.RuleSet{
+			Type:         C.RuleSetTypeLocal,
+			Tag:          tag,
+			Format:       C.RuleSetFormatBinary,
+			LocalOptions: option.LocalRuleSet{Path: managedSet.ArtifactPath},
+		})
+		return tag
+	}
+	return ""
+}
+
+func appendEmbeddedAdsRuleSet(ruleSets *[]option.RuleSet) string {
+	if len(embeddedAdsSRS) == 0 {
+		return ""
+	}
+	parsed, err := srs.Read(bytes.NewReader(embeddedAdsSRS), true)
+	if err != nil || len(parsed.Options.Rules) == 0 {
+		fmt.Printf("Ignoring invalid embedded ads SRS: %v\n", err)
+		return ""
+	}
+	*ruleSets = append(*ruleSets, option.RuleSet{
+		Type:          C.RuleSetTypeInline,
+		Tag:           embeddedAdsRuleSetTag,
+		InlineOptions: parsed.Options,
+	})
+	return embeddedAdsRuleSetTag
 }
 
 func managedRUDNSRule(tag string, action string, hopt *HiddifyOptions) option.DefaultDNSRule {

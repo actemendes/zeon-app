@@ -58,6 +58,41 @@ void main() {
     );
   }
 
+  Future<ManagedRuleSet> buildAds({List<int>? bytes, String version = '1'}) async {
+    final artifact =
+        bytes ??
+        <int>[
+          0x53,
+          0x52,
+          0x53,
+          4,
+          ...ZLibEncoder().convert([1, 0, 0xff, 0]),
+        ];
+    final digest = await Sha256().hash(artifact);
+    final checksum = digest.bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+    return ManagedRuleSet(
+      metadata: ManagedRuleSetMetadata(
+        id: 'ads',
+        version: version,
+        source: 'zeon-admin',
+        generatedAt: generatedAt,
+        expiresAt: expiresAt,
+        checksum: checksum,
+        formatVersion: 1,
+        domainCount: 0,
+        cidrCount: 0,
+        priority: -1000,
+        action: ManagedRuleAction.block,
+        applicablePreset: ManagedRulePreset.all,
+        format: ManagedRuleFormat.srs,
+        size: artifact.length,
+      ),
+      domainSuffixes: const [],
+      ipCidrs: const [],
+      srsBytes: List.unmodifiable(artifact),
+    );
+  }
+
   test('normalizes schemes paths wildcards case and duplicates', () async {
     final result = await build(
       domains: ['HTTPS://API.EXAMPLE.RU/path', '||api.example.ru^', '*.static.example.ru', '.STATIC.EXAMPLE.RU.'],
@@ -258,5 +293,70 @@ void main() {
       store.validateEnvelope(await buildEnvelope(ruleSets: [direct, vpn]), rejectExpired: true),
       throwsA(isA<RuleSetValidationException>()),
     );
+  });
+
+  test('managed ads is cached with the common envelope and rematerialized from active or LKG', () async {
+    final directory = await Directory.systemTemp.createTemp('zeon-rules-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = ManagedRuleSetStore(directory: directory, now: () => generatedAt);
+    final adsV1 = await buildAds();
+    await store.installEnvelope(await buildEnvelope(ruleSets: [adsV1]));
+
+    final artifactV1 = store.artifactFile(adsV1);
+    expect(await artifactV1.readAsBytes(), adsV1.srsBytes);
+    await artifactV1.writeAsBytes([1, 2, 3], flush: true);
+    expect((await store.readActiveBundle())?.bundle.ruleSets.single.metadata.id, 'ads');
+    expect(await artifactV1.readAsBytes(), adsV1.srsBytes);
+
+    final adsV2 = await buildAds(version: '2');
+    await store.installEnvelope(await buildEnvelope(generation: 2, ruleSets: [adsV2]));
+    await store.activeFile.writeAsString('{', flush: true);
+    await artifactV1.delete();
+    final recovered = await store.readActiveBundle();
+    expect(recovered?.envelope.generation, 1);
+    expect(await artifactV1.readAsBytes(), adsV1.srsBytes);
+  });
+
+  test('invalid checksum and corrupted SRS never replace the active ads release', () async {
+    final directory = await Directory.systemTemp.createTemp('zeon-rules-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = ManagedRuleSetStore(directory: directory, now: () => generatedAt);
+    final active = await buildAds();
+    await store.installEnvelope(await buildEnvelope(ruleSets: [active]));
+
+    final corrupt = await buildAds(bytes: [0x53, 0x52, 0x53, 4, 1, 2, 3]);
+    await expectLater(
+      store.installEnvelope(await buildEnvelope(generation: 2, ruleSets: [corrupt])),
+      throwsA(isA<RuleSetValidationException>()),
+    );
+    expect((await store.readActiveBundle())?.envelope.generation, 1);
+
+    final valid = await buildAds(version: '2');
+    final badMetadata = ManagedRuleSet(
+      metadata: ManagedRuleSetMetadata(
+        id: valid.metadata.id,
+        version: valid.metadata.version,
+        source: valid.metadata.source,
+        generatedAt: valid.metadata.generatedAt,
+        expiresAt: valid.metadata.expiresAt,
+        checksum: '00${valid.metadata.checksum.substring(2)}',
+        formatVersion: 1,
+        domainCount: 0,
+        cidrCount: 0,
+        priority: valid.metadata.priority,
+        action: valid.metadata.action,
+        applicablePreset: valid.metadata.applicablePreset,
+        format: valid.metadata.format,
+        size: valid.metadata.size,
+      ),
+      domainSuffixes: const [],
+      ipCidrs: const [],
+      srsBytes: valid.srsBytes,
+    );
+    await expectLater(
+      store.installEnvelope(await buildEnvelope(generation: 2, ruleSets: [badMetadata])),
+      throwsA(isA<RuleSetValidationException>()),
+    );
+    expect((await store.readActiveBundle())?.envelope.generation, 1);
   });
 }

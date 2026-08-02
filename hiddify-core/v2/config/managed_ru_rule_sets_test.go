@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -10,8 +11,136 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sagernet/sing-box/common/srs"
+	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 )
+
+func TestManagedAdsAppliesInRussiaAndGlobalOnlyWhenEnabled(t *testing.T) {
+	ads := managedAdsRuleSetForTest(t, []string{
+		"tpc.googlesyndication.com", "criteo.com", "ads.vk.com", "appmetrica.yandex.ru", "adfox.ru",
+	})
+	path := writeManagedRUBundleForTest(t, []managedRURuleSet{ads})
+	previousPath := managedRURuleSetBundleFile
+	managedRURuleSetBundleFile = path
+	t.Cleanup(func() { managedRURuleSetBundleFile = previousPath })
+
+	for _, region := range []string{"ru", "other"} {
+		t.Run(region+" enabled", func(t *testing.T) {
+			hopt := DefaultHiddifyOptions()
+			hopt.Region = region
+			hopt.BlockAds = true
+			opts := option.Options{DNS: &option.DNSOptions{}}
+			if err := setRoutingOptions(&opts, hopt); err != nil {
+				t.Fatal(err)
+			}
+			tag := managedRURuleSetTagPrefix + "ads"
+			foundLocal := false
+			foundEmbedded := false
+			for _, ruleSet := range opts.Route.RuleSet {
+				if ruleSet.Tag == tag {
+					foundLocal = ruleSet.Type == C.RuleSetTypeLocal && ruleSet.Format == C.RuleSetFormatBinary && ruleSet.LocalOptions.Path != ""
+				}
+				if ruleSet.Tag == embeddedAdsRuleSetTag {
+					foundEmbedded = ruleSet.Type == C.RuleSetTypeInline && len(ruleSet.InlineOptions.Rules) > 0
+				}
+				if ruleSet.Tag == "geosite-ads" {
+					t.Fatal("mutable remote ads rule set must not be present")
+				}
+			}
+			if !foundLocal || !foundEmbedded || indexRejectedRuleSet(opts.Route.Rules, tag) < 0 {
+				t.Fatalf("managed ads local/reject rule missing in region %s", region)
+			}
+			managedIndex := indexRejectedRuleSet(opts.Route.Rules, tag)
+			embeddedIndex := indexRejectedRuleSet(opts.Route.Rules, embeddedAdsRuleSetTag)
+			if managedIndex < 0 || embeddedIndex < 0 || managedIndex > embeddedIndex {
+				t.Fatalf("managed ads must precede embedded fallback: managed=%d embedded=%d", managedIndex, embeddedIndex)
+			}
+			foundDNSRefused := false
+			for _, rule := range opts.DNS.Rules {
+				candidate := rule.DefaultOptions
+				if containsString(candidate.RuleSet, tag) && candidate.Action == C.RuleActionTypePredefined &&
+					candidate.PredefinedOptions.Rcode != nil {
+					foundDNSRefused = true
+				}
+			}
+			if !foundDNSRefused {
+				t.Fatalf("managed ads DNS REFUSED rule missing in region %s", region)
+			}
+			if region == "ru" {
+				adsIndex := indexRejectedRuleSet(opts.Route.Rules, tag)
+				yandexIndex := indexRouteRuleSet(opts.Route.Rules, RUYandexRuleSetTag, OutboundDirectTag)
+				if adsIndex < 0 || yandexIndex < 0 || adsIndex >= yandexIndex {
+					t.Fatalf("managed ads must precede Russia direct rules: ads=%d yandex=%d", adsIndex, yandexIndex)
+				}
+			}
+		})
+
+		t.Run(region+" disabled", func(t *testing.T) {
+			hopt := DefaultHiddifyOptions()
+			hopt.Region = region
+			hopt.BlockAds = false
+			opts := option.Options{DNS: &option.DNSOptions{}}
+			if err := setRoutingOptions(&opts, hopt); err != nil {
+				t.Fatal(err)
+			}
+			for _, ruleSet := range opts.Route.RuleSet {
+				if ruleSet.Tag == managedRURuleSetTagPrefix+"ads" || ruleSet.Tag == embeddedAdsRuleSetTag || ruleSet.Tag == RUAdListHardcodedRuleSetTag {
+					t.Fatalf("ads rule set %q present while disabled", ruleSet.Tag)
+				}
+			}
+		})
+	}
+}
+
+func TestEmbeddedAdsFallbackAppliesWithoutManagedRelease(t *testing.T) {
+	previousPath := managedRURuleSetBundleFile
+	managedRURuleSetBundleFile = filepath.Join(t.TempDir(), "active.json")
+	t.Cleanup(func() { managedRURuleSetBundleFile = previousPath })
+
+	parsed, err := srs.Read(bytes.NewReader(embeddedAdsSRS), false)
+	if err != nil || len(parsed.Options.Rules) == 0 {
+		t.Fatalf("embedded ads artifact is invalid: rules=%d err=%v", len(parsed.Options.Rules), err)
+	}
+	recovered, err := srs.Read(bytes.NewReader(embeddedAdsSRS), true)
+	if err != nil {
+		t.Fatalf("recover embedded ads artifact: %v", err)
+	}
+	for _, domain := range []string{
+		"tpc.googlesyndication.com", "criteo.com", "ads.vk.com", "appmetrica.yandex.ru", "adfox.ru",
+	} {
+		found := false
+		for _, rule := range recovered.Options.Rules {
+			if containsString(rule.DefaultOptions.Domain, domain) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("embedded ads artifact is missing acceptance domain %q", domain)
+		}
+	}
+	for _, region := range []string{"ru", "other"} {
+		hopt := DefaultHiddifyOptions()
+		hopt.Region = region
+		hopt.BlockAds = true
+		opts := option.Options{DNS: &option.DNSOptions{}}
+		if err := setRoutingOptions(&opts, hopt); err != nil {
+			t.Fatal(err)
+		}
+		foundDNSRefused := false
+		for _, rule := range opts.DNS.Rules {
+			candidate := rule.DefaultOptions
+			if containsString(candidate.RuleSet, embeddedAdsRuleSetTag) &&
+				candidate.Action == C.RuleActionTypePredefined && candidate.PredefinedOptions.Rcode != nil {
+				foundDNSRefused = true
+			}
+		}
+		if indexRejectedRuleSet(opts.Route.Rules, embeddedAdsRuleSetTag) < 0 || !foundDNSRefused {
+			t.Fatalf("embedded ads fallback missing in region %s", region)
+		}
+	}
+}
 
 func TestManagedRURuleSetsPrecedeRussiaDirectPolicy(t *testing.T) {
 	vpn := managedRURuleSetForTest(t, "force-vpn", 10, "VPN", []string{"blocked.ru"}, nil)
@@ -162,6 +291,28 @@ func managedRURuleSetForTest(
 	}
 }
 
+func managedAdsRuleSetForTest(t *testing.T, domains []string) managedRURuleSet {
+	t.Helper()
+	var artifact bytes.Buffer
+	err := srs.Write(&artifact, option.PlainRuleSet{Rules: []option.HeadlessRule{{
+		Type:           C.RuleTypeDefault,
+		DefaultOptions: option.DefaultHeadlessRule{DomainSuffix: domains},
+	}}}, C.RuleSetVersionCurrent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bytes := artifact.Bytes()
+	digest := sha256.Sum256(bytes)
+	return managedRURuleSet{
+		Metadata: managedRURuleSetMetadata{
+			ID: "ads", Version: "test-v1", Source: "test", GeneratedAt: "2026-07-31T00:00:00Z",
+			ExpiresAt: "2026-08-31T00:00:00Z", Checksum: hex.EncodeToString(digest[:]), FormatVersion: 1,
+			Priority: -1000, Action: "BLOCK", ApplicablePreset: "all", Format: "srs", Size: len(bytes),
+		},
+		Payload: managedRURuleSetPayload{DomainSuffix: []string{}, IPCIDR: []string{}, SRSBase64: base64.StdEncoding.EncodeToString(bytes)},
+	}
+}
+
 func writeManagedRUBundleForTest(t *testing.T, ruleSets []managedRURuleSet) string {
 	t.Helper()
 	payload, err := json.Marshal(managedRURuleSetBundle{
@@ -182,9 +333,27 @@ func writeManagedRUBundleForTest(t *testing.T, ruleSets []managedRURuleSet) stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(t.TempDir(), "active.json")
+	directory := t.TempDir()
+	path := filepath.Join(directory, "active.json")
 	if err := os.WriteFile(path, envelope, 0o600); err != nil {
 		t.Fatal(err)
+	}
+	for _, ruleSet := range ruleSets {
+		if ruleSet.Metadata.Format != "srs" {
+			continue
+		}
+		artifact, err := base64.StdEncoding.DecodeString(ruleSet.Payload.SRSBase64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		artifactDirectory := filepath.Join(directory, "artifacts")
+		if err := os.MkdirAll(artifactDirectory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		artifactPath := filepath.Join(artifactDirectory, ruleSet.Metadata.ID+"-"+ruleSet.Metadata.Checksum+".srs")
+		if err := os.WriteFile(artifactPath, artifact, 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return path
 }

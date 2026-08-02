@@ -109,7 +109,7 @@ class ManagedRuleSetSyncService with InfraLogger {
     required ManagedRuleSetStore store,
     required SharedPreferences preferences,
     DateTime Function()? now,
-    this.ttl = const Duration(hours: 24),
+    this.ttl = const Duration(minutes: 15),
   }) : _remoteDataSource = remoteDataSource,
        _store = store,
        _preferences = preferences,

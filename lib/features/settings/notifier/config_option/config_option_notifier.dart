@@ -5,17 +5,19 @@ import 'dart:io';
 import 'package:dartx/dartx_io.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:json_path/json_path.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/features/connection/data/connection_data_providers.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
+import 'package:zeon/features/route_rules/data/managed_rule_set.dart';
+import 'package:zeon/features/route_rules/data/managed_rule_set_sync.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:json_path/json_path.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'config_option_notifier.g.dart';
 
@@ -26,6 +28,7 @@ class ConfigOptionNotifier extends _$ConfigOptionNotifier with AppLogger {
     ref.onDispose(() => _restartTimer?.cancel());
     ref.listen(ConfigOptions.singboxConfigOptions, (previous, next) {
       if (previous == null || next == previous) return;
+      if (previous.blockAds != next.blockAds) _verifyAdsCacheBeforeRestart = true;
       _scheduleRestart();
     }, fireImmediately: true);
     ref.listen(Preferences.disableMemoryLimit, (previous, next) {
@@ -51,6 +54,7 @@ class ConfigOptionNotifier extends _$ConfigOptionNotifier with AppLogger {
 
   Timer? _restartTimer;
   bool _forceRestart = false;
+  bool _verifyAdsCacheBeforeRestart = false;
 
   bool _samePackages(List<String>? previous, List<String> next) =>
       previous != null && previous.length == next.length && previous.toSet().containsAll(next);
@@ -78,6 +82,7 @@ class ConfigOptionNotifier extends _$ConfigOptionNotifier with AppLogger {
     };
     if (!isConnected) {
       _forceRestart = false;
+      _verifyAdsCacheBeforeRestart = false;
       return;
     }
 
@@ -85,6 +90,27 @@ class ConfigOptionNotifier extends _$ConfigOptionNotifier with AppLogger {
     final nextOptions = ref.read(ConfigOptions.singboxConfigOptions);
     if (!_forceRestart && nextOptions == repository.configOptionsSnapshot) return;
     _forceRestart = false;
+
+    if (_verifyAdsCacheBeforeRestart) {
+      _verifyAdsCacheBeforeRestart = false;
+      var hasManagedAds = false;
+      try {
+        final snapshot = await ref.read(managedRuleSetStoreProvider).readActiveBundle();
+        hasManagedAds =
+            snapshot?.bundle.ruleSets.any(
+              (ruleSet) =>
+                  ruleSet.metadata.id == 'ads' &&
+                  ruleSet.metadata.format == ManagedRuleFormat.srs &&
+                  ruleSet.metadata.applicablePreset == ManagedRulePreset.all,
+            ) ??
+            false;
+      } on Object catch (error, stackTrace) {
+        loggy.warning('failed to verify managed ads cache before restart', error, stackTrace);
+      }
+      if (!hasManagedAds) {
+        loggy.warning('managed ads active/LKG is unavailable; restart will use embedded ads fallback');
+      }
+    }
 
     loggy.debug("config options changed, restarting connection");
     final t = ref.read(translationsProvider).requireValue;

@@ -1166,6 +1166,13 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			Rcode: &rejectRCode,
 		},
 	}
+	managedRuleSets, managedErr := readManagedRURuleSets(managedRURuleSetBundleFile)
+	if managedErr != nil {
+		// Managed policy is optional. Embedded routing and the hardcoded ads
+		// fallback keep VPN startup available while active/LKG is unavailable.
+		fmt.Printf("Ignoring invalid managed rule-set bundle: %v\n", managedErr)
+		managedRuleSets = nil
+	}
 	if hopt.BlockAds {
 		rulesets = append(rulesets, option.RuleSet{
 			Type: C.RuleSetTypeInline,
@@ -1182,16 +1189,8 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 				},
 			},
 		})
-		rulesets = append(rulesets, option.RuleSet{
-			Type:   C.RuleSetTypeRemote,
-			Tag:    "geosite-ads",
-			Format: C.RuleSetFormatBinary,
-			RemoteOptions: option.RemoteRuleSet{
-				URL:            "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/block/geosite-category-ads-all.srs",
-				UpdateInterval: badoption.Duration(5 * time.Hour * 24),
-				DownloadDetour: OutboundSelectTag,
-			},
-		})
+		managedAdsTag := appendManagedAdsRuleSet(&rulesets, managedRuleSets)
+		embeddedAdsTag := appendEmbeddedAdsRuleSet(&rulesets)
 		rulesets = append(rulesets, option.RuleSet{
 			Type:   C.RuleSetTypeRemote,
 			Tag:    "geosite-malware",
@@ -1243,19 +1242,33 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			},
 		})
 
+		adsRouteRuleSets := []string{
+			RUAdListHardcodedRuleSetTag,
+			"geosite-malware",
+			"geosite-phishing",
+			"geosite-cryptominers",
+			"geoip-malware",
+			"geoip-phishing",
+		}
+		adsDNSRuleSets := []string{
+			RUAdListHardcodedRuleSetTag,
+			"geosite-malware",
+			"geosite-phishing",
+			"geosite-cryptominers",
+		}
+		if embeddedAdsTag != "" {
+			adsRouteRuleSets = append([]string{embeddedAdsTag}, adsRouteRuleSets...)
+			adsDNSRuleSets = append([]string{embeddedAdsTag}, adsDNSRuleSets...)
+		}
+		if managedAdsTag != "" {
+			adsRouteRuleSets = append([]string{managedAdsTag}, adsRouteRuleSets...)
+			adsDNSRuleSets = append([]string{managedAdsTag}, adsDNSRuleSets...)
+		}
 		routeRules = append(routeRules, option.Rule{
 			Type: C.RuleTypeDefault,
 			DefaultOptions: option.DefaultRule{
 				RawDefaultRule: option.RawDefaultRule{
-					RuleSet: []string{
-						RUAdListHardcodedRuleSetTag,
-						"geosite-ads",
-						"geosite-malware",
-						"geosite-phishing",
-						"geosite-cryptominers",
-						"geoip-malware",
-						"geoip-phishing",
-					},
+					RuleSet: adsRouteRuleSets,
 				},
 				RuleAction: option.RuleAction{
 					Action: C.RuleActionTypeReject,
@@ -1268,13 +1281,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 		dnsRules = append(dnsRules, option.DefaultDNSRule{
 			RawDefaultDNSRule: option.RawDefaultDNSRule{
 
-				RuleSet: []string{
-					RUAdListHardcodedRuleSetTag,
-					"geosite-ads",
-					"geosite-malware",
-					"geosite-phishing",
-					"geosite-cryptominers",
-				},
+				RuleSet: adsDNSRuleSets,
 			},
 			DNSRuleAction: rejectDnsAction,
 		})
@@ -1296,14 +1303,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 		})
 	}
 	if hopt.Region == "ru" {
-		managedRuleSets, managedErr := readManagedRURuleSets(managedRURuleSetBundleFile)
-		if managedErr != nil {
-			// A remotely managed bundle is optional and must never make the
-			// embedded/offline routing policy unavailable.
-			fmt.Printf("Ignoring invalid managed RU rule-set bundle: %v\n", managedErr)
-		} else {
-			appendManagedRURouting(&dnsRules, &routeRules, &rulesets, hopt, managedRuleSets)
-		}
+		appendManagedRURouting(&dnsRules, &routeRules, &rulesets, hopt, managedRuleSets)
 		appendRUServiceRoutingPolicy(
 			&dnsRules,
 			&routeRules,

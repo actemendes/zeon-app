@@ -9,6 +9,8 @@ enum ManagedRuleAction { direct, vpn, block }
 
 enum ManagedRulePreset { russia, global, all }
 
+enum ManagedRuleFormat { json, srs }
+
 const managedRuleSetEnvelopeFormatVersion = 1;
 const managedRuleSetMaxEnvelopeBytes = 4 << 20;
 const managedRuleSetMaxRuleSets = 32;
@@ -32,6 +34,8 @@ class ManagedRuleSetMetadata {
     required this.priority,
     required this.action,
     required this.applicablePreset,
+    this.format = ManagedRuleFormat.json,
+    this.size = 0,
     this.signature,
   });
 
@@ -48,6 +52,8 @@ class ManagedRuleSetMetadata {
   final int priority;
   final ManagedRuleAction action;
   final ManagedRulePreset applicablePreset;
+  final ManagedRuleFormat format;
+  final int size;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -63,6 +69,8 @@ class ManagedRuleSetMetadata {
     'priority': priority,
     'action': action.name.toUpperCase(),
     'applicablePreset': applicablePreset.name,
+    'format': format.name,
+    'size': size,
   };
 
   factory ManagedRuleSetMetadata.fromJson(Map<String, dynamic> json) {
@@ -80,28 +88,38 @@ class ManagedRuleSetMetadata {
       priority: json['priority'] as int,
       action: ManagedRuleAction.values.byName((json['action'] as String).toLowerCase()),
       applicablePreset: ManagedRulePreset.values.byName(json['applicablePreset'] as String),
+      format: ManagedRuleFormat.values.byName((json['format'] as String?) ?? 'json'),
+      size: (json['size'] as int?) ?? 0,
     );
   }
 }
 
 @immutable
 class ManagedRuleSet {
-  const ManagedRuleSet({required this.metadata, required this.domainSuffixes, required this.ipCidrs});
+  const ManagedRuleSet({required this.metadata, required this.domainSuffixes, required this.ipCidrs, this.srsBytes});
 
   final ManagedRuleSetMetadata metadata;
   final List<String> domainSuffixes;
   final List<String> ipCidrs;
+  final List<int>? srsBytes;
 
-  Map<String, Object?> get payload => {'domainSuffix': domainSuffixes, 'ipCidr': ipCidrs};
+  Map<String, Object?> get payload => {
+    'domainSuffix': domainSuffixes,
+    'ipCidr': ipCidrs,
+    if (srsBytes != null) 'srsBase64': base64.encode(srsBytes!),
+  };
 
   Map<String, Object?> toJson() => {'metadata': metadata.toJson(), 'payload': payload};
 
   factory ManagedRuleSet.fromJson(Map<String, dynamic> json) {
     final payload = json['payload'] as Map<String, dynamic>;
+    final metadata = ManagedRuleSetMetadata.fromJson(json['metadata'] as Map<String, dynamic>);
+    final rawSrs = payload['srsBase64'];
     return ManagedRuleSet(
-      metadata: ManagedRuleSetMetadata.fromJson(json['metadata'] as Map<String, dynamic>),
+      metadata: metadata,
       domainSuffixes: List<String>.unmodifiable((payload['domainSuffix'] as List).cast<String>()),
       ipCidrs: List<String>.unmodifiable((payload['ipCidr'] as List).cast<String>()),
+      srsBytes: rawSrs == null ? null : List<int>.unmodifiable(base64.decode(rawSrs as String)),
     );
   }
 }
@@ -313,6 +331,10 @@ class ManagedRuleSetStore {
   File get activeFile => File('${directory.path}${Platform.pathSeparator}active.json');
   File get temporaryActiveFile => File('${activeFile.path}.tmp');
   File get lastKnownGoodActiveFile => File('${activeFile.path}.lkg');
+  Directory get artifactDirectory => Directory('${directory.path}${Platform.pathSeparator}artifacts');
+
+  File artifactFile(ManagedRuleSet ruleSet) =>
+      File('${artifactDirectory.path}${Platform.pathSeparator}${ruleSet.metadata.id}-${ruleSet.metadata.checksum}.srs');
 
   Future<ManagedRuleSetSnapshot?> readActiveBundle() async {
     final active = await _tryReadEnvelopeFile(activeFile, rejectExpired: false);
@@ -404,6 +426,7 @@ class ManagedRuleSetStore {
     }
 
     await directory.create(recursive: true);
+    await _ensureArtifacts(verified);
     final serialized = jsonEncode(candidate.toJson());
     await temporaryActiveFile.writeAsString(serialized, flush: true);
     await _decodeEnvelope(await temporaryActiveFile.readAsString(), rejectExpired: true);
@@ -520,7 +543,7 @@ class ManagedRuleSetStore {
     if (!metadata.expiresAt.isAfter(metadata.generatedAt)) {
       throw const RuleSetValidationException('invalid rule-set validity interval');
     }
-    if (metadata.domainCount < 0 || metadata.cidrCount < 0) {
+    if (metadata.domainCount < 0 || metadata.cidrCount < 0 || metadata.size < 0) {
       throw const RuleSetValidationException('invalid entry count');
     }
     if (metadata.domainCount != ruleSet.domainSuffixes.length || metadata.cidrCount != ruleSet.ipCidrs.length) {
@@ -543,9 +566,26 @@ class ManagedRuleSetStore {
     if (!_sha256Pattern.hasMatch(metadata.checksum)) {
       throw const RuleSetValidationException('invalid rule-set checksum');
     }
-    final checksum = await normalizer.checksumForPayload(ruleSet.payload);
-    if (checksum != metadata.checksum.toLowerCase()) {
-      throw const RuleSetValidationException('checksum mismatch');
+    if (metadata.format == ManagedRuleFormat.srs) {
+      if (metadata.id != 'ads' ||
+          metadata.action != ManagedRuleAction.block ||
+          metadata.applicablePreset != ManagedRulePreset.all ||
+          ruleSet.domainSuffixes.isNotEmpty ||
+          ruleSet.ipCidrs.isNotEmpty ||
+          ruleSet.srsBytes == null) {
+        throw const RuleSetValidationException('invalid managed ads rule set');
+      }
+      _validateSrs(ruleSet.srsBytes!);
+      if (metadata.size != ruleSet.srsBytes!.length || await _sha256Hex(ruleSet.srsBytes!) != metadata.checksum) {
+        throw const RuleSetValidationException('SRS checksum or size mismatch');
+      }
+    } else if (ruleSet.srsBytes != null) {
+      throw const RuleSetValidationException('unexpected SRS artifact');
+    } else {
+      final checksum = await normalizer.checksumForPayload(ruleSet.payload);
+      if (checksum != metadata.checksum.toLowerCase()) {
+        throw const RuleSetValidationException('checksum mismatch');
+      }
     }
     if (rejectExpired && !metadata.expiresAt.isAfter(now().toUtc())) {
       throw const RuleSetValidationException('expired rule-set');
@@ -571,9 +611,36 @@ class ManagedRuleSetStore {
       if (!await file.exists()) return null;
       final length = await file.length();
       if (length <= 0 || length > managedRuleSetMaxEnvelopeBytes) return null;
-      return await _decodeEnvelope(await file.readAsString(), rejectExpired: rejectExpired);
+      final snapshot = await _decodeEnvelope(await file.readAsString(), rejectExpired: rejectExpired);
+      await _ensureArtifacts(snapshot);
+      return snapshot;
     } on Object {
       return null;
+    }
+  }
+
+  Future<void> _ensureArtifacts(ManagedRuleSetSnapshot snapshot) async {
+    for (final ruleSet in snapshot.bundle.ruleSets.where((item) => item.metadata.format == ManagedRuleFormat.srs)) {
+      final bytes = ruleSet.srsBytes!;
+      final target = artifactFile(ruleSet);
+      if (await target.exists()) {
+        try {
+          final existing = await target.readAsBytes();
+          _validateSrs(existing);
+          if (existing.length == bytes.length && await _sha256Hex(existing) == ruleSet.metadata.checksum) continue;
+        } on Object {
+          // The authenticated envelope below rematerializes the damaged artifact.
+        }
+      }
+      await artifactDirectory.create(recursive: true);
+      final temporary = File('${target.path}.tmp');
+      await temporary.writeAsBytes(bytes, flush: true);
+      _validateSrs(await temporary.readAsBytes());
+      if (await _sha256Hex(await temporary.readAsBytes()) != ruleSet.metadata.checksum) {
+        throw const RuleSetValidationException('materialized SRS checksum mismatch');
+      }
+      if (await target.exists()) await target.delete();
+      await temporary.rename(target.path);
     }
   }
 
@@ -634,6 +701,32 @@ String _withBase64Padding(String value) {
 Future<String> _sha256Hex(List<int> bytes) async {
   final digest = await Sha256().hash(bytes);
   return digest.bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+}
+
+void _validateSrs(List<int> bytes) {
+  if (bytes.length < 6 || bytes[0] != 0x53 || bytes[1] != 0x52 || bytes[2] != 0x53 || bytes[3] > 4) {
+    throw const RuleSetValidationException('invalid SRS header or version');
+  }
+  final List<int> inflated;
+  try {
+    inflated = ZLibDecoder().convert(bytes.sublist(4));
+  } on Object {
+    throw const RuleSetValidationException('corrupted SRS artifact');
+  }
+  var count = 0;
+  var shift = 0;
+  var complete = false;
+  for (final byte in inflated.take(10)) {
+    count |= (byte & 0x7f) << shift;
+    if (byte & 0x80 == 0) {
+      complete = true;
+      break;
+    }
+    shift += 7;
+  }
+  if (!complete || count <= 0 || inflated.length < 2) {
+    throw const RuleSetValidationException('SRS artifact contains no readable rules');
+  }
 }
 
 class RuleConflict {

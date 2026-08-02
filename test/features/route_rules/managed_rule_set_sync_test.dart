@@ -41,6 +41,53 @@ void main() {
     );
   }
 
+  Future<ManagedRuleSetEnvelope> adsEnvelope(int generation) async {
+    final artifact = <int>[
+      0x53,
+      0x52,
+      0x53,
+      4,
+      ...ZLibEncoder().convert([1, 0, 0xff, 0]),
+    ];
+    final artifactDigest = await Sha256().hash(artifact);
+    final artifactChecksum = artifactDigest.bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+    final ads = ManagedRuleSet(
+      metadata: ManagedRuleSetMetadata(
+        id: 'ads',
+        version: '$generation',
+        source: 'zeon-admin',
+        generatedAt: generatedAt,
+        expiresAt: expiresAt,
+        checksum: artifactChecksum,
+        formatVersion: 1,
+        domainCount: 0,
+        cidrCount: 0,
+        priority: -1000,
+        action: ManagedRuleAction.block,
+        applicablePreset: ManagedRulePreset.all,
+        format: ManagedRuleFormat.srs,
+        size: artifact.length,
+      ),
+      domainSuffixes: const [],
+      ipCidrs: const [],
+      srsBytes: List.unmodifiable(artifact),
+    );
+    final payloadBytes = utf8.encode(
+      jsonEncode({
+        'generatedAt': generatedAt.toIso8601String(),
+        'expiresAt': expiresAt.toIso8601String(),
+        'ruleSets': [ads.toJson()],
+      }),
+    );
+    final digest = await Sha256().hash(payloadBytes);
+    return ManagedRuleSetEnvelope(
+      formatVersion: 1,
+      generation: generation,
+      payload: base64Url.encode(payloadBytes).replaceAll('=', ''),
+      checksum: digest.bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join(),
+    );
+  }
+
   Future<({Directory directory, ManagedRuleSetStore store, SharedPreferences preferences})> dependencies() async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -60,23 +107,47 @@ void main() {
     expect(parseManagedRuleSetApiBody({'ok': true, 'data': value.toJson()}).checksum, value.checksum);
   });
 
-  test('fresh successful check observes the 24 hour TTL', () async {
+  test('common API sync caches ads without a blockAds input', () async {
+    final deps = await dependencies();
+    final remoteEnvelope = await adsEnvelope(1);
+    final remote = _FakeRemote((_) async => ManagedRuleSetFetchResult.modified(remoteEnvelope, eTag: '"generation-1"'));
+    final service = ManagedRuleSetSyncService(
+      remoteDataSource: remote,
+      store: deps.store,
+      preferences: deps.preferences,
+      now: () => generatedAt,
+    );
+
+    expect(await service.sync(force: true, reason: 'ordinary_sync'), ManagedRuleSetSyncResult.updated);
+    final active = await deps.store.readActiveBundle();
+    final ads = active?.bundle.ruleSets.single;
+    expect(ads?.metadata.id, 'ads');
+    expect(await deps.store.artifactFile(ads!).readAsBytes(), ads.srsBytes);
+    expect(remote.calls, 1);
+  });
+
+  test('fresh successful check observes the 15 minute TTL', () async {
     final deps = await dependencies();
     final active = await envelope(1);
     await deps.store.installEnvelope(active);
     await deps.preferences.setString(ManagedRuleSetSyncService.lastSuccessfulCheckKey, generatedAt.toIso8601String());
     await deps.preferences.setInt(ManagedRuleSetSyncService.activeGenerationKey, active.generation);
     await deps.preferences.setString(ManagedRuleSetSyncService.activeChecksumKey, active.checksum);
-    final remote = _FakeRemote((_) async => throw StateError('network must not be called'));
+    final remote = _FakeRemote((_) async => ManagedRuleSetFetchResult.notModified(eTag: '"generation-1"'));
+    var now = generatedAt.add(const Duration(minutes: 14, seconds: 59));
     final service = ManagedRuleSetSyncService(
       remoteDataSource: remote,
       store: deps.store,
       preferences: deps.preferences,
-      now: () => generatedAt.add(const Duration(hours: 23)),
+      now: () => now,
     );
 
     expect(await service.sync(reason: 'ttl_test'), ManagedRuleSetSyncResult.skipped);
     expect(remote.calls, 0);
+
+    now = generatedAt.add(const Duration(minutes: 15));
+    expect(await service.sync(reason: 'ttl_test'), ManagedRuleSetSyncResult.notModified);
+    expect(remote.calls, 1);
   });
 
   test('conditional 304 refreshes TTL without replacing active bundle', () async {
@@ -149,7 +220,7 @@ void main() {
       remoteDataSource: remote,
       store: deps.store,
       preferences: deps.preferences,
-      now: () => generatedAt.add(const Duration(hours: 1)),
+      now: () => generatedAt.add(const Duration(minutes: 14)),
     );
 
     final background = service.sync(reason: 'config_generation');
