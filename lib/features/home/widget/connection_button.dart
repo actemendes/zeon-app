@@ -7,13 +7,10 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
-import 'package:zeon/core/router/bottom_sheets/bottom_sheets_notifier.dart';
-import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/widget/animated_text.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
 import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
-import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/gen/assets.gen.dart';
@@ -49,18 +46,7 @@ class ConnectionButton extends ConsumerWidget {
 
     return MainVpnButtonView(
       onTap: buttonState.enabled
-          ? () => ref
-                .read(connectionNotifierProvider.notifier)
-                .handleMainVpnButtonTap(
-                  buttonState,
-                  confirmStart: () async {
-                    if (ref.read(activeProfileProvider).valueOrNull == null) {
-                      await ref.read(dialogNotifierProvider.notifier).showNoActiveProfile();
-                      await ref.read(bottomSheetsNotifierProvider.notifier).showProfilesOverview();
-                    }
-                    return ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice();
-                  },
-                )
+          ? () => ref.read(connectionNotifierProvider.notifier).handleMainVpnButtonTap(buttonState)
           : null,
       presentation: presentation,
       image: buttonState.isConnected ? Assets.images.connectNorouz : Assets.images.disconnectNorouz,

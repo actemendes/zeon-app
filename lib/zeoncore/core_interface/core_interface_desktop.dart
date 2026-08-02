@@ -106,7 +106,11 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
         0,
         debug ? 1 : 0,
       );
-      return errPtr.cast<Utf8>().toDartString();
+      try {
+        return errPtr.cast<Utf8>().toDartString();
+      } finally {
+        _box.freeString(errPtr);
+      }
     });
     if (err.isNotEmpty) {
       _port = null;

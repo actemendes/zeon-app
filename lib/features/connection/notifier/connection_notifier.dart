@@ -377,7 +377,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     if (state.asData?.value case Disconnecting()) return false;
 
     final intentEpoch = _beginConnectionIntent(running: true);
-    final activeProfile = await ref.read(activeProfileProvider.future);
+    final activeProfile = ref.read(activeProfileProvider).valueOrNull;
     if (!_isCurrentIntent(intentEpoch, running: true)) return false;
     if (activeProfile == null) {
       loggy.warning("API VPN recovery skipped: no active profile");
@@ -491,7 +491,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     final snapshotSource = ref.read(vpnSessionSnapshotSourceProvider);
     try {
       final snapshot = await snapshotSource.resync(source).timeout(_platformResyncTimeout);
-      return snapshot == null ? null : MainVpnButtonState.fromSnapshot(snapshot);
+      if (snapshot != null) return MainVpnButtonState.fromSnapshot(snapshot);
+      if (!PlatformUtils.isAndroid) {
+        return MainVpnButtonState.fromLegacyConnectionStatus(state.valueOrNull);
+      }
+      return null;
     } catch (error, stackTrace) {
       loggy.warning('main VPN button snapshot resync failed [$source]', error, stackTrace);
       // Fail closed. A cached DISCONNECTED value is not sufficient proof that
