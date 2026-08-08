@@ -144,7 +144,12 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         // A platform-owned notification/tile Stop clears the shared intent
         // before publishing DISCONNECTED, so it is not an unexpected outage.
         final expectedRunning = startedByUser;
-        if (_shouldCaptureUnexpectedDisconnect(event, wasUpBefore: wasUpBefore, expectedRunning: expectedRunning)) {
+        if (_shouldCaptureUnexpectedDisconnect(
+          event,
+          previousStatus: previousStatus,
+          wasUpBefore: wasUpBefore,
+          expectedRunning: expectedRunning,
+        )) {
           try {
             unawaited(
               ref
@@ -884,10 +889,16 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
   bool _shouldCaptureUnexpectedDisconnect(
     Disconnected disconnected, {
+    required ConnectionStatus? previousStatus,
     required bool wasUpBefore,
     required bool expectedRunning,
   }) {
-    if (!wasUpBefore || !expectedRunning || _isExpectedStop()) {
+    if (!shouldCaptureUnexpectedDisconnect(
+      previousStatus: previousStatus,
+      wasUpBefore: wasUpBefore,
+      expectedRunning: expectedRunning,
+      isExpectedStop: _isExpectedStop(),
+    )) {
       return false;
     }
 
@@ -898,6 +909,34 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
     return true;
   }
+}
+
+/// Decides whether reaching [Disconnected] is an outage worth reporting.
+///
+/// A teardown that already published [Disconnecting] is an orderly shutdown
+/// whoever started it, so its completion is never an unexpected outage. That
+/// has to be judged from the transition itself rather than from
+/// [isExpectedStop] alone: the expected-stop window is anchored to the last
+/// user action, and a stop that outlives it (a slow teardown, or a restart
+/// that chains stop and start) would otherwise be reported as if the tunnel
+/// had dropped on its own.
+///
+/// A drop straight from [Connected] is the case that stays reportable: no
+/// shutdown was ever announced, so the tunnel went away underneath us.
+@visibleForTesting
+bool shouldCaptureUnexpectedDisconnect({
+  required ConnectionStatus? previousStatus,
+  required bool wasUpBefore,
+  required bool expectedRunning,
+  required bool isExpectedStop,
+}) {
+  if (!wasUpBefore || !expectedRunning || isExpectedStop) {
+    return false;
+  }
+  if (previousStatus is Disconnecting) {
+    return false;
+  }
+  return true;
 }
 
 @visibleForTesting
