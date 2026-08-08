@@ -182,9 +182,10 @@ class ErrorReportController {
   }
 
   Future<void> _captureVpnNotRunningOnStartupIfNeeded() async {
-    if (_preferences.getBool('started_by_user') != true || _coreService.currentState is! CoreStopped) {
-      return;
-    }
+    if (_preferences.getBool('started_by_user') != true) return;
+    final coreState = _coreService.currentState;
+    if (coreState is! CoreStopped) return;
+    if (!stoppedCoreIndicatesFailedStart(coreState)) return;
 
     final now = DateTime.now().toUtc();
     final lastReported = DateTime.tryParse((_preferences.getString(_startupStoppedReportKey) ?? '').trim())?.toUtc();
@@ -440,4 +441,22 @@ extension _TakeLast<T> on List<T> {
 
 extension _FirstOrNull<T> on List<T> {
   T? get firstOrNull => isEmpty ? null : first;
+}
+
+/// Whether a stopped core carries evidence that a start actually failed.
+///
+/// `started_by_user` is a persisted intent (see [Preferences.startedByUser]):
+/// it records that the user last asked for the VPN, and it survives process
+/// death, app restart and reboot. Nothing restores the tunnel automatically
+/// on launch, so finding a stopped core next to that intent is the ordinary
+/// state after any restart rather than a malfunction - which is why every one
+/// of the 905 production reports of this kind carried a bare `Stopped` with
+/// no alert and no message.
+///
+/// A start that genuinely failed leaves the alert/message the core reported
+/// (for example a `startService` alert), and that remains worth reporting.
+@visibleForTesting
+bool stoppedCoreIndicatesFailedStart(CoreStopped stopped) {
+  if (stopped.alert != null) return true;
+  return (stopped.message ?? '').trim().isNotEmpty;
 }
