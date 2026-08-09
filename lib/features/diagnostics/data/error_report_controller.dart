@@ -145,6 +145,7 @@ class ErrorReportController {
     required bool startedByUser,
   }) async {
     if (!_enabled || kIsWeb) return;
+    if (!coreStatusAllowsUnexpectedDisconnectReport(_coreService.currentState)) return;
     final failure = disconnected.connectionFailure;
     final context = <String, dynamic>{
       'status_before': previousStatus?.format(),
@@ -459,4 +460,25 @@ extension _FirstOrNull<T> on List<T> {
 bool stoppedCoreIndicatesFailedStart(CoreStopped stopped) {
   if (stopped.alert != null) return true;
   return (stopped.message ?? '').trim().isNotEmpty;
+}
+
+/// Whether the core lifecycle allows treating a `Disconnected` as an outage.
+///
+/// `vpn_unexpected_disconnect` is meant to record the tunnel going away on its
+/// own. A core that is still `Stopping` is in the middle of a teardown it has
+/// already announced, so reaching `Disconnected` there is that teardown
+/// completing rather than an outage - regardless of which connection states
+/// the UI happened to observe on the way.
+///
+/// This is deliberately narrower than looking at the previous
+/// [ConnectionStatus]: production reports carried
+/// `status_before = CONNECTED` while `core_status` was still `Stopping`, so
+/// the observed UI transition and the authoritative core lifecycle disagreed.
+/// 16 such reports (11 config restarts, 4 profile reconnects, 1 manual
+/// disconnect) were misclassified this way.
+///
+/// A stopped core stays reportable: that is the state a genuine drop lands in.
+@visibleForTesting
+bool coreStatusAllowsUnexpectedDisconnectReport(CoreStatus coreStatus) {
+  return coreStatus is! CoreStopping;
 }
