@@ -16,6 +16,34 @@ class PortProbeObservation {
 
 typedef PortProbeObserver = void Function(PortProbeObservation observation);
 
+enum BackgroundSetupFailure {
+  none,
+  replacementTeardown,
+  controlPortClosed,
+  controlPortTimeout,
+  controlPortSocketError,
+  controlPortOtherError,
+  commandEndpointTimeout,
+}
+
+class BackgroundSetupResult {
+  const BackgroundSetupResult({
+    required this.generation,
+    required this.status,
+    this.failure = BackgroundSetupFailure.none,
+    this.portProbe,
+    this.nativeSnapshot,
+  });
+
+  final int generation;
+  final CoreStatus status;
+  final BackgroundSetupFailure failure;
+  final PortProbeObservation? portProbe;
+  final VpnSessionSnapshot? nativeSnapshot;
+
+  bool get isReady => status is CoreStarting && failure == BackgroundSetupFailure.none;
+}
+
 class CoreInterface {
   late CoreClient fgClient;
   late CoreClient bgClient;
@@ -24,8 +52,8 @@ class CoreInterface {
     return "";
   }
 
-  Future<CoreStatus> setupBackground(String path, String name, {int generation = 0}) async {
-    return const CoreStarted();
+  Future<BackgroundSetupResult> setupBackground(String path, String name, {int generation = 0}) async {
+    return BackgroundSetupResult(generation: generation, status: const CoreStarting());
   }
 
   Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit, {int generation = 0}) async {

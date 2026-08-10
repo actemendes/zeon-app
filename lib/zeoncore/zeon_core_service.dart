@@ -36,6 +36,7 @@ import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/global_data_plane_config_redactor.dart';
 import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/zeoncore/session_generation.dart';
+import 'package:zeon/zeoncore/startup_failure_classification.dart';
 import 'package:zeon/zeoncore/vpn_diagnostics.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
@@ -643,6 +644,7 @@ class ZeonCoreService with InfraLogger {
     required TransportCloseDisposition disposition,
     required Object error,
     StackTrace? stackTrace,
+    bool reportIncident = true,
   }) {
     final event = vpnDiagnosticEvent(
       "grpc_transport_outcome",
@@ -651,7 +653,7 @@ class ZeonCoreService with InfraLogger {
           "source=$source outcome=${disposition.name} error_type=${error.runtimeType} "
           "native_phase=${authoritativeSessionSnapshot?.phase.name ?? "none"}",
     );
-    if (disposition == TransportCloseDisposition.realFailure) {
+    if (disposition == TransportCloseDisposition.realFailure && reportIncident) {
       loggy.error(event, error, stackTrace);
     } else {
       loggy.warning(event, error);
@@ -1183,6 +1185,108 @@ class ZeonCoreService with InfraLogger {
     return false;
   }
 
+  Future<VpnSessionSnapshot?> _refreshStartupSnapshot(int generation, String source) async {
+    if (!PlatformUtils.isAndroid) return authoritativeSessionSnapshot;
+    try {
+      return await readAuthoritativeSessionSnapshot();
+    } catch (error, stackTrace) {
+      loggy.warning(
+        vpnDiagnosticEvent(
+          "startup_snapshot_unavailable",
+          generation,
+          details: "source=$source error_type=${error.runtimeType}",
+        ),
+        error,
+        stackTrace,
+      );
+      return authoritativeSessionSnapshot;
+    }
+  }
+
+  StartupOutcomeDisposition _classifyStartupFailure({
+    required int generation,
+    required StartupFailureSignal signal,
+    BackgroundSetupFailure backgroundSetupFailure = BackgroundSetupFailure.none,
+    VpnSessionSnapshot? nativeSnapshot,
+    bool controlRecoverySucceeded = false,
+  }) {
+    return classifyStartupOutcome(
+      StartupOutcomeEvidence(
+        operationGeneration: generation,
+        operationCurrent: _sessionGeneration.isCurrent(generation, source: "startup_outcome"),
+        signal: signal,
+        backgroundSetupFailure: backgroundSetupFailure,
+        nativeSnapshot: nativeSnapshot,
+        controlRecoverySucceeded: controlRecoverySucceeded,
+      ),
+    );
+  }
+
+  void _recordStartupOutcome({
+    required int generation,
+    required StartupFailureSignal signal,
+    required StartupOutcomeDisposition disposition,
+    BackgroundSetupFailure backgroundSetupFailure = BackgroundSetupFailure.none,
+    VpnSessionSnapshot? nativeSnapshot,
+  }) {
+    loggy.warning(
+      vpnDiagnosticEvent(
+        "startup_outcome",
+        generation,
+        details:
+            "signal=${signal.name} outcome=${disposition.name} "
+            "background_setup=${backgroundSetupFailure.name} "
+            "native_generation=${nativeSnapshot?.generation ?? 0} "
+            "native_phase=${nativeSnapshot?.phase.name ?? "none"} "
+            "failure_code=${nativeSnapshot?.failureCode.isNotEmpty == true ? nativeSnapshot!.failureCode : "none"}",
+      ),
+    );
+  }
+
+  ConnectionFailure _startupConnectionFailure({
+    required int generation,
+    required StartupOutcomeDisposition disposition,
+    required StartupFailureSignal signal,
+    BackgroundSetupFailure backgroundSetupFailure = BackgroundSetupFailure.none,
+    VpnSessionSnapshot? nativeSnapshot,
+  }) {
+    final detail =
+        "category=${disposition.name} signal=${signal.name} generation=$generation "
+        "background_setup=${backgroundSetupFailure.name} "
+        "native_phase=${nativeSnapshot?.phase.name ?? "none"} "
+        "native_failure=${nativeSnapshot?.failureCode.isNotEmpty == true ? nativeSnapshot!.failureCode : "none"}";
+    if (disposition == StartupOutcomeDisposition.controlChannelFailure) {
+      return ConnectionFailure.backgroundCoreNotAvailable("background control startup failed [$detail]");
+    }
+    return ConnectionFailure.unexpected("core startup failed [$detail]");
+  }
+
+  bool _completeNonIncidentStartupOutcome(int generation, StartupOutcomeDisposition disposition, String reason) {
+    if (startupOutcomeIsIncident(disposition)) return false;
+    if (disposition == StartupOutcomeDisposition.recovered &&
+        _sessionGeneration.isCurrent(generation, source: "startup_recovered/$reason")) {
+      _connectedGeneration = generation;
+      _transitionLifecycle(_CoreLifecycleState.started, reason: reason);
+      statusController.add(currentState = const CoreStatus.started());
+    }
+    return true;
+  }
+
+  Future<void> _cleanupFailedStartup(
+    int generation,
+    String reason, {
+    CoreStatus terminalStatus = const CoreStatus.stopped(),
+  }) async {
+    try {
+      await core.stop(generation: generation).timeout(const Duration(seconds: 14), onTimeout: () => false);
+    } catch (error, stackTrace) {
+      loggy.warning("failed startup cleanup did not complete [$reason]", error, stackTrace);
+    }
+    if (!_sessionGeneration.isCurrent(generation, source: "startup_cleanup/$reason")) return;
+    _transitionLifecycle(_CoreLifecycleState.stopped, reason: reason);
+    statusController.add(currentState = terminalStatus);
+  }
+
   bool _isTransientGrpcTransportClose(GrpcError error) {
     final message = (error.message ?? error.toString()).toLowerCase();
     return error.code == StatusCode.unknown &&
@@ -1423,23 +1527,69 @@ class ZeonCoreService with InfraLogger {
         statusController.add(currentState = const CoreStatus.starting());
         loggy.debug("starting");
 
-        final CoreStatus background;
+        final BackgroundSetupResult backgroundSetup;
         try {
-          background = await core.setupBackground(path, name, generation: generation);
+          backgroundSetup = await core.setupBackground(path, name, generation: generation);
         } catch (e, st) {
           if (_isStaleOperation(generation, "background_setup", error: e)) return right(unit);
+          final nativeSnapshot = await _refreshStartupSnapshot(generation, "background_setup_exception");
+          final disposition = _classifyStartupFailure(
+            generation: generation,
+            signal: StartupFailureSignal.unknown,
+            nativeSnapshot: nativeSnapshot,
+          );
+          _recordStartupOutcome(
+            generation: generation,
+            signal: StartupFailureSignal.unknown,
+            disposition: disposition,
+            nativeSnapshot: nativeSnapshot,
+          );
+          if (_completeNonIncidentStartupOutcome(generation, disposition, "background setup exception recovered")) {
+            return right(unit);
+          }
           await _deleteCoreCurrentConfigSnapshot();
-          loggy.error("failed to setup background core", e, st);
-          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "background setup error");
-          statusController.add(currentState = const CoreStatus.stopped());
-          return left(const ConnectionFailure.unexpected("failed to setup background core"));
+          loggy.warning("failed to setup background core", e, st);
+          await _cleanupFailedStartup(generation, "background setup error");
+          return left(
+            _startupConnectionFailure(
+              generation: generation,
+              disposition: disposition,
+              signal: StartupFailureSignal.unknown,
+              nativeSnapshot: nativeSnapshot,
+            ),
+          );
         }
         if (_isStaleOperation(generation, "background_setup")) return right(unit);
-        if (background is! CoreStarting) {
+        if (!backgroundSetup.isReady) {
+          final nativeSnapshot = backgroundSetup.nativeSnapshot ?? authoritativeSessionSnapshot;
+          final disposition = _classifyStartupFailure(
+            generation: generation,
+            signal: StartupFailureSignal.backgroundSetup,
+            backgroundSetupFailure: backgroundSetup.failure,
+            nativeSnapshot: nativeSnapshot,
+          );
+          _recordStartupOutcome(
+            generation: generation,
+            signal: StartupFailureSignal.backgroundSetup,
+            disposition: disposition,
+            backgroundSetupFailure: backgroundSetup.failure,
+            nativeSnapshot: nativeSnapshot,
+          );
+          if (_completeNonIncidentStartupOutcome(generation, disposition, "background setup recovered")) {
+            return right(unit);
+          }
           await _deleteCoreCurrentConfigSnapshot();
           _transitionLifecycle(_CoreLifecycleState.stopped, reason: "background setup failed");
           statusController.add(currentState = const CoreStatus.stopped());
-          return left(background.getCoreAlert() ?? const ConnectionFailure.unexpected("failed to start core"));
+          return left(
+            _startupConnectionFailure(
+              generation: generation,
+              disposition: disposition,
+              signal: StartupFailureSignal.backgroundSetup,
+              backgroundSetupFailure: backgroundSetup.failure,
+              nativeSnapshot: nativeSnapshot,
+            ),
+          );
         }
 
         if (!core.isSingleChannel()) {
@@ -1449,11 +1599,31 @@ class ZeonCoreService with InfraLogger {
 
         final optionsResult = await _applyLatestCoreOptionsToBackground("start");
         if (optionsResult.isLeft()) {
-          final error = optionsResult.getLeft().toNullable() ?? "failed to apply core options";
+          final nativeSnapshot = await _refreshStartupSnapshot(generation, "background_options_failed");
+          final disposition = _classifyStartupFailure(
+            generation: generation,
+            signal: StartupFailureSignal.configuration,
+            nativeSnapshot: nativeSnapshot,
+          );
+          _recordStartupOutcome(
+            generation: generation,
+            signal: StartupFailureSignal.configuration,
+            disposition: disposition,
+            nativeSnapshot: nativeSnapshot,
+          );
+          if (_completeNonIncidentStartupOutcome(generation, disposition, "background options recovered")) {
+            return right(unit);
+          }
           await _deleteCoreCurrentConfigSnapshot();
-          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "background options failed");
-          statusController.add(currentState = const CoreStatus.stopped());
-          return left(ConnectionFailure.unexpected("failed to apply core options: $error"));
+          await _cleanupFailedStartup(generation, "background options failed");
+          return left(
+            _startupConnectionFailure(
+              generation: generation,
+              disposition: disposition,
+              signal: StartupFailureSignal.configuration,
+              nativeSnapshot: nativeSnapshot,
+            ),
+          );
         }
 
         try {
@@ -1464,14 +1634,29 @@ class ZeonCoreService with InfraLogger {
           if (_isStaleOperation(generation, "core_start_result")) return right(unit);
           ref.read(coreRestartSignalProvider.notifier).restart();
           if (res.messageType == MessageType.ALREADY_STARTED) {
-            loggy.error(vpnDiagnosticEvent("core_already_started_conflict", generation));
+            loggy.warning(vpnDiagnosticEvent("core_already_started_conflict", generation));
             await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "duplicate native core");
             statusController.add(currentState = const CoreStatus.stopped());
             return left(const ConnectionFailure.unexpected("core is already started by another session"));
           }
           if (res.messageType != MessageType.EMPTY) {
-            loggy.error(
+            final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_start_response");
+            final disposition = _classifyStartupFailure(
+              generation: generation,
+              signal: StartupFailureSignal.coreResponse,
+              nativeSnapshot: nativeSnapshot,
+            );
+            _recordStartupOutcome(
+              generation: generation,
+              signal: StartupFailureSignal.coreResponse,
+              disposition: disposition,
+              nativeSnapshot: nativeSnapshot,
+            );
+            if (_completeNonIncidentStartupOutcome(generation, disposition, "core response recovered")) {
+              return right(unit);
+            }
+            loggy.warning(
               vpnDiagnosticEvent(
                 "core_start_failure",
                 generation,
@@ -1479,6 +1664,7 @@ class ZeonCoreService with InfraLogger {
               ),
             );
             final alert = isVpnPermissionDenied(res.message) ? CoreAlert.requestVPNPermission : CoreAlert.startFailed;
+            await core.stop(generation: generation);
             currentState = CoreStatus.stopped(
               alert: alert,
               message: "failed to start core ${res.messageType} ${res.message}",
@@ -1486,8 +1672,14 @@ class ZeonCoreService with InfraLogger {
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "start rejected by core");
             statusController.add(currentState);
             return left(
-              currentState.getCoreAlert() ??
-                  ConnectionFailure.unexpected("failed to start core ${res.messageType} ${res.message}"),
+              alert == CoreAlert.requestVPNPermission
+                  ? ConnectionFailure.missingVpnPermission(res.message)
+                  : _startupConnectionFailure(
+                      generation: generation,
+                      disposition: disposition,
+                      signal: StartupFailureSignal.coreResponse,
+                      nativeSnapshot: nativeSnapshot,
+                    ),
             );
           }
           await core.markCoreStarted(generation);
@@ -1506,31 +1698,61 @@ class ZeonCoreService with InfraLogger {
               disposition: TransportCloseDisposition.realFailure,
               error: e,
               stackTrace: st,
+              reportIncident: false,
             );
             final message = e.message ?? e.toString();
-            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "vpn permission denied on start");
-            statusController.add(
-              currentState = CoreStatus.stopped(alert: CoreAlert.requestVPNPermission, message: message),
+            await _cleanupFailedStartup(
+              generation,
+              "vpn permission denied on start",
+              terminalStatus: CoreStatus.stopped(alert: CoreAlert.requestVPNPermission, message: message),
             );
             return left(ConnectionFailure.missingVpnPermission(message));
           }
           final transientTransportClose = _isTransientGrpcTransportClose(e);
           if (transientTransportClose &&
               _sessionGeneration.isCurrent(generation, source: "core_start_transport_close")) {
-            final backgroundCoreActive = await _isBackgroundCoreReachable();
+            final backgroundCoreActive = await _isBackgroundCoreReachable(attempts: 3);
             if (backgroundCoreActive) {
               try {
                 await core.markCoreStarted(generation);
               } catch (markError, markStackTrace) {
+                final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_start_mark_failed");
+                final startupDisposition = _classifyStartupFailure(
+                  generation: generation,
+                  signal: StartupFailureSignal.nativeGate,
+                  nativeSnapshot: nativeSnapshot,
+                );
+                _recordStartupOutcome(
+                  generation: generation,
+                  signal: StartupFailureSignal.nativeGate,
+                  disposition: startupDisposition,
+                  nativeSnapshot: nativeSnapshot,
+                );
+                if (_completeNonIncidentStartupOutcome(
+                  generation,
+                  startupDisposition,
+                  "native start confirmation recovered",
+                )) {
+                  return right(unit);
+                }
                 _recordTransportCloseOutcome(
                   source: "core_start_mark_failed",
                   generation: generation,
                   disposition: TransportCloseDisposition.realFailure,
                   error: e,
                   stackTrace: st,
+                  reportIncident: false,
                 );
                 loggy.warning("native recovery confirmation failed after transport close", markError, markStackTrace);
-                rethrow;
+                await _cleanupFailedStartup(generation, "native start confirmation failed");
+                return left(
+                  _startupConnectionFailure(
+                    generation: generation,
+                    disposition: startupDisposition,
+                    signal: StartupFailureSignal.nativeGate,
+                    nativeSnapshot: nativeSnapshot,
+                  ),
+                );
               }
               if (_isStaleOperation(generation, "core_start_transport_mark")) return right(unit);
               final disposition = classifyTransportClose(
@@ -1555,28 +1777,75 @@ class ZeonCoreService with InfraLogger {
               return right(unit);
             }
           }
+          final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_start_grpc_failure");
+          final startupDisposition = _classifyStartupFailure(
+            generation: generation,
+            signal: StartupFailureSignal.grpcTransport,
+            nativeSnapshot: nativeSnapshot,
+          );
+          _recordStartupOutcome(
+            generation: generation,
+            signal: StartupFailureSignal.grpcTransport,
+            disposition: startupDisposition,
+            nativeSnapshot: nativeSnapshot,
+          );
+          if (_completeNonIncidentStartupOutcome(
+            generation,
+            startupDisposition,
+            "native startup recovered after grpc failure",
+          )) {
+            return right(unit);
+          }
           _recordTransportCloseOutcome(
             source: "core_start",
             generation: generation,
             disposition: TransportCloseDisposition.realFailure,
             error: e,
             stackTrace: st,
+            reportIncident: false,
           );
-          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc error on start");
           loggy.warning(
             vpnDiagnosticEvent("terminal_failure", generation, details: "phase=core_start error=grpc_${e.code}"),
           );
+          await _cleanupFailedStartup(generation, "grpc error on start");
           if (_isMissingWindowsTunPrivilege()) {
             return left(const ConnectionFailure.missingPrivilege());
           }
-          if (e.code == StatusCode.unavailable) {
-            return left(const ConnectionFailure.unexpected("background core is not started yet!"));
-          }
-          return left(const ConnectionFailure.unexpected("failed to start background core"));
-        } catch (e) {
+          return left(
+            _startupConnectionFailure(
+              generation: generation,
+              disposition: startupDisposition,
+              signal: StartupFailureSignal.grpcTransport,
+              nativeSnapshot: nativeSnapshot,
+            ),
+          );
+        } catch (e, st) {
           if (_isStaleOperation(generation, "core_start_exception", error: e)) return right(unit);
-          loggy.error(vpnDiagnosticEvent("core_start_failure", generation, details: "error=${e.runtimeType}"));
-          return left(const ConnectionFailure.unexpected("failed to start background core"));
+          final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_start_exception");
+          final disposition = _classifyStartupFailure(
+            generation: generation,
+            signal: StartupFailureSignal.unknown,
+            nativeSnapshot: nativeSnapshot,
+          );
+          _recordStartupOutcome(
+            generation: generation,
+            signal: StartupFailureSignal.unknown,
+            disposition: disposition,
+            nativeSnapshot: nativeSnapshot,
+          );
+          if (_completeNonIncidentStartupOutcome(generation, disposition, "core start exception recovered")) {
+            return right(unit);
+          }
+          loggy.warning(vpnDiagnosticEvent("core_start_failure", generation, details: "error=${e.runtimeType}"), e, st);
+          await _cleanupFailedStartup(generation, "core start exception");
+          return left(
+            _startupConnectionFailure(
+              generation: generation,
+              disposition: disposition,
+              signal: StartupFailureSignal.unknown,
+              nativeSnapshot: nativeSnapshot,
+            ),
+          );
         } finally {
           if (_sessionGeneration.isCurrent(generation, source: "core_start_cleanup")) {
             await _deleteCoreCurrentConfigSnapshot();
@@ -1920,12 +2189,32 @@ class ZeonCoreService with InfraLogger {
           transportStage = TransportCloseStage.start;
           _transitionLifecycle(_CoreLifecycleState.starting, reason: "restart old generation closed");
           statusController.add(currentState = const CoreStatus.starting());
-          final background = await core.setupBackground(path, name, generation: generation);
+          final backgroundSetup = await core.setupBackground(path, name, generation: generation);
           if (_isStaleOperation(generation, "mode_switch_background_setup")) return right(unit);
-          if (background is! CoreStarting) {
+          if (!backgroundSetup.isReady) {
+            final nativeSnapshot = backgroundSetup.nativeSnapshot ?? authoritativeSessionSnapshot;
+            final disposition = _classifyStartupFailure(
+              generation: generation,
+              signal: StartupFailureSignal.backgroundSetup,
+              backgroundSetupFailure: backgroundSetup.failure,
+              nativeSnapshot: nativeSnapshot,
+            );
+            _recordStartupOutcome(
+              generation: generation,
+              signal: StartupFailureSignal.backgroundSetup,
+              disposition: disposition,
+              backgroundSetupFailure: backgroundSetup.failure,
+              nativeSnapshot: nativeSnapshot,
+            );
+            if (_completeNonIncidentStartupOutcome(generation, disposition, "restart background setup recovered")) {
+              return right(unit);
+            }
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart background setup failed");
             statusController.add(currentState = const CoreStatus.stopped());
-            return left(background.getCoreAlert()?.toString() ?? "failed to create background core for restart");
+            return left(
+              "startup ${disposition.name}: background setup ${backgroundSetup.failure.name} "
+              "generation=$generation native_phase=${nativeSnapshot?.phase.name ?? "none"}",
+            );
           }
 
           await startListeningLogs("bg", core.bgClient);
@@ -1945,17 +2234,35 @@ class ZeonCoreService with InfraLogger {
           );
           if (_isStaleOperation(generation, "core_restart_start_result")) return right(unit);
           if (res.messageType == MessageType.ALREADY_STARTED) {
-            loggy.error(vpnDiagnosticEvent("core_already_started_conflict", generation));
+            loggy.warning(vpnDiagnosticEvent("core_already_started_conflict", generation));
             await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "duplicate native core on restart");
             statusController.add(currentState = const CoreStatus.stopped());
             return left("core is already started by another session");
           }
           if (res.messageType != MessageType.EMPTY) {
+            final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_restart_response");
+            final disposition = _classifyStartupFailure(
+              generation: generation,
+              signal: StartupFailureSignal.coreResponse,
+              nativeSnapshot: nativeSnapshot,
+            );
+            _recordStartupOutcome(
+              generation: generation,
+              signal: StartupFailureSignal.coreResponse,
+              disposition: disposition,
+              nativeSnapshot: nativeSnapshot,
+            );
+            if (_completeNonIncidentStartupOutcome(generation, disposition, "restart core response recovered")) {
+              return right(unit);
+            }
             await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart start failed");
             statusController.add(currentState = const CoreStatus.stopped());
-            return left("${res.messageType} ${res.message}");
+            return left(
+              "startup ${disposition.name}: core response ${res.messageType.name} "
+              "generation=$generation native_phase=${nativeSnapshot?.phase.name ?? "none"}",
+            );
           }
           await core.markCoreStarted(generation);
           if (_isStaleOperation(generation, "core_restart_mark_result")) return right(unit);
@@ -1981,9 +2288,9 @@ class ZeonCoreService with InfraLogger {
               disposition: TransportCloseDisposition.realFailure,
               error: e,
               stackTrace: st,
+              reportIncident: false,
             );
-            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "tun permission denied on restart");
-            statusController.add(currentState = const CoreStatus.stopped());
+            await _cleanupFailedStartup(generation, "tun permission denied on restart");
             return left(e.message ?? e.toString());
           }
           final transientTransportClose = _isTransientGrpcTransportClose(e);
@@ -1994,15 +2301,33 @@ class ZeonCoreService with InfraLogger {
               disposition: TransportCloseDisposition.realFailure,
               error: e,
               stackTrace: st,
+              reportIncident: false,
             );
-            await core.stop(generation: generation);
-            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc restart failure");
-            statusController.add(currentState = const CoreStatus.stopped());
+            await _cleanupFailedStartup(generation, "grpc restart failure");
             return left("${e.message}");
           }
           final operationCurrent = _sessionGeneration.isCurrent(generation, source: "core_restart_transport_close");
-          final backgroundCoreActive = operationCurrent && await _isBackgroundCoreReachable();
+          final backgroundCoreActive = operationCurrent && await _isBackgroundCoreReachable(attempts: 3);
           if (!backgroundCoreActive) {
+            final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_restart_grpc_failure");
+            final startupDisposition = _classifyStartupFailure(
+              generation: generation,
+              signal: StartupFailureSignal.grpcTransport,
+              nativeSnapshot: nativeSnapshot,
+            );
+            _recordStartupOutcome(
+              generation: generation,
+              signal: StartupFailureSignal.grpcTransport,
+              disposition: startupDisposition,
+              nativeSnapshot: nativeSnapshot,
+            );
+            if (_completeNonIncidentStartupOutcome(
+              generation,
+              startupDisposition,
+              "native restart recovered after grpc failure",
+            )) {
+              return right(unit);
+            }
             _recordTransportCloseOutcome(
               source: "core_restart",
               generation: generation,
@@ -2013,33 +2338,59 @@ class ZeonCoreService with InfraLogger {
                 operationCurrent: operationCurrent,
                 backgroundCoreActive: false,
                 controlRecoverySucceeded: false,
-                nativeSnapshot: authoritativeSessionSnapshot,
+                nativeSnapshot: nativeSnapshot,
                 explicitFailure: operationCurrent,
               ),
               error: e,
               stackTrace: st,
+              reportIncident: false,
             );
-            await core.stop(generation: generation);
-            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart endpoint not ready");
-            statusController.add(currentState = const CoreStatus.stopped());
-            return left("background core command endpoint is not ready after restart");
+            await _cleanupFailedStartup(generation, "restart endpoint not ready");
+            return left(
+              "startup ${startupDisposition.name}: grpc transport generation=$generation "
+              "native_phase=${nativeSnapshot?.phase.name ?? "none"}",
+            );
           }
           try {
             await core.markCoreStarted(generation);
           } catch (markError, markStackTrace) {
+            final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_restart_mark_failed");
+            final startupDisposition = _classifyStartupFailure(
+              generation: generation,
+              signal: StartupFailureSignal.nativeGate,
+              nativeSnapshot: nativeSnapshot,
+            );
+            _recordStartupOutcome(
+              generation: generation,
+              signal: StartupFailureSignal.nativeGate,
+              disposition: startupDisposition,
+              nativeSnapshot: nativeSnapshot,
+            );
+            if (_completeNonIncidentStartupOutcome(
+              generation,
+              startupDisposition,
+              "restart native start confirmation recovered",
+            )) {
+              return right(unit);
+            }
             _recordTransportCloseOutcome(
               source: "core_restart_mark_failed",
               generation: generation,
               disposition: TransportCloseDisposition.realFailure,
               error: e,
               stackTrace: st,
+              reportIncident: false,
             );
             loggy.warning(
               "native recovery confirmation failed after restart transport close",
               markError,
               markStackTrace,
             );
-            rethrow;
+            await _cleanupFailedStartup(generation, "restart native start confirmation failed");
+            return left(
+              "startup ${startupDisposition.name}: native gate generation=$generation "
+              "native_phase=${nativeSnapshot?.phase.name ?? "none"}",
+            );
           }
           if (_isStaleOperation(generation, "core_restart_transport_mark")) return right(unit);
           _recordTransportCloseOutcome(
@@ -2058,13 +2409,29 @@ class ZeonCoreService with InfraLogger {
             error: e,
           );
           _connectedGeneration = generation;
-        } catch (e) {
+        } catch (e, st) {
           if (_isStaleOperation(generation, "core_restart_exception", error: e)) return right(unit);
-          loggy.error("failed to restart bg core: $e");
-          await core.stop(generation: generation);
-          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart exception");
-          statusController.add(currentState = const CoreStatus.stopped());
-          return left("failed to restart background core");
+          final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_restart_exception");
+          final disposition = _classifyStartupFailure(
+            generation: generation,
+            signal: StartupFailureSignal.unknown,
+            nativeSnapshot: nativeSnapshot,
+          );
+          _recordStartupOutcome(
+            generation: generation,
+            signal: StartupFailureSignal.unknown,
+            disposition: disposition,
+            nativeSnapshot: nativeSnapshot,
+          );
+          if (_completeNonIncidentStartupOutcome(generation, disposition, "restart exception recovered")) {
+            return right(unit);
+          }
+          loggy.warning("failed to restart bg core", e, st);
+          await _cleanupFailedStartup(generation, "restart exception");
+          return left(
+            "startup ${disposition.name}: unknown restart failure generation=$generation "
+            "native_phase=${nativeSnapshot?.phase.name ?? "none"}",
+          );
         } finally {
           if (_sessionGeneration.isCurrent(generation, source: "core_restart_cleanup")) {
             await _deleteCoreCurrentConfigSnapshot();

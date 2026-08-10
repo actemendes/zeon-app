@@ -243,11 +243,16 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   @override
-  Future<CoreStatus> setupBackground(String path, String name, {int generation = 0}) async {
+  Future<BackgroundSetupResult> setupBackground(String path, String name, {int generation = 0}) async {
     await setSessionGeneration(generation);
     // if (!await waitUntilPort(portBack, false, stop)) return const CoreStatus.stopped(alert: CoreAlert.createService);
     if (!await stopForReplacement(generation: generation)) {
-      return const CoreStatus.stopped(alert: CoreAlert.createService);
+      return BackgroundSetupResult(
+        generation: generation,
+        status: const CoreStatus.stopped(alert: CoreAlert.createService),
+        failure: BackgroundSetupFailure.replacementTeardown,
+        nativeSnapshot: _authoritativeSessionSnapshot,
+      );
     }
     _status.clean();
     await methodChannel.invokeMethod("start", {
@@ -260,6 +265,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     });
 
     _isBgClientAvailable = true;
+    PortProbeObservation? lastPortProbe;
     if (!await waitUntilPort(
       portBack,
       true,
@@ -267,33 +273,73 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
       maxTry: 18,
       baseDelay: const Duration(milliseconds: 180),
       maxDelay: const Duration(milliseconds: 1600),
+      portProbe: _portProbe,
+      onObservation: (observation) => lastPortProbe = observation,
     )) {
-      await stopMethodChannel();
-      return const CoreStatus.stopped(alert: CoreAlert.startService, message: "starting background core...");
+      final nativeSnapshot = await _snapshotBeforeFailedStartCleanup();
+      await stopMethodChannel(generation: generation);
+      return BackgroundSetupResult(
+        generation: generation,
+        status: const CoreStatus.stopped(alert: CoreAlert.startService, message: "starting background core..."),
+        failure: _backgroundSetupFailureForProbe(lastPortProbe),
+        portProbe: lastPortProbe,
+        nativeSnapshot: nativeSnapshot,
+      );
     }
     if (!await _waitForBackgroundCommandEndpoint(generation)) {
-      await stopMethodChannel();
-      return const CoreStatus.stopped(
-        alert: CoreAlert.startService,
-        message: "background command endpoint readiness timeout",
+      final nativeSnapshot = await _snapshotBeforeFailedStartCleanup();
+      await stopMethodChannel(generation: generation);
+      return BackgroundSetupResult(
+        generation: generation,
+        status: const CoreStatus.stopped(
+          alert: CoreAlert.startService,
+          message: "background command endpoint readiness timeout",
+        ),
+        failure: BackgroundSetupFailure.commandEndpointTimeout,
+        portProbe: lastPortProbe,
+        nativeSnapshot: nativeSnapshot,
       );
     }
     // The daemon/control endpoint is reachable, but the tunnel core has not
     // completed Mobile.start yet. This must never be exposed as Connected.
-    return const CoreStarting();
+    return BackgroundSetupResult(
+      generation: generation,
+      status: const CoreStarting(),
+      portProbe: lastPortProbe,
+      nativeSnapshot: _authoritativeSessionSnapshot,
+    );
   }
+
+  Future<VpnSessionSnapshot?> _snapshotBeforeFailedStartCleanup() async {
+    if (!_isAndroid) return _authoritativeSessionSnapshot;
+    try {
+      await resyncSessionStatus();
+    } catch (_) {
+      // Failure cleanup must not be blocked by an observational snapshot read.
+    }
+    return _authoritativeSessionSnapshot;
+  }
+
+  BackgroundSetupFailure _backgroundSetupFailureForProbe(PortProbeObservation? observation) =>
+      switch (observation?.outcome) {
+        PortProbeOutcome.closed => BackgroundSetupFailure.controlPortClosed,
+        PortProbeOutcome.timeout => BackgroundSetupFailure.controlPortTimeout,
+        PortProbeOutcome.socketError => BackgroundSetupFailure.controlPortSocketError,
+        PortProbeOutcome.otherError => BackgroundSetupFailure.controlPortOtherError,
+        PortProbeOutcome.connected || null => BackgroundSetupFailure.controlPortOtherError,
+      };
 
   @override
   Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit, {int generation = 0}) async {
     await setSessionGeneration(generation);
-    await methodChannel.invokeMethod("prepare_vpn", {
+    final prepared = await methodChannel.invokeMethod<bool>("prepare_vpn", {
       "path": path,
       "name": name,
       "grpcPort": portBack,
       "disableMemoryLimit": disableMemoryLimit,
       "generation": generation,
     });
-    return true;
+    return prepared ?? false;
   }
 
   @override
@@ -440,11 +486,26 @@ Future<bool> waitUntilPort(
   Duration maxDelay = const Duration(milliseconds: 1500),
   double factor = 1.8,
   Future<bool> Function(String, int)? portProbe,
+  PortProbeObserver? onObservation,
 }) async {
   var delay = baseDelay;
   final random = Random();
   for (var i = 0; i < maxTry; i++) {
-    if (await (portProbe ?? isPortOpen)("127.0.0.1", portNumber) == isOpen) {
+    final stopwatch = Stopwatch()..start();
+    final observed = portProbe == null
+        ? await isPortOpen("127.0.0.1", portNumber, onObservation: onObservation)
+        : await portProbe("127.0.0.1", portNumber);
+    stopwatch.stop();
+    if (portProbe != null) {
+      _notifyPortProbe(
+        onObservation,
+        PortProbeObservation(
+          outcome: observed ? PortProbeOutcome.connected : PortProbeOutcome.closed,
+          duration: stopwatch.elapsed,
+        ),
+      );
+    }
+    if (observed == isOpen) {
       return true;
     }
     if (callFunctionAfterEachFail != null) {

@@ -218,6 +218,34 @@ void main() {
     expect(calls[1].arguments, {'generation': 9002, 'preemptive': true, 'replacement': false});
   });
 
+  test('Android VPN preparation denial is propagated instead of starting the core', () async {
+    const generation = 9050;
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      CoreInterfaceMobile.methodChannel,
+      (call) async {
+        calls.add(call);
+        return switch (call.method) {
+          'set_session_generation' => generation,
+          'prepare_vpn' => false,
+          _ => throw StateError('unexpected platform call: ${call.method}'),
+        };
+      },
+    );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        CoreInterfaceMobile.methodChannel,
+        null,
+      ),
+    );
+
+    final core = CoreInterfaceMobile(androidOverride: true);
+    final prepared = await core.prepareVpn('runtime.json', 'profile', false, generation: generation);
+
+    expect(prepared, isFalse);
+    expect(calls.map((call) => call.method), ['set_session_generation', 'prepare_vpn']);
+  });
+
   test('Android replacement cleanup waits for its exact terminal snapshot before continuing', () async {
     const generation = 9101;
     var snapshotPolls = 0;

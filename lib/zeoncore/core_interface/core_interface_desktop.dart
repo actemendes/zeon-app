@@ -162,17 +162,23 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   }
 
   @override
-  Future<CoreStatus> setupBackground(String path, String name, {int generation = 0}) async {
+  Future<BackgroundSetupResult> setupBackground(String path, String name, {int generation = 0}) async {
     await setSessionGeneration(generation);
     _coreStarted = false;
     if (_startupValidationGuard) {
       loggy.warning("Windows startup validation guard blocked an explicit VPN start");
-      return const CoreStatus.stopped(message: "VPN disabled by startup validation artifact");
+      return BackgroundSetupResult(
+        generation: generation,
+        status: const CoreStatus.stopped(message: "VPN disabled by startup validation artifact"),
+      );
     }
     if (!isInitialized() || _port == null) {
-      return const CoreStatus.stopped(message: "desktop core management endpoint is unavailable");
+      return BackgroundSetupResult(
+        generation: generation,
+        status: const CoreStatus.stopped(message: "desktop core management endpoint is unavailable"),
+      );
     }
-    return const CoreStarting();
+    return BackgroundSetupResult(generation: generation, status: const CoreStarting());
   }
 
   @override
