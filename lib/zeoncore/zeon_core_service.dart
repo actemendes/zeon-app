@@ -41,6 +41,61 @@ import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 enum _CoreLifecycleState { stopped, starting, started, stopping }
 
+enum TransportCloseIntent { none, stop, restartReplacement, foregroundClose }
+
+enum TransportCloseStage { teardown, start, listener }
+
+enum TransportCloseDisposition { expectedTeardown, recovered, realFailure }
+
+@visibleForTesting
+TransportCloseDisposition classifyTransportClose({
+  required TransportCloseIntent intent,
+  required TransportCloseStage stage,
+  required int operationGeneration,
+  required bool operationCurrent,
+  required bool backgroundCoreActive,
+  required bool controlRecoverySucceeded,
+  required VpnSessionSnapshot? nativeSnapshot,
+  required bool explicitFailure,
+}) {
+  final snapshot = nativeSnapshot;
+  if (!operationCurrent) return TransportCloseDisposition.expectedTeardown;
+
+  final snapshotMatchesOperation = snapshot != null && snapshot.generation == operationGeneration;
+  final nativeFailed = snapshotMatchesOperation && snapshot.phase == VpnSessionPhase.failed;
+  if (explicitFailure || nativeFailed) return TransportCloseDisposition.realFailure;
+
+  final nativeStopSourceIsIntentional =
+      snapshotMatchesOperation &&
+      switch (snapshot.stopSource) {
+        VpnStopSource.flutter ||
+        VpnStopSource.notification ||
+        VpnStopSource.tile ||
+        VpnStopSource.shortcut ||
+        VpnStopSource.revoke ||
+        VpnStopSource.replacement => true,
+        _ => false,
+      };
+  final nativeStop =
+      snapshotMatchesOperation &&
+      nativeStopSourceIsIntentional &&
+      snapshot.requestedAction == 'stop' &&
+      switch (snapshot.phase) {
+        VpnSessionPhase.stopRequested || VpnSessionPhase.stopping || VpnSessionPhase.disconnected => true,
+        _ => false,
+      };
+  final explicitTeardown = stage == TransportCloseStage.teardown && intent != TransportCloseIntent.none;
+  if (explicitTeardown || nativeStop) {
+    return TransportCloseDisposition.expectedTeardown;
+  }
+
+  final nativeConnected = snapshotMatchesOperation && snapshot.provesConnected;
+  if (controlRecoverySucceeded && (backgroundCoreActive || nativeConnected)) {
+    return TransportCloseDisposition.recovered;
+  }
+  return TransportCloseDisposition.realFailure;
+}
+
 @visibleForTesting
 CoreStatus closeFrontStatusForBackgroundProbe(bool backgroundActive) =>
     backgroundActive ? const CoreStatus.started() : const CoreStatus.stopped();
@@ -116,6 +171,7 @@ class ZeonCoreService with InfraLogger {
   int _coreInitOperationSequence = 0;
   int _coreSetupOperationSequence = 0;
   int _appResumeSequence = 0;
+  final Map<TransportCloseIntent, int> _activeTransportTeardownIntents = {};
   ChangeHiddifySettingsRequest? _latestCoreOptionsRequest;
   static const _platformChannel = MethodChannel("com.zeon.app/platform");
   List<OutboundGroup> latest = [];
@@ -534,23 +590,131 @@ class ZeonCoreService with InfraLogger {
     return Duration(milliseconds: exp + jitter);
   }
 
-  void _scheduleListenerReconnect(String key, Future<void> Function() starter) {
+  Future<bool> _scheduleListenerReconnect(String key, Future<void> Function() starter) async {
     if (_lifecycleState == _CoreLifecycleState.stopping || _lifecycleState == _CoreLifecycleState.stopped) {
       loggy.debug("listener reconnect skipped [$key]: lifecycle=${_lifecycleState.name}");
-      return;
+      return false;
     }
     final delay = _listenerReconnectDelay(key);
     loggy.debug("listener reconnect scheduled [$key] in ${delay.inMilliseconds}ms");
-    Future<void>.delayed(delay, () async {
-      if (!core.isInitialized()) return;
-      if (_lifecycleState == _CoreLifecycleState.stopping || _lifecycleState == _CoreLifecycleState.stopped) return;
-      if (subscriptions.containsKey(key)) return;
-      try {
-        await starter();
-      } catch (e, st) {
-        loggy.warning("listener reconnect failed [$key]", e, st);
+    await Future<void>.delayed(delay);
+    if (!core.isInitialized()) return false;
+    if (_lifecycleState == _CoreLifecycleState.stopping || _lifecycleState == _CoreLifecycleState.stopped) {
+      return false;
+    }
+    if (subscriptions.containsKey(key)) return true;
+    try {
+      await starter();
+      return true;
+    } catch (e, st) {
+      loggy.warning("listener reconnect failed [$key]", e, st);
+      return false;
+    }
+  }
+
+  TransportCloseIntent get _activeTransportTeardownIntent {
+    for (final intent in const [
+      TransportCloseIntent.restartReplacement,
+      TransportCloseIntent.stop,
+      TransportCloseIntent.foregroundClose,
+    ]) {
+      if ((_activeTransportTeardownIntents[intent] ?? 0) > 0) return intent;
+    }
+    return TransportCloseIntent.none;
+  }
+
+  Future<T> _withinExpectedTransportTeardown<T>(TransportCloseIntent intent, Future<T> Function() action) async {
+    _activeTransportTeardownIntents.update(intent, (count) => count + 1, ifAbsent: () => 1);
+    try {
+      return await action();
+    } finally {
+      final remaining = (_activeTransportTeardownIntents[intent] ?? 1) - 1;
+      if (remaining == 0) {
+        _activeTransportTeardownIntents.remove(intent);
+      } else {
+        _activeTransportTeardownIntents[intent] = remaining;
       }
-    });
+    }
+  }
+
+  void _recordTransportCloseOutcome({
+    required String source,
+    required int generation,
+    required TransportCloseDisposition disposition,
+    required Object error,
+    StackTrace? stackTrace,
+  }) {
+    final event = vpnDiagnosticEvent(
+      "grpc_transport_outcome",
+      generation,
+      details:
+          "source=$source outcome=${disposition.name} error_type=${error.runtimeType} "
+          "native_phase=${authoritativeSessionSnapshot?.phase.name ?? "none"}",
+    );
+    if (disposition == TransportCloseDisposition.realFailure) {
+      loggy.error(event, error, stackTrace);
+    } else {
+      loggy.warning(event, error);
+    }
+  }
+
+  Future<void> _handleListenerTransportClose({
+    required String key,
+    required int generation,
+    required Object error,
+    required TransportCloseIntent teardownIntent,
+    required Future<void> Function() reconnect,
+  }) async {
+    if (error is! GrpcError || !_isTransientGrpcTransportClose(error)) {
+      _recordTransportCloseOutcome(
+        source: "${key}_listener",
+        generation: generation,
+        disposition: TransportCloseDisposition.realFailure,
+        error: error,
+      );
+      unawaited(_scheduleListenerReconnect(key, reconnect));
+      return;
+    }
+
+    if (teardownIntent != TransportCloseIntent.none) {
+      final disposition = classifyTransportClose(
+        intent: teardownIntent,
+        stage: TransportCloseStage.teardown,
+        operationGeneration: generation,
+        operationCurrent: _sessionGeneration.isCurrent(generation, source: "${key}_teardown_close"),
+        backgroundCoreActive: false,
+        controlRecoverySucceeded: false,
+        nativeSnapshot: authoritativeSessionSnapshot,
+        explicitFailure: false,
+      );
+      _recordTransportCloseOutcome(
+        source: "${key}_listener",
+        generation: generation,
+        disposition: disposition,
+        error: error,
+      );
+      unawaited(_scheduleListenerReconnect(key, reconnect));
+      return;
+    }
+
+    final backgroundCoreActive = await _isBackgroundCoreReachable();
+    final controlRecoverySucceeded = await _scheduleListenerReconnect(key, reconnect);
+    final disposition = classifyTransportClose(
+      intent: TransportCloseIntent.none,
+      stage: TransportCloseStage.listener,
+      operationGeneration: generation,
+      operationCurrent: _sessionGeneration.isCurrent(generation, source: "${key}_transport_outcome"),
+      backgroundCoreActive: backgroundCoreActive,
+      controlRecoverySucceeded: controlRecoverySucceeded,
+      nativeSnapshot: authoritativeSessionSnapshot,
+      explicitFailure: false,
+    );
+    _recordTransportCloseOutcome(
+      source: "${key}_listener",
+      generation: generation,
+      disposition: disposition,
+      error: error,
+    );
   }
 
   void _recoverStatusAfterListenerClose(String key, Object? error) {
@@ -1029,14 +1193,6 @@ class ZeonCoreService with InfraLogger {
     return error.code == StatusCode.unavailable || _isTransientGrpcTransportClose(error);
   }
 
-  bool _isExpectedLifecycleGrpcClose(Object? error) {
-    return error is GrpcError &&
-        (_isTransientGrpcFailure(error) ||
-            _lifecycleState == _CoreLifecycleState.starting ||
-            _lifecycleState == _CoreLifecycleState.stopping ||
-            _lifecycleState == _CoreLifecycleState.stopped);
-  }
-
   bool _isTransientCoreFailure(Object error) {
     if (error is GrpcError) return _isTransientGrpcFailure(error);
     final message = error.toString().toLowerCase();
@@ -1337,11 +1493,17 @@ class ZeonCoreService with InfraLogger {
           loggy.info(vpnDiagnosticEvent("core_start_success", generation));
           await _emitRedactedEffectiveConfig(generation, "start");
           await _logRuntimeIndicators(generation, "core_start_success");
-        } on GrpcError catch (e) {
+        } on GrpcError catch (e, st) {
           if (_isStaleOperation(generation, "core_start_grpc", error: e)) return right(unit);
-          loggy.error(vpnDiagnosticEvent("grpc_disconnect", generation, details: "source=core_start code=${e.code}"));
           ref.read(coreRestartSignalProvider.notifier).restart();
           if (isVpnPermissionDenied(e)) {
+            _recordTransportCloseOutcome(
+              source: "core_start",
+              generation: generation,
+              disposition: TransportCloseDisposition.realFailure,
+              error: e,
+              stackTrace: st,
+            );
             final message = e.message ?? e.toString();
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "vpn permission denied on start");
             statusController.add(
@@ -1349,20 +1511,56 @@ class ZeonCoreService with InfraLogger {
             );
             return left(ConnectionFailure.missingVpnPermission(message));
           }
-          loggy.error("failed to start bg core: $e");
-          if (_isTransientGrpcTransportClose(e) &&
-              _sessionGeneration.isCurrent(generation, source: "core_start_transport_close") &&
-              await _isBackgroundCoreReachable()) {
-            loggy.warning("start bg core transport closed after start, but background core is active: $e");
-            _transitionLifecycle(_CoreLifecycleState.started, reason: "start transport closed with active bg");
-            await core.markCoreStarted(generation);
-            if (_isStaleOperation(generation, "core_start_transport_mark")) return right(unit);
-            _connectedGeneration = generation;
-            statusController.add(currentState = const CoreStatus.started());
-            return right(unit);
+          final transientTransportClose = _isTransientGrpcTransportClose(e);
+          if (transientTransportClose &&
+              _sessionGeneration.isCurrent(generation, source: "core_start_transport_close")) {
+            final backgroundCoreActive = await _isBackgroundCoreReachable();
+            if (backgroundCoreActive) {
+              try {
+                await core.markCoreStarted(generation);
+              } catch (markError, markStackTrace) {
+                _recordTransportCloseOutcome(
+                  source: "core_start_mark_failed",
+                  generation: generation,
+                  disposition: TransportCloseDisposition.realFailure,
+                  error: e,
+                  stackTrace: st,
+                );
+                loggy.warning("native recovery confirmation failed after transport close", markError, markStackTrace);
+                rethrow;
+              }
+              if (_isStaleOperation(generation, "core_start_transport_mark")) return right(unit);
+              final disposition = classifyTransportClose(
+                intent: TransportCloseIntent.none,
+                stage: TransportCloseStage.start,
+                operationGeneration: generation,
+                operationCurrent: true,
+                backgroundCoreActive: true,
+                controlRecoverySucceeded: true,
+                nativeSnapshot: authoritativeSessionSnapshot,
+                explicitFailure: false,
+              );
+              _recordTransportCloseOutcome(
+                source: "core_start",
+                generation: generation,
+                disposition: disposition,
+                error: e,
+              );
+              _transitionLifecycle(_CoreLifecycleState.started, reason: "start transport closed with active bg");
+              _connectedGeneration = generation;
+              statusController.add(currentState = const CoreStatus.started());
+              return right(unit);
+            }
           }
+          _recordTransportCloseOutcome(
+            source: "core_start",
+            generation: generation,
+            disposition: TransportCloseDisposition.realFailure,
+            error: e,
+            stackTrace: st,
+          );
           _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc error on start");
-          loggy.error(
+          loggy.warning(
             vpnDiagnosticEvent("terminal_failure", generation, details: "phase=core_start error=grpc_${e.code}"),
           );
           if (_isMissingWindowsTunPrivilege()) {
@@ -1561,14 +1759,32 @@ class ZeonCoreService with InfraLogger {
       var errMsg = "";
       GrpcError? grpcStopError;
       try {
-        await _logRuntimeIndicators(operationGeneration, "before_stop");
-        await _closeSessionListeners(operationGeneration);
-        platformStopped = _platformConfirmsStopped(operationGeneration);
-        if (!platformStopped) {
-          await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
-        }
+        await _withinExpectedTransportTeardown(TransportCloseIntent.stop, () async {
+          await _logRuntimeIndicators(operationGeneration, "before_stop");
+          await _closeSessionListeners(operationGeneration);
+          platformStopped = _platformConfirmsStopped(operationGeneration);
+          if (!platformStopped) {
+            await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
+          }
+        });
       } on GrpcError catch (e) {
-        if (!_isTransientGrpcFailure(e)) {
+        if (_isTransientGrpcTransportClose(e)) {
+          _recordTransportCloseOutcome(
+            source: "core_stop",
+            generation: operationGeneration,
+            disposition: classifyTransportClose(
+              intent: TransportCloseIntent.stop,
+              stage: TransportCloseStage.teardown,
+              operationGeneration: operationGeneration,
+              operationCurrent: _sessionGeneration.isCurrent(operationGeneration, source: "core_stop_transport_close"),
+              backgroundCoreActive: false,
+              controlRecoverySucceeded: false,
+              nativeSnapshot: authoritativeSessionSnapshot,
+              explicitFailure: false,
+            ),
+            error: e,
+          );
+        } else if (!_isTransientGrpcFailure(e)) {
           grpcStopError = e;
           loggy.warning("background core stop failed before native terminal confirmation", e);
         }
@@ -1649,16 +1865,37 @@ class ZeonCoreService with InfraLogger {
         _transitionLifecycle(_CoreLifecycleState.stopping, reason: "restart requested");
         statusController.add(currentState = const CoreStatus.stopping());
 
+        var transportStage = TransportCloseStage.teardown;
         try {
-          await _closeSessionListeners(generation);
-          try {
-            await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
-          } on GrpcError catch (error) {
-            if (!_isTransientGrpcTransportClose(error)) rethrow;
-          }
-          final oldClosed = await core
-              .stopForReplacement(generation: generation)
-              .timeout(const Duration(seconds: 14), onTimeout: () => false);
+          final oldClosed = await _withinExpectedTransportTeardown(TransportCloseIntent.restartReplacement, () async {
+            await _closeSessionListeners(generation);
+            try {
+              await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
+            } on GrpcError catch (error) {
+              if (!_isTransientGrpcTransportClose(error)) rethrow;
+              _recordTransportCloseOutcome(
+                source: "core_restart_old_generation",
+                generation: generation,
+                disposition: classifyTransportClose(
+                  intent: TransportCloseIntent.restartReplacement,
+                  stage: TransportCloseStage.teardown,
+                  operationGeneration: generation,
+                  operationCurrent: _sessionGeneration.isCurrent(
+                    generation,
+                    source: "core_restart_teardown_transport_close",
+                  ),
+                  backgroundCoreActive: false,
+                  controlRecoverySucceeded: false,
+                  nativeSnapshot: authoritativeSessionSnapshot,
+                  explicitFailure: false,
+                ),
+                error: error,
+              );
+            }
+            return core
+                .stopForReplacement(generation: generation)
+                .timeout(const Duration(seconds: 14), onTimeout: () => false);
+          });
           if (_isStaleOperation(generation, "mode_switch_old_close")) return right(unit);
           if (!oldClosed) {
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "old generation close timeout");
@@ -1677,6 +1914,7 @@ class ZeonCoreService with InfraLogger {
             );
           }
 
+          transportStage = TransportCloseStage.start;
           _transitionLifecycle(_CoreLifecycleState.starting, reason: "restart old generation closed");
           statusController.add(currentState = const CoreStatus.starting());
           final background = await core.setupBackground(path, name, generation: generation);
@@ -1731,29 +1969,91 @@ class ZeonCoreService with InfraLogger {
               ),
             );
           }
-        } on GrpcError catch (e) {
+        } on GrpcError catch (e, st) {
           if (_isStaleOperation(generation, "core_restart_grpc", error: e)) return right(unit);
           if (isTunInterfacePermissionDenied(e)) {
+            _recordTransportCloseOutcome(
+              source: "core_restart",
+              generation: generation,
+              disposition: TransportCloseDisposition.realFailure,
+              error: e,
+              stackTrace: st,
+            );
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "tun permission denied on restart");
             statusController.add(currentState = const CoreStatus.stopped());
             return left(e.message ?? e.toString());
           }
-          loggy.error("failed to restart bg core: $e");
-          if (!_isTransientGrpcTransportClose(e)) {
+          final transientTransportClose = _isTransientGrpcTransportClose(e);
+          if (!transientTransportClose || transportStage == TransportCloseStage.teardown) {
+            _recordTransportCloseOutcome(
+              source: "core_restart",
+              generation: generation,
+              disposition: TransportCloseDisposition.realFailure,
+              error: e,
+              stackTrace: st,
+            );
             await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc restart failure");
             statusController.add(currentState = const CoreStatus.stopped());
             return left("${e.message}");
           }
-          if (!_sessionGeneration.isCurrent(generation, source: "core_restart_transport_close") ||
-              !await _isBackgroundCoreReachable()) {
+          final operationCurrent = _sessionGeneration.isCurrent(generation, source: "core_restart_transport_close");
+          final backgroundCoreActive = operationCurrent && await _isBackgroundCoreReachable();
+          if (!backgroundCoreActive) {
+            _recordTransportCloseOutcome(
+              source: "core_restart",
+              generation: generation,
+              disposition: classifyTransportClose(
+                intent: TransportCloseIntent.none,
+                stage: TransportCloseStage.start,
+                operationGeneration: generation,
+                operationCurrent: operationCurrent,
+                backgroundCoreActive: false,
+                controlRecoverySucceeded: false,
+                nativeSnapshot: authoritativeSessionSnapshot,
+                explicitFailure: operationCurrent,
+              ),
+              error: e,
+              stackTrace: st,
+            );
             await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart endpoint not ready");
             statusController.add(currentState = const CoreStatus.stopped());
             return left("background core command endpoint is not ready after restart");
           }
-          await core.markCoreStarted(generation);
+          try {
+            await core.markCoreStarted(generation);
+          } catch (markError, markStackTrace) {
+            _recordTransportCloseOutcome(
+              source: "core_restart_mark_failed",
+              generation: generation,
+              disposition: TransportCloseDisposition.realFailure,
+              error: e,
+              stackTrace: st,
+            );
+            loggy.warning(
+              "native recovery confirmation failed after restart transport close",
+              markError,
+              markStackTrace,
+            );
+            rethrow;
+          }
           if (_isStaleOperation(generation, "core_restart_transport_mark")) return right(unit);
+          _recordTransportCloseOutcome(
+            source: "core_restart",
+            generation: generation,
+            disposition: classifyTransportClose(
+              intent: TransportCloseIntent.none,
+              stage: TransportCloseStage.start,
+              operationGeneration: generation,
+              operationCurrent: true,
+              backgroundCoreActive: true,
+              controlRecoverySucceeded: true,
+              nativeSnapshot: authoritativeSessionSnapshot,
+              explicitFailure: false,
+            ),
+            error: e,
+          );
           _connectedGeneration = generation;
         } catch (e) {
           if (_isStaleOperation(generation, "core_restart_exception", error: e)) return right(unit);
@@ -2214,20 +2514,27 @@ class ZeonCoreService with InfraLogger {
         loggy.warning("status listener closed [$key], scheduling reconnect");
         _recoverStatusAfterListenerClose(key, null);
         if (_sessionGeneration.isCurrent(listenerGeneration, source: "status_listener_done[$key]")) {
-          _scheduleListenerReconnect(listenKey, () => startListeningStatus(key, cc, generation: listenerGeneration));
+          unawaited(
+            _scheduleListenerReconnect(listenKey, () => startListeningStatus(key, cc, generation: listenerGeneration)),
+          );
         }
       },
       onError: (error) {
+        final Object listenerError = error is Object ? error : StateError("status listener failed without an error");
         loggy.warning(
           vpnDiagnosticEvent("grpc_disconnect", listenerGeneration, details: "source=${key}_status outcome=error"),
         );
-        if (_isExpectedLifecycleGrpcClose(error)) {
-          loggy.warning("Stream closed in $listenKey during lifecycle transition: $error");
-        } else {
-          loggy.error("Stream error in $listenKey: $error");
-        }
-        _recoverStatusAfterListenerClose(key, error);
-        _scheduleListenerReconnect(listenKey, () => startListeningStatus(key, cc));
+        final teardownIntent = _activeTransportTeardownIntent;
+        _recoverStatusAfterListenerClose(key, listenerError);
+        unawaited(
+          _handleListenerTransportClose(
+            key: listenKey,
+            generation: listenerGeneration,
+            error: listenerError,
+            teardownIntent: teardownIntent,
+            reconnect: () => startListeningStatus(key, cc, generation: listenerGeneration),
+          ),
+        );
       },
     );
   }
@@ -2274,18 +2581,23 @@ class ZeonCoreService with InfraLogger {
           vpnDiagnosticEvent("grpc_disconnect", listenerGeneration, details: "source=${key}_log outcome=done"),
         );
         loggy.warning("log listener closed [$key], scheduling reconnect");
-        _scheduleListenerReconnect(listenKey, () => startListeningLogs(key, cc));
+        unawaited(_scheduleListenerReconnect(listenKey, () => startListeningLogs(key, cc)));
       },
       onError: (error) {
+        final Object listenerError = error is Object ? error : StateError("log listener failed without an error");
         loggy.warning(
           vpnDiagnosticEvent("grpc_disconnect", listenerGeneration, details: "source=${key}_log outcome=error"),
         );
-        if (_isExpectedLifecycleGrpcClose(error)) {
-          loggy.warning("Stream closed in $listenKey during lifecycle transition: $error");
-        } else {
-          loggy.error("Stream error in $listenKey: $error");
-        }
-        _scheduleListenerReconnect(listenKey, () => startListeningLogs(key, cc));
+        final teardownIntent = _activeTransportTeardownIntent;
+        unawaited(
+          _handleListenerTransportClose(
+            key: listenKey,
+            generation: listenerGeneration,
+            error: listenerError,
+            teardownIntent: teardownIntent,
+            reconnect: () => startListeningLogs(key, cc),
+          ),
+        );
       },
     );
   }
@@ -2572,18 +2884,20 @@ class ZeonCoreService with InfraLogger {
       final teardownStopwatch = Stopwatch()..start();
       _diagnosticLog("CloseFrontTeardownBegin", "operationId=$operationId singleChannel=$singleChannel");
       if (!singleChannel) {
-        await stopListenSingle("fg");
-        await stopListenSingle("bg");
-        try {
-          await core.fgClient.close(CloseRequest(mode: SetupMode.GRPC_NORMAL_INSECURE));
-        } catch (_) {
-          // Best-effort close; the alternate mode below may still succeed.
-        }
-        try {
-          await core.fgClient.close(CloseRequest(mode: SetupMode.GRPC_NORMAL));
-        } catch (_) {
-          // Best-effort close during shutdown.
-        }
+        await _withinExpectedTransportTeardown(TransportCloseIntent.foregroundClose, () async {
+          await stopListenSingle("fg");
+          await stopListenSingle("bg");
+          try {
+            await core.fgClient.close(CloseRequest(mode: SetupMode.GRPC_NORMAL_INSECURE));
+          } catch (_) {
+            // Best-effort close; the alternate mode below may still succeed.
+          }
+          try {
+            await core.fgClient.close(CloseRequest(mode: SetupMode.GRPC_NORMAL));
+          } catch (_) {
+            // Best-effort close during shutdown.
+          }
+        });
       }
       teardownStopwatch.stop();
       _diagnosticLog(
