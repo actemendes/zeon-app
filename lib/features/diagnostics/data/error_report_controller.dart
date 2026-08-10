@@ -185,7 +185,7 @@ class ErrorReportController {
   Future<void> _captureVpnNotRunningOnStartupIfNeeded() async {
     VpnSessionSnapshot? nativeSnapshot;
     try {
-      nativeSnapshot = await _coreService.resyncSessionSnapshot('startup_telemetry');
+      nativeSnapshot = await _coreService.readAuthoritativeSessionSnapshot();
     } catch (error, stackTrace) {
       Logger.app.warning('startup VPN snapshot unavailable; skipping startup failure telemetry', error, stackTrace);
       return;

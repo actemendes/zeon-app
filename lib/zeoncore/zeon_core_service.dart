@@ -407,6 +407,15 @@ class ZeonCoreService with InfraLogger {
 
   VpnSessionSnapshot? get authoritativeSessionSnapshot => _latestPlatformSnapshot ?? core.authoritativeSessionSnapshot;
 
+  /// Refreshes the native snapshot cache without publishing [CoreStatus] or
+  /// synchronizing persisted running intent. Telemetry classification must be
+  /// observational and must not mutate lifecycle state merely to obtain
+  /// authoritative evidence.
+  Future<VpnSessionSnapshot?> readAuthoritativeSessionSnapshot() async {
+    await core.resyncSessionStatus();
+    return core.authoritativeSessionSnapshot;
+  }
+
   Stream<VpnSessionSnapshot> watchAuthoritativeSessionSnapshots() => _authoritativeSnapshotController.stream;
 
   Future<VpnSessionSnapshot?> resyncSessionSnapshot(String source) async {
