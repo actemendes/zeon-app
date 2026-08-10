@@ -491,18 +491,13 @@ Future<bool> waitUntilPort(
   var delay = baseDelay;
   final random = Random();
   for (var i = 0; i < maxTry; i++) {
-    final stopwatch = Stopwatch()..start();
     final observed = portProbe == null
         ? await isPortOpen("127.0.0.1", portNumber, onObservation: onObservation)
         : await portProbe("127.0.0.1", portNumber);
-    stopwatch.stop();
     if (portProbe != null) {
       _notifyPortProbe(
         onObservation,
-        PortProbeObservation(
-          outcome: observed ? PortProbeOutcome.connected : PortProbeOutcome.closed,
-          duration: stopwatch.elapsed,
-        ),
+        PortProbeObservation(observed ? PortProbeOutcome.connected : PortProbeOutcome.closed),
       );
     }
     if (observed == isOpen) {
@@ -528,49 +523,19 @@ Future<bool> isPortOpen(
   Duration timeout = const Duration(milliseconds: 300),
   PortProbeObserver? onObservation,
 }) async {
-  final stopwatch = Stopwatch()..start();
   try {
     final socket = await Socket.connect(host, port, timeout: timeout);
     await socket.close();
-    stopwatch.stop();
-    _notifyPortProbe(
-      onObservation,
-      PortProbeObservation(outcome: PortProbeOutcome.connected, duration: stopwatch.elapsed),
-    );
+    _notifyPortProbe(onObservation, const PortProbeObservation(PortProbeOutcome.connected));
     return true;
-  } on TimeoutException catch (error) {
-    stopwatch.stop();
-    _notifyPortProbe(
-      onObservation,
-      PortProbeObservation(
-        outcome: PortProbeOutcome.timeout,
-        duration: stopwatch.elapsed,
-        exceptionType: error.runtimeType.toString(),
-      ),
-    );
+  } on TimeoutException {
+    _notifyPortProbe(onObservation, const PortProbeObservation(PortProbeOutcome.timeout));
     return false;
   } on SocketException catch (error) {
-    stopwatch.stop();
-    _notifyPortProbe(
-      onObservation,
-      PortProbeObservation(
-        outcome: classifySocketProbeError(error),
-        duration: stopwatch.elapsed,
-        exceptionType: error.runtimeType.toString(),
-        osErrorCode: error.osError?.errorCode,
-      ),
-    );
+    _notifyPortProbe(onObservation, PortProbeObservation(classifySocketProbeError(error)));
     return false;
-  } catch (error) {
-    stopwatch.stop();
-    _notifyPortProbe(
-      onObservation,
-      PortProbeObservation(
-        outcome: PortProbeOutcome.otherError,
-        duration: stopwatch.elapsed,
-        exceptionType: error.runtimeType.toString(),
-      ),
-    );
+  } catch (_) {
+    _notifyPortProbe(onObservation, const PortProbeObservation(PortProbeOutcome.otherError));
     return false;
   }
 }

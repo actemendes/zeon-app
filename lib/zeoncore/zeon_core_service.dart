@@ -219,8 +219,6 @@ class ZeonCoreService with InfraLogger {
   _CoreLifecycleState _lifecycleState = _CoreLifecycleState.stopped;
   int _connectedGeneration = 0;
   int _closeFrontOperationSequence = 0;
-  int _coreInitOperationSequence = 0;
-  int _coreSetupOperationSequence = 0;
   int _appResumeSequence = 0;
   int _foregroundLifecycleEpoch = 0;
   final Map<TransportCloseIntent, int> _activeTransportTeardownIntents = {};
@@ -445,11 +443,6 @@ class ZeonCoreService with InfraLogger {
     if (!statusController.isClosed) {
       statusController.add(authoritative);
     }
-    _diagnosticLog(
-      "AuthoritativeSnapshot",
-      "source=event_bridge ${_formatNativeSnapshotForTrace(snapshot)} "
-          "localStatusAfterApply=${_formatCoreStatusForTrace(currentState)} lifecycle=${_lifecycleState.name}",
-    );
     loggy.info(
       vpnDiagnosticEvent(
         "vpn_snapshot_applied",
@@ -491,12 +484,6 @@ class ZeonCoreService with InfraLogger {
     } else {
       _sessionGeneration.advanceTo(core.authoritativeSessionGeneration);
     }
-    _diagnosticLog(
-      "AuthoritativeSnapshot",
-      "source=resync/$source ${_formatNativeSnapshotForTrace(snapshot)} "
-          "localStatusBeforePublish=${_formatCoreStatusForTrace(currentState)} lifecycle=${_lifecycleState.name} "
-          "willPublish=$publish",
-    );
     if (authoritative == null) return null;
     if (publish) {
       currentState = authoritative;
@@ -827,54 +814,28 @@ class ZeonCoreService with InfraLogger {
     }
   }
 
-  void recordAppResume({required String appLifecycleState}) {
-    final resumeId = ++_appResumeSequence;
-    final lifecycleEpoch = ++_foregroundLifecycleEpoch;
-    _diagnosticLog(
-      "AppResume",
-      "resumeId=$resumeId lifecycleEpoch=$lifecycleEpoch generation=${_sessionGeneration.current} "
-          "runtimeEpoch=${_currentRuntimeEpoch()} "
-          "lifecycle=${_lifecycleState.name} localStatus=${_formatCoreStatusForTrace(currentState)} "
-          "appLifecycle=$appLifecycleState ${_formatNativeSnapshotForTrace(authoritativeSessionSnapshot)}",
-    );
+  void recordAppResume() {
+    _appResumeSequence++;
+    _foregroundLifecycleEpoch++;
   }
 
-  Future<void> init({String source = "unspecified"}) async {
-    final lifecycleEpoch = ++_foregroundLifecycleEpoch;
-    final operationId = "core-init-${++_coreInitOperationSequence}";
-    var outcome = "threw";
-    _diagnosticLog(
-      "CoreInitBegin",
-      "operationId=$operationId source=$source lifecycleEpoch=$lifecycleEpoch generation=${_sessionGeneration.current} "
-          "runtimeEpoch=${_currentRuntimeEpoch()} lifecycle=${_lifecycleState.name} "
-          "localStatus=${_formatCoreStatusForTrace(currentState)}",
-    );
-    try {
-      await _deleteCoreCurrentConfigSnapshot();
-      await setup(diagnosticParentOperationId: operationId, diagnosticSource: source)
-          .mapLeft((e) {
-            outcome = "error";
-            loggy.error(e);
-            if (PlatformUtils.isIOS) return;
-            statusController.add(const CoreStatus.stopped());
-            ref.read(inAppNotificationControllerProvider).showErrorToast(e);
-          })
-          .map((_) {
-            outcome = "success";
-            loggy.info("ZEON-core setup done");
-            if (!_useMockCore) {
-              ref.read(coreRestartSignalProvider.notifier).restart();
-            }
-          })
-          .run();
-    } finally {
-      _diagnosticLog(
-        "CoreInitEnd",
-        "operationId=$operationId source=$source outcome=$outcome generation=${_sessionGeneration.current} "
-            "runtimeEpoch=${_currentRuntimeEpoch()} lifecycle=${_lifecycleState.name} "
-            "localStatus=${_formatCoreStatusForTrace(currentState)}",
-      );
-    }
+  Future<void> init() async {
+    _foregroundLifecycleEpoch++;
+    await _deleteCoreCurrentConfigSnapshot();
+    await setup()
+        .mapLeft((e) {
+          loggy.error(e);
+          if (PlatformUtils.isIOS) return;
+          statusController.add(const CoreStatus.stopped());
+          ref.read(inAppNotificationControllerProvider).showErrorToast(e);
+        })
+        .map((_) {
+          loggy.info("ZEON-core setup done");
+          if (!_useMockCore) {
+            ref.read(coreRestartSignalProvider.notifier).restart();
+          }
+        })
+        .run();
   }
 
   /// validates config by path and save it
@@ -960,30 +921,15 @@ class ZeonCoreService with InfraLogger {
     });
   }
 
-  TaskEither<String, Unit> setup({String? diagnosticParentOperationId, String diagnosticSource = "direct"}) {
+  TaskEither<String, Unit> setup() {
     return TaskEither(() async {
-      final lifecycleEpoch = ++_foregroundLifecycleEpoch;
-      final operationId = "core-setup-${++_coreSetupOperationSequence}";
-      _diagnosticLog(
-        "CoreSetupBegin",
-        "operationId=$operationId parentOperationId=${diagnosticParentOperationId ?? "none"} "
-            "lifecycleEpoch=$lifecycleEpoch "
-            "source=$diagnosticSource generation=${_sessionGeneration.current} runtimeEpoch=${_currentRuntimeEpoch()} "
-            "lifecycle=${_lifecycleState.name} localStatus=${_formatCoreStatusForTrace(currentState)}",
-      );
+      _foregroundLifecycleEpoch++;
       if (_useMockCore) {
         if (_lifecycleState != _CoreLifecycleState.starting && _lifecycleState != _CoreLifecycleState.stopping) {
           currentState = const CoreStatus.stopped();
           _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock setup");
           statusController.add(currentState);
-          _diagnosticLog(
-            "CoreSetupPublish",
-            "operationId=$operationId status=${_formatCoreStatusForTrace(currentState)} "
-                "generation=${_sessionGeneration.current} runtimeEpoch=${_currentRuntimeEpoch()} "
-                "lifecycle=${_lifecycleState.name} mock=true",
-          );
         }
-        _diagnosticLog("CoreSetupEnd", "operationId=$operationId outcome=success mock=true");
         return right(unit);
       }
       try {
@@ -996,10 +942,7 @@ class ZeonCoreService with InfraLogger {
         final debug = ref.read(debugModeNotifierProvider) || kDebugMode;
         final setupResponse = await core.setup(directories, debug, 3);
 
-        if (setupResponse.isNotEmpty) {
-          _diagnosticLog("CoreSetupEnd", "operationId=$operationId outcome=core_setup_error");
-          return left(setupResponse);
-        }
+        if (setupResponse.isNotEmpty) return left(setupResponse);
 
         await startListeningLogs("fg", core.fgClient);
         // await startListeningStatus("fg", core.fgClient);
@@ -1022,12 +965,6 @@ class ZeonCoreService with InfraLogger {
         }
         if (!lifecycleIntentReserved) {
           statusController.add(currentState);
-          _diagnosticLog(
-            "CoreSetupPublish",
-            "operationId=$operationId status=${_formatCoreStatusForTrace(currentState)} "
-                "generation=${_sessionGeneration.current} runtimeEpoch=${_currentRuntimeEpoch()} "
-                "lifecycle=${_lifecycleState.name} bgActive=$bgActive lifecycleIntentReserved=false",
-          );
         } else {
           loggy.debug("setup background probe preserved reserved lifecycle=${_lifecycleState.name}");
         }
@@ -1035,21 +972,8 @@ class ZeonCoreService with InfraLogger {
           await startListeningStatus("bg", core.bgClient);
         }
         // ref.read(coreRestartSignalProvider.notifier).restart();
-        _diagnosticLog(
-          "CoreSetupEnd",
-          "operationId=$operationId outcome=success generation=${_sessionGeneration.current} "
-              "runtimeEpoch=${_currentRuntimeEpoch()} lifecycle=${_lifecycleState.name} "
-              "localStatus=${_formatCoreStatusForTrace(currentState)} bgActive=$bgActive "
-              "lifecycleIntentReserved=$lifecycleIntentReserved",
-        );
         return right(unit);
       } catch (e) {
-        _diagnosticLog(
-          "CoreSetupEnd",
-          "operationId=$operationId outcome=exception exceptionType=${e.runtimeType} "
-              "generation=${_sessionGeneration.current} runtimeEpoch=${_currentRuntimeEpoch()} "
-              "lifecycle=${_lifecycleState.name} localStatus=${_formatCoreStatusForTrace(currentState)}",
-        );
         return left(e.toString());
       }
     });
@@ -3194,63 +3118,9 @@ class ZeonCoreService with InfraLogger {
     };
   }
 
-  String _formatCoreStatusForTrace(CoreStatus s) => switch (s) {
-    CoreStarted() => 'Started',
-    CoreStarting() => 'Starting',
-    CoreStopping() => 'Stopping',
-    CoreStopped() => 'Stopped',
-  };
-
-  String _formatPortProbeOutcome(PortProbeOutcome outcome) => switch (outcome) {
-    PortProbeOutcome.connected => "connected",
-    PortProbeOutcome.closed => "closed",
-    PortProbeOutcome.timeout => "timeout",
-    PortProbeOutcome.socketError => "socket_error",
-    PortProbeOutcome.otherError => "other_error",
-  };
-
-  String _formatCloseFrontDecision(CloseFrontPublicationDecision decision) => switch (decision) {
-    CloseFrontPublicationDecision.publishStarted => "publish_started",
-    CloseFrontPublicationDecision.preserveStarted => "preserve_started",
-    CloseFrontPublicationDecision.publishStopped => "publish_stopped",
-    CloseFrontPublicationDecision.preserveStopped => "preserve_stopped",
-    CloseFrontPublicationDecision.preserveUnknown => "preserve_unknown",
-    CloseFrontPublicationDecision.preserveLifecycleIntent => "preserve_lifecycle_intent",
-    CloseFrontPublicationDecision.nativeConnectedOverride => "native_connected_override",
-    CloseFrontPublicationDecision.skipStaleOperation => "skip_stale_operation",
-  };
-
   String _currentRuntimeEpoch() {
     final epoch = authoritativeSessionSnapshot?.runtimeEpoch;
     return epoch == null || epoch.isEmpty ? "none" : epoch;
-  }
-
-  String _formatNativeSnapshotForTrace(VpnSessionSnapshot? snapshot) {
-    if (snapshot == null) return "nativeSnapshot=none";
-    return "nativeGeneration=${snapshot.generation} nativeRuntimeEpoch=${snapshot.runtimeEpoch.isEmpty ? "none" : snapshot.runtimeEpoch} "
-        "nativeSequence=${snapshot.sequenceNumber} nativePhase=${snapshot.phase.name} "
-        "nativeCoreReady=${snapshot.coreReady} nativeCoreStarted=${snapshot.coreStarted} "
-        "nativeCommandReady=${snapshot.commandEndpointReady} nativeTunnelReady=${snapshot.tunnelReady} "
-        "nativeProtectSucceeded=${snapshot.protectSucceeded} nativeVpnValidated=${snapshot.platformVpnValidated} "
-        "nativeProvesConnected=${snapshot.provesConnected}";
-  }
-
-  void _diagnosticLog(String event, String fields, {DateTime? timestamp}) {
-    final at = (timestamp ?? DateTime.now().toUtc()).toIso8601String();
-    final line = "[$event] timestamp=$at $fields";
-    loggy.info(line);
-    if (_routeEvidenceLogcatEnabled && Platform.isAndroid) {
-      unawaited(_emitRouteEvidence("ZEON_ROUTE_VALIDATION $line"));
-    }
-  }
-
-  String _readAppLifecycle(String Function()? reader) {
-    if (reader == null) return "unknown";
-    try {
-      return reader();
-    } catch (_) {
-      return "unknown";
-    }
   }
 
   Map<String, StreamSubscription?> _captureCloseFrontListeners() => Map<String, StreamSubscription?>.fromEntries(
@@ -3283,204 +3153,97 @@ class ZeonCoreService with InfraLogger {
     }
   }
 
-  Future<void> closeFront({String Function()? appLifecycleStateReader}) async {
-    final enteredAt = DateTime.now().toUtc();
+  Future<void> closeFront() async {
     final operationSequence = ++_closeFrontOperationSequence;
-    final operationId = "close-front-${enteredAt.microsecondsSinceEpoch}-$operationSequence";
     final capturedGeneration = _sessionGeneration.current;
     final capturedRuntimeEpoch = _currentRuntimeEpoch();
-    final capturedLifecycle = _lifecycleState.name;
-    final capturedStatus = _formatCoreStatusForTrace(currentState);
-    final capturedAppLifecycle = _readAppLifecycle(appLifecycleStateReader);
     final capturedResumeSequence = _appResumeSequence;
     final capturedLifecycleEpoch = _foregroundLifecycleEpoch;
     final initialized = core.isInitialized();
     final singleChannel = initialized && core.isSingleChannel();
-    final capturedNativeSnapshot = authoritativeSessionSnapshot;
     final capturedForegroundClient = initialized && !singleChannel ? core.fgClient : null;
     final capturedListeners = initialized && !singleChannel
         ? _captureCloseFrontListeners()
         : const <String, StreamSubscription?>{};
-    _diagnosticLog(
-      "CloseFrontEnter",
-      "operationId=$operationId capturedGeneration=$capturedGeneration "
-          "capturedRuntimeEpoch=$capturedRuntimeEpoch lifecycle=$capturedLifecycle "
-          "localStatus=$capturedStatus appLifecycle=$capturedAppLifecycle "
-          "singleChannel=$singleChannel initialized=$initialized resumeSequence=$capturedResumeSequence "
-          "lifecycleEpoch=$capturedLifecycleEpoch "
-          "${_formatNativeSnapshotForTrace(capturedNativeSnapshot)}",
-      timestamp: enteredAt,
+    if (!initialized) return;
+
+    var bgStillActive = false;
+    PortProbeObservation? rawProbe;
+    if (!singleChannel) {
+      try {
+        bgStillActive = await core.isActiveBg(onPortProbe: (observation) => rawProbe = observation);
+      } catch (_) {
+        // A failed liveness probe is inconclusive and cannot prove a stop.
+      }
+    }
+    final backgroundState = closeFrontBackgroundState(
+      singleChannel: singleChannel,
+      backgroundActive: bgStillActive,
+      observation: rawProbe,
     );
-    var exitOutcome = "exception";
-    try {
-      if (!initialized) {
-        exitOutcome = "not_initialized";
-        return;
-      }
-      var bgStillActive = false;
-      var probeAttempted = false;
-      var probeResult = "not_attempted";
-      var probeDurationMs = 0;
-      var probeExceptionType = "none";
-      int? probeOsErrorCode;
-      PortProbeObservation? rawProbe;
-      if (!singleChannel) {
-        probeAttempted = true;
-        final probeStopwatch = Stopwatch()..start();
-        try {
-          bgStillActive = await core.isActiveBg(onPortProbe: (observation) => rawProbe = observation);
-          probeStopwatch.stop();
-          probeDurationMs = rawProbe?.duration.inMilliseconds ?? probeStopwatch.elapsedMilliseconds;
-          probeResult = rawProbe == null ? "unobserved" : _formatPortProbeOutcome(rawProbe!.outcome);
-          probeExceptionType = rawProbe?.exceptionType ?? "none";
-          probeOsErrorCode = rawProbe?.osErrorCode;
-        } catch (e) {
-          probeStopwatch.stop();
-          probeResult = "other_error";
-          probeDurationMs = probeStopwatch.elapsedMilliseconds;
-          probeExceptionType = e.runtimeType.toString();
+
+    if (capturedForegroundClient != null) {
+      await _withinExpectedTransportTeardown(TransportCloseIntent.foregroundClose, () async {
+        await _closeCapturedFrontResources(capturedForegroundClient, capturedListeners);
+      });
+    }
+
+    final prePublishNativeSnapshot = authoritativeSessionSnapshot;
+    final nativeGenerationAdvanced =
+        prePublishNativeSnapshot != null && prePublishNativeSnapshot.generation > capturedGeneration;
+    final nativeProvesConnected =
+        prePublishNativeSnapshot != null &&
+        prePublishNativeSnapshot.generation == capturedGeneration &&
+        prePublishNativeSnapshot.provesConnected;
+    final nativeLifecycleIntentReserved =
+        prePublishNativeSnapshot != null &&
+        prePublishNativeSnapshot.generation == capturedGeneration &&
+        switch (prePublishNativeSnapshot.phase) {
+          VpnSessionPhase.startRequested ||
+          VpnSessionPhase.startingPlatform ||
+          VpnSessionPhase.startingCore ||
+          VpnSessionPhase.waitingTun ||
+          VpnSessionPhase.verifying ||
+          VpnSessionPhase.stopRequested ||
+          VpnSessionPhase.stopping => true,
+          _ => false,
+        };
+    final operationCurrent =
+        capturedGeneration == _sessionGeneration.current &&
+        capturedRuntimeEpoch == _currentRuntimeEpoch() &&
+        capturedResumeSequence == _appResumeSequence &&
+        capturedLifecycleEpoch == _foregroundLifecycleEpoch &&
+        operationSequence == _closeFrontOperationSequence &&
+        !nativeGenerationAdvanced;
+    final lifecycleIntentReserved =
+        _lifecycleState == _CoreLifecycleState.starting ||
+        _lifecycleState == _CoreLifecycleState.stopping ||
+        nativeLifecycleIntentReserved;
+    final decision = classifyCloseFrontPublication(
+      operationCurrent: operationCurrent,
+      backgroundState: backgroundState,
+      nativeProvesConnected: nativeProvesConnected,
+      lifecycleIntentReserved: lifecycleIntentReserved,
+      currentStatus: currentState,
+    );
+    switch (decision) {
+      case CloseFrontPublicationDecision.publishStarted:
+        _transitionLifecycle(_CoreLifecycleState.started, reason: "close front while bg active");
+        statusController.add(currentState = const CoreStatus.started());
+      case CloseFrontPublicationDecision.nativeConnectedOverride:
+        if (currentState is! CoreStarted) {
+          _transitionLifecycle(_CoreLifecycleState.started, reason: "close front native connected override");
+          statusController.add(currentState = const CoreStatus.started());
         }
-      }
-      final backgroundState = closeFrontBackgroundState(
-        singleChannel: singleChannel,
-        backgroundActive: bgStillActive,
-        observation: rawProbe,
-      );
-      _diagnosticLog(
-        "BgPortProbe",
-        "operationId=$operationId capturedGeneration=$capturedGeneration role=background-control "
-            "attempted=$probeAttempted result=$probeResult durationMs=$probeDurationMs "
-            "exceptionType=$probeExceptionType osErrorCode=${probeOsErrorCode ?? "none"}",
-      );
-      _diagnosticLog(
-        "CloseFrontProbeDecision",
-        "operationId=$operationId capturedGeneration=$capturedGeneration rawProbeResult=$probeResult "
-            "isActiveBg=$bgStillActive backgroundState=${backgroundState.name}",
-      );
-      final teardownStopwatch = Stopwatch()..start();
-      _diagnosticLog("CloseFrontTeardownBegin", "operationId=$operationId singleChannel=$singleChannel");
-      if (capturedForegroundClient != null) {
-        await _withinExpectedTransportTeardown(TransportCloseIntent.foregroundClose, () async {
-          await _closeCapturedFrontResources(capturedForegroundClient, capturedListeners);
-        });
-      }
-      teardownStopwatch.stop();
-      _diagnosticLog(
-        "CloseFrontTeardownEnd",
-        "operationId=$operationId durationMs=${teardownStopwatch.elapsedMilliseconds}",
-      );
-      final currentGeneration = _sessionGeneration.current;
-      final currentRuntimeEpoch = _currentRuntimeEpoch();
-      final currentResumeSequence = _appResumeSequence;
-      final currentLifecycleEpoch = _foregroundLifecycleEpoch;
-      final currentAppLifecycle = _readAppLifecycle(appLifecycleStateReader);
-      final generationChanged = capturedGeneration != currentGeneration;
-      final runtimeEpochChanged = capturedRuntimeEpoch != currentRuntimeEpoch;
-      final resumeOverlap = currentResumeSequence != capturedResumeSequence;
-      final lifecycleEpochChanged = currentLifecycleEpoch != capturedLifecycleEpoch;
-      final newerCloseFront = operationSequence != _closeFrontOperationSequence;
-      final resumedDuringOperation = capturedAppLifecycle != currentAppLifecycle && currentAppLifecycle == "resumed";
-      final prePublishNativeSnapshot = authoritativeSessionSnapshot;
-      final nativeGenerationAdvanced =
-          prePublishNativeSnapshot != null && prePublishNativeSnapshot.generation > capturedGeneration;
-      final nativeProvesConnected =
-          prePublishNativeSnapshot != null &&
-          prePublishNativeSnapshot.generation == capturedGeneration &&
-          prePublishNativeSnapshot.provesConnected;
-      final nativeLifecycleIntentReserved =
-          prePublishNativeSnapshot != null &&
-          prePublishNativeSnapshot.generation == capturedGeneration &&
-          switch (prePublishNativeSnapshot.phase) {
-            VpnSessionPhase.startRequested ||
-            VpnSessionPhase.startingPlatform ||
-            VpnSessionPhase.startingCore ||
-            VpnSessionPhase.waitingTun ||
-            VpnSessionPhase.verifying ||
-            VpnSessionPhase.stopRequested ||
-            VpnSessionPhase.stopping => true,
-            _ => false,
-          };
-      final operationCurrent =
-          !generationChanged &&
-          !runtimeEpochChanged &&
-          !resumeOverlap &&
-          !lifecycleEpochChanged &&
-          !newerCloseFront &&
-          !resumedDuringOperation &&
-          !nativeGenerationAdvanced;
-      final lifecycleIntentReserved =
-          _lifecycleState == _CoreLifecycleState.starting ||
-          _lifecycleState == _CoreLifecycleState.stopping ||
-          nativeLifecycleIntentReserved;
-      final decision = classifyCloseFrontPublication(
-        operationCurrent: operationCurrent,
-        backgroundState: backgroundState,
-        nativeProvesConnected: nativeProvesConnected,
-        lifecycleIntentReserved: lifecycleIntentReserved,
-        currentStatus: currentState,
-      );
-      final decisionName = _formatCloseFrontDecision(decision);
-      _diagnosticLog(
-        "CloseFrontPrePublish",
-        "operationId=$operationId capturedGeneration=$capturedGeneration currentGeneration=$currentGeneration "
-            "capturedRuntimeEpoch=$capturedRuntimeEpoch currentRuntimeEpoch=$currentRuntimeEpoch "
-            "generationChanged=$generationChanged runtimeEpochChanged=$runtimeEpochChanged "
-            "capturedResumeSequence=$capturedResumeSequence currentResumeSequence=$currentResumeSequence "
-            "resumeOverlap=$resumeOverlap capturedLifecycleEpoch=$capturedLifecycleEpoch "
-            "currentLifecycleEpoch=$currentLifecycleEpoch lifecycleEpochChanged=$lifecycleEpochChanged "
-            "newerCloseFront=$newerCloseFront resumedDuringOperation=$resumedDuringOperation "
-            "nativeGenerationAdvanced=$nativeGenerationAdvanced "
-            "operationCurrent=$operationCurrent lifecycle=${_lifecycleState.name} "
-            "localStatus=${_formatCoreStatusForTrace(currentState)} "
-            "appLifecycle=$currentAppLifecycle rawProbeResult=$probeResult "
-            "isActiveBg=$bgStillActive backgroundState=${backgroundState.name} "
-            "nativeProvesConnected=$nativeProvesConnected "
-            "nativeLifecycleIntentReserved=$nativeLifecycleIntentReserved intendedDecision=$decisionName "
-            "${_formatNativeSnapshotForTrace(prePublishNativeSnapshot)}",
-      );
-      var published = false;
-      switch (decision) {
-        case CloseFrontPublicationDecision.publishStarted:
-          _transitionLifecycle(_CoreLifecycleState.started, reason: "close front while bg active");
-          currentState = const CoreStatus.started();
-          statusController.add(currentState);
-          published = true;
-        case CloseFrontPublicationDecision.nativeConnectedOverride:
-          if (currentState is! CoreStarted) {
-            _transitionLifecycle(_CoreLifecycleState.started, reason: "close front native connected override");
-            currentState = const CoreStatus.started();
-            statusController.add(currentState);
-            published = true;
-          }
-        case CloseFrontPublicationDecision.publishStopped:
-          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "close front confirmed inactive");
-          currentState = const CoreStatus.stopped();
-          statusController.add(currentState);
-          published = true;
-        case CloseFrontPublicationDecision.preserveStarted ||
-            CloseFrontPublicationDecision.preserveStopped ||
-            CloseFrontPublicationDecision.preserveUnknown ||
-            CloseFrontPublicationDecision.preserveLifecycleIntent ||
-            CloseFrontPublicationDecision.skipStaleOperation:
-          break;
-      }
-      _diagnosticLog(
-        "CloseFrontPublish",
-        "operationId=$operationId decision=$decisionName published=$published "
-            "status=${_formatCoreStatusForTrace(currentState)} generation=${_sessionGeneration.current} "
-            "runtimeEpoch=${_currentRuntimeEpoch()} lifecycle=${_lifecycleState.name} "
-            "${_formatNativeSnapshotForTrace(authoritativeSessionSnapshot)}",
-      );
-      exitOutcome = "completed";
-    } catch (error) {
-      exitOutcome = "exception exceptionType=${error.runtimeType}";
-      rethrow;
-    } finally {
-      _diagnosticLog(
-        "CloseFrontExit",
-        "operationId=$operationId outcome=$exitOutcome "
-            "elapsedMs=${DateTime.now().toUtc().difference(enteredAt).inMilliseconds}",
-      );
+      case CloseFrontPublicationDecision.publishStopped:
+        _transitionLifecycle(_CoreLifecycleState.stopped, reason: "close front confirmed inactive");
+        statusController.add(currentState = const CoreStatus.stopped());
+      case CloseFrontPublicationDecision.preserveStarted ||
+          CloseFrontPublicationDecision.preserveStopped ||
+          CloseFrontPublicationDecision.preserveUnknown ||
+          CloseFrontPublicationDecision.preserveLifecycleIntent ||
+          CloseFrontPublicationDecision.skipStaleOperation:
+        break;
     }
   }
 }

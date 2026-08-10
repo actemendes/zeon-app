@@ -50,19 +50,15 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   void onPause(WidgetRef ref) {
     if (PlatformUtils.isDesktop) return;
     isOnPauseCalled = true;
-    unawaited(
-      ref
-          .read(zeonCoreServiceProvider)
-          .closeFront(appLifecycleStateReader: () => WidgetsBinding.instance.lifecycleState?.name ?? "unknown"),
-    );
+    unawaited(ref.read(zeonCoreServiceProvider).closeFront());
   }
 
   void onResume(WidgetRef ref) {
     // if (PlatformUtils.isDesktop) return;
     final coreService = ref.read(zeonCoreServiceProvider);
-    coreService.recordAppResume(appLifecycleState: WidgetsBinding.instance.lifecycleState?.name ?? "unknown");
+    coreService.recordAppResume();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(coreService.init(source: "app_resume"));
+      unawaited(coreService.init());
       ref.invalidate(activeProxyNotifierProvider);
       if (isOnPauseCalled && PlatformUtils.isAndroid) ref.invalidate(perAppProxyServiceProvider);
       isOnPauseCalled = false;

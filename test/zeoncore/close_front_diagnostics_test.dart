@@ -76,7 +76,7 @@ void main() {
       fixture.publishStarted();
       fixture.events.clear();
 
-      await fixture.service.closeFront(appLifecycleStateReader: () => 'paused');
+      await fixture.service.closeFront();
       await Future<void>.delayed(Duration.zero);
 
       expect(fixture.events.whereType<CoreStopped>(), hasLength(1));
@@ -89,7 +89,7 @@ void main() {
         fixture.publishStarted();
         fixture.events.clear();
 
-        await fixture.service.closeFront(appLifecycleStateReader: () => 'paused');
+        await fixture.service.closeFront();
         await Future<void>.delayed(Duration.zero);
 
         expect(fixture.events.whereType<CoreStopped>(), isEmpty, reason: outcome.name);
@@ -106,7 +106,7 @@ void main() {
       fixture.publishStarted();
       fixture.events.clear();
 
-      await fixture.service.closeFront(appLifecycleStateReader: () => 'paused');
+      await fixture.service.closeFront();
       await Future<void>.delayed(Duration.zero);
 
       expect(fixture.events.whereType<CoreStopped>(), isEmpty);
@@ -132,14 +132,13 @@ void main() {
       addTearDown(newSubscription.cancel);
       fixture.service.subscriptions['fg-test'] = oldSubscription;
 
-      final closeOperation = fixture.service.closeFront(appLifecycleStateReader: () => fixture.appLifecycle);
+      final closeOperation = fixture.service.closeFront();
       await enteredProbe.future.timeout(const Duration(seconds: 1));
       final resumedClient = _TrackingCoreClient();
       fixture.additionalClients.add(resumedClient);
       fixture.core.fgClient = resumedClient;
       fixture.service.subscriptions['fg-test'] = newSubscription;
-      fixture.appLifecycle = 'resumed';
-      fixture.service.recordAppResume(appLifecycleState: 'resumed');
+      fixture.service.recordAppResume();
       fixture.publishStarted();
       barrier.complete();
 
@@ -163,7 +162,7 @@ void main() {
       fixture.publishStarted();
       fixture.events.clear();
 
-      final closeOperation = fixture.service.closeFront(appLifecycleStateReader: () => 'paused');
+      final closeOperation = fixture.service.closeFront();
       await enteredProbe.future.timeout(const Duration(seconds: 1));
       fixture.service.beginVpnOperation('replacement');
       fixture.events.clear();
@@ -247,7 +246,7 @@ CloseFrontPublicationDecision _decision({
   backgroundState: closeFrontBackgroundState(
     singleChannel: false,
     backgroundActive: outcome == PortProbeOutcome.connected,
-    observation: PortProbeObservation(outcome: outcome, duration: Duration.zero),
+    observation: PortProbeObservation(outcome),
   ),
   nativeProvesConnected: nativeProvesConnected,
   lifecycleIntentReserved: lifecycleIntentReserved,
@@ -280,7 +279,6 @@ class _CloseFrontFixture {
   late final _TrackingCoreClient initialForegroundClient;
   final List<_TrackingCoreClient> additionalClients = [];
   final List<CoreStatus> events = [];
-  String appLifecycle = 'paused';
 
   void publishStarted() {
     service.currentState = const CoreStatus.started();
@@ -318,7 +316,7 @@ class _CloseFrontCoreInterface extends CoreInterface {
   Future<bool> isActiveBg({PortProbeObserver? onPortProbe}) async {
     if (onProbeEntered != null && !onProbeEntered!.isCompleted) onProbeEntered!.complete();
     await probeBarrier?.future;
-    onPortProbe?.call(PortProbeObservation(outcome: outcome, duration: const Duration(milliseconds: 1)));
+    onPortProbe?.call(PortProbeObservation(outcome));
     return outcome == PortProbeOutcome.connected;
   }
 

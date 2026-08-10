@@ -6,12 +6,9 @@ import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 enum PortProbeOutcome { connected, closed, timeout, socketError, otherError }
 
 class PortProbeObservation {
-  const PortProbeObservation({required this.outcome, required this.duration, this.exceptionType, this.osErrorCode});
+  const PortProbeObservation(this.outcome);
 
   final PortProbeOutcome outcome;
-  final Duration duration;
-  final String? exceptionType;
-  final int? osErrorCode;
 }
 
 typedef PortProbeObserver = void Function(PortProbeObservation observation);
