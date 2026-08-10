@@ -1,47 +1,72 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zeon/features/diagnostics/data/error_report_controller.dart';
-import 'package:zeon/singbox/model/core_status.dart';
-import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
-/// `vpn_not_running_on_startup` fired whenever the persisted `started_by_user`
-/// intent was set and the core happened to be stopped. That intent survives
-/// process death, app restart and reboot, and nothing restores the tunnel
-/// automatically on launch, so the combination describes the ordinary state
-/// after any restart. All 905 production reports of this kind carried a bare
-/// `Stopped` with no alert and no message - no evidence of a failure at all.
-///
-/// A start that really failed leaves the core's own alert/message behind, and
-/// that must keep reporting.
 void main() {
-  group('startup stopped-core classification', () {
-    test('CASE A: cold startup with no restore attempted is not a failure', () {
-      expect(stoppedCoreIndicatesFailedStart(const CoreStopped()), isFalse);
+  group('startup failure classification', () {
+    test('no authoritative snapshot is not a failure', () {
+      expect(startupSnapshotIndicatesFailedStart(null), isFalse);
     });
 
-    test('CASE B: normal reconciliation after process restart is not a failure', () {
-      // Matches the shape seen in production: `Stopped message=` (empty).
-      expect(stoppedCoreIndicatesFailedStart(const CoreStopped(message: '')), isFalse);
-      expect(stoppedCoreIndicatesFailedStart(const CoreStopped(message: '   ')), isFalse);
+    test('ordinary cold-start idle snapshot is not a failure', () {
+      expect(startupSnapshotIndicatesFailedStart(_snapshot(phase: VpnSessionPhase.idle)), isFalse);
     });
 
-    test('CASE C: a start that actually failed is still reported', () {
+    test('bare terminal stop is not proof of a failed start', () {
       expect(
-        stoppedCoreIndicatesFailedStart(
-          const CoreStopped(alert: CoreAlert.startService, message: 'configure tun interface: Access is denied.'),
+        startupSnapshotIndicatesFailedStart(_snapshot(phase: VpnSessionPhase.disconnected, requestedAction: 'stop')),
+        isFalse,
+      );
+    });
+
+    test('authoritative failed connect remains reportable', () {
+      expect(
+        startupSnapshotIndicatesFailedStart(
+          _snapshot(phase: VpnSessionPhase.failed, requestedAction: 'connect', failureCode: 'START_SERVICE'),
         ),
         isTrue,
       );
     });
 
-    test('CASE C2: a failure message without an alert is still reported', () {
+    test('failed teardown is not misclassified as a startup failure', () {
       expect(
-        stoppedCoreIndicatesFailedStart(const CoreStopped(message: 'failed to start background core')),
-        isTrue,
+        startupSnapshotIndicatesFailedStart(
+          _snapshot(phase: VpnSessionPhase.failed, requestedAction: 'stop', failureCode: 'teardown_timeout'),
+        ),
+        isFalse,
       );
     });
 
-    test('CASE D: an alert with no message is still reported', () {
-      expect(stoppedCoreIndicatesFailedStart(const CoreStopped(alert: CoreAlert.startService)), isTrue);
+    test('generation zero cannot prove a current start attempt', () {
+      expect(
+        startupSnapshotIndicatesFailedStart(
+          _snapshot(
+            generation: 0,
+            phase: VpnSessionPhase.failed,
+            requestedAction: 'connect',
+            failureCode: 'START_SERVICE',
+          ),
+        ),
+        isFalse,
+      );
     });
   });
+}
+
+VpnSessionSnapshot _snapshot({
+  int generation = 4,
+  required VpnSessionPhase phase,
+  String requestedAction = '',
+  String failureCode = '',
+}) {
+  return VpnSessionSnapshot(
+    generation: generation,
+    runtimeEpoch: 'test-runtime',
+    sequenceNumber: 6,
+    snapshotVersion: 9,
+    phase: phase,
+    requestedAction: requestedAction,
+    failureCode: failureCode,
+    failureOwner: failureCode.isEmpty ? '' : 'android_service',
+  );
 }

@@ -1,49 +1,72 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zeon/features/diagnostics/data/error_report_controller.dart';
-import 'package:zeon/singbox/model/core_status.dart';
-import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
-/// Production sent 16 `vpn_unexpected_disconnect` reports while the core was
-/// still `Stopping` (11 config restarts, 4 profile reconnects, 1 manual
-/// disconnect). A core in `Stopping` is completing a teardown it already
-/// announced, so reaching `Disconnected` there is that teardown finishing -
-/// not the tunnel dropping on its own.
-///
-/// This check is on the authoritative core lifecycle, which is deliberately
-/// independent of the connection states the UI observed: those reports carried
-/// `status_before = CONNECTED` while `core_status` said `Stopping`, so the two
-/// disagreed.
 void main() {
-  group('mid-Stopping unexpected-disconnect classification', () {
-    test('CASE A: core still Stopping is not an outage', () {
-      expect(coreStatusAllowsUnexpectedDisconnectReport(const CoreStopping()), isFalse);
-    });
-
-    test('CASE B: a stopped core stays reportable', () {
+  group('authoritative stop evidence', () {
+    test('explicit Flutter stop is expected', () {
       expect(
-        coreStatusAllowsUnexpectedDisconnectReport(const CoreStopped()),
-        isTrue,
-        reason: 'a genuine drop lands in Stopped and must remain visible',
-      );
-    });
-
-    test('CASE D: a stopped core carrying failure evidence stays reportable', () {
-      expect(
-        coreStatusAllowsUnexpectedDisconnectReport(
-          const CoreStopped(alert: CoreAlert.startService, message: 'teardown_timeout'),
+        nativeSnapshotIndicatesExplicitStop(
+          _snapshot(phase: VpnSessionPhase.stopRequested, requestedAction: 'stop', stopSource: VpnStopSource.flutter),
         ),
         isTrue,
       );
     });
 
-    test('a started core stays reportable', () {
-      // Dart believing the tunnel is gone while the core reports Started is a
-      // desync worth seeing, not something to hide.
-      expect(coreStatusAllowsUnexpectedDisconnectReport(const CoreStarted()), isTrue);
+    test('replacement stop is expected', () {
+      expect(
+        nativeSnapshotIndicatesExplicitStop(
+          _snapshot(
+            phase: VpnSessionPhase.disconnected,
+            requestedAction: 'stop',
+            stopSource: VpnStopSource.replacement,
+          ),
+        ),
+        isTrue,
+      );
     });
 
-    test('a starting core stays reportable', () {
-      expect(coreStatusAllowsUnexpectedDisconnectReport(const CoreStarting()), isTrue);
+    test('FAILED is not suppressed even when it retains stop metadata', () {
+      expect(
+        nativeSnapshotIndicatesExplicitStop(
+          _snapshot(phase: VpnSessionPhase.failed, requestedAction: 'stop', stopSource: VpnStopSource.flutter),
+        ),
+        isFalse,
+      );
+    });
+
+    test('service destruction remains unexpected', () {
+      expect(
+        nativeSnapshotIndicatesExplicitStop(
+          _snapshot(phase: VpnSessionPhase.disconnected, requestedAction: 'stop', stopSource: VpnStopSource.destroy),
+        ),
+        isFalse,
+      );
+    });
+
+    test('unknown stop source remains unexpected', () {
+      expect(
+        nativeSnapshotIndicatesExplicitStop(
+          _snapshot(phase: VpnSessionPhase.stopping, requestedAction: 'stop', stopSource: VpnStopSource.unknown),
+        ),
+        isFalse,
+      );
     });
   });
+}
+
+VpnSessionSnapshot _snapshot({
+  required VpnSessionPhase phase,
+  required String requestedAction,
+  required VpnStopSource stopSource,
+}) {
+  return VpnSessionSnapshot(
+    generation: 3,
+    runtimeEpoch: 'test-runtime',
+    sequenceNumber: 5,
+    snapshotVersion: 8,
+    phase: phase,
+    requestedAction: requestedAction,
+    stopSource: stopSource,
+  );
 }

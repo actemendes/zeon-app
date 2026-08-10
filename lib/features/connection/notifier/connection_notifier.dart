@@ -26,6 +26,7 @@ import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/utils/utils.dart';
 import 'package:zeon/zeoncore/init_signal.dart';
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 part 'connection_notifier.g.dart';
 
@@ -61,7 +62,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   bool _connectionWasUp = false;
   String? _lastUserAction;
   DateTime? _lastUserActionAt;
-  DateTime? _expectedStopUntil;
+  int? _expectedStopIntentEpoch;
   AppLifecycleListener? _appLifecycleListener;
   int _connectionIntentEpoch = 0;
   bool? _desiredRunning;
@@ -144,11 +145,12 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         // A platform-owned notification/tile Stop clears the shared intent
         // before publishing DISCONNECTED, so it is not an unexpected outage.
         final expectedRunning = startedByUser;
+        final nativeSnapshot = ref.read(vpnSessionSnapshotSourceProvider).current;
         if (_shouldCaptureUnexpectedDisconnect(
           event,
-          previousStatus: previousStatus,
           wasUpBefore: wasUpBefore,
           expectedRunning: expectedRunning,
+          nativeSnapshot: nativeSnapshot,
         )) {
           try {
             unawaited(
@@ -167,7 +169,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
           }
         }
         _connectionWasUp = false;
-        _expectedStopUntil = null;
+        _expectedStopIntentEpoch = null;
 
         // Android notification/tile Stop is outside this notifier. The native
         // owner persists startedByUser=false before publishing DISCONNECTED;
@@ -878,26 +880,24 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     _lastUserAction = action;
     _lastUserActionAt = DateTime.now().toUtc();
     if (expectsStop) {
-      _expectedStopUntil = _lastUserActionAt!.add(const Duration(seconds: 30));
+      _expectedStopIntentEpoch = _connectionIntentEpoch;
     }
   }
 
-  bool _isExpectedStop() {
-    final expectedStopUntil = _expectedStopUntil;
-    return expectedStopUntil != null && expectedStopUntil.isAfter(DateTime.now().toUtc());
-  }
+  bool get _hasExpectedStopIntent => _expectedStopIntentEpoch == _connectionIntentEpoch;
 
   bool _shouldCaptureUnexpectedDisconnect(
     Disconnected disconnected, {
-    required ConnectionStatus? previousStatus,
     required bool wasUpBefore,
     required bool expectedRunning,
+    required VpnSessionSnapshot? nativeSnapshot,
   }) {
     if (!shouldCaptureUnexpectedDisconnect(
-      previousStatus: previousStatus,
       wasUpBefore: wasUpBefore,
       expectedRunning: expectedRunning,
-      isExpectedStop: _isExpectedStop(),
+      hasFailure: disconnected.connectionFailure != null,
+      hasExpectedStopIntent: _hasExpectedStopIntent,
+      nativeSnapshot: nativeSnapshot,
     )) {
       return false;
     }
@@ -913,30 +913,47 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
 /// Decides whether reaching [Disconnected] is an outage worth reporting.
 ///
-/// A teardown that already published [Disconnecting] is an orderly shutdown
-/// whoever started it, so its completion is never an unexpected outage. That
-/// has to be judged from the transition itself rather than from
-/// [isExpectedStop] alone: the expected-stop window is anchored to the last
-/// user action, and a stop that outlives it (a slow teardown, or a restart
-/// that chains stop and start) would otherwise be reported as if the tunnel
-/// had dropped on its own.
+/// An expected stop must be backed by an explicit notifier intent or by the
+/// authoritative Android session snapshot. UI [Disconnecting] and Dart-side
+/// `CoreStopping` are mutable local projections and are not evidence by
+/// themselves.
 ///
-/// A drop straight from [Connected] is the case that stays reportable: no
-/// shutdown was ever announced, so the tunnel went away underneath us.
+/// Explicit failure evidence wins over stop intent. A teardown that reaches
+/// native `FAILED`, or a disconnected status carrying [ConnectionFailure], is
+/// still a real incident even if it happened during stop/restart handling.
 @visibleForTesting
 bool shouldCaptureUnexpectedDisconnect({
-  required ConnectionStatus? previousStatus,
   required bool wasUpBefore,
   required bool expectedRunning,
-  required bool isExpectedStop,
+  required bool hasFailure,
+  required bool hasExpectedStopIntent,
+  required VpnSessionSnapshot? nativeSnapshot,
 }) {
-  if (!wasUpBefore || !expectedRunning || isExpectedStop) {
-    return false;
-  }
-  if (previousStatus is Disconnecting) {
-    return false;
-  }
+  if (!wasUpBefore) return false;
+  if (hasFailure || nativeSnapshot?.phase == VpnSessionPhase.failed) return true;
+  if (!expectedRunning) return false;
+  if (hasExpectedStopIntent || nativeSnapshotIndicatesExplicitStop(nativeSnapshot)) return false;
   return true;
+}
+
+@visibleForTesting
+bool nativeSnapshotIndicatesExplicitStop(VpnSessionSnapshot? snapshot) {
+  if (snapshot == null || snapshot.requestedAction != 'stop') return false;
+  final stopInProgressOrComplete = switch (snapshot.phase) {
+    VpnSessionPhase.stopRequested || VpnSessionPhase.stopping || VpnSessionPhase.disconnected => true,
+    _ => false,
+  };
+  if (!stopInProgressOrComplete) return false;
+  return switch (snapshot.stopSource) {
+    VpnStopSource.flutter ||
+    VpnStopSource.notification ||
+    VpnStopSource.tile ||
+    VpnStopSource.shortcut ||
+    VpnStopSource.revoke ||
+    VpnStopSource.replacement ||
+    VpnStopSource.internal => true,
+    VpnStopSource.none || VpnStopSource.destroy || VpnStopSource.unknown => false,
+  };
 }
 
 @visibleForTesting

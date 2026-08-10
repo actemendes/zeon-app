@@ -25,6 +25,7 @@ import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/singbox/model/singbox_config_option.dart';
 import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart' as hcore;
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 import 'package:zeon/zeoncore/zeon_core_service.dart';
 
 typedef ActiveProfileReader = Future<ProfileEntity?> Function();
@@ -145,7 +146,6 @@ class ErrorReportController {
     required bool startedByUser,
   }) async {
     if (!_enabled || kIsWeb) return;
-    if (!coreStatusAllowsUnexpectedDisconnectReport(_coreService.currentState)) return;
     final failure = disconnected.connectionFailure;
     final context = <String, dynamic>{
       'status_before': previousStatus?.format(),
@@ -183,10 +183,14 @@ class ErrorReportController {
   }
 
   Future<void> _captureVpnNotRunningOnStartupIfNeeded() async {
-    if (_preferences.getBool('started_by_user') != true) return;
-    final coreState = _coreService.currentState;
-    if (coreState is! CoreStopped) return;
-    if (!stoppedCoreIndicatesFailedStart(coreState)) return;
+    VpnSessionSnapshot? nativeSnapshot;
+    try {
+      nativeSnapshot = await _coreService.resyncSessionSnapshot('startup_telemetry');
+    } catch (error, stackTrace) {
+      Logger.app.warning('startup VPN snapshot unavailable; skipping startup failure telemetry', error, stackTrace);
+      return;
+    }
+    if (!startupSnapshotIndicatesFailedStart(nativeSnapshot)) return;
 
     final now = DateTime.now().toUtc();
     final lastReported = DateTime.tryParse((_preferences.getString(_startupStoppedReportKey) ?? '').trim())?.toUtc();
@@ -197,10 +201,19 @@ class ErrorReportController {
     await _preferences.setString(_startupStoppedReportKey, now.toIso8601String());
     await captureError(
       trigger: 'vpn_not_running_on_startup',
-      error: StateError('VPN was expected to be running but core is stopped on app startup'),
+      error: StateError('Authoritative VPN session reports a failed start on app startup'),
       stackTrace: StackTrace.current,
-      message: 'VPN was expected to be running but core is stopped on app startup',
-      context: {'started_by_user': true, 'core_status_at_startup': _formatCoreStatus(_coreService.currentState)},
+      message: 'Authoritative VPN session reports a failed start on app startup',
+      context: {
+        'started_by_user': _preferences.getBool('started_by_user') ?? false,
+        'core_status_at_startup': _formatCoreStatus(_coreService.currentState),
+        'native_generation': nativeSnapshot!.generation,
+        'native_runtime_epoch': nativeSnapshot.runtimeEpoch,
+        'native_phase': nativeSnapshot.phase.name,
+        'native_requested_action': nativeSnapshot.requestedAction,
+        'native_failure_code': nativeSnapshot.failureCode,
+        'native_failure_owner': nativeSnapshot.failureOwner,
+      },
     );
   }
 
@@ -444,41 +457,21 @@ extension _FirstOrNull<T> on List<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
 
-/// Whether a stopped core carries evidence that a start actually failed.
+/// Whether the current Android session authoritatively records a failed start.
 ///
-/// `started_by_user` is a persisted intent (see [Preferences.startedByUser]):
-/// it records that the user last asked for the VPN, and it survives process
-/// death, app restart and reboot. Nothing restores the tunnel automatically
-/// on launch, so finding a stopped core next to that intent is the ordinary
-/// state after any restart rather than a malfunction - which is why every one
-/// of the 905 production reports of this kind carried a bare `Stopped` with
-/// no alert and no message.
+/// `started_by_user` is only persisted intent (see
+/// [Preferences.startedByUser]); it survives process death and therefore does
+/// not prove that this process attempted a start. A bare stopped state next to
+/// that preference is not a failure classification.
 ///
-/// A start that genuinely failed leaves the alert/message the core reported
-/// (for example a `startService` alert), and that remains worth reporting.
+/// Local `CoreStopped` alert/message values are intentionally not consulted:
+/// they can be stale or written by non-authoritative Dart lifecycle paths. A
+/// current native generation in `FAILED` after a connect request is direct
+/// evidence that startup was attempted and failed.
 @visibleForTesting
-bool stoppedCoreIndicatesFailedStart(CoreStopped stopped) {
-  if (stopped.alert != null) return true;
-  return (stopped.message ?? '').trim().isNotEmpty;
-}
-
-/// Whether the core lifecycle allows treating a `Disconnected` as an outage.
-///
-/// `vpn_unexpected_disconnect` is meant to record the tunnel going away on its
-/// own. A core that is still `Stopping` is in the middle of a teardown it has
-/// already announced, so reaching `Disconnected` there is that teardown
-/// completing rather than an outage - regardless of which connection states
-/// the UI happened to observe on the way.
-///
-/// This is deliberately narrower than looking at the previous
-/// [ConnectionStatus]: production reports carried
-/// `status_before = CONNECTED` while `core_status` was still `Stopping`, so
-/// the observed UI transition and the authoritative core lifecycle disagreed.
-/// 16 such reports (11 config restarts, 4 profile reconnects, 1 manual
-/// disconnect) were misclassified this way.
-///
-/// A stopped core stays reportable: that is the state a genuine drop lands in.
-@visibleForTesting
-bool coreStatusAllowsUnexpectedDisconnectReport(CoreStatus coreStatus) {
-  return coreStatus is! CoreStopping;
+bool startupSnapshotIndicatesFailedStart(VpnSessionSnapshot? snapshot) {
+  return snapshot != null &&
+      snapshot.generation > 0 &&
+      snapshot.requestedAction == 'connect' &&
+      snapshot.phase == VpnSessionPhase.failed;
 }

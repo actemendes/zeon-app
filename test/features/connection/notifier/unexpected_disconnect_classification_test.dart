@@ -1,120 +1,165 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
-/// `vpn_unexpected_disconnect` is meant to record the tunnel going away on its
-/// own. Production telemetry showed 202 of these reports arriving from a
-/// `Disconnecting -> Disconnected` transition - i.e. the orderly completion of
-/// a shutdown that had already been announced - including plain
-/// `manual_disconnect` and `config_restart` teardowns. They were reported only
-/// because the expected-stop window is anchored to the last user action and a
-/// slow teardown (measured at ~6s, and longer for restart flows that chain a
-/// stop and a start) can outlive it.
-///
-/// The 103 `Connected -> Disconnected` reports are the genuine outages and
-/// must keep being reported.
 void main() {
   group('unexpected disconnect classification', () {
-    test('CASE A: orderly teardown after a manual disconnect is not an outage', () {
+    test('explicit manual stop intent suppresses orderly completion', () {
       expect(
         shouldCaptureUnexpectedDisconnect(
-          previousStatus: const Disconnecting(),
           wasUpBefore: true,
           expectedRunning: true,
-          // The user action happened long enough ago that the 30s window lapsed.
-          isExpectedStop: false,
+          hasFailure: false,
+          hasExpectedStopIntent: true,
+          nativeSnapshot: null,
         ),
         isFalse,
       );
     });
 
-    test('CASE B: teardown belonging to a config restart is not an outage', () {
+    test('explicit restart intent suppresses its intermediate disconnect', () {
       expect(
         shouldCaptureUnexpectedDisconnect(
-          previousStatus: const Disconnecting(),
           wasUpBefore: true,
           expectedRunning: true,
-          isExpectedStop: false,
+          hasFailure: false,
+          hasExpectedStopIntent: true,
+          nativeSnapshot: _snapshot(
+            phase: VpnSessionPhase.disconnected,
+            requestedAction: 'stop',
+            stopSource: VpnStopSource.replacement,
+          ),
         ),
         isFalse,
       );
     });
 
-    test('CASE C: replacement/reconnect teardown is not an outage', () {
-      // A reconnect keeps the user intent set to running while the old session
-      // is torn down; the Disconnecting hop still makes it an orderly stop.
+    test('authoritative Android stop suppresses orderly completion', () {
       expect(
         shouldCaptureUnexpectedDisconnect(
-          previousStatus: const Disconnecting(),
           wasUpBefore: true,
           expectedRunning: true,
-          isExpectedStop: false,
+          hasFailure: false,
+          hasExpectedStopIntent: false,
+          nativeSnapshot: _snapshot(
+            phase: VpnSessionPhase.stopping,
+            requestedAction: 'stop',
+            stopSource: VpnStopSource.notification,
+          ),
         ),
         isFalse,
       );
     });
 
-    test('CASE D: a drop straight from Connected is still reported', () {
+    test('real unexpected stop remains reportable without stop evidence', () {
       expect(
         shouldCaptureUnexpectedDisconnect(
-          previousStatus: const Connected(),
           wasUpBefore: true,
           expectedRunning: true,
-          isExpectedStop: false,
+          hasFailure: false,
+          hasExpectedStopIntent: false,
+          nativeSnapshot: _snapshot(phase: VpnSessionPhase.disconnected),
         ),
         isTrue,
-        reason: 'no shutdown was ever announced, so the tunnel dropped on its own',
       );
     });
 
-    test('CASE E: a drop inside the expected-stop window is not an outage', () {
+    test('bare local Disconnecting/CoreStopping projection cannot suppress', () {
+      // Neither mutable local status is an input to this classifier. With no
+      // operation intent or native stop proof, the outage remains visible.
       expect(
         shouldCaptureUnexpectedDisconnect(
-          previousStatus: const Connected(),
           wasUpBefore: true,
           expectedRunning: true,
-          isExpectedStop: true,
+          hasFailure: false,
+          hasExpectedStopIntent: false,
+          nativeSnapshot: null,
         ),
-        isFalse,
+        isTrue,
       );
     });
 
-    test('never reported when the user did not want the VPN running', () {
+    test('native FAILED remains reportable during restart', () {
       expect(
         shouldCaptureUnexpectedDisconnect(
-          previousStatus: const Connected(),
+          wasUpBefore: true,
+          expectedRunning: true,
+          hasFailure: false,
+          hasExpectedStopIntent: true,
+          nativeSnapshot: _snapshot(
+            phase: VpnSessionPhase.failed,
+            requestedAction: 'connect',
+            failureCode: 'START_SERVICE',
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('connection failure remains reportable during expected stop', () {
+      expect(
+        shouldCaptureUnexpectedDisconnect(
           wasUpBefore: true,
           expectedRunning: false,
-          isExpectedStop: false,
-        ),
-        isFalse,
-      );
-    });
-
-    test('never reported when the tunnel was never up', () {
-      expect(
-        shouldCaptureUnexpectedDisconnect(
-          previousStatus: const Connecting(),
-          wasUpBefore: false,
-          expectedRunning: true,
-          isExpectedStop: false,
-        ),
-        isFalse,
-      );
-    });
-
-    test('a Connecting -> Disconnected failure is still reported once it had been up', () {
-      // Reconnect attempt after the tunnel had been established: nothing
-      // announced a shutdown, so this stays visible.
-      expect(
-        shouldCaptureUnexpectedDisconnect(
-          previousStatus: const Connecting(),
-          wasUpBefore: true,
-          expectedRunning: true,
-          isExpectedStop: false,
+          hasFailure: true,
+          hasExpectedStopIntent: true,
+          nativeSnapshot: null,
         ),
         isTrue,
+      );
+    });
+
+    test('service destruction is not treated as an expected stop', () {
+      expect(
+        shouldCaptureUnexpectedDisconnect(
+          wasUpBefore: true,
+          expectedRunning: true,
+          hasFailure: false,
+          hasExpectedStopIntent: false,
+          nativeSnapshot: _snapshot(
+            phase: VpnSessionPhase.disconnected,
+            requestedAction: 'stop',
+            stopSource: VpnStopSource.destroy,
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('never reports a disconnect before the tunnel was up', () {
+      expect(
+        shouldCaptureUnexpectedDisconnect(
+          wasUpBefore: false,
+          expectedRunning: true,
+          hasFailure: true,
+          hasExpectedStopIntent: false,
+          nativeSnapshot: _snapshot(
+            phase: VpnSessionPhase.failed,
+            requestedAction: 'connect',
+            failureCode: 'START_SERVICE',
+          ),
+        ),
+        isFalse,
+        reason: 'startup failures are reported by connection_failure/startup telemetry instead',
       );
     });
   });
+}
+
+VpnSessionSnapshot _snapshot({
+  required VpnSessionPhase phase,
+  String requestedAction = '',
+  VpnStopSource stopSource = VpnStopSource.none,
+  String failureCode = '',
+}) {
+  return VpnSessionSnapshot(
+    generation: 7,
+    runtimeEpoch: 'test-runtime',
+    sequenceNumber: 11,
+    snapshotVersion: 13,
+    phase: phase,
+    requestedAction: requestedAction,
+    stopSource: stopSource,
+    failureCode: failureCode,
+  );
 }
