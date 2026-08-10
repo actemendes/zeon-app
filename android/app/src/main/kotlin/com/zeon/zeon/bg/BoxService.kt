@@ -62,7 +62,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class BoxService(
         private val service: Service,
-        private val platformInterface: PlatformInterface
+        private val platformInterfaceForGeneration: (Long) -> PlatformInterface,
 )  {
 
     companion object {
@@ -584,7 +584,7 @@ class BoxService(
                                 it.secret = ""
                                 it.debug = Settings.debugMode
                             },
-                            platformInterface,
+                            session.platformInterface,
                         )
                     } catch (error: Throwable) {
                         return@exclusive CoreStartupGate.Result.Failed(error)
@@ -712,7 +712,7 @@ class BoxService(
             stopPreemptively(generation, VpnStopSource.INTERNAL)
             return
         }
-        val session = ActiveSession(generation, platformInterface, tunOwner)
+        val session = ActiveSession(generation, platformInterfaceForGeneration(generation), tunOwner)
         val committed = VpnLifecycleIntentCoordinator.commitReload(this, generation) {
             if (ownerDestroyed) {
                 false
@@ -981,7 +981,7 @@ class BoxService(
     }
 
     private fun beginExplicitSession(generation: Long): Boolean {
-        val session = ActiveSession(generation, platformInterface, tunOwner)
+        val session = ActiveSession(generation, platformInterfaceForGeneration(generation), tunOwner)
         val committed = VpnLifecycleIntentCoordinator.commitStart(generation) {
             if (ownerDestroyed || activeSession != null) {
                 false
@@ -1130,22 +1130,56 @@ class BoxService(
     )
 
     internal fun openTun(
-        generation: Long,
+        ownerGeneration: Long,
         descriptor: android.os.ParcelFileDescriptor,
         validate: () -> Unit,
     ): Int {
-        val session = activeSession
-        if (session == null || session.generation != generation || !session.acceptsOperations()) {
-            descriptor.close()
-            VpnSessionCoordinator.stale(generation, "open_tun_without_active_session")
-            error("VPN session is not accepting TUN requests")
-        }
-        val fd = tunOwner.open(generation, descriptor, validate)
-        session.markTunReady(protectSucceeded = true)
-        VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.VERIFYING) {
+        val active = requireTunCallbackSession(ownerGeneration, descriptor::close)
+        val fd = tunOwner.open(ownerGeneration, descriptor, validate)
+        active.markTunReady(protectSucceeded = true)
+        VpnSessionSnapshotCoordinator.transition(ownerGeneration, VpnSessionPhase.VERIFYING) {
             it.copy(tunnelReady = true, protectSucceeded = true)
         }
         return fd
+    }
+
+    internal fun requireTunCallbackSession(
+        ownerGeneration: Long,
+        closeRejectedDescriptor: () -> Unit = {},
+    ): ActiveSession {
+        val session = activeSession
+        val currentGeneration = VpnSessionCoordinator.current()
+        val decision = TunCallbackOwnership.classifyAndCloseRejected(
+            ownerGeneration = ownerGeneration,
+            currentGeneration = currentGeneration,
+            activeSessionGeneration = session?.generation,
+            activeSessionAccepting = session?.acceptsOperations() == true,
+            closeRejectedDescriptor = closeRejectedDescriptor,
+        )
+        if (!decision.accepted) {
+            val reason = decision.rejectionReason?.name ?: "UNKNOWN"
+            val details =
+                "owner_generation=$ownerGeneration current_generation=$currentGeneration " +
+                    "active_generation=${session?.generation ?: 0L} " +
+                    "disposition=${decision.disposition.name} reason=$reason"
+            if (decision.reportIncident) {
+                VpnSessionCoordinator.event(
+                    "tun_open_rejected_current_generation",
+                    ownerGeneration,
+                    details,
+                    Log.ERROR,
+                )
+            } else {
+                VpnSessionCoordinator.event(
+                    "stale_tun_callback_ignored",
+                    ownerGeneration,
+                    details,
+                    Log.WARN,
+                )
+            }
+            error("VPN session is not accepting TUN requests ($reason)")
+        }
+        return checkNotNull(session)
     }
 
     private suspend fun confirmCoreStarted(generation: Long): Boolean {

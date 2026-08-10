@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import com.hiddify.core.libbox.Notification
+import com.hiddify.core.libbox.PlatformInterface
 import com.zeon.zeon.constant.PerAppProxyMode
 import com.zeon.zeon.ktx.toIpPrefix
 import com.hiddify.core.libbox.TunOptions
@@ -22,7 +23,15 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
         private const val TAG = "A/VPNService"
     }
 
-    private val service = BoxService(this, this)
+    private val service = BoxService(this, ::platformInterfaceForGeneration)
+
+    private fun platformInterfaceForGeneration(generation: Long): PlatformInterface =
+        GenerationBoundPlatformInterface(
+            ownerGeneration = generation,
+            delegate = this,
+            openTunForOwner = ::openTun,
+            controlSocketForOwner = ::autoDetectInterfaceControl,
+        )
 
     override fun onCreate() {
         super.onCreate()
@@ -60,11 +69,14 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     override fun autoDetectInterfaceControl(fd: Int) {
-        val generation = service.currentSessionGeneration()
+        error("VPN core callbacks require a generation-bound platform interface")
+    }
+
+    private fun autoDetectInterfaceControl(ownerGeneration: Long, fd: Int) {
         val protected = protect(fd)
         VpnSessionCoordinator.event(
             "protect_result",
-            generation,
+            ownerGeneration,
             "source=core_socket success=$protected",
             if (protected) Log.INFO else Log.ERROR,
         )
@@ -93,17 +105,15 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     override fun openTun(options: TunOptions): Int {
-        val generation = service.currentSessionGeneration()
-        VpnSessionCoordinator.event("tun_open_requested", generation)
-        if (!VpnSessionCoordinator.isCurrent(generation)) {
-            VpnSessionCoordinator.event(
-                "stale_exception_ignored",
-                generation,
-                "current_generation=${VpnSessionCoordinator.current()} session_state=tun source=open_tun reason=pre_establish_generation_check",
-                Log.WARN,
-            )
-            error("stale VPN operation")
-        }
+        error("VPN core callbacks require a generation-bound platform interface")
+    }
+
+    private fun openTun(ownerGeneration: Long, options: TunOptions): Int {
+        VpnSessionCoordinator.event("tun_open_requested", ownerGeneration)
+        // Reject stale callbacks before Builder.establish() can create or
+        // replace a platform VPN descriptor. BoxService repeats the check when
+        // handing off the established descriptor to close the race window.
+        service.requireTunCallbackSession(ownerGeneration)
         var hasPermission = false
         for (i in 0 until 20) {
             if (prepare(this) != null) {
@@ -240,8 +250,8 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
         }
 
         val pfd = builder.establish() ?: error("android: the application is not prepared or is revoked")
-        return service.openTun(generation, pfd) {
-            verifyPlatformProtect(generation)
+        return service.openTun(ownerGeneration, pfd) {
+            verifyPlatformProtect(ownerGeneration)
         }
     }
 

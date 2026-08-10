@@ -43,6 +43,7 @@ class VpnTestInstrumentation : Instrumentation() {
         val generationTests = VpnSessionCoordinatorInstrumentedTest()
         val startupTests = CoreStartupGateInstrumentedTest()
         val tunTests = TunDescriptorOwnerInstrumentedTest()
+        val tunCallbackTests = TunCallbackOwnershipInstrumentedTest()
         val activeSessionTests = ActiveSessionInstrumentedTest()
         val permissionTests = VpnPermissionAndConnectedGateInstrumentedTest()
         val startPermissionTests = StartPermissionRequestCoordinatorInstrumentedTest()
@@ -149,6 +150,27 @@ class VpnTestInstrumentation : Instrumentation() {
             },
             TestCase(tunTests.javaClass.name, "twoServiceOwnersCannotOpenConcurrentProcessTuns") {
                 tunTests.twoServiceOwnersCannotOpenConcurrentProcessTuns()
+            },
+            TestCase(tunCallbackTests.javaClass.name, "matchingAcceptingGenerationCanOpenTun") {
+                tunCallbackTests.matchingAcceptingGenerationCanOpenTun()
+            },
+            TestCase(tunCallbackTests.javaClass.name, "oldGenerationMismatchIsStaleAndClosesDescriptor") {
+                tunCallbackTests.oldGenerationMismatchIsStaleAndClosesDescriptor()
+            },
+            TestCase(tunCallbackTests.javaClass.name, "currentGenerationNotAcceptingRemainsIncident") {
+                tunCallbackTests.currentGenerationNotAcceptingRemainsIncident()
+            },
+            TestCase(tunCallbackTests.javaClass.name, "missingCurrentSessionWhileWaitingForTunRemainsIncident") {
+                tunCallbackTests.missingCurrentSessionWhileWaitingForTunRemainsIncident()
+            },
+            TestCase(tunCallbackTests.javaClass.name, "staleCallbackCannotReplaceNewGenerationDescriptor") {
+                tunCallbackTests.staleCallbackCannotReplaceNewGenerationDescriptor()
+            },
+            TestCase(tunCallbackTests.javaClass.name, "oldCallbackIsStaleEvenBeforeOldSessionDetaches") {
+                tunCallbackTests.oldCallbackIsStaleEvenBeforeOldSessionDetaches()
+            },
+            TestCase(tunCallbackTests.javaClass.name, "rapidReplacementDoesNotChangeCallbackOwnerGeneration") {
+                tunCallbackTests.rapidReplacementDoesNotChangeCallbackOwnerGeneration()
             },
             TestCase(activeSessionTests.javaClass.name, "teardownOrderIsStableAndCloseIsIdempotent") {
                 activeSessionTests.teardownOrderIsStableAndCloseIsIdempotent()
