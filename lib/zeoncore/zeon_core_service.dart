@@ -2601,7 +2601,7 @@ class ZeonCoreService with InfraLogger {
             "${_formatNativeSnapshotForTrace(prePublishNativeSnapshot)}",
       );
       var published = false;
-      if (bgStillActive) {
+      if (intendedStatus is CoreStarted) {
         _transitionLifecycle(_CoreLifecycleState.started, reason: "close front while bg active");
         if (currentState != const CoreStatus.started()) {
           currentState = const CoreStatus.started();
