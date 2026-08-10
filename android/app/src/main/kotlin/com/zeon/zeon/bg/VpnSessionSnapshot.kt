@@ -22,6 +22,14 @@ enum class VpnSessionPhase {
     FAILED,
 }
 
+internal fun phaseAfterCommandEndpointReady(current: VpnSessionPhase): VpnSessionPhase =
+    when (current) {
+        VpnSessionPhase.VERIFYING,
+        VpnSessionPhase.CONNECTED,
+        -> current
+        else -> VpnSessionPhase.WAITING_TUN
+    }
+
 enum class VpnStopSource(
     val wireValue: String,
     val clearsExpectedRunning: Boolean,

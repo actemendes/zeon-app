@@ -4,6 +4,7 @@ import com.zeon.zeon.bg.VpnSessionPhase
 import com.zeon.zeon.bg.VpnSessionSnapshot
 import com.zeon.zeon.bg.VpnSessionCoordinator
 import com.zeon.zeon.bg.VpnSessionSnapshotCoordinator
+import com.zeon.zeon.bg.phaseAfterCommandEndpointReady
 import com.zeon.zeon.bg.VpnStopSource
 import com.zeon.zeon.bg.VpnLifecycleIntentCoordinator
 import com.zeon.zeon.bg.CoreProcessOwnerCoordinator
@@ -41,6 +42,13 @@ class VpnSessionSnapshotInstrumentedTest {
     fun nonConnectedPhaseCannotPassTheGate() {
         check(!snapshot(VpnSessionPhase.VERIFYING, ready = true).provesConnected())
         check(!snapshot(VpnSessionPhase.STOPPING, ready = true).provesConnected())
+    }
+
+    fun commandEndpointReadinessCannotRegressAnOpenedTun() {
+        check(phaseAfterCommandEndpointReady(VpnSessionPhase.STARTING_CORE) == VpnSessionPhase.WAITING_TUN)
+        check(phaseAfterCommandEndpointReady(VpnSessionPhase.WAITING_TUN) == VpnSessionPhase.WAITING_TUN)
+        check(phaseAfterCommandEndpointReady(VpnSessionPhase.VERIFYING) == VpnSessionPhase.VERIFYING)
+        check(phaseAfterCommandEndpointReady(VpnSessionPhase.CONNECTED) == VpnSessionPhase.CONNECTED)
     }
 
     fun duplicateSelectedOutboundDoesNotPublishANewSnapshot() {

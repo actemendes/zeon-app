@@ -2,6 +2,7 @@ package test.com.zeon.zeon.bg
 
 import com.zeon.zeon.bg.CoreStartupGate
 import com.zeon.zeon.bg.VpnSessionCoordinator
+import com.zeon.zeon.bg.ownsCurrentStartupFailure
 
 class CoreStartupGateInstrumentedTest {
     suspend fun mobileStartSuccessRequiresEndpointReadiness() {
@@ -73,5 +74,32 @@ class CoreStartupGateInstrumentedTest {
         )
 
         check(CoreStartupGate.Result.Superseded == result)
+    }
+
+    fun onlyTheCurrentAcceptingSessionReportsAStartFailure() {
+        check(
+            ownsCurrentStartupFailure(
+                generation = 42L,
+                currentGeneration = 42L,
+                activeSessionGeneration = 42L,
+                activeSessionAccepting = true,
+            ),
+        )
+        check(
+            !ownsCurrentStartupFailure(
+                generation = 41L,
+                currentGeneration = 42L,
+                activeSessionGeneration = 42L,
+                activeSessionAccepting = true,
+            ),
+        )
+        check(
+            !ownsCurrentStartupFailure(
+                generation = 42L,
+                currentGeneration = 42L,
+                activeSessionGeneration = 42L,
+                activeSessionAccepting = false,
+            ),
+        )
     }
 }

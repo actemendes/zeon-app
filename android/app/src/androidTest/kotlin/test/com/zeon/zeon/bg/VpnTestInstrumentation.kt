@@ -133,6 +133,9 @@ class VpnTestInstrumentation : Instrumentation() {
             TestCase(startupTests.javaClass.name, "restartDuringStartSupersedesPendingResult") {
                 startupTests.restartDuringStartSupersedesPendingResult()
             },
+            TestCase(startupTests.javaClass.name, "onlyTheCurrentAcceptingSessionReportsAStartFailure") {
+                startupTests.onlyTheCurrentAcceptingSessionReportsAStartFailure()
+            },
             TestCase(tunTests.javaClass.name, "duplicateOpenIsRejectedAndNewDescriptorIsClosed") {
                 tunTests.duplicateOpenIsRejectedAndNewDescriptorIsClosed()
             },
@@ -180,6 +183,9 @@ class VpnTestInstrumentation : Instrumentation() {
             },
             TestCase(snapshotTests.javaClass.name, "nonConnectedPhaseCannotPassTheGate") {
                 snapshotTests.nonConnectedPhaseCannotPassTheGate()
+            },
+            TestCase(snapshotTests.javaClass.name, "commandEndpointReadinessCannotRegressAnOpenedTun") {
+                snapshotTests.commandEndpointReadinessCannotRegressAnOpenedTun()
             },
             TestCase(snapshotTests.javaClass.name, "duplicateSelectedOutboundDoesNotPublishANewSnapshot") {
                 snapshotTests.duplicateSelectedOutboundDoesNotPublishANewSnapshot()

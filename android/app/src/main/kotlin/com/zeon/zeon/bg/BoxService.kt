@@ -58,7 +58,27 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
 import java.util.concurrent.ConcurrentHashMap
+
+internal data class CommandEndpointProbe(
+    val ready: Boolean,
+    val failureCategory: String = "none",
+)
+
+internal fun ownsCurrentStartupFailure(
+    generation: Long,
+    currentGeneration: Long,
+    activeSessionGeneration: Long?,
+    activeSessionAccepting: Boolean,
+): Boolean =
+    generation > 0L &&
+        generation == currentGeneration &&
+        generation == activeSessionGeneration &&
+        activeSessionAccepting
 
 class BoxService(
         private val service: Service,
@@ -509,22 +529,12 @@ class BoxService(
             }
 
             if (!CoreShutdownDispatcher.awaitSettled()) {
-                VpnSessionCoordinator.event(
-                    "core_start_failure",
-                    generation,
-                    "error=previous_core_shutdown_timeout",
-                    Log.ERROR,
-                )
+                if (!reportCurrentCoreStartFailure(session, generation, "error=previous_core_shutdown_timeout")) return
                 stopAndAlert(generation, Alert.StartService, "previous core shutdown is still running")
                 return
             }
             if (!TunDescriptorOwner.awaitProcessSettled()) {
-                VpnSessionCoordinator.event(
-                    "core_start_failure",
-                    generation,
-                    "error=process_tun_owner_timeout",
-                    Log.ERROR,
-                )
+                if (!reportCurrentCoreStartFailure(session, generation, "error=process_tun_owner_timeout")) return
                 stopAndAlert(generation, Alert.StartService, "previous TUN owner is still closing")
                 return
             }
@@ -537,12 +547,7 @@ class BoxService(
                 return
             }
             if (!CoreProcessOwnerCoordinator.tryAcquire(this, generation)) {
-                VpnSessionCoordinator.event(
-                    "core_start_failure",
-                    generation,
-                    "error=process_core_owner_conflict",
-                    Log.ERROR,
-                )
+                if (!reportCurrentCoreStartFailure(session, generation, "error=process_core_owner_conflict")) return
                 stopAndAlert(generation, Alert.StartService, "another Android service still owns the core")
                 return
             }
@@ -560,6 +565,7 @@ class BoxService(
             Libbox.setMemoryLimit(!Settings.disableMemoryLimit)
             val startsCoreHere = Settings.startCoreAfterStartingService
             VpnSessionCoordinator.event("core_start_requested", generation, "owner=android starts_core=$startsCoreHere")
+            var lastEndpointProbe = CommandEndpointProbe(ready = false, failureCategory = "not_attempted")
             val readiness = CoreNativeOperationCoordinator.exclusive {
                 if (
                     !VpnSessionCoordinator.isCurrent(generation) ||
@@ -603,7 +609,9 @@ class BoxService(
                             } else {
                                 null
                             },
-                            endpointReady = ::isCommandEndpointReady,
+                            endpointReady = {
+                                probeCommandEndpoint().also { lastEndpointProbe = it }.ready
+                            },
                         )
                     }
                 }
@@ -611,7 +619,8 @@ class BoxService(
             when (readiness) {
                 CoreStartupGate.Result.Ready -> {
                     session.markCommandEndpointReady()
-                    VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.WAITING_TUN) {
+                    val currentPhase = VpnSessionSnapshotCoordinator.current().phase
+                    VpnSessionSnapshotCoordinator.transition(generation, phaseAfterCommandEndpointReady(currentPhase)) {
                         it.copy(coreReady = true, commandEndpointReady = true)
                     }
                     VpnSessionCoordinator.event("command_endpoint_ready", generation)
@@ -624,17 +633,18 @@ class BoxService(
                 }
                 CoreStartupGate.Result.Superseded -> return
                 is CoreStartupGate.Result.Failed -> {
-                    VpnSessionCoordinator.event(
-                        "core_start_failure",
-                        generation,
-                        "error=${readiness.error.javaClass.simpleName}",
-                        Log.ERROR,
-                    )
+                    if (!reportCurrentCoreStartFailure(session, generation, "error=${readiness.error.javaClass.simpleName}")) return
                     stopAndAlert(generation, Alert.StartService, readiness.error.message)
                     return
                 }
                 CoreStartupGate.Result.Timeout -> {
-                    VpnSessionCoordinator.event("core_start_failure", generation, "error=command_endpoint_timeout", Log.ERROR)
+                    if (
+                        !reportCurrentCoreStartFailure(
+                            session,
+                            generation,
+                            "error=command_endpoint_timeout last_probe=${lastEndpointProbe.failureCategory}",
+                        )
+                    ) return
                     stopAndAlert(generation, Alert.StartService, "command endpoint readiness timeout")
                     return
                 }
@@ -667,6 +677,26 @@ class BoxService(
             stopAndAlert(generation, Alert.StartService, e.message)
             return
         }
+    }
+
+    private fun reportCurrentCoreStartFailure(
+        session: ActiveSession,
+        generation: Long,
+        details: String,
+    ): Boolean {
+        if (
+            !ownsCurrentStartupFailure(
+                generation = generation,
+                currentGeneration = VpnSessionCoordinator.current(),
+                activeSessionGeneration = activeSession?.generation,
+                activeSessionAccepting = activeSession === session && session.acceptsOperations(),
+            )
+        ) {
+            VpnSessionCoordinator.stale(generation, "core_start_failure")
+            return false
+        }
+        VpnSessionCoordinator.event("core_start_failure", generation, details, Log.ERROR)
+        return true
     }
 
     fun serviceReload() {
@@ -862,6 +892,7 @@ class BoxService(
                 callback.onServiceAlert(type.ordinal, message)
             }
             status.value = Status.Stopped
+            service.stopSelf()
         }
     }
 
@@ -1361,13 +1392,21 @@ class BoxService(
         return true
     }
 
-    private fun isCommandEndpointReady(): Boolean {
+    private fun probeCommandEndpoint(): CommandEndpointProbe {
         return try {
             val client = GrpcClientProvider.grpcClient.create(CoreClient::class)
             client.GetSystemInfo().executeBlocking(Empty())
-            true
+            CommandEndpointProbe(ready = true)
+        } catch (_: SocketTimeoutException) {
+            CommandEndpointProbe(ready = false, failureCategory = "timeout")
+        } catch (_: ConnectException) {
+            CommandEndpointProbe(ready = false, failureCategory = "connection_refused")
+        } catch (_: InterruptedIOException) {
+            CommandEndpointProbe(ready = false, failureCategory = "timeout")
+        } catch (_: IOException) {
+            CommandEndpointProbe(ready = false, failureCategory = "io_error")
         } catch (_: Exception) {
-            false
+            CommandEndpointProbe(ready = false, failureCategory = "other_error")
         }
     }
 
