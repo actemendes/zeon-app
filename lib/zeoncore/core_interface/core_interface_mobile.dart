@@ -426,8 +426,8 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   @override
-  Future<bool> isActiveBg() async {
-    return await isPortOpen("127.0.0.1", portBack);
+  Future<bool> isActiveBg({PortProbeObserver? onPortProbe}) async {
+    return await isPortOpen("127.0.0.1", portBack, onObservation: onPortProbe);
   }
 }
 
@@ -461,14 +461,74 @@ Future<bool> waitUntilPort(
   return false;
 }
 
-Future<bool> isPortOpen(String host, int port, {Duration timeout = const Duration(milliseconds: 300)}) async {
+Future<bool> isPortOpen(
+  String host,
+  int port, {
+  Duration timeout = const Duration(milliseconds: 300),
+  PortProbeObserver? onObservation,
+}) async {
+  final stopwatch = Stopwatch()..start();
   try {
     final socket = await Socket.connect(host, port, timeout: timeout);
     await socket.close();
+    stopwatch.stop();
+    _notifyPortProbe(
+      onObservation,
+      PortProbeObservation(outcome: PortProbeOutcome.connected, duration: stopwatch.elapsed),
+    );
     return true;
-  } on SocketException catch (_) {
+  } on TimeoutException catch (error) {
+    stopwatch.stop();
+    _notifyPortProbe(
+      onObservation,
+      PortProbeObservation(
+        outcome: PortProbeOutcome.timeout,
+        duration: stopwatch.elapsed,
+        exceptionType: error.runtimeType.toString(),
+      ),
+    );
     return false;
-  } catch (_) {
+  } on SocketException catch (error) {
+    stopwatch.stop();
+    _notifyPortProbe(
+      onObservation,
+      PortProbeObservation(
+        outcome: classifySocketProbeError(error),
+        duration: stopwatch.elapsed,
+        exceptionType: error.runtimeType.toString(),
+        osErrorCode: error.osError?.errorCode,
+      ),
+    );
+    return false;
+  } catch (error) {
+    stopwatch.stop();
+    _notifyPortProbe(
+      onObservation,
+      PortProbeObservation(
+        outcome: PortProbeOutcome.otherError,
+        duration: stopwatch.elapsed,
+        exceptionType: error.runtimeType.toString(),
+      ),
+    );
     return false;
   }
+}
+
+void _notifyPortProbe(PortProbeObserver? observer, PortProbeObservation observation) {
+  try {
+    observer?.call(observation);
+  } catch (_) {
+    // Diagnostics must not change the probe result used by the caller.
+  }
+}
+
+PortProbeOutcome classifySocketProbeError(SocketException error) {
+  final code = error.osError?.errorCode;
+  if (const {60, 110, 10060}.contains(code) || error.message.toLowerCase().contains('timed out')) {
+    return PortProbeOutcome.timeout;
+  }
+  if (const {61, 111, 10061}.contains(code) || error.message.toLowerCase().contains('refused')) {
+    return PortProbeOutcome.closed;
+  }
+  return PortProbeOutcome.socketError;
 }

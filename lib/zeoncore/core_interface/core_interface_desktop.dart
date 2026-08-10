@@ -218,7 +218,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   }
 
   @override
-  Future<bool> isActiveBg() => isActiveFg();
+  Future<bool> isActiveBg({PortProbeObserver? onPortProbe}) => isActiveFg();
 
   @override
   Future<bool> isBgClientAvailable() => isActiveBg();

@@ -3,6 +3,19 @@ import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
+enum PortProbeOutcome { connected, closed, timeout, socketError, otherError }
+
+class PortProbeObservation {
+  const PortProbeObservation({required this.outcome, required this.duration, this.exceptionType, this.osErrorCode});
+
+  final PortProbeOutcome outcome;
+  final Duration duration;
+  final String? exceptionType;
+  final int? osErrorCode;
+}
+
+typedef PortProbeObserver = void Function(PortProbeObservation observation);
+
 class CoreInterface {
   late CoreClient fgClient;
   late CoreClient bgClient;
@@ -72,7 +85,7 @@ class CoreInterface {
     return true;
   }
 
-  Future<bool> isActiveBg() async {
+  Future<bool> isActiveBg({PortProbeObserver? onPortProbe}) async {
     return true;
   }
 
