@@ -697,8 +697,11 @@ class ZeonCoreService with InfraLogger {
       return;
     }
 
+    // Start the existing recovery immediately. Telemetry observes its result
+    // but must never delay it behind the background reachability probe.
+    final controlRecovery = _scheduleListenerReconnect(key, reconnect);
     final backgroundCoreActive = await _isBackgroundCoreReachable();
-    final controlRecoverySucceeded = await _scheduleListenerReconnect(key, reconnect);
+    final controlRecoverySucceeded = await controlRecovery;
     final disposition = classifyTransportClose(
       intent: TransportCloseIntent.none,
       stage: TransportCloseStage.listener,
