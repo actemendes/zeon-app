@@ -950,9 +950,8 @@ bool nativeSnapshotIndicatesExplicitStop(VpnSessionSnapshot? snapshot) {
     VpnStopSource.tile ||
     VpnStopSource.shortcut ||
     VpnStopSource.revoke ||
-    VpnStopSource.replacement ||
-    VpnStopSource.internal => true,
-    VpnStopSource.none || VpnStopSource.destroy || VpnStopSource.unknown => false,
+    VpnStopSource.replacement => true,
+    VpnStopSource.none || VpnStopSource.destroy || VpnStopSource.internal || VpnStopSource.unknown => false,
   };
 }
 

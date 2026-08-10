@@ -44,6 +44,15 @@ void main() {
       );
     });
 
+    test('internal failure cleanup remains unexpected', () {
+      expect(
+        nativeSnapshotIndicatesExplicitStop(
+          _snapshot(phase: VpnSessionPhase.disconnected, requestedAction: 'stop', stopSource: VpnStopSource.internal),
+        ),
+        isFalse,
+      );
+    });
+
     test('unknown stop source remains unexpected', () {
       expect(
         nativeSnapshotIndicatesExplicitStop(
