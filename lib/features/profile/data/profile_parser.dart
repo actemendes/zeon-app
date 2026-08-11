@@ -8,6 +8,7 @@ import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/features/profile/data/profile_data_mapper.dart';
 import 'package:zeon/features/profile/data/profile_name_parser.dart';
+import 'package:zeon/features/profile/data/subscription_url_policy.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/model/profile_failure.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
@@ -208,7 +209,7 @@ class ProfileParser {
     //   throw const ProfileFailure.invalidUrl('HTTP is not supported. Please use HTTPS for secure connection.');
 
     Future<Response> download(String targetUrl) => _httpClient.download(
-      targetUrl,
+      enforceZeonSingBoxSubscriptionUrl(targetUrl),
       tempFilePath,
       cancelToken: cancelToken,
       userAgent: _ref.read(ConfigOptions.useXrayCoreWhenPossible)
