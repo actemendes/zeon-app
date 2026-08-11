@@ -69,6 +69,60 @@ void main() {
     });
   });
 
+  group('local control status ownership', () {
+    test('native connected blocks Stopped even when the control port is closed', () {
+      expect(
+        classifyLocalControlStatus(
+          backgroundState: CloseFrontBackgroundState.inactive,
+          nativeProvesConnected: true,
+          nativeProvesStopped: false,
+        ),
+        LocalControlStatusDecision.publishStarted,
+      );
+    });
+
+    test('timeout or unobserved failure preserves the current global status', () {
+      expect(
+        classifyLocalControlStatus(
+          backgroundState: CloseFrontBackgroundState.unknown,
+          nativeProvesConnected: false,
+          nativeProvesStopped: false,
+        ),
+        LocalControlStatusDecision.preserve,
+      );
+    });
+
+    test('confirmed closed or authoritative terminal state permits Stopped', () {
+      expect(
+        classifyLocalControlStatus(
+          backgroundState: CloseFrontBackgroundState.inactive,
+          nativeProvesConnected: false,
+          nativeProvesStopped: false,
+        ),
+        LocalControlStatusDecision.publishStopped,
+      );
+      expect(
+        classifyLocalControlStatus(
+          backgroundState: CloseFrontBackgroundState.unknown,
+          nativeProvesConnected: false,
+          nativeProvesStopped: true,
+        ),
+        LocalControlStatusDecision.publishStopped,
+      );
+    });
+
+    test('confirmed active control endpoint permits Started', () {
+      expect(
+        classifyLocalControlStatus(
+          backgroundState: CloseFrontBackgroundState.active,
+          nativeProvesConnected: false,
+          nativeProvesStopped: false,
+        ),
+        LocalControlStatusDecision.publishStarted,
+      );
+    });
+  });
+
   group('closeFront operation integration', () {
     test('confirmed closed probe publishes Stopped for the current operation', () async {
       final fixture = _CloseFrontFixture(PortProbeOutcome.closed);

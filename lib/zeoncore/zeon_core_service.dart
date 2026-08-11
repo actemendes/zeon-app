@@ -110,6 +110,22 @@ enum CloseFrontPublicationDecision {
   skipStaleOperation,
 }
 
+enum LocalControlStatusDecision { publishStarted, publishStopped, preserve }
+
+LocalControlStatusDecision classifyLocalControlStatus({
+  required CloseFrontBackgroundState backgroundState,
+  required bool nativeProvesConnected,
+  required bool nativeProvesStopped,
+}) {
+  if (nativeProvesConnected) return LocalControlStatusDecision.publishStarted;
+  if (nativeProvesStopped) return LocalControlStatusDecision.publishStopped;
+  return switch (backgroundState) {
+    CloseFrontBackgroundState.active => LocalControlStatusDecision.publishStarted,
+    CloseFrontBackgroundState.inactive => LocalControlStatusDecision.publishStopped,
+    CloseFrontBackgroundState.unknown => LocalControlStatusDecision.preserve,
+  };
+}
+
 @visibleForTesting
 CloseFrontBackgroundState closeFrontBackgroundState({
   required bool singleChannel,
@@ -591,14 +607,19 @@ class ZeonCoreService with InfraLogger {
       return currentState;
     }
     final gatedNext = _gateTerminalStatus(next, generation, "coreInfoListener[$key]");
-    // Guard against transient/stale "stopped" events while background core is still alive.
+    // A local control listener cannot declare the platform VPN stopped unless
+    // the background endpoint or authoritative native session confirms it.
     if (gatedNext is CoreStopped && _lifecycleState == _CoreLifecycleState.started) {
-      try {
-        if (await core.isActiveBg()) {
-          loggy.warning("ignore stale stopped from coreInfoListener[$key]: bg port still active");
-          return currentState;
-        }
-      } catch (_) {}
+      final backgroundState = await _probeBackgroundCoreState();
+      final decision = classifyLocalControlStatus(
+        backgroundState: backgroundState,
+        nativeProvesConnected: _nativeSnapshotProvesCurrentConnected(),
+        nativeProvesStopped: _nativeSnapshotProvesCurrentStopped(),
+      );
+      if (decision != LocalControlStatusDecision.publishStopped) {
+        loggy.warning("ignore unconfirmed stopped from coreInfoListener[$key]: background=${backgroundState.name}");
+        return currentState;
+      }
     }
     currentState = gatedNext;
     _syncLifecycleFromCoreStatus(currentState, reason: "coreInfoListener[$key]");
@@ -792,8 +813,13 @@ class ZeonCoreService with InfraLogger {
     final stillNeedsRecovery = _lifecycleState == _CoreLifecycleState.stopping || currentState is CoreStopping;
     if (!stillNeedsRecovery || _useMockCore) return;
 
-    final bgReachable = await _isBackgroundCoreReachable();
-    if (!bgReachable) {
+    final backgroundState = await _probeBackgroundCoreState();
+    final decision = classifyLocalControlStatus(
+      backgroundState: backgroundState,
+      nativeProvesConnected: _nativeSnapshotProvesCurrentConnected(),
+      nativeProvesStopped: _nativeSnapshotProvesCurrentStopped(),
+    );
+    if (decision == LocalControlStatusDecision.publishStopped) {
       loggy.warning("$reason: background core is down, forcing stopped", error);
       await _deleteCoreCurrentConfigSnapshot();
       _transitionLifecycle(_CoreLifecycleState.stopped, reason: reason);
@@ -802,7 +828,12 @@ class ZeonCoreService with InfraLogger {
       return;
     }
 
-    loggy.warning("$reason: background core is still active, forcing started", error);
+    if (decision == LocalControlStatusDecision.preserve) {
+      loggy.warning("$reason: background state is inconclusive, preserving stopping", error);
+      return;
+    }
+
+    loggy.warning("$reason: background or native session is still active, forcing started", error);
     _transitionLifecycle(_CoreLifecycleState.started, reason: reason);
     statusController.add(currentState = const CoreStatus.started());
     if (listenerKey != null && core.isInitialized()) {
@@ -826,7 +857,8 @@ class ZeonCoreService with InfraLogger {
         .mapLeft((e) {
           loggy.error(e);
           if (PlatformUtils.isIOS) return;
-          statusController.add(const CoreStatus.stopped());
+          // Failure to reconstruct the foreground control channel is not
+          // evidence that the platform-owned VPN tunnel stopped.
           ref.read(inAppNotificationControllerProvider).showErrorToast(e);
         })
         .map((_) {
@@ -946,24 +978,34 @@ class ZeonCoreService with InfraLogger {
 
         await startListeningLogs("fg", core.fgClient);
         // await startListeningStatus("fg", core.fgClient);
-        final bgActive = await _isBackgroundCoreReachable(attempts: PlatformUtils.isIOS ? 8 : 1);
+        final backgroundState = await _probeBackgroundCoreState(attempts: PlatformUtils.isIOS ? 8 : 1);
+        final bgActive = backgroundState == CloseFrontBackgroundState.active;
         if (bgActive && !core.isSingleChannel()) {
           await startListeningLogs("bg", core.bgClient);
         }
         final lifecycleIntentReserved =
             _lifecycleState == _CoreLifecycleState.starting || _lifecycleState == _CoreLifecycleState.stopping;
+        var publishSetupStatus = core.isSingleChannel();
         if (!core.isSingleChannel() && !lifecycleIntentReserved) {
-          try {
-            currentState = bgActive ? const CoreStatus.started() : const CoreStatus.stopped();
-            _transitionLifecycle(
-              bgActive ? _CoreLifecycleState.started : _CoreLifecycleState.stopped,
-              reason: "setup background probe",
-            );
-          } catch (e) {
-            loggy.warning("failed to detect background core state: $e");
+          final decision = classifyLocalControlStatus(
+            backgroundState: backgroundState,
+            nativeProvesConnected: _nativeSnapshotProvesCurrentConnected(),
+            nativeProvesStopped: _nativeSnapshotProvesCurrentStopped(),
+          );
+          switch (decision) {
+            case LocalControlStatusDecision.publishStarted:
+              currentState = const CoreStatus.started();
+              _transitionLifecycle(_CoreLifecycleState.started, reason: "setup background/native state");
+              publishSetupStatus = true;
+            case LocalControlStatusDecision.publishStopped:
+              currentState = const CoreStatus.stopped();
+              _transitionLifecycle(_CoreLifecycleState.stopped, reason: "setup background/native state");
+              publishSetupStatus = true;
+            case LocalControlStatusDecision.preserve:
+              loggy.warning("setup background probe was inconclusive; preserving current VPN status");
           }
         }
-        if (!lifecycleIntentReserved) {
+        if (!lifecycleIntentReserved && publishSetupStatus) {
           statusController.add(currentState);
         } else {
           loggy.debug("setup background probe preserved reserved lifecycle=${_lifecycleState.name}");
@@ -1144,25 +1186,45 @@ class ZeonCoreService with InfraLogger {
     int attempts = 1,
     Duration retryDelay = const Duration(milliseconds: 250),
   }) async {
-    if (!core.isInitialized()) return false;
-    if (core.isSingleChannel()) return true;
+    return await _probeBackgroundCoreState(attempts: attempts, retryDelay: retryDelay) ==
+        CloseFrontBackgroundState.active;
+  }
 
-    Object? lastError;
+  Future<CloseFrontBackgroundState> _probeBackgroundCoreState({
+    int attempts = 1,
+    Duration retryDelay = const Duration(milliseconds: 250),
+  }) async {
+    if (!core.isInitialized()) return CloseFrontBackgroundState.unknown;
+    if (core.isSingleChannel()) return CloseFrontBackgroundState.active;
+
+    var lastState = CloseFrontBackgroundState.unknown;
     final maxAttempts = max(1, attempts);
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      PortProbeObservation? observation;
       try {
-        if (await core.isActiveBg()) return true;
-      } catch (e) {
-        lastError = e;
+        final active = await core.isActiveBg(onPortProbe: (value) => observation = value);
+        lastState = closeFrontBackgroundState(singleChannel: false, backgroundActive: active, observation: observation);
+      } catch (_) {
+        lastState = CloseFrontBackgroundState.unknown;
       }
+      if (lastState == CloseFrontBackgroundState.active) return lastState;
       if (attempt < maxAttempts) {
         await Future<void>.delayed(retryDelay);
       }
     }
-    if (lastError != null) {
-      loggy.debug("failed checking background core after transient grpc close", lastError);
-    }
-    return false;
+    return lastState;
+  }
+
+  bool _nativeSnapshotProvesCurrentConnected() {
+    final snapshot = authoritativeSessionSnapshot;
+    return snapshot != null && snapshot.generation == _sessionGeneration.current && snapshot.provesConnected;
+  }
+
+  bool _nativeSnapshotProvesCurrentStopped() {
+    final snapshot = authoritativeSessionSnapshot;
+    return snapshot != null &&
+        snapshot.generation == _sessionGeneration.current &&
+        (snapshot.phase == VpnSessionPhase.disconnected || snapshot.phase == VpnSessionPhase.failed);
   }
 
   Future<VpnSessionSnapshot?> _refreshStartupSnapshot(int generation, String source) async {
