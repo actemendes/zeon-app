@@ -205,6 +205,26 @@ android {
 
 }
 
+// The Flutter plugin observes a custom build type before the `initWith debug`
+// closure has finished configuring it. Without this narrow substitution the
+// validation variant gets release libflutter.so together with debug/JIT Dart
+// assets and aborts at startup. Keep the isolated validation package entirely
+// on the debug engine; production release configurations are not affected.
+configurations.configureEach { configuration ->
+    if (configuration.name.toLowerCase().startsWith("validation")) {
+        configuration.resolutionStrategy.eachDependency { details ->
+            def requested = details.requested
+            if (requested.group == "io.flutter" &&
+                requested.name ==~ /^(armeabi_v7a|arm64_v8a|x86_64)_release$/) {
+                details.useTarget(
+                    "${requested.group}:${requested.name.replace('_release', '_debug')}:${requested.version}"
+                )
+                details.because("validation is a debug/JIT Flutter build")
+            }
+        }
+    }
+}
+
 gradle.taskGraph.whenReady { graph ->
     def unsafeManagedAndroidTests = graph.allTasks.findAll { task ->
         def name = task.name.toLowerCase()
