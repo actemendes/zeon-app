@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	constant "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/experimental/libbox"
 	"github.com/sagernet/sing-box/option"
 )
@@ -120,4 +121,28 @@ func TestStage2BuilderPreservesGroupAndMTUPolicy(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIPv4OnlyModeDoesNotExposeIPv6OnTun(t *testing.T) {
+	ctx := testConfigContext()
+	input := &ReadOptions{Content: `{"outbounds":[{"type":"direct","tag":"one"}]}`}
+	hopts := DefaultHiddifyOptions()
+	hopts.EnableTun = true
+	hopts.IPv6Mode = option.DomainStrategy(constant.DomainStrategyIPv4Only)
+
+	built, err := BuildConfig(ctx, hopts, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, inbound := range built.Inbounds {
+		tunOptions, ok := inbound.Options.(*option.TunInboundOptions)
+		if !ok {
+			continue
+		}
+		if len(tunOptions.Address) != 1 || !tunOptions.Address[0].Addr().Is4() {
+			t.Fatalf("IPv4-only TUN addresses = %v, want one IPv4 prefix", tunOptions.Address)
+		}
+		return
+	}
+	t.Fatal("TUN inbound missing")
 }

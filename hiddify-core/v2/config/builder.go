@@ -851,7 +851,10 @@ func setInbound(options *option.Options, hopt *HiddifyOptions) {
 	// } else {
 	// 	inboundDomainStrategy = opt.IPv6Mode
 	// }
-	ipv6Enable := isIPv6Supported()
+	// The local presence of an IPv6 loopback does not mean that the selected
+	// outbound has working IPv6 egress.  In IPv4-only mode, do not advertise an
+	// IPv6 address on the TUN and let applications select an unusable family.
+	ipv6Enable := isIPv6Supported() && hopt.IPv6Mode != option.DomainStrategy(C.DomainStrategyIPv4Only)
 	if hopt.EnableTun {
 		effectiveMTU := resolveEffectiveTunMTU(hopt)
 

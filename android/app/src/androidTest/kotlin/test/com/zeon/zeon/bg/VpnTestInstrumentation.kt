@@ -50,6 +50,7 @@ class VpnTestInstrumentation : Instrumentation() {
         val snapshotTests = VpnSessionSnapshotInstrumentedTest()
         val shutdownTests = CoreShutdownDispatcherInstrumentedTest()
         val notificationTests = ServiceNotificationInstrumentedTest()
+        val routePolicyTests = VpnRoutePolicyInstrumentedTest()
         val bitmapTests = SampledBitmapDecoderInstrumentedTest(targetContext)
         val tests = mutableListOf(
             TestCase(generationTests.javaClass.name, "generationIsStrictlyMonotonic") {
@@ -153,6 +154,12 @@ class VpnTestInstrumentation : Instrumentation() {
             },
             TestCase(tunTests.javaClass.name, "twoServiceOwnersCannotOpenConcurrentProcessTuns") {
                 tunTests.twoServiceOwnersCannotOpenConcurrentProcessTuns()
+            },
+            TestCase(routePolicyTests.javaClass.name, "ipv4OnlyTunDoesNotInstallIpv6Routes") {
+                routePolicyTests.ipv4OnlyTunDoesNotInstallIpv6Routes()
+            },
+            TestCase(routePolicyTests.javaClass.name, "dualStackTunInstallsIpv6Routes") {
+                routePolicyTests.dualStackTunInstallsIpv6Routes()
             },
             TestCase(tunCallbackTests.javaClass.name, "matchingAcceptingGenerationCanOpenTun") {
                 tunCallbackTests.matchingAcceptingGenerationCanOpenTun()

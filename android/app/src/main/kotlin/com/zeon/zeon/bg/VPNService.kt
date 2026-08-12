@@ -145,9 +145,11 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
         }
 
         val inet6Address = options.inet6Address
+        var hasInet6Address = false
         while (inet6Address.hasNext()) {
             val address = inet6Address.next()
             builder.addAddress(address.address(), address.prefix())
+            hasInet6Address = true
         }
 
         if (options.autoRoute) {
@@ -163,13 +165,17 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
                     builder.addRoute("0.0.0.0", 0)
                 }
 
-                val inet6RouteAddress = options.inet6RouteAddress
-                if (inet6RouteAddress.hasNext()) {
-                    while (inet6RouteAddress.hasNext()) {
-                        builder.addRoute(inet6RouteAddress.next().toIpPrefix())
+                // Do not synthesize a catch-all IPv6 route when the core did
+                // not configure an IPv6 TUN address (IPv4-only mode).
+                if (shouldInstallIpv6Routes(hasInet6Address)) {
+                    val inet6RouteAddress = options.inet6RouteAddress
+                    if (inet6RouteAddress.hasNext()) {
+                        while (inet6RouteAddress.hasNext()) {
+                            builder.addRoute(inet6RouteAddress.next().toIpPrefix())
+                        }
+                    } else {
+                        builder.addRoute("::", 0)
                     }
-                } else {
-                    builder.addRoute("::", 0)
                 }
 
                 val inet4RouteExcludeAddress = options.inet4RouteExcludeAddress
