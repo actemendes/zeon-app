@@ -3,8 +3,6 @@ import 'package:flutter/services.dart';
 
 abstract class Constants {
   static const appName = "ZEON";
-  static const githubReleasesApiUrl = "https://api.github.com/repos/actemendes/zeon-app/releases";
-  static const githubLatestReleaseUrl = "https://github.com/actemendes/zeon-app/releases/latest";
   static const privacyPolicyUrl =
       "https://zeon-vps.net/faq/?k=HHhBa3AAQleuzYt3Tl2GYycjl8HGG_a_m0lucqCqJDg#/zeon-app-privacy";
   static const termsAndConditionsUrl =

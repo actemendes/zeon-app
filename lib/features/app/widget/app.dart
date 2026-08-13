@@ -8,21 +8,16 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:toastification/toastification.dart';
-import 'package:upgrader/upgrader.dart';
-import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/localization/locale_extensions.dart';
 import 'package:zeon/core/localization/locale_preferences.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
-import 'package:zeon/core/model/environment.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
-import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/router/go_router/go_router_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/theme/app_theme.dart';
 import 'package:zeon/core/theme/system_bars_style.dart';
 import 'package:zeon/core/theme/theme_preferences.dart';
-import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/features/connection/widget/connection_wrapper.dart';
 import 'package:zeon/features/notifications/data/notification_data_providers.dart';
 import 'package:zeon/features/per_app_proxy/overview/per_app_proxy_service_notifier.dart';
@@ -73,8 +68,6 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
     final locale = ref.watch(localePreferencesProvider);
     final themeMode = ref.watch(themePreferencesProvider);
     final theme = AppTheme(themeMode, locale.preferredFontFamily);
-    final appInfo = ref.watch(appInfoProvider).requireValue;
-    final upgrader = appInfo.release == Release.googlePlay ? ref.watch(upgraderProvider) : null;
     final activeBreakpoint = Breakpoint(context).activeBreakpoint;
 
     ref.listen(foregroundProfilesUpdateNotifierProvider, (_, _) {});
@@ -97,17 +90,6 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
       });
       return null;
     }, [activeBreakpoint]);
-    useEffect(() {
-      if (appInfo.release != Release.general) return null;
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        final newVersion = await ref.read(appUpdateNotifierProvider.notifier).checkAutomatically();
-        if (!context.mounted || newVersion == null) return;
-        await ref
-            .read(dialogNotifierProvider.notifier)
-            .showNewVersion(currentVersion: appInfo.presentVersion, newVersion: newVersion, canIgnore: false);
-      });
-      return null;
-    }, [appInfo.release]);
     return WindowWrapper(
       ShortcutWrapper(
         ToastificationWrapper(
@@ -124,14 +106,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
               title: Constants.appName,
               builder: (context, child) {
                 final theme = Theme.of(context);
-                var appChild = child ?? const SizedBox();
-                if (upgrader != null) {
-                  appChild = UpgradeAlert(
-                    upgrader: upgrader,
-                    navigatorKey: router.routerDelegate.navigatorKey,
-                    child: appChild,
-                  );
-                }
+                final appChild = child ?? const SizedBox();
                 if (kDebugMode && _debugAccessibility) {
                   return AccessibilityTools(checkFontOverflows: true, child: appChild);
                 }

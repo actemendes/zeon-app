@@ -2,14 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
-import 'package:zeon/core/model/failures.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
-import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
-import 'package:zeon/features/app_update/notifier/app_update_state.dart';
 import 'package:zeon/features/settings/notifier/config_option/config_option_notifier.dart';
 import 'package:zeon/utils/utils.dart';
 
@@ -39,8 +35,6 @@ class SettingsPage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
-    final appInfo = ref.watch(appInfoProvider).requireValue;
-    final appUpdateState = ref.watch(appUpdateNotifierProvider);
     // final scrollController = useScrollController();
 
     // useMemoized(
@@ -180,41 +174,9 @@ class SettingsPage extends HookConsumerWidget {
               namedLocation: context.namedLocation('about'),
             ),
           ],
-          if (appInfo.release.allowCustomUpdateChecker && !PlatformUtils.isIOS)
-            Material(
-              child: ListTile(
-                leading: const Icon(Icons.system_update_alt_rounded),
-                title: Text(t.pages.about.checkForUpdate),
-                subtitle: Text("${t.common.version} ${appInfo.presentVersion}"),
-                trailing: appUpdateState is AppUpdateStateChecking
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh_rounded),
-                onTap: appUpdateState is AppUpdateStateChecking ? null : () => _checkForUpdate(context, ref),
-              ),
-            ),
         ],
       ),
     );
-  }
-}
-
-Future<void> _checkForUpdate(BuildContext context, WidgetRef ref) async {
-  final result = await ref.read(appUpdateNotifierProvider.notifier).check();
-  if (!context.mounted) return;
-
-  final t = ref.read(translationsProvider).requireValue;
-  final appInfo = ref.read(appInfoProvider).requireValue;
-  switch (result) {
-    case AppUpdateStateAvailable(:final versionInfo) || AppUpdateStateIgnored(:final versionInfo):
-      await ref
-          .read(dialogNotifierProvider.notifier)
-          .showNewVersion(currentVersion: appInfo.presentVersion, newVersion: versionInfo, canIgnore: false);
-    case AppUpdateStateError(:final error):
-      CustomToast.error(t.presentShortError(error), diagnosticText: t.diagnosticError(error)).show(context);
-    case AppUpdateStateNotAvailable():
-      CustomToast.success(t.pages.about.notAvailableMsg).show(context);
-    case AppUpdateStateInitial() || AppUpdateStateDisabled() || AppUpdateStateChecking():
-      return;
   }
 }
 
