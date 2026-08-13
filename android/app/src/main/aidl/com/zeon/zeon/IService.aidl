@@ -4,6 +4,7 @@ import com.zeon.zeon.IServiceCallback;
 
 interface IService {
   int getStatus();
+  long getGeneration();
   void registerCallback(in IServiceCallback callback);
   oneway void unregisterCallback(in IServiceCallback callback);
 }

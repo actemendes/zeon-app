@@ -43,7 +43,7 @@ type CommandServerHandler interface {
 }
 
 func NewCommandServer(handler CommandServerHandler, platformInterface PlatformInterface) (*CommandServer, error) {
-	ctx := BaseContext(platformInterface)
+	ctx := baseContext(platformInterface)
 	platformWrapper := &platformInterfaceWrapper{
 		iif:       platformInterface,
 		useProcFS: platformInterface.UseProcFS(),
@@ -60,6 +60,7 @@ func NewCommandServer(handler CommandServerHandler, platformInterface PlatformIn
 		Handler:     (*platformHandler)(server),
 		Debug:       sDebug,
 		LogMaxLines: sLogMaxLines,
+		OOMKiller:   memoryLimitEnabled,
 		// WorkingDirectory: sWorkingPath,
 		// TempDirectory:    sTempPath,
 		// UserID:           sUserID,
@@ -113,7 +114,7 @@ func (s *CommandServer) Start() error {
 	if sCommandServerListenPort == 0 {
 		sockPath := filepath.Join(sBasePath, "command.sock")
 		os.Remove(sockPath)
-		for i := 0; i < 30; i++ {
+		for range 30 {
 			listener, err = net.ListenUnix("unix", &net.UnixAddr{
 				Name: sockPath,
 				Net:  "unix",
@@ -159,6 +160,7 @@ func (s *CommandServer) Close() {
 		s.grpcServer.Stop()
 	}
 	common.Close(s.listener)
+	s.StartedService.Close()
 }
 
 type OverrideOptions struct {

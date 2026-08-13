@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/conntrack"
 	"github.com/sagernet/sing-box/common/urltest"
 	"github.com/sagernet/sing-box/experimental/clashapi"
 	"github.com/sagernet/sing-box/experimental/clashapi/trafficontrol"
@@ -37,6 +36,7 @@ type StartedService struct {
 	handler     PlatformHandler
 	debug       bool
 	logMaxLines int
+	oomKiller   bool
 	// workingDirectory string
 	// tempDirectory    string
 	// userID           int
@@ -70,6 +70,7 @@ type ServiceOptions struct {
 	Handler     PlatformHandler
 	Debug       bool
 	LogMaxLines int
+	OOMKiller   bool
 	// WorkingDirectory   string
 	// TempDirectory      string
 	// UserID             int
@@ -85,6 +86,7 @@ func NewStartedService(options ServiceOptions) *StartedService {
 		handler:     options.Handler,
 		debug:       options.Debug,
 		logMaxLines: options.LogMaxLines,
+		oomKiller:   options.OOMKiller,
 		// workingDirectory: options.WorkingDirectory,
 		// tempDirectory:    options.TempDirectory,
 		// userID:           options.UserID,
@@ -176,7 +178,7 @@ func (s *StartedService) StartOrReloadServiceOptions(profileOptions option.Optio
 func (s *StartedService) startOrReloadServiceImp(profileOptions *option.Options, profileContent string, options *OverrideOptions) error {
 	s.serviceAccess.Lock()
 	switch s.serviceStatus.Status {
-	case ServiceStatus_IDLE, ServiceStatus_STARTED, ServiceStatus_STARTING:
+	case ServiceStatus_IDLE, ServiceStatus_STARTED, ServiceStatus_STARTING, ServiceStatus_FATAL:
 	default:
 		s.serviceAccess.Unlock()
 		return os.ErrInvalid
@@ -227,6 +229,14 @@ func (s *StartedService) startOrReloadServiceImp(profileOptions *option.Options,
 	return nil
 }
 
+func (s *StartedService) Close() {
+	s.serviceStatusSubscriber.Close()
+	s.logSubscriber.Close()
+	s.urlTestSubscriber.Close()
+	s.clashModeSubscriber.Close()
+	s.connectionEventSubscriber.Close()
+}
+
 func (s *StartedService) CloseService() error {
 	s.serviceAccess.Lock()
 	switch s.serviceStatus.Status {
@@ -236,13 +246,14 @@ func (s *StartedService) CloseService() error {
 		return os.ErrInvalid
 	}
 	s.updateStatus(ServiceStatus_STOPPING)
-	if s.instance != nil {
-		err := s.instance.Close()
+	instance := s.instance
+	s.instance = nil
+	if instance != nil {
+		err := instance.Close()
 		if err != nil {
 			return s.updateStatusError(err)
 		}
 	}
-	s.instance = nil
 	s.startedAt = time.Time{}
 	s.updateStatus(ServiceStatus_IDLE)
 	s.serviceAccess.Unlock()
@@ -422,12 +433,14 @@ func (s *StartedService) ReadStatus() *Status {
 }
 func (s *StartedService) readStatus() *Status {
 	var status Status
-	status.Memory = memory.Inuse()
+	status.Memory = memory.Total()
 	status.Goroutines = int32(runtime.NumGoroutine())
-	status.ConnectionsOut = int32(conntrack.Count())
 	s.serviceAccess.RLock()
 	nowService := s.instance
 	s.serviceAccess.RUnlock()
+	if nowService != nil && nowService.connectionManager != nil {
+		status.ConnectionsOut = int32(nowService.connectionManager.Count())
+	}
 	if nowService != nil {
 		if clashServer := nowService.clashServer; clashServer != nil {
 			status.TrafficAvailable = true
@@ -613,10 +626,7 @@ func (s *StartedService) URLTest(ctx context.Context, request *URLTestRequest) (
 				return false
 			}
 			_, isGroup := it.(adapter.OutboundGroup)
-			if isGroup {
-				return false
-			}
-			return true
+			return !isGroup
 		})
 		b, _ := batch.New(boxService.ctx, batch.WithConcurrencyNum[any](10))
 		for _, detour := range outbounds {
@@ -957,11 +967,11 @@ func buildConnectionProto(metadata *trafficontrol.TrackerMetadata) *Connection {
 	var processInfo *ProcessInfo
 	if metadata.Metadata.ProcessInfo != nil {
 		processInfo = &ProcessInfo{
-			ProcessId:   metadata.Metadata.ProcessInfo.ProcessID,
-			UserId:      metadata.Metadata.ProcessInfo.UserId,
-			UserName:    metadata.Metadata.ProcessInfo.UserName,
-			ProcessPath: metadata.Metadata.ProcessInfo.ProcessPath,
-			PackageName: metadata.Metadata.ProcessInfo.AndroidPackageName,
+			ProcessId:    metadata.Metadata.ProcessInfo.ProcessID,
+			UserId:       metadata.Metadata.ProcessInfo.UserId,
+			UserName:     metadata.Metadata.ProcessInfo.UserName,
+			ProcessPath:  metadata.Metadata.ProcessInfo.ProcessPath,
+			PackageNames: metadata.Metadata.ProcessInfo.AndroidPackageNames,
 		}
 	}
 	return &Connection{
@@ -1005,7 +1015,12 @@ func (s *StartedService) CloseConnection(ctx context.Context, request *CloseConn
 }
 
 func (s *StartedService) CloseAllConnections(ctx context.Context, empty *emptypb.Empty) (*emptypb.Empty, error) {
-	conntrack.Close()
+	s.serviceAccess.RLock()
+	nowService := s.instance
+	s.serviceAccess.RUnlock()
+	if nowService != nil && nowService.connectionManager != nil {
+		nowService.connectionManager.CloseAll()
+	}
 	return &emptypb.Empty{}, nil
 }
 

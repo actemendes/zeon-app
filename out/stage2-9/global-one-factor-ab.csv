@@ -1,0 +1,13 @@
+factor,A,B,held_constant,result,conclusion
+effective_config,Stage_2.7,Stage_2.8,"profile; device; preset; transformation pipeline",IDENTICAL,"SHA-256 identical; zero changed lines"
+core,Stage_2.7_compat,Stage_2.8_validation,"app; Global config; device; selected endpoint",NO_CHANGE,"same browser closes; Stage 2.8 core is not the cause"
+DNS,Stage_2.7_Global,Stage_2.8_Global,"effective config",IDENTICAL,"dns-remote and independent_cache unchanged"
+FakeDNS,Stage_2.7_Global,Stage_2.8_Global,"effective config",IDENTICAL,"no FakeIP declaration in either config"
+endpoint,A_TROJAN,D_VLESS,"app; device; Global config; DNS; MTU",DIFFERENT,"D restored browser services; protocol also changed so proof is partial"
+same_protocol_endpoint,A_TROJAN,B_TROJAN,"app; device; Global config; DNS; MTU",PARTIAL,"B restored example.com but not YouTube/Telegram/Speedtest"
+IPv4_IPv6,current_dual_stack,explicit_family_socket_control,"endpoint; MTU; DNS",NOT_RUN,"no production-wide change justified; DNS returned A and AAAA and h3 succeeded"
+QUIC,current_enabled,disabled,"all other options",NOT_RUN,"positive h3 evidence; disabling QUIC not justified"
+mux,current,disabled,"all other options",NOT_RUN,"no deterministic mux reset signature and config unchanged"
+MTU,current_1500,reduced,"all other options",NOT_RUN,"small and large transfers both pass; no PMTU black-hole proof"
+selector_interruption,selected_endpoint,post_refresh,"generation; UI; notification",NO_UNEXPECTED_SWITCH,"safe outbound identity remained stable inside each measured generation"
+monitoring_hooks,current,disabled,"all other options",NOT_RUN,"no hook-correlated close was observed"

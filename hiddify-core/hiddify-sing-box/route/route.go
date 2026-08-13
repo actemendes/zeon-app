@@ -9,11 +9,9 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/conntrack"
-	"github.com/sagernet/sing-box/common/process"
 	"github.com/sagernet/sing-box/common/sniff"
+	"github.com/sagernet/sing-box/common/zeonvalidation"
 	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/option"
 	R "github.com/sagernet/sing-box/route/rule"
 	"github.com/sagernet/sing-mux"
 	"github.com/sagernet/sing-tun"
@@ -34,7 +32,7 @@ import (
 
 // Deprecated: use RouteConnectionEx instead.
 func (r *Router) RouteConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
-	done := make(chan interface{})
+	done := make(chan any)
 	err := r.routeConnection(ctx, conn, metadata, N.OnceClose(func(it error) {
 		close(done)
 	}))
@@ -80,7 +78,6 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 		injectable.NewConnectionEx(ctx, conn, metadata, onClose)
 		return nil
 	}
-	conntrack.KillerCheck()
 	metadata.Network = N.NetworkTCP
 	switch metadata.Destination.Fqdn {
 	case mux.Destination.Fqdn:
@@ -95,7 +92,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 	if deadline.NeedAdditionalReadDeadline(conn) {
 		conn = deadline.NewConn(conn)
 	}
-	selectedRule, _, buffers, _, err := r.matchRule(ctx, &metadata, false, false, conn, nil)
+	selectedRule, selectedRuleIndex, buffers, _, err := r.matchRule(ctx, &metadata, false, false, conn, nil)
 	if err != nil {
 		return err
 	}
@@ -129,6 +126,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 			}
 		case *R.RuleActionReject:
 			buf.ReleaseMulti(buffers)
+			zeonvalidation.RecordRoute(ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, nil, true)
 			if action.Method == C.RuleActionRejectMethodReply {
 				return E.New("reject method `reply` is not supported for TCP connections")
 			}
@@ -149,6 +147,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 		}
 		selectedOutbound = defaultOutbound
 	}
+	zeonvalidation.RecordRoute(ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, selectedOutbound, false)
 
 	for _, buffer := range buffers {
 		conn = bufio.NewCachedConn(conn, buffer)
@@ -165,7 +164,7 @@ func (r *Router) routeConnection(ctx context.Context, conn net.Conn, metadata ad
 }
 
 func (r *Router) RoutePacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext) error {
-	done := make(chan interface{})
+	done := make(chan any)
 	err := r.routePacketConnection(ctx, conn, metadata, N.OnceClose(func(it error) {
 		close(done)
 	}))
@@ -216,8 +215,6 @@ func (r *Router) routePacketConnection(ctx context.Context, conn N.PacketConn, m
 		injectable.NewPacketConnectionEx(ctx, conn, metadata, onClose)
 		return nil
 	}
-	conntrack.KillerCheck()
-
 	// TODO: move to UoT
 	metadata.Network = N.NetworkUDP
 
@@ -226,7 +223,7 @@ func (r *Router) routePacketConnection(ctx context.Context, conn N.PacketConn, m
 		conn = deadline.NewPacketConn(bufio.NewNetPacketConn(conn))
 	}*/
 
-	selectedRule, _, _, packetBuffers, err := r.matchRule(ctx, &metadata, false, false, nil, conn)
+	selectedRule, selectedRuleIndex, _, packetBuffers, err := r.matchRule(ctx, &metadata, false, false, nil, conn)
 	if err != nil {
 		return err
 	}
@@ -261,6 +258,7 @@ func (r *Router) routePacketConnection(ctx context.Context, conn N.PacketConn, m
 			}
 		case *R.RuleActionReject:
 			N.ReleaseMultiPacketBuffer(packetBuffers)
+			zeonvalidation.RecordRoute(ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, nil, true)
 			if action.Method == C.RuleActionRejectMethodReply {
 				return E.New("reject method `reply` is not supported for UDP connections")
 			}
@@ -277,6 +275,7 @@ func (r *Router) routePacketConnection(ctx context.Context, conn N.PacketConn, m
 		}
 		selectedOutbound = defaultOutbound
 	}
+	zeonvalidation.RecordRoute(ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, selectedOutbound, false)
 	for _, buffer := range packetBuffers {
 		conn = bufio.NewCachedPacketConn(conn, buffer.Buffer, buffer.Destination)
 		N.PutPacketBuffer(buffer)
@@ -296,7 +295,7 @@ func (r *Router) routePacketConnection(ctx context.Context, conn N.PacketConn, m
 }
 
 func (r *Router) PreMatch(metadata adapter.InboundContext, routeContext tun.DirectRouteContext, timeout time.Duration, supportBypass bool) (tun.DirectRouteDestination, error) {
-	selectedRule, _, _, _, err := r.matchRule(r.ctx, &metadata, true, supportBypass, nil, nil)
+	selectedRule, selectedRuleIndex, _, _, err := r.matchRule(r.ctx, &metadata, true, supportBypass, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -304,6 +303,7 @@ func (r *Router) PreMatch(metadata adapter.InboundContext, routeContext tun.Dire
 	if selectedRule != nil {
 		switch action := selectedRule.Action().(type) {
 		case *R.RuleActionReject:
+			zeonvalidation.RecordRoute(r.ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, nil, true)
 			switch metadata.Network {
 			case N.NetworkTCP:
 				if action.Method == C.RuleActionRejectMethodReply {
@@ -317,6 +317,7 @@ func (r *Router) PreMatch(metadata adapter.InboundContext, routeContext tun.Dire
 			return nil, action.Error(context.Background())
 		case *R.RuleActionBypass:
 			if supportBypass {
+				zeonvalidation.RecordRoute(r.ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, nil, false)
 				return nil, &R.BypassedError{Cause: tun.ErrBypass}
 			}
 			if routeContext == nil {
@@ -354,7 +355,7 @@ func (r *Router) PreMatch(metadata adapter.InboundContext, routeContext tun.Dire
 		}
 		directRouteOutbound = defaultOutbound.(adapter.DirectRouteOutbound)
 	}
-	if metadata.Destination.IsFqdn() {
+	if metadata.Destination.IsDomain() {
 		if len(metadata.DestinationAddresses) == 0 {
 			var strategy C.DomainStrategy
 			if metadata.Source.IsIPv4() {
@@ -401,9 +402,15 @@ func (r *Router) PreMatch(metadata adapter.InboundContext, routeContext tun.Dire
 		if err != nil {
 			return nil, err
 		}
-		return ping.NewDestinationWriter(routeDestination, newDestination), nil
+		routeDestination = ping.NewDestinationWriter(routeDestination, newDestination)
+		zeonvalidation.RecordRoute(r.ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, directRouteOutbound, false)
+		return routeDestination, nil
 	}
-	return directRouteOutbound.NewDirectRouteConnection(metadata, routeContext, timeout)
+	routeDestination, err := directRouteOutbound.NewDirectRouteConnection(metadata, routeContext, timeout)
+	if err == nil && routeDestination != nil {
+		zeonvalidation.RecordRoute(r.ctx, r.logger, &metadata, selectedRule, selectedRuleIndex, directRouteOutbound, false)
+	}
+	return routeDestination, err
 }
 
 func (r *Router) matchRule(
@@ -413,37 +420,7 @@ func (r *Router) matchRule(
 	selectedRule adapter.Rule, selectedRuleIndex int,
 	buffers []*buf.Buffer, packetBuffers []*N.PacketBuffer, fatalErr error,
 ) {
-	if r.processSearcher != nil && metadata.ProcessInfo == nil {
-		var originDestination netip.AddrPort
-		if metadata.OriginDestination.IsValid() {
-			originDestination = metadata.OriginDestination.AddrPort()
-		} else if metadata.Destination.IsIP() {
-			originDestination = metadata.Destination.AddrPort()
-		}
-		processInfo, fErr := process.FindProcessInfo(r.processSearcher, ctx, metadata.Network, metadata.Source.AddrPort(), originDestination)
-		if fErr != nil {
-			r.logger.InfoContext(ctx, "failed to search process: ", fErr)
-		} else {
-			if processInfo.ProcessPath != "" {
-				if processInfo.UserName != "" {
-					r.logger.InfoContext(ctx, "found process path: ", processInfo.ProcessPath, ", user: ", processInfo.UserName)
-				} else if processInfo.UserId != -1 {
-					r.logger.InfoContext(ctx, "found process path: ", processInfo.ProcessPath, ", user id: ", processInfo.UserId)
-				} else {
-					r.logger.InfoContext(ctx, "found process path: ", processInfo.ProcessPath)
-				}
-			} else if processInfo.AndroidPackageName != "" {
-				r.logger.InfoContext(ctx, "found package name: ", processInfo.AndroidPackageName)
-			} else if processInfo.UserId != -1 {
-				if processInfo.UserName != "" {
-					r.logger.InfoContext(ctx, "found user: ", processInfo.UserName)
-				} else {
-					r.logger.InfoContext(ctx, "found user id: ", processInfo.UserId)
-				}
-			}
-			metadata.ProcessInfo = processInfo
-		}
-	}
+	r.searchProcessInfo(ctx, metadata)
 	if metadata.Destination.Addr.IsValid() && r.dnsTransport.FakeIP() != nil && r.dnsTransport.FakeIP().Store().Contains(metadata.Destination.Addr) {
 		domain, loaded := r.dnsTransport.FakeIP().Store().Lookup(metadata.Destination.Addr)
 		if !loaded {
@@ -470,37 +447,6 @@ func (r *Router) matchRule(
 		metadata.IPVersion = 4
 	} else if metadata.Destination.IsIPv6() {
 		metadata.IPVersion = 6
-	}
-
-	//nolint:staticcheck
-	if metadata.InboundOptions != common.DefaultValue[option.InboundOptions]() {
-		if !preMatch && metadata.InboundOptions.SniffEnabled {
-			newBuffer, newPackerBuffers, newErr := r.actionSniff(ctx, metadata, &R.RuleActionSniff{
-				OverrideDestination: metadata.InboundOptions.SniffOverrideDestination,
-				Timeout:             time.Duration(metadata.InboundOptions.SniffTimeout),
-			}, inputConn, inputPacketConn, nil, nil)
-			if newBuffer != nil {
-				buffers = []*buf.Buffer{newBuffer}
-			} else if len(newPackerBuffers) > 0 {
-				packetBuffers = newPackerBuffers
-			}
-			if newErr != nil {
-				fatalErr = newErr
-				return
-			}
-		}
-		if C.DomainStrategy(metadata.InboundOptions.DomainStrategy) != C.DomainStrategyAsIS {
-			fatalErr = r.actionResolve(ctx, metadata, &R.RuleActionResolve{
-				Strategy: C.DomainStrategy(metadata.InboundOptions.DomainStrategy),
-			})
-			if fatalErr != nil {
-				return
-			}
-		}
-		if metadata.InboundOptions.UDPDisableDomainUnmapping {
-			metadata.UDPDisableDomainUnmapping = true
-		}
-		metadata.InboundOptions = option.InboundOptions{}
 	}
 
 match:
@@ -770,7 +716,7 @@ func (r *Router) actionSniff(
 			}
 			if err != nil {
 				sniffBuffer.Release()
-				if !errors.Is(err, context.DeadlineExceeded) {
+				if !E.IsTimeout(err) {
 					fatalErr = err
 					return
 				}
@@ -829,7 +775,7 @@ func (r *Router) actionSniff(
 }
 
 func (r *Router) actionResolve(ctx context.Context, metadata *adapter.InboundContext, action *R.RuleActionResolve) error {
-	if metadata.Destination.IsFqdn() {
+	if metadata.Destination.IsDomain() {
 		var transport adapter.DNSTransport
 		if action.Server != "" {
 			var loaded bool

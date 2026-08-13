@@ -641,6 +641,9 @@
   },
   "connection": {
     "tapToConnect": "Toca para conectar",
+    "tapToDisconnect": "Toca para desconectar",
+    "connectingSemantics": "Conexión en curso",
+    "disconnectingSemantics": "Desconexión en curso",
     "connect": "Conectar",
     "connecting": "Conectando...",
     "connected": "Conectado",

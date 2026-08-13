@@ -1,0 +1,23 @@
+ZEON Stage 2.9 effective Global configuration comparison
+
+Stage 2.7 source: final physically exercised Stage 2.7 artifact
+Stage 2.7 redacted config SHA-256: 0424e50b3764c372b5048635119d33c20ace6f7ffe5a5fce901fbce596930db4
+Stage 2.8 source: exact production revision 07158f91
+Stage 2.8 redacted config SHA-256: 0424e50b3764c372b5048635119d33c20ace6f7ffe5a5fce901fbce596930db4
+
+Comparison result: BYTE-FOR-BYTE IDENTICAL
+Changed lines: 0
+
+Verified effective properties in both captures:
+- route.final = select
+- DNS final = dns-remote
+- DNS independent_cache = true
+- TUN MTU = 1500
+- FakeIP/FakeDNS declaration absent
+- Global RU destination/service rule-set tags absent
+- no zapret-ru-domains, zapret-ru-ip, zeon-ru-yandex, or zeon-ru-wildberries
+
+Conclusion: no Stage 2.7 -> Stage 2.8 effective-Global config delta exists to
+explain the observed service closes. This comparison is of the transformed
+effective config, not only the source profile JSON. Credentials, endpoint
+addresses, profile labels, UUIDs, and full IP addresses are not present.

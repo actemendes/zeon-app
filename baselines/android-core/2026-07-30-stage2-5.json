@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-07-30T15:45:00Z",
+  "purpose": "Stage 2.5 Google Play bitmap and release-hardening provenance.",
+  "source": {
+    "branch": "stage2.5/google-play-performance",
+    "stage2_4_commit": "961ced2058c8b67c268ac5a44bf4c260b958127d",
+    "implementation_commit": "7b27fb0a16912c17e207a41ef91261f38f9b36f1",
+    "implementation_tree": "92eade01c5ade21d3c534cc643e276e799f82999",
+    "bitmap_identification_commit": "e6e11ff0",
+    "bitmap_fix_commit": "02dbc548",
+    "r8_hardening_commit": "85ca8964",
+    "agp9_compatibility_commit": "7b27fb0a",
+    "core_source_changed": false
+  },
+  "application": {
+    "package": "com.zeon.hiddify",
+    "version_name": "1.3.0",
+    "version_code": 103001,
+    "min_sdk": 24,
+    "compile_sdk": 36,
+    "target_sdk": 36
+  },
+  "core": {
+    "fork_version": "sing-box 1.13.14-zeon.1",
+    "source_revision": "e8c06439e1864255d81f4ee89290d89cbb1b3a18",
+    "upstream_version": "v1.13.14",
+    "upstream_commit": "25a600db24f7680ad9806ce5427bd0ab8afe1114",
+    "hiddify_core_tree": "7390740472f8e17abd281c0e10ab40eb77c971af",
+    "hiddify_sing_box_tree": "7f4930c76d7dbe9f08a6de01acaaca33db5bac9d",
+    "aar_sha256": "5BEC09E8AA72E385C0BB4950FE9970759725C6083F813E6DAB7BBFE436BECB00",
+    "classes_jar_sha256": "959C71C4B641067BA96FA0D24BD23ADCC99F8DC063274FA4E99B2C0C07BE7B58",
+    "api_abi_identical_to_stage2_4": true
+  },
+  "toolchain": {
+    "flutter": "3.41.9",
+    "dart": "3.11.5",
+    "android_gradle_plugin": "8.6.0",
+    "r8": "8.6.17",
+    "gradle": "8.7",
+    "kotlin_plugin": "2.1.0",
+    "jdk": "17.0.19",
+    "ndk": "28.2.13676358",
+    "bundletool": "1.18.3"
+  },
+  "release_optimization": {
+    "minify_enabled": true,
+    "shrink_resources": true,
+    "optimized_default_proguard": true,
+    "r8_full_mode_disabled": false,
+    "unbounded_custom_keep_rules": false,
+    "optimized_resource_shrinking": false,
+    "optimized_resource_shrinking_reason": "Not supported by AGP 8.6.0; introduced in AGP 8.12."
+  },
+  "bitmap": {
+    "reported_obfuscated_method": "r2.u5.a",
+    "source_class": "com.mr.flutter.plugin.filepicker.FileUtils",
+    "source_method": "compressImage(android.net.Uri,int,android.content.Context)",
+    "dependency": "file_picker 8.3.7",
+    "fix": "bounds-first decode with validated dimensions and power-of-two inSampleSize",
+    "unsafe_one_argument_decode_present": false,
+    "instrumented_tests": "14/14"
+  },
+  "artifacts": {
+    "aab": {
+      "path": "out/stage2-5-google-play/20260730T110709Z/final/zeon-stage2.5-release.aab",
+      "sha256": "E140523788ACCB3BEDDA685151E63CF35C7857B0FA609BB7EAD6A0D563AA5B39",
+      "size_bytes": 232638745
+    },
+    "universal_apk": {
+      "path": "out/stage2-5-google-play/20260730T110709Z/final/apks-universal/universal.apk",
+      "sha256": "4EA930ADA761B120AB38ED3A6323081A89A68DAEC188C3BB35308E7ACF887AB2",
+      "size_bytes": 318096071
+    },
+    "arm64_split_apk": {
+      "path": "out/stage2-5-google-play/20260730T110709Z/final/apks-device/splits/base-arm64_v8a.apk",
+      "sha256": "1860149CEA3791FF68E30D76E6B2189596E502172AF48B918798F27E4115D367",
+      "size_bytes": 103445640
+    },
+    "device_download_size_bytes": 48156661,
+    "signing_certificate_sha256": "8C767DC4657BB13CCFEE900B4B7CACC8F794027E6544650EF85D006BDC9F8EE7"
+  },
+  "stage2_4_baseline": {
+    "aab_sha256": "43E2A522277EDA9BAA12AD8EC22DD5D9CEB9111210EB89032AC4063745FC530B",
+    "aab_size_bytes": 232637936,
+    "universal_apk_sha256": "6B3517B5C2D639D8210C6E36B86B331C8BBE8B3861F404831FB2A14B6E3DC6DA",
+    "device_download_size_bytes": 48156581
+  },
+  "agp9": {
+    "result": "AGP 9 MIGRATION BLOCKED",
+    "reason": "Flutter 3.41.9 and the current plugin stack use the legacy Kotlin plugin and Android variant APIs; Flutter stable AGP 9 support begins in 3.44.",
+    "toolchain_changed": false
+  }
+}

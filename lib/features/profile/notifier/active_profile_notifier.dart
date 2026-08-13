@@ -1,18 +1,22 @@
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/features/profile/data/profile_data_mapper.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'active_profile_notifier.g.dart';
 
 @Riverpod(keepAlive: true)
 class ActiveProfile extends _$ActiveProfile with AppLogger {
   @override
-  Stream<ProfileEntity?> build() {
+  Stream<ProfileEntity?> build() async* {
     loggy.debug("watching active profile");
-    return ref.watch(profileDataSourceProvider).watchActiveProfile().map((event) => event?.toEntity());
+    final source = ref.watch(profileDataSourceProvider);
+    final initial = await source.getActiveProfile();
+    final initialEntity = initial?.toEntity();
+    yield initialEntity;
+    yield* source.watchActiveProfile().map((event) => event?.toEntity()).where((event) => event != initialEntity);
   }
 }
 

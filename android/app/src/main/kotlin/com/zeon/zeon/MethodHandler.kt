@@ -12,8 +12,16 @@ import com.hiddify.core.libbox.Libbox
 import com.hiddify.core.mobile.Mobile
 import com.hiddify.core.mobile.SetupOptions
 import com.zeon.zeon.bg.Bugs
+import com.zeon.zeon.bg.CoreNativeOperationCoordinator
+import com.zeon.zeon.bg.CoreShutdownDispatcher
+import com.zeon.zeon.bg.VpnSessionCoordinator
+import com.zeon.zeon.bg.StartPermissionRequestCoordinator
+import com.zeon.zeon.bg.VpnSessionSnapshotCoordinator
+import com.zeon.zeon.bg.VpnStopSource
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
@@ -30,6 +38,9 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             Start("start"),
             Stop("stop"),
             Restart("restart"),
+            SetSessionGeneration("set_session_generation"),
+            MarkCoreStarted("mark_core_started"),
+            GetVpnSessionSnapshot("get_vpn_session_snapshot"),
             AddGrpcClientPublicKey("add_grpc_client_public_key"),
             GetGrpcServerPublicKey("get_grpc_server_public_key"),
 
@@ -83,17 +94,25 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         val grpcPort = args["grpcPort"] as Int
                         Log.d("debugmode","${Settings.debugMode}")
                         runCatching {
-                            Mobile.setup(
-                                SetupOptions().also {
-                                    it.basePath = Settings.baseDir
-                                    it.workingDir = Settings.workingDir
-                                    it.tempDir = Settings.tempDir
-                                    it.fixAndroidStack = Bugs.fixAndroidStack
-                                    it.mode=mode.toLong()
-                                    it.listen= "127.0.0.1:" + grpcPort
-                                    it.secret=""
-                                    it.debug = Settings.debugMode
-                                },null)
+                            if (!CoreShutdownDispatcher.awaitSettled()) {
+                                error("native core shutdown is still in progress")
+                            }
+                            CoreNativeOperationCoordinator.exclusive {
+                                if (!CoreShutdownDispatcher.awaitSettled()) {
+                                    error("native core shutdown started while setup was queued")
+                                }
+                                Mobile.setup(
+                                    SetupOptions().also {
+                                        it.basePath = Settings.baseDir
+                                        it.workingDir = Settings.workingDir
+                                        it.tempDir = Settings.tempDir
+                                        it.fixAndroidStack = Bugs.fixAndroidStack
+                                        it.mode=mode.toLong()
+                                        it.listen= "127.0.0.1:" + grpcPort
+                                        it.secret=""
+                                        it.debug = Settings.debugMode
+                                    },null)
+                            }
 
 //                            Libbox.setup(Settings.baseDir, Settings.workingDir, Settings.tempDir, false)
                             Libbox.redirectStderr(File(Settings.workingDir, "stderr2.log").path)
@@ -116,9 +135,30 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         Settings.activeProfileName = args["name"] as String? ?: ""
                         Settings.grpcServiceModePort = args["grpcPort"] as Int
                         Settings.disableMemoryLimit = args["disableMemoryLimit"] as Boolean? ?: false
+                        val generation = (args["generation"] as Number?)?.toLong() ?: 0L
+                        val acceptedGeneration = VpnSessionCoordinator.accept(generation, "prepare_vpn")
+                        if (generation <= 0 || acceptedGeneration != generation) {
+                            VpnSessionCoordinator.event(
+                                "permission_result_ignored_stale",
+                                generation,
+                                "current_generation=$acceptedGeneration session_state=permission source=method_handler reason=invalid_generation",
+                            )
+                            result.error("vpn_operation_stale", "VPN permission result belongs to a stale session", null)
+                            return@launch
+                        }
 
-                        MainActivity.instance.prepareVpn { prepared ->
-                            result.success(prepared)
+                        MainActivity.instance.prepareVpn(generation) { outcome ->
+                            when (outcome) {
+                                StartPermissionRequestCoordinator.Outcome.Granted -> result.success(true)
+                                StartPermissionRequestCoordinator.Outcome.NotificationDenied,
+                                StartPermissionRequestCoordinator.Outcome.VpnDenied,
+                                -> result.success(false)
+                                StartPermissionRequestCoordinator.Outcome.Stale -> result.error(
+                                    "vpn_operation_stale",
+                                    "VPN permission result belongs to a stale session",
+                                    null,
+                                )
+                            }
                         }
                     } catch (e: Exception) {
                         result.error("prepare_vpn_failed", e.message, null)
@@ -134,6 +174,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         Settings.activeProfileName = args["name"] as String? ?: ""
                         Settings.debugMode = args["debug"] as Boolean? ?: false
                         Settings.grpcServiceModePort = args["grpcPort"] as Int
+                        val generation = (args["generation"] as Number?)?.toLong() ?: 0L
 
                         val mainActivity = MainActivity.instance
 //                        val started = mainActivity.serviceStatus.value == Status.Started
@@ -143,8 +184,8 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
 //                        }
                         Settings.startCoreAfterStartingService = false
 
-                        mainActivity.startService()
-                        success(true)
+                        mainActivity.startService(generation)
+                        success(generation)
                     }
                 }
             }
@@ -158,10 +199,82 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                             Log.w(TAG, "service is not running")
                             //    return@launch success(true)
                         }
-                        BoxService.stop()
-                        success(true)
+                        val args = call.arguments as? Map<*, *>
+                        val generation = (args?.get("generation") as Number?)?.toLong() ?: 0L
+                        val preemptive = args?.get("preemptive") as? Boolean ?: false
+                        val replacement = args?.get("replacement") as? Boolean ?: false
+                        val currentGeneration = VpnSessionCoordinator.current()
+                        if (replacement) {
+                            if (generation <= 0L) {
+                                result.error(
+                                    "vpn_operation_invalid",
+                                    "replacement cleanup requires a positive generation",
+                                    null,
+                                )
+                                return@launch
+                            }
+                            val accepted = BoxService.stopForReplacement(generation)
+                            success(if (accepted) generation else VpnSessionCoordinator.current())
+                        } else if (preemptive) {
+                            // This method call is the newest explicit user Stop
+                            // to reach Android. Reserve the generation and the
+                            // terminal lifecycle fence atomically so an internal
+                            // serviceReload cannot supersede it before dispatch.
+                            val acceptedGeneration = BoxService.stopPreemptively(
+                                generation,
+                                VpnStopSource.FLUTTER,
+                            )
+                            success(acceptedGeneration)
+                        } else if (generation > 0L && generation < currentGeneration) {
+                            VpnSessionCoordinator.stale(generation, "flutter_stop")
+                            success(currentGeneration)
+                        } else {
+                            val acceptedGeneration = VpnSessionCoordinator.accept(generation, "flutter_stop")
+                            BoxService.stop(acceptedGeneration, VpnStopSource.FLUTTER)
+                            success(acceptedGeneration)
+                        }
                     }
                 }
+            }
+
+            Trigger.SetSessionGeneration.method -> {
+                scope.launch {
+                    result.runCatching {
+                        val args = call.arguments as? Map<*, *>
+                        val generation = (args?.get("generation") as Number?)?.toLong() ?: 0L
+                        success(VpnSessionCoordinator.accept(generation, "flutter_generation_update"))
+                    }
+                }
+            }
+
+            Trigger.MarkCoreStarted.method -> {
+                scope.launch {
+                    result.runCatching {
+                        val args = call.arguments as? Map<*, *>
+                        val generation = (args?.get("generation") as Number?)?.toLong() ?: 0L
+                        if (!VpnSessionCoordinator.isCurrent(generation)) {
+                            VpnSessionCoordinator.stale(generation, "flutter_mark_core_started")
+                            result.error("vpn_operation_stale", "VPN core completion belongs to a stale session", null)
+                            return@runCatching
+                        }
+                        val confirmed = withContext(Dispatchers.IO) {
+                            BoxService.markCoreStarted(generation)
+                        }
+                        if (!confirmed) {
+                            result.error(
+                                "vpn_start_gate_rejected",
+                                "VPN startup readiness validation failed",
+                                null,
+                            )
+                            return@runCatching
+                        }
+                        success(generation)
+                    }
+                }
+            }
+
+            Trigger.GetVpnSessionSnapshot.method -> {
+                result.success(VpnSessionSnapshotCoordinator.current().toEvent())
             }
 
 //            Trigger.Restart.method -> {
@@ -194,4 +307,5 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             else -> result.notImplemented()
         }
     }
+
 }

@@ -25,6 +25,7 @@ import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/singbox/model/singbox_config_option.dart';
 import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart' as hcore;
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 import 'package:zeon/zeoncore/zeon_core_service.dart';
 
 typedef ActiveProfileReader = Future<ProfileEntity?> Function();
@@ -225,9 +226,14 @@ class ErrorReportController {
 
   Future<void> _captureVpnNotRunningOnStartupIfNeeded(int generation) async {
     if (!_isGenerationActive(generation)) return;
-    if (_preferences.getBool('started_by_user') != true || _coreService.currentState is! CoreStopped) {
+    VpnSessionSnapshot? nativeSnapshot;
+    try {
+      nativeSnapshot = await _coreService.readAuthoritativeSessionSnapshot();
+    } catch (error, stackTrace) {
+      Logger.app.warning('startup VPN snapshot unavailable; skipping startup failure telemetry', error, stackTrace);
       return;
     }
+    if (!startupSnapshotIndicatesFailedStart(nativeSnapshot)) return;
 
     final now = DateTime.now().toUtc();
     final lastReported = DateTime.tryParse((_preferences.getString(_startupStoppedReportKey) ?? '').trim())?.toUtc();
@@ -240,10 +246,19 @@ class ErrorReportController {
     if (!_isGenerationActive(generation)) return;
     await captureError(
       trigger: 'vpn_not_running_on_startup',
-      error: StateError('VPN was expected to be running but core is stopped on app startup'),
+      error: StateError('Authoritative VPN session reports a failed start on app startup'),
       stackTrace: StackTrace.current,
-      message: 'VPN was expected to be running but core is stopped on app startup',
-      context: {'started_by_user': true, 'core_status_at_startup': _formatCoreStatus(_coreService.currentState)},
+      message: 'Authoritative VPN session reports a failed start on app startup',
+      context: {
+        'started_by_user': _preferences.getBool('started_by_user') ?? false,
+        'core_status_at_startup': _formatCoreStatus(_coreService.currentState),
+        'native_generation': nativeSnapshot!.generation,
+        'native_runtime_epoch': nativeSnapshot.runtimeEpoch,
+        'native_phase': nativeSnapshot.phase.name,
+        'native_requested_action': nativeSnapshot.requestedAction,
+        'native_failure_code': nativeSnapshot.failureCode,
+        'native_failure_owner': nativeSnapshot.failureOwner,
+      },
     );
   }
 
@@ -509,4 +524,23 @@ extension _TakeLast<T> on List<T> {
 
 extension _FirstOrNull<T> on List<T> {
   T? get firstOrNull => isEmpty ? null : first;
+}
+
+/// Whether the current Android session authoritatively records a failed start.
+///
+/// `started_by_user` is only persisted intent (see
+/// [Preferences.startedByUser]); it survives process death and therefore does
+/// not prove that this process attempted a start. A bare stopped state next to
+/// that preference is not a failure classification.
+///
+/// Local `CoreStopped` alert/message values are intentionally not consulted:
+/// they can be stale or written by non-authoritative Dart lifecycle paths. A
+/// current native generation in `FAILED` after a connect request is direct
+/// evidence that startup was attempted and failed.
+@visibleForTesting
+bool startupSnapshotIndicatesFailedStart(VpnSessionSnapshot? snapshot) {
+  return snapshot != null &&
+      snapshot.generation > 0 &&
+      snapshot.requestedAction == 'connect' &&
+      snapshot.phase == VpnSessionPhase.failed;
 }

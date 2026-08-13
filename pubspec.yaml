@@ -1,7 +1,7 @@
 name: zeon
 description: ZEON cross-platform VPN client.
 publish_to: "none"
-version: 1.3.0+103004
+version: 1.4.1+1040301
 
 environment:
   sdk: ^3.10.4
@@ -105,7 +105,6 @@ dependencies:
   # # then active "protoc_plugin" by running this command -> dart pub global activate protoc_plugin
   # # then add path to "environment variable" e.g. -> C:\Users\%USERPROFILE%\AppData\Local\Pub\Cache\global_packages\protoc_plugin\bin
   protobuf: ^2.0.0
-  dynamic_color: ^1.7.0
   flutter_typeahead: ^5.0.1
   # flutter_platform_widgets: ^7.0.1
   simple_icons: ^10.1.3
@@ -116,7 +115,10 @@ dependencies:
   flutter_markdown_plus: ^1.0.6
   # platform-specific  settings
   # https://github.com/miguelpruivo/flutter_file_picker/wiki/Setup
-  file_picker: ^8.1.7
+  # Local 8.3.7 compatibility patch: two-pass, bounded BitmapFactory decode.
+  # Remove after a stable upstream file_picker release contains commit 8d8713f6.
+  file_picker:
+    path: third_party/file_picker
   installed_apps: # ^1.5.2
     git: https://github.com/VB10/installed_apps
 

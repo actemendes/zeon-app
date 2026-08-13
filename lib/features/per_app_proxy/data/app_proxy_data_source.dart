@@ -9,7 +9,8 @@ part 'app_proxy_data_source.g.dart';
 
 abstract interface class AppProxyDataSource {
   Future<void> updatePkg({required String pkg, required AppProxyMode mode});
-  Future<int> removePkg({required String pkg, required AppProxyMode mode});
+  Future<int> clearUserSelectionFromPkgs({required Iterable<String> pkgs, required AppProxyMode mode});
+  Future<bool> hasAnyPkgs({required AppProxyMode mode});
   Stream<List<AppProxyEntry>> watchAll({required AppProxyMode mode});
   Stream<List<AppProxyEntry>> watchFilterForDisplay({required Set<String> phonePkgs, required AppProxyMode mode});
   Stream<List<String>> watchActivePackages({required Set<String> phonePkgs, required AppProxyMode mode});
@@ -26,8 +27,38 @@ class AppProxyDao extends DatabaseAccessor<Db> with _$AppProxyDaoMixin, InfraLog
   AppProxyDao(super.db);
 
   @override
-  Future<int> removePkg({required String pkg, required AppProxyMode mode}) {
-    return (delete(appProxyEntries)..where((tbl) => tbl.mode.equalsValue(mode) & tbl.pkgName.equals(pkg))).go();
+  Future<int> clearUserSelectionFromPkgs({required Iterable<String> pkgs, required AppProxyMode mode}) {
+    final packageList = pkgs.toSet().toList(growable: false);
+    if (packageList.isEmpty) return Future.value(0);
+    return transaction(() async {
+      final updated =
+          await (update(appProxyEntries)..where((tbl) {
+                final matchingPackage = tbl.mode.equalsValue(mode) & tbl.pkgName.isIn(packageList);
+                final hasUserSelection = tbl.flags
+                    .bitwiseAnd(Constant(PkgFlag.userSelection.value))
+                    .equals(PkgFlag.userSelection.value);
+                return matchingPackage & hasUserSelection;
+              }))
+              .write(
+                AppProxyEntriesCompanion.custom(
+                  flags: appProxyEntries.flags.bitwiseAnd(Constant(~PkgFlag.userSelection.value)),
+                ),
+              );
+      await (delete(
+        appProxyEntries,
+      )..where((tbl) => tbl.mode.equalsValue(mode) & tbl.pkgName.isIn(packageList) & tbl.flags.equals(0))).go();
+      return updated;
+    });
+  }
+
+  @override
+  Future<bool> hasAnyPkgs({required AppProxyMode mode}) async {
+    final entry =
+        await (select(appProxyEntries)
+              ..where((tbl) => tbl.mode.equalsValue(mode))
+              ..limit(1))
+            .getSingleOrNull();
+    return entry != null;
   }
 
   @override

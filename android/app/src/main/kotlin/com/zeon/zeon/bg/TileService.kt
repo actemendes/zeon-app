@@ -23,7 +23,7 @@ class TileService : TileService(), ServiceConnection.Callback {
 
     private val connection = ServiceConnection(this, this)
 
-    override fun onServiceStatusChanged(status: Status) {
+    override fun onServiceStatusChanged(status: Status, generation: Long) {
         qsTile?.apply {
             state =
                 when (status) {
@@ -55,7 +55,7 @@ class TileService : TileService(), ServiceConnection.Callback {
                 }
             }
             Status.Started -> {
-                BoxService.stop()
+                BoxService.stop(source = VpnStopSource.TILE)
                 qsTile?.apply {
                     state = Tile.STATE_INACTIVE
                     updateTile()

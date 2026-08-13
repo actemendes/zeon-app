@@ -1,0 +1,11 @@
+artifact,site,main_status,protocol,matched_rule_set,route,dns,ip_version,result,notes
+stage29_validation,yandex,302,h2,zeon-ru-yandex,DIRECT,DIRECT,IPv4,PASS,"service-specific rule"
+stage29_validation,wildberries,200,h3,zeon-ru-wildberries,DIRECT,DIRECT,IPv4,PASS,"service-specific rule"
+stage29_validation,ozon,200,h2,zapret-ru-domains,DIRECT,DIRECT,IPv4,PASS,"main document"
+stage29_validation,gosuslugi,200,http/1.1,zapret-ru-domains,DIRECT,DIRECT,IPv4,PASS,"main document"
+stage29_validation,sber,200,h2,zapret-ru-domains,DIRECT,DIRECT,IPv4,PASS,"public page"
+stage29_validation,ru_suffix_ria,200,h2,zapret-ru-domains,DIRECT,DIRECT,IPv4,PASS,".ru"
+stage29_validation,su_suffix,200,h2,zapret-ru-domains,DIRECT,DIRECT,IPv4,PASS,".su"
+stage29_validation,rf_suffix,200,h2,zapret-ru-domains,DIRECT,DIRECT,IPv4,PASS,".xn--p1ai"
+stage29_validation,ru_ip_cross_zone_vk,301,h2,zapret-ru-ip,DIRECT,REMOTE,IPv4,CONDITIONAL,"IP-only cross-zone requires resolution before RU-IP classification; unchanged from Stage 2.8"
+stage29_production_828d7ae9,short_matrix,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,INCONCLUSIVE,"device reached PIN keyguard after required screen-off test"

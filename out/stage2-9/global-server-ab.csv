@@ -1,0 +1,8 @@
+candidate,protocol,safe_outbound_id_scope,example,youtube,telegram,cloudflare_speedtest,http3,classification
+A,TROJAN,hmac-sha256:61f894f91aa38832b5d6ae5486d79931,FAIL,FAIL,FAIL,FAIL,PASS,"endpoint/path failure"
+B,TROJAN,hmac-sha256:f890d754b749cf02984f490c3c8563cc,PASS,FAIL,FAIL,FAIL,PASS,"service-dependent endpoint/path failure"
+C,TROJAN,hmac-sha256:7c6051a0b4a377a947a74c4cd0603211,NOT_RUN,"FAIL then PASS h3",NOT_RUN,NOT_RUN,PASS,"time-varying endpoint/path behavior"
+D,VLESS,hmac-sha256:4479c42e32248d07c4c8fd85b38989b5,NOT_RUN,PASS,PASS,"page PASS; full run not counted",PASS,"working control"
+H,VLESS,hmac-sha256:69290331d25fe165d648d2f4b59b8a12,NOT_RUN,PASS,NOT_RUN,NOT_RUN,PASS,"working control"
+FINAL_VALIDATION,VLESS,generation_scoped_redacted,PASS,"5/5 PASS","5/5 PASS","5/5 complete",PASS,"stable validation control"
+FINAL_PRODUCTION,selected_control,generation_scoped_not_logged,PASS,"5/5 PASS","5/5 PASS","0/3 complete",PASS,"throughput degradation remained"

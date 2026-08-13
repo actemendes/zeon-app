@@ -33,12 +33,13 @@ type HiddifyOptions struct {
 	SmartActiveDebugCandidateScore   int    `json:"smart_active_debug_candidate_score,omitempty"`
 	// GeoIPPath        string      `json:"geoip-path"`
 	// GeoSitePath      string      `json:"geosite-path"`
-	Rules     []Rule      `json:"rules,omitempty" overridable:"true"`
-	Warp      WarpOptions `json:"warp,omitempty"`
-	Warp2     WarpOptions `json:"warp2,omitempty"`
-	Mux       MuxOptions  `json:"mux,omitempty" overridable:"true"`
-	TLSTricks TLSTricks   `json:"tls-tricks,omitempty"`
-	EnableNTP bool        `json:"enable-ntp,omitempty"`
+	Rules        []Rule      `json:"rules,omitempty" overridable:"true"`
+	ProfileRules []Rule      `json:"profile-rules,omitempty" overridable:"true"`
+	Warp         WarpOptions `json:"warp,omitempty"`
+	Warp2        WarpOptions `json:"warp2,omitempty"`
+	Mux          MuxOptions  `json:"mux,omitempty" overridable:"true"`
+	TLSTricks    TLSTricks   `json:"tls-tricks,omitempty"`
+	EnableNTP    bool        `json:"enable-ntp,omitempty"`
 
 	NetworkProfile       string `json:"network-profile,omitempty"`
 	NetworkMtuMode       string `json:"network-mtu-mode,omitempty"`

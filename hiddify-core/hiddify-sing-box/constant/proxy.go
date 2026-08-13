@@ -1,47 +1,47 @@
 package constant
 
 const (
-	TypeTun          = "tun"
-	TypeRedirect     = "redirect"
-	TypeTProxy       = "tproxy"
-	TypeDirect       = "direct"
-	TypeBlock        = "block"
-	TypeDNS          = "dns"
-	TypeSOCKS        = "socks"
-	TypeHTTP         = "http"
-	TypeMixed        = "mixed"
-	TypeShadowsocks  = "shadowsocks"
-	TypeVMess        = "vmess"
-	TypeTrojan       = "trojan"
-	TypeNaive        = "naive"
-	TypeWireGuard    = "wireguard"
-	TypeWARP         = "warp"
-	TypeHysteria     = "hysteria"
-	TypeTor          = "tor"
-	TypeSSH          = "ssh"
-	TypeShadowTLS    = "shadowtls"
-	TypeMieru        = "mieru"
-	TypeAnyTLS       = "anytls"
-	TypeShadowsocksR = "shadowsocksr"
-	TypeVLESS        = "vless"
-	TypeTUIC         = "tuic"
-	TypeHysteria2    = "hysteria2"
-	TypePsiphon      = "psiphon"
-	TypeTunnelClient = "tunnel_client"
-	TypeTunnelServer = "tunnel_server"
-	TypeTailscale    = "tailscale"
-	TypeDERP         = "derp"
-	TypeResolved     = "resolved"
-	TypeSSMAPI       = "ssm-api"
-	TypeCCM          = "ccm"
-	TypeOCM          = "ocm"
-
+	TypeTun            = "tun"
+	TypeRedirect       = "redirect"
+	TypeTProxy         = "tproxy"
+	TypeDirect         = "direct"
+	TypeBlock          = "block"
+	TypeDNS            = "dns"
+	TypeSOCKS          = "socks"
+	TypeHTTP           = "http"
+	TypeMixed          = "mixed"
+	TypeShadowsocks    = "shadowsocks"
+	TypeVMess          = "vmess"
+	TypeTrojan         = "trojan"
+	TypeNaive          = "naive"
+	TypeWireGuard      = "wireguard"
+	TypeWARP           = "warp"
+	TypeHysteria       = "hysteria"
+	TypeTor            = "tor"
+	TypeSSH            = "ssh"
+	TypeShadowTLS      = "shadowtls"
+	TypeMieru          = "mieru"
+	TypeAnyTLS         = "anytls"
+	TypeShadowsocksR   = "shadowsocksr"
+	TypeVLESS          = "vless"
+	TypeTUIC           = "tuic"
+	TypeHysteria2      = "hysteria2"
+	TypePsiphon        = "psiphon"
+	TypeTunnelClient   = "tunnel_client"
+	TypeTunnelServer   = "tunnel_server"
+	TypeTailscale      = "tailscale"
+	TypeDERP           = "derp"
+	TypeResolved       = "resolved"
+	TypeSSMAPI         = "ssm-api"
+	TypeCCM            = "ccm"
+	TypeOCM            = "ocm"
 	TypeHInvalidConfig = "hinvalid" //H
 	TypeXray           = "xray"     //H
 	TypeCustom         = "custom"   //H
 	TypeAwg            = "awg"      //H
 	TypeBalancer       = "balancer" //H
 	TypeDNSTT          = "dnstt"    //H
+	TypeOOMKiller      = "oom-killer"
 )
 
 const (
@@ -103,6 +103,8 @@ func ProxyDisplayName(proxyType string) string {
 		return "AnyTLS"
 	case TypePsiphon:
 		return "Psiphon"
+	case TypeTailscale:
+		return "Tailscale"
 	case TypeSelector:
 		return "Selector"
 	case TypeURLTest:

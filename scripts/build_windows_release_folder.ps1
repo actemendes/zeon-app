@@ -11,7 +11,9 @@ param(
 
     [switch]$SkipCodeGeneration,
 
-    [switch]$SkipClean
+    [switch]$SkipClean,
+
+    [switch]$StartupValidation
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +35,7 @@ if ($Launch) { $params.Launch = $true }
 if ($SkipSecureStoragePatch) { $params.SkipSecureStoragePatch = $true }
 if ($SkipCodeGeneration) { $params.SkipCodeGeneration = $true }
 if ($SkipClean) { $params.SkipClean = $true }
+if ($StartupValidation) { $params.StartupValidation = $true }
 
 Write-Host "Building Windows app in build\\windows\\x64\\runner\\Release..."
 Write-Host "Build target: $BuildTarget"

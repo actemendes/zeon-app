@@ -56,6 +56,15 @@ const (
 	InboundDirectTag = "dns-in"
 
 	RUAdListHardcodedRuleSetTag = "ru-adlist-hardcoded"
+	RUYandexRuleSetTag          = "zeon-ru-yandex"
+	RUWildberriesRuleSetTag     = "zeon-ru-wildberries"
+
+	// Group interruption is a capability, not a blanket switch behavior.
+	// Manual/metric switches preserve user TCP/UDP sessions. Smart Active is
+	// granted the capability only so its runtime policy can use it for a
+	// confirmed, outbound-specific emergency.
+	PreserveExistingUserConnections  = false
+	AllowConfirmedEmergencyInterrupt = true
 )
 
 var (
@@ -136,6 +145,29 @@ var ruAdListHardcodedDomainSuffixes = []string{
 	".videoroll.net",
 }
 
+var ruYandexDomainSuffixes = []string{
+	"ya.ru",
+	"yandex.ru",
+	"yandex.net",
+	"yastatic.net",
+}
+
+var ruWildberriesDomainSuffixes = []string{
+	"wildberries.ru",
+	"wb.ru",
+	"wbbasket.ru",
+	"wbstatic.net",
+	"wbcontent.net",
+	"rwb.ru",
+	"wibes.ru",
+}
+
+type ruServiceRoutingPolicy struct {
+	ruleSetTag     string
+	domainSuffixes []string
+	direct         bool
+}
+
 // TODO include selectors
 func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptions) (*option.Options, error) {
 
@@ -168,8 +200,40 @@ func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptio
 	if err := setRoutingOptions(&options, hopts); err != nil {
 		return nil, err
 	}
+	if err := validateAndroidProtectCompatibility(&options, C.IsAndroid); err != nil {
+		return nil, err
+	}
 
 	return &options, nil
+}
+
+func validateAndroidProtectCompatibility(options *option.Options, android bool) error {
+	if !android {
+		return nil
+	}
+	if options.Route != nil && options.Route.DefaultInterface != "" {
+		return fmt.Errorf("android VPN protect conflict: route.default_interface bypasses platform socket protection")
+	}
+	for _, outbound := range options.Outbounds {
+		dialer, ok := outbound.Options.(option.DialerOptionsWrapper)
+		if !ok {
+			continue
+		}
+		dialerOptions := dialer.TakeDialerOptions()
+		switch {
+		case dialerOptions.BindInterface != "":
+			return fmt.Errorf("android VPN protect conflict: outbound bind_interface bypasses platform socket protection")
+		case dialerOptions.Inet4BindAddress != nil:
+			return fmt.Errorf("android VPN protect conflict: outbound inet4_bind_address bypasses platform socket protection")
+		case dialerOptions.Inet6BindAddress != nil:
+			return fmt.Errorf("android VPN protect conflict: outbound inet6_bind_address bypasses platform socket protection")
+		case dialerOptions.RoutingMark != 0:
+			return fmt.Errorf("android VPN protect conflict: outbound routing_mark is unsupported")
+		case dialerOptions.NetNs != "":
+			return fmt.Errorf("android VPN protect conflict: outbound netns is unsupported")
+		}
+	}
+	return nil
 }
 
 func setNTP(options *option.Options) {
@@ -355,7 +419,7 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			// IdleTimeout: badoption.Duration(opt.URLTestIdleTimeout.Duration()),
 			Tolerance: 1,
 			// IdleTimeout:               badoption.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
-			InterruptExistConnections: true,
+			InterruptExistConnections: PreserveExistingUserConnections,
 		},
 	}
 
@@ -376,7 +440,7 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			// IdleTimeout: badoption.Duration(opt.URLTestIdleTimeout.Duration()),
 			Tolerance: 1,
 			// IdleTimeout:               badoption.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
-			InterruptExistConnections:        true,
+			InterruptExistConnections:        balancerStrategy == "smart-active-auto" && AllowConfirmedEmergencyInterrupt,
 			SmartActiveDebugForceStatus:      opt.SmartActiveDebugForceStatus,
 			SmartActiveDebugForceError:       opt.SmartActiveDebugForceError,
 			SmartActiveDebugForceDegradation: opt.SmartActiveDebugForceDegradation,
@@ -413,7 +477,7 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 		Options: &option.SelectorOutboundOptions{
 			Outbounds:                 selectorTags,
 			Default:                   defaultSelect,
-			InterruptExistConnections: true,
+			InterruptExistConnections: PreserveExistingUserConnections,
 		},
 	}
 	outbounds = append([]option.Outbound{selector}, outbounds...)
@@ -659,21 +723,26 @@ func toNetworkString(n Network) string {
 	}
 }
 
-func buildUserRouteRules(rules []Rule) []option.Rule {
+func orderedEnabledUserRules(rules []Rule) []*Rule {
 	if len(rules) == 0 {
 		return nil
 	}
-	ordered := make([]Rule, 0, len(rules))
-	for _, r := range rules {
-		if !r.Enabled {
+	ordered := make([]*Rule, 0, len(rules))
+	for index := range rules {
+		rule := &rules[index]
+		if !rule.Enabled {
 			continue
 		}
-		ordered = append(ordered, r)
+		ordered = append(ordered, rule)
 	}
-	sort.Slice(ordered, func(i, j int) bool {
+	sort.SliceStable(ordered, func(i, j int) bool {
 		return ordered[i].ListOrder < ordered[j].ListOrder
 	})
+	return ordered
+}
 
+func buildUserRouteRules(rules []Rule) []option.Rule {
+	ordered := orderedEnabledUserRules(rules)
 	routeRules := make([]option.Rule, 0, len(ordered))
 	for _, r := range ordered {
 		raw := option.RawDefaultRule{
@@ -714,6 +783,67 @@ func buildUserRouteRules(rules []Rule) []option.Rule {
 	return routeRules
 }
 
+func buildUserDNSRules(rules []Rule, hopt *HiddifyOptions) []option.DefaultDNSRule {
+	ordered := orderedEnabledUserRules(rules)
+	dnsRules := make([]option.DefaultDNSRule, 0, len(ordered))
+	for _, rule := range ordered {
+		// Address-only rules are evaluated after resolution by the route
+		// engine. Installing an empty pre-resolution DNS matcher for them
+		// would accidentally turn the rule into a global DNS policy.
+		if len(rule.RuleSets) == 0 &&
+			len(rule.Domains) == 0 &&
+			len(rule.DomainSuffixes) == 0 &&
+			len(rule.DomainKeywords) == 0 &&
+			len(rule.DomainRegexes) == 0 {
+			continue
+		}
+		raw := option.RawDefaultDNSRule{
+			RuleSet:       rule.RuleSets,
+			Domain:        rule.Domains,
+			DomainSuffix:  rule.DomainSuffixes,
+			DomainKeyword: rule.DomainKeywords,
+			DomainRegex:   rule.DomainRegexes,
+		}
+
+		var action option.DNSRuleAction
+		switch rule.Outbound {
+		case Outbound_direct, Outbound_direct_with_fragment:
+			action = option.DNSRuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.DNSRouteActionOptions{
+					Server:         DNSMultiDirectTag,
+					Strategy:       hopt.DirectDnsDomainStrategy,
+					RewriteTTL:     &DEFAULT_DNS_TTL,
+					BypassIfFailed: true,
+				},
+			}
+		case Outbound_block:
+			rejectRCode := option.DNSRCode(sdns.RcodeRefused)
+			action = option.DNSRuleAction{
+				Action: C.RuleActionTypePredefined,
+				PredefinedOptions: option.DNSRouteActionPredefined{
+					Rcode: &rejectRCode,
+				},
+			}
+		default:
+			action = option.DNSRuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.DNSRouteActionOptions{
+					Server:         DNSMultiRemoteTag,
+					Strategy:       hopt.RemoteDnsDomainStrategy,
+					RewriteTTL:     &DEFAULT_DNS_TTL,
+					BypassIfFailed: true,
+				},
+			}
+		}
+		dnsRules = append(dnsRules, option.DefaultDNSRule{
+			RawDefaultDNSRule: raw,
+			DNSRuleAction:     action,
+		})
+	}
+	return dnsRules
+}
+
 func setInbound(options *option.Options, hopt *HiddifyOptions) {
 	// var inboundDomainStrategy option.DomainStrategy
 	// if !opt.ResolveDestination {
@@ -721,7 +851,10 @@ func setInbound(options *option.Options, hopt *HiddifyOptions) {
 	// } else {
 	// 	inboundDomainStrategy = opt.IPv6Mode
 	// }
-	ipv6Enable := isIPv6Supported()
+	// The local presence of an IPv6 loopback does not mean that the selected
+	// outbound has working IPv6 egress.  In IPv4-only mode, do not advertise an
+	// IPv6 address on the TUN and let applications select an unusable family.
+	ipv6Enable := isIPv6Supported() && hopt.IPv6Mode != option.DomainStrategy(C.DomainStrategyIPv4Only)
 	if hopt.EnableTun {
 		effectiveMTU := resolveEffectiveTunMTU(hopt)
 
@@ -851,20 +984,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	dnsRules := []option.DefaultDNSRule{}
 	routeRules := []option.Rule{}
 	rulesets := []option.RuleSet{}
-	ruProxyOverrideDomainSuffixes := []string{
-		"ya.ru",
-		"yandex.ru",
-		"yandex.net",
-		"yastatic.net",
-		"wildberries.ru",
-		"wb.ru",
-		"wbbasket.ru",
-		"wbstatic.net",
-		"wbcontent.net",
-		"rwb.ru",
-		"wibes.ru",
-	}
-
+	regionDomainSuffixes := []string{"." + hopt.Region}
 	// if opt.EnableTun && runtime.GOOS == "android" {
 	// 	// routeRules = append(
 	// 	// 	routeRules,
@@ -948,11 +1068,23 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			},
 		},
 	})
-	userRouteRules := buildUserRouteRules(hopt.Rules)
-	if len(userRouteRules) > 0 {
-		fmt.Printf("Applying user route rules: configured=%d active=%d\n", len(hopt.Rules), len(userRouteRules))
-		routeRules = append(routeRules, userRouteRules...)
+	appendInternalDirectRoutes(&dnsRules, &routeRules, options, hopt)
+
+	earlyRouteRules := buildUserRouteRules(hopt.Rules)
+	earlyDNSRules := buildUserDNSRules(hopt.Rules, hopt)
+	earlyRuleCount := len(hopt.Rules)
+	// Explicit user rules precede profile policy in every preset. Russia moves
+	// profile/global rules to its strict late stage after RU destinations.
+	if hopt.Region != "ru" {
+		earlyRouteRules = append(earlyRouteRules, buildUserRouteRules(hopt.ProfileRules)...)
+		earlyDNSRules = append(earlyDNSRules, buildUserDNSRules(hopt.ProfileRules, hopt)...)
+		earlyRuleCount += len(hopt.ProfileRules)
 	}
+	if len(earlyRouteRules) > 0 {
+		fmt.Printf("Applying early route rules: configured=%d active=%d\n", earlyRuleCount, len(earlyRouteRules))
+		routeRules = append(routeRules, earlyRouteRules...)
+	}
+	dnsRules = append(dnsRules, earlyDNSRules...)
 	// {
 	// 	Type: C.RuleTypeDefault,
 	// 	DefaultOptions: option.DefaultRule{
@@ -968,7 +1100,10 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	// 	},
 	// },	}
 
-	if hopt.BypassLAN {
+	// Russia mode always keeps private/LAN destinations on the ordinary
+	// network. Explicit user rules are appended above this invariant and can
+	// still override it intentionally.
+	if hopt.BypassLAN || hopt.Region == "ru" {
 		routeRules = append(
 			routeRules,
 			option.Rule{
@@ -1027,59 +1162,19 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	// 	}
 	// 	dnsRules = append(dnsRules, dnsRule)
 	// }
-	forceDirectRoute := make([]string, 0)
-	if options.NTP != nil && options.NTP.Enabled {
-		forceDirectRoute = append(forceDirectRoute, options.NTP.Server)
-	}
-
-	// parsedURL, err := url.Parse(opt.ConnectionTestUrl)
-	// if err == nil {
-	// 	dnsRules = append(dnsRules, option.DefaultDNSRule{
-	// 		Domain:       []string{parsedURL.Host},
-	// 		Server:       DNSRemoteTag,
-	// 		RewriteTTL:   &dnsCPttl,
-	// 		DisableCache: false,
-	// 	})
-	// }
-
-	if len(forceDirectRoute) > 0 {
-
-		dnsRules = append(dnsRules, option.DefaultDNSRule{
-			RawDefaultDNSRule: option.RawDefaultDNSRule{
-				Domain: forceDirectRoute,
-			},
-			DNSRuleAction: option.DNSRuleAction{
-				Action: C.RuleActionTypeRoute,
-				RouteOptions: option.DNSRouteActionOptions{
-					Server:         DNSMultiDirectTag,
-					Strategy:       hopt.DirectDnsDomainStrategy,
-					RewriteTTL:     &DEFAULT_DNS_TTL,
-					DisableCache:   false,
-					BypassIfFailed: true,
-				},
-			},
-		})
-		routeRules = append(routeRules, option.Rule{
-			Type: C.RuleTypeDefault,
-			DefaultOptions: option.DefaultRule{
-				RawDefaultRule: option.RawDefaultRule{
-					Domain: forceDirectRoute,
-				},
-				RuleAction: option.RuleAction{
-					Action: C.RuleActionTypeRoute,
-					RouteOptions: option.RouteActionOptions{
-						Outbound: OutboundDirectTag,
-					},
-				},
-			},
-		})
-	}
 	rejectRCode := (option.DNSRCode(sdns.RcodeRefused))
 	rejectDnsAction := option.DNSRuleAction{
 		Action: C.RuleActionTypePredefined,
 		PredefinedOptions: option.DNSRouteActionPredefined{
 			Rcode: &rejectRCode,
 		},
+	}
+	managedRuleSets, managedErr := readManagedRURuleSets(managedRURuleSetBundleFile)
+	if managedErr != nil {
+		// Managed policy is optional. Embedded routing and the hardcoded ads
+		// fallback keep VPN startup available while active/LKG is unavailable.
+		fmt.Printf("Ignoring invalid managed rule-set bundle: %v\n", managedErr)
+		managedRuleSets = nil
 	}
 	if hopt.BlockAds {
 		rulesets = append(rulesets, option.RuleSet{
@@ -1097,16 +1192,8 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 				},
 			},
 		})
-		rulesets = append(rulesets, option.RuleSet{
-			Type:   C.RuleSetTypeRemote,
-			Tag:    "geosite-ads",
-			Format: C.RuleSetFormatBinary,
-			RemoteOptions: option.RemoteRuleSet{
-				URL:            "https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set/block/geosite-category-ads-all.srs",
-				UpdateInterval: badoption.Duration(5 * time.Hour * 24),
-				DownloadDetour: OutboundSelectTag,
-			},
-		})
+		managedAdsTag := appendManagedAdsRuleSet(&rulesets, managedRuleSets)
+		embeddedAdsTag := appendEmbeddedAdsRuleSet(&rulesets)
 		rulesets = append(rulesets, option.RuleSet{
 			Type:   C.RuleSetTypeRemote,
 			Tag:    "geosite-malware",
@@ -1158,19 +1245,33 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			},
 		})
 
+		adsRouteRuleSets := []string{
+			RUAdListHardcodedRuleSetTag,
+			"geosite-malware",
+			"geosite-phishing",
+			"geosite-cryptominers",
+			"geoip-malware",
+			"geoip-phishing",
+		}
+		adsDNSRuleSets := []string{
+			RUAdListHardcodedRuleSetTag,
+			"geosite-malware",
+			"geosite-phishing",
+			"geosite-cryptominers",
+		}
+		if embeddedAdsTag != "" {
+			adsRouteRuleSets = append([]string{embeddedAdsTag}, adsRouteRuleSets...)
+			adsDNSRuleSets = append([]string{embeddedAdsTag}, adsDNSRuleSets...)
+		}
+		if managedAdsTag != "" {
+			adsRouteRuleSets = append([]string{managedAdsTag}, adsRouteRuleSets...)
+			adsDNSRuleSets = append([]string{managedAdsTag}, adsDNSRuleSets...)
+		}
 		routeRules = append(routeRules, option.Rule{
 			Type: C.RuleTypeDefault,
 			DefaultOptions: option.DefaultRule{
 				RawDefaultRule: option.RawDefaultRule{
-					RuleSet: []string{
-						RUAdListHardcodedRuleSetTag,
-						"geosite-ads",
-						"geosite-malware",
-						"geosite-phishing",
-						"geosite-cryptominers",
-						"geoip-malware",
-						"geoip-phishing",
-					},
+					RuleSet: adsRouteRuleSets,
 				},
 				RuleAction: option.RuleAction{
 					Action: C.RuleActionTypeReject,
@@ -1183,53 +1284,61 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 		dnsRules = append(dnsRules, option.DefaultDNSRule{
 			RawDefaultDNSRule: option.RawDefaultDNSRule{
 
-				RuleSet: []string{
-					RUAdListHardcodedRuleSetTag,
-					"geosite-ads",
-					"geosite-malware",
-					"geosite-phishing",
-					"geosite-cryptominers",
-				},
+				RuleSet: adsDNSRuleSets,
 			},
 			DNSRuleAction: rejectDnsAction,
 		})
 	}
-	if hopt.Region == "ru" {
-		// Some RU services work more reliably via proxy path from certain networks.
-		// Place this before generic RU direct rules.
-		dnsRules = append(dnsRules, option.DefaultDNSRule{
-			RawDefaultDNSRule: option.RawDefaultDNSRule{
-				DomainSuffix: ruProxyOverrideDomainSuffixes,
-			},
-			DNSRuleAction: option.DNSRuleAction{
-				Action: C.RuleActionTypeRoute,
-				RouteOptions: option.DNSRouteActionOptions{
-					Server:         DNSMultiRemoteTag,
-					Strategy:       hopt.RemoteDnsDomainStrategy,
-					RewriteTTL:     &DEFAULT_DNS_TTL,
-					BypassIfFailed: true,
-				},
-			},
-		})
+	if hopt.RouteOptions.BlockQuic {
 		routeRules = append(routeRules, option.Rule{
 			Type: C.RuleTypeDefault,
 			DefaultOptions: option.DefaultRule{
 				RawDefaultRule: option.RawDefaultRule{
-					DomainSuffix: ruProxyOverrideDomainSuffixes,
+					Protocol: []string{C.ProtocolQUIC},
 				},
 				RuleAction: option.RuleAction{
-					Action: C.RuleActionTypeRoute,
-					RouteOptions: option.RouteActionOptions{
-						Outbound: OutboundMainDetour,
+					Action: C.RuleActionTypeReject,
+					RejectOptions: option.RejectActionOptions{
+						Method: C.RuleActionRejectMethodDefault,
 					},
 				},
 			},
 		})
 	}
-	if hopt.Region != "other" {
+	if hopt.Region == "ru" {
+		appendManagedRURouting(&dnsRules, &routeRules, &rulesets, hopt, managedRuleSets)
+		appendRUServiceRoutingPolicy(
+			&dnsRules,
+			&routeRules,
+			&rulesets,
+			hopt,
+			ruServiceRoutingPolicy{
+				ruleSetTag:     RUYandexRuleSetTag,
+				domainSuffixes: ruYandexDomainSuffixes,
+				direct:         ruYandexRussiaDirect,
+			},
+		)
+		appendRUServiceRoutingPolicy(
+			&dnsRules,
+			&routeRules,
+			&rulesets,
+			hopt,
+			ruServiceRoutingPolicy{
+				ruleSetTag:     RUWildberriesRuleSetTag,
+				domainSuffixes: ruWildberriesDomainSuffixes,
+				direct:         ruWildberriesRussiaDirect,
+			},
+		)
+		appendBundledRUDestinationRouting(&dnsRules, &routeRules, &rulesets, hopt)
+		// Profile/global policy is deliberately late in Russia mode: it cannot
+		// preempt LAN, security, service-family, RU-domain, or RU-IP DIRECT
+		// decisions. Explicit user rules remain in the early bucket above.
+		dnsRules = append(dnsRules, buildUserDNSRules(hopt.ProfileRules, hopt)...)
+		routeRules = append(routeRules, buildUserRouteRules(hopt.ProfileRules)...)
+	} else if hopt.Region != "other" {
 		dnsRules = append(dnsRules, option.DefaultDNSRule{
 			RawDefaultDNSRule: option.RawDefaultDNSRule{
-				DomainSuffix: []string{"." + hopt.Region},
+				DomainSuffix: regionDomainSuffixes,
 			},
 			DNSRuleAction: option.DNSRuleAction{
 				Action: C.RuleActionTypeRoute,
@@ -1245,7 +1354,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			Type: C.RuleTypeDefault,
 			DefaultOptions: option.DefaultRule{
 				RawDefaultRule: option.RawDefaultRule{
-					DomainSuffix: []string{"." + hopt.Region},
+					DomainSuffix: regionDomainSuffixes,
 				},
 				RuleAction: option.RuleAction{
 					Action: C.RuleActionTypeRoute,
@@ -1313,22 +1422,6 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 			},
 		})
 	}
-	if hopt.RouteOptions.BlockQuic {
-		routeRules = append(routeRules, option.Rule{
-			Type: C.RuleTypeDefault,
-			DefaultOptions: option.DefaultRule{
-				RawDefaultRule: option.RawDefaultRule{
-					Protocol: []string{C.ProtocolQUIC},
-				},
-				RuleAction: option.RuleAction{
-					Action: C.RuleActionTypeReject,
-					RejectOptions: option.RejectActionOptions{
-						Method: C.RuleActionRejectMethodDefault,
-					},
-				},
-			},
-		})
-	}
 	options.Route = &option.RouteOptions{
 		Rules:               routeRules,
 		Final:               OutboundMainDetour,
@@ -1348,7 +1441,7 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 		// },
 	}
 	// if opt.EnableDNSRouting {
-	if hopt.EnableFakeDNS {
+	if fakeDNSEnabled(hopt) {
 		// inbounds := []string{InboundTUNTag}
 		// for _, inp := range options.Inbounds {
 		// 	if strings.Contains(inp.Tag, InboundDirectTag) || strings.Contains(inp.Tag, InboundRedirect) || strings.Contains(inp.Tag, InboundTProxy) {
@@ -1454,6 +1547,203 @@ func setRoutingOptions(options *option.Options, hopt *HiddifyOptions) error {
 	}
 	// }
 	return nil
+}
+
+func fakeDNSEnabled(hopt *HiddifyOptions) bool {
+	// A fake address hides the real resolved destination from the post-DNS
+	// zapret-ru-ip matcher. Keep FakeDNS behavior unchanged for every other
+	// preset, but disable it in Russia so non-RU hostnames on Russian IPv4/IPv6
+	// destinations still reach the IP rule set.
+	return hopt.EnableFakeDNS && hopt.Region != "ru"
+}
+
+func appendInternalDirectRoutes(
+	dnsRules *[]option.DefaultDNSRule,
+	routeRules *[]option.Rule,
+	options *option.Options,
+	hopt *HiddifyOptions,
+) {
+	if options.NTP == nil || !options.NTP.Enabled || options.NTP.Server == "" {
+		return
+	}
+	internalDomains := []string{options.NTP.Server}
+	*dnsRules = append(*dnsRules, option.DefaultDNSRule{
+		RawDefaultDNSRule: option.RawDefaultDNSRule{
+			Domain: internalDomains,
+		},
+		DNSRuleAction: option.DNSRuleAction{
+			Action: C.RuleActionTypeRoute,
+			RouteOptions: option.DNSRouteActionOptions{
+				Server:         DNSMultiDirectTag,
+				Strategy:       hopt.DirectDnsDomainStrategy,
+				RewriteTTL:     &DEFAULT_DNS_TTL,
+				DisableCache:   false,
+				BypassIfFailed: true,
+			},
+		},
+	})
+	*routeRules = append(*routeRules, option.Rule{
+		Type: C.RuleTypeDefault,
+		DefaultOptions: option.DefaultRule{
+			RawDefaultRule: option.RawDefaultRule{
+				Domain: internalDomains,
+			},
+			RuleAction: option.RuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.RouteActionOptions{
+					Outbound: OutboundDirectTag,
+				},
+			},
+		},
+	})
+}
+
+func appendBundledRUDestinationRouting(
+	dnsRules *[]option.DefaultDNSRule,
+	routeRules *[]option.Rule,
+	ruleSets *[]option.RuleSet,
+	hopt *HiddifyOptions,
+) {
+	*ruleSets = append(
+		*ruleSets,
+		option.RuleSet{
+			Type:   C.RuleSetTypeLocal,
+			Tag:    BundledRUDomainsRuleSetTag,
+			Format: C.RuleSetFormatBinary,
+			LocalOptions: option.LocalRuleSet{
+				Path: BundledRUDomainsRuleSetPath,
+			},
+		},
+		option.RuleSet{
+			Type:   C.RuleSetTypeLocal,
+			Tag:    BundledRUIPRuleSetTag,
+			Format: C.RuleSetFormatBinary,
+			LocalOptions: option.LocalRuleSet{
+				Path: BundledRUIPRuleSetPath,
+			},
+		},
+	)
+
+	ruDNSServer, ruDNSStrategy := ruDestinationDNSPolicy(hopt)
+	*dnsRules = append(*dnsRules, option.DefaultDNSRule{
+		RawDefaultDNSRule: option.RawDefaultDNSRule{
+			RuleSet: []string{BundledRUDomainsRuleSetTag},
+		},
+		DNSRuleAction: option.DNSRuleAction{
+			Action: C.RuleActionTypeRoute,
+			RouteOptions: option.DNSRouteActionOptions{
+				Server:         ruDNSServer,
+				Strategy:       ruDNSStrategy,
+				RewriteTTL:     &DEFAULT_DNS_TTL,
+				BypassIfFailed: true,
+			},
+		},
+	})
+	*routeRules = append(*routeRules, option.Rule{
+		Type: C.RuleTypeDefault,
+		DefaultOptions: option.DefaultRule{
+			RawDefaultRule: option.RawDefaultRule{
+				RuleSet: []string{BundledRUDomainsRuleSetTag},
+			},
+			RuleAction: option.RuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.RouteActionOptions{
+					Outbound: OutboundDirectTag,
+				},
+			},
+		},
+	})
+	*routeRules = append(*routeRules, option.Rule{
+		Type: C.RuleTypeDefault,
+		DefaultOptions: option.DefaultRule{
+			RawDefaultRule: option.RawDefaultRule{
+				RuleSet: []string{BundledRUIPRuleSetTag},
+			},
+			RuleAction: option.RuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.RouteActionOptions{
+					Outbound: OutboundDirectTag,
+				},
+			},
+		},
+	})
+}
+
+func appendRUServiceRoutingPolicy(
+	dnsRules *[]option.DefaultDNSRule,
+	routeRules *[]option.Rule,
+	ruleSets *[]option.RuleSet,
+	hopt *HiddifyOptions,
+	policy ruServiceRoutingPolicy,
+) {
+	*ruleSets = append(*ruleSets, option.RuleSet{
+		Type: C.RuleSetTypeInline,
+		Tag:  policy.ruleSetTag,
+		InlineOptions: option.PlainRuleSet{
+			Rules: []option.HeadlessRule{
+				{
+					Type: C.RuleTypeDefault,
+					DefaultOptions: option.DefaultHeadlessRule{
+						DomainSuffix: policy.domainSuffixes,
+					},
+				},
+			},
+		},
+	})
+
+	dnsServer := DNSMultiRemoteTag
+	dnsStrategy := hopt.RemoteDnsDomainStrategy
+	outbound := OutboundMainDetour
+	if policy.direct {
+		dnsServer, dnsStrategy = ruDestinationDNSPolicy(hopt)
+		outbound = OutboundDirectTag
+	}
+	*dnsRules = append(*dnsRules, option.DefaultDNSRule{
+		RawDefaultDNSRule: option.RawDefaultDNSRule{
+			RuleSet: []string{policy.ruleSetTag},
+		},
+		DNSRuleAction: option.DNSRuleAction{
+			Action: C.RuleActionTypeRoute,
+			RouteOptions: option.DNSRouteActionOptions{
+				Server:         dnsServer,
+				Strategy:       dnsStrategy,
+				RewriteTTL:     &DEFAULT_DNS_TTL,
+				BypassIfFailed: true,
+			},
+		},
+	})
+	*routeRules = append(*routeRules, option.Rule{
+		Type: C.RuleTypeDefault,
+		DefaultOptions: option.DefaultRule{
+			RawDefaultRule: option.RawDefaultRule{
+				RuleSet: []string{policy.ruleSetTag},
+			},
+			RuleAction: option.RuleAction{
+				Action: C.RuleActionTypeRoute,
+				RouteOptions: option.RouteActionOptions{
+					Outbound: outbound,
+				},
+			},
+		},
+	})
+}
+
+func ruDestinationDNSPolicy(hopt *HiddifyOptions) (string, option.DomainStrategy) {
+	var strategy option.DomainStrategy
+	if ruRemoteDNSBaseline {
+		strategy = hopt.RemoteDnsDomainStrategy
+	} else {
+		strategy = hopt.DirectDnsDomainStrategy
+	}
+	switch hopt.IPv6Mode {
+	case option.DomainStrategy(C.DomainStrategyIPv4Only),
+		option.DomainStrategy(C.DomainStrategyIPv6Only):
+		strategy = hopt.IPv6Mode
+	}
+	if ruRemoteDNSBaseline {
+		return DNSMultiRemoteTag, strategy
+	}
+	return DNSMultiDirectTag, strategy
 }
 
 func patchHiddifyWarpFromConfig(out *option.Outbound, opt HiddifyOptions) *option.Outbound {

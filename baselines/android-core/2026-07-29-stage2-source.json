@@ -1,0 +1,154 @@
+{
+  "schema_version": 2,
+  "created_at_utc": "2026-07-29T00:00:00Z",
+  "purpose": "Immutable source manifest captured before the Stage 2 sing-box v1.13.14 port. No Stage 2 core source or dependency change is represented by this manifest.",
+  "stage2": {
+    "branch": "stage2/sing-box-1.13.14-zeon.1",
+    "working_version": "v1.13.14-zeon.1",
+    "source_branch_point": "31617345e081b14c3d548b570d24ccaff8a702ab",
+    "stage1_source_baseline": "51d6c5156431f46fc56a4b79f5571a1771ca6caf",
+    "stage1_implementation_commit": "f6650c782c72d7e7260827b2f8f1eb9d3d95cd76",
+    "stage1_core_build_revision": "31c5987477d3cd02a099c2c0c01c3a07da05ce69"
+  },
+  "source_state": {
+    "tracked_dirty": false,
+    "dirty_files": [
+      "untracked:android/app/src/main/assets/adi-registration.properties (pre-existing user-owned file; excluded from Stage 2 commits and migration patches)"
+    ],
+    "ignored_artifacts": [
+      "android/app/libs/hiddify-core.aar",
+      "hiddify-core/bin/hiddify-core.aar",
+      "out/baseline/51d6c5156431f46fc56a4b79f5571a1771ca6caf/",
+      "out/stabilization/31c5987477d3cd02a099c2c0c01c3a07da05ce69/",
+      "generated Flutter/Dart sources and Android/Gradle build outputs"
+    ]
+  },
+  "stage1_core_source": {
+    "hiddify_core_upstream_commit": "c9d6f0f00b2eda34e4fb71863e4e0a62b3e931a0",
+    "hiddify_core_tree": "2c50fe96981ba2e3bb6e2a2b71ddbe97b1ed354d",
+    "hiddify_sing_box_commit": "0a02b7729f6a211436bb8bdcd8696c283eb27767",
+    "hiddify_sing_box_tree": "70dc263d60846a4fc66f357b7b227941d4d54d2c",
+    "sing_box_module_version": "v1.13.0"
+  },
+  "official_upstream": {
+    "remote": "https://github.com/SagerNet/sing-box.git",
+    "remote_owner": "SagerNet",
+    "tag": "v1.13.14",
+    "tag_type": "lightweight",
+    "tag_commit": "25a600db24f7680ad9806ce5427bd0ab8afe1114",
+    "tag_tree": "ebe928ddfdf2273bc2ab7e0cba818db315cd6151",
+    "verified_external_workspace": "B:/1CODING/zeon-stage2-sing-box-20260729",
+    "fetch_command": "git fetch --force --tags origin",
+    "verification_command": "git rev-parse v1.13.14^{commit}",
+    "worktree_clean": true
+  },
+  "replacement_graph": [
+    {
+      "module": "github.com/bepass-org/warp-plus",
+      "replacement": "github.com/hiddify/warp-plus",
+      "version": "v0.0.0-20240717223357-4f3122e0d11d"
+    },
+    {
+      "module": "github.com/sagernet/sing-dns",
+      "replacement": "github.com/shtorm-7/sing-dns",
+      "version": "v0.4.6-extended-1.0.0"
+    },
+    {
+      "module": "github.com/ameshkov/dnscrypt/v2",
+      "replacement": "github.com/shtorm-7/dnscrypt/v2",
+      "version": "v2.4.0-extended-1.0.0"
+    },
+    {
+      "module": "github.com/hiddify/ray2sing",
+      "replacement": "./ray2sing",
+      "version": "local"
+    },
+    {
+      "module": "github.com/sagernet/sing-box",
+      "replacement": "./hiddify-sing-box",
+      "version": "v1.13.0"
+    },
+    {
+      "module": "github.com/sagernet/wireguard-go",
+      "replacement": "./hiddify-sing-box/replace/wireguard-go",
+      "version": "local"
+    },
+    {
+      "module": "github.com/sagernet/tailscale",
+      "replacement": "./hiddify-sing-box/replace/tailscale",
+      "version": "local"
+    },
+    {
+      "module": "github.com/Psiphon-Labs/quic-go",
+      "replacement": "./hiddify-sing-box/replace/psiphon-quic-go",
+      "version": "local"
+    },
+    {
+      "module": "github.com/Psiphon-Labs/psiphon-tls",
+      "replacement": "./hiddify-sing-box/replace/psiphon-tls",
+      "version": "local"
+    }
+  ],
+  "toolchain": {
+    "go_version": "go1.25.6",
+    "gomobile_version": "v0.1.11",
+    "android_ndk": "28.2.13676358",
+    "android_compile_sdk": 36,
+    "android_target_sdk": 36,
+    "android_min_api_for_gomobile": 21,
+    "build_tags": [
+      "with_gvisor",
+      "with_quic",
+      "with_wireguard",
+      "with_utls",
+      "with_clash_api",
+      "with_grpc",
+      "with_awg",
+      "tfogo_checklinkname0",
+      "with_naive_outbound",
+      "with_conntrack"
+    ],
+    "aar_abis": [
+      "arm64-v8a",
+      "armeabi-v7a",
+      "x86",
+      "x86_64"
+    ],
+    "apk_abis": [
+      "arm64-v8a",
+      "armeabi-v7a",
+      "x86_64"
+    ]
+  },
+  "stage1_artifacts": {
+    "aar": {
+      "path": "out/stabilization/31c5987477d3cd02a099c2c0c01c3a07da05ce69/hiddify-core.aar",
+      "repository_path": "android/app/libs/hiddify-core.aar",
+      "sha256": "04453FE46DDEC27DB8A4B9F859FB084D19D5F9121E709D3457BD52BABD8359E5",
+      "verified": true
+    },
+    "apk": {
+      "path": "out/stabilization/31c5987477d3cd02a099c2c0c01c3a07da05ce69/zeon-1.3.0+103001-stage1-release.apk",
+      "sha256": "2FA51176B2A7536C66FA73403D0ADAB15756FDC0B602813F4D6DC34DF7A55AAF",
+      "verified": true
+    },
+    "rollback_aar": {
+      "path": "out/baseline/51d6c5156431f46fc56a4b79f5571a1771ca6caf/hiddify-core.aar",
+      "sha256": "7A94C004286875410D70D8CECF07D8813DAB33D27F7D76A23C7ABA3460E37600",
+      "verified": true
+    },
+    "rollback_apk": {
+      "path": "out/baseline/51d6c5156431f46fc56a4b79f5571a1771ca6caf/zeon-1.3.0+103001-arm64-v8a-release.apk",
+      "sha256": "C89EAFDB7824A1AFF95B166939A14F8CA424563E007DF26E1D78E2C4D59531DF",
+      "verified": true
+    }
+  },
+  "preflight": {
+    "baseline_verifier_passed": true,
+    "stage1_verifier_passed": true,
+    "working_aar_is_stage1": true,
+    "stage1_manifest_unchanged": true,
+    "baseline_manifest_unchanged": true,
+    "migration_allowed": true
+  }
+}

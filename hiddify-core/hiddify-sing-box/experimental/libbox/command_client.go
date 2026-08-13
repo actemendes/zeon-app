@@ -119,7 +119,11 @@ func dialTarget() (string, func(context.Context, string) (net.Conn, error)) {
 		}
 	}
 	if sCommandServerListenPort == 0 {
-		return "unix://" + filepath.Join(sBasePath, "command.sock"), nil
+		socketPath := filepath.Join(sBasePath, "command.sock")
+		return "passthrough:///command-socket", func(ctx context.Context, _ string) (net.Conn, error) {
+			var networkDialer net.Dialer
+			return networkDialer.DialContext(ctx, "unix", socketPath)
+		}
 	}
 	return net.JoinHostPort("127.0.0.1", strconv.Itoa(int(sCommandServerListenPort))), nil
 }
@@ -143,7 +147,7 @@ func (c *CommandClient) dialWithRetry(target string, contextDialer func(context.
 	var client daemon.StartedServiceClient
 	var lastError error
 
-	for attempt := 0; attempt < commandClientDialAttempts; attempt++ {
+	for attempt := range commandClientDialAttempts {
 		if connection == nil {
 			options := []grpc.DialOption{
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -362,7 +366,7 @@ func (c *CommandClient) handleStatusStream() {
 			c.handler.Disconnected(err.Error())
 			return
 		}
-		c.handler.WriteStatus(StatusMessageFromGRPC(status))
+		c.handler.WriteStatus(statusMessageFromGRPC(status))
 	}
 }
 
@@ -381,7 +385,7 @@ func (c *CommandClient) handleGroupStream() {
 			c.handler.Disconnected(err.Error())
 			return
 		}
-		c.handler.WriteGroups(OutboundGroupIteratorFromGRPC(groups))
+		c.handler.WriteGroups(outboundGroupIteratorFromGRPC(groups))
 	}
 }
 
@@ -447,7 +451,7 @@ func (c *CommandClient) handleConnectionsStream() {
 			c.handler.Disconnected(err.Error())
 			return
 		}
-		libboxEvents := ConnectionEventsFromGRPC(events)
+		libboxEvents := connectionEventsFromGRPC(events)
 		c.handler.WriteConnectionEvents(libboxEvents)
 	}
 }
@@ -523,7 +527,7 @@ func (c *CommandClient) GetSystemProxyStatus() (*SystemProxyStatus, error) {
 		if err != nil {
 			return nil, err
 		}
-		return SystemProxyStatusFromGRPC(status), nil
+		return systemProxyStatusFromGRPC(status), nil
 	})
 }
 

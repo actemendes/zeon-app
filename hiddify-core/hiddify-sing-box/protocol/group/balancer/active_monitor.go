@@ -140,6 +140,10 @@ func (s *Balancer) runScheduledActiveProbe(tag string) {
 func (s *Balancer) applyActiveProbe(result monitoring.ActiveProbeResult) smartActiveProbeUpdate {
 	s.strategyUpdate.Lock()
 	defer s.strategyUpdate.Unlock()
+	if !sessionGenerationMatches(s.sessionGeneration) {
+		s.logger.Warn("[SelectorStaleResult] session_generation=", s.sessionGeneration, " source=active_probe action=ignored")
+		return smartActiveProbeUpdate{}
+	}
 
 	strategy, ok := s.strategyFn.(*SmartActive)
 	if !ok || strategy.Now() != result.OutboundTag {
@@ -166,11 +170,38 @@ func (s *Balancer) applyActiveProbe(result monitoring.ActiveProbeResult) smartAc
 	probe := cloneSmartActiveHistory(&result.History)
 	update := strategy.UpdateActiveProbe(result.OutboundTag, probe, rankingHistory)
 	decision := strategy.LastDecision()
+	selectionGeneration, decisionHistory, resultSource := strategy.SelectionDiagnostics()
+	activeHistory := decisionHistory[result.OutboundTag]
 	s.logger.Info(fmt.Sprintf(
-		"[SmartActiveDecision] action=%s reason=%s from=%s to=%s current=%s mode=active_probe delay=%d score=%d udp_ready=%t udp_loss=%.4f",
+		"[SmartActiveDecision] action=%s reason=%s from=%s to=%s current=%s mode=active_probe active=%s selection_generation=%d history_generation=%d source=%s success=%t delay=%d score=%d stored_score=%d url_test_status=%s combined_ready=%t result_time=%s udp_ready=%t udp_loss=%.4f",
 		decision.action, decision.reason, decision.from, decision.to, strategy.Now(),
-		result.History.Delay, result.History.HealthScore, result.History.UDPReady, result.History.UDPLoss,
+		result.OutboundTag, selectionGeneration,
+		historyValue64(activeHistory, func(h *adapter.URLTestHistory) uint64 { return h.CheckGeneration }),
+		resultSource,
+		historyBool(activeHistory, func(h *adapter.URLTestHistory) bool { return h.Success }),
+		getTagDelay(result.OutboundTag, decisionHistory),
+		getTagHealthScore(result.OutboundTag, decisionHistory),
+		historyValue(activeHistory, func(h *adapter.URLTestHistory) int { return h.HealthScore }),
+		historyString(activeHistory, func(h *adapter.URLTestHistory) string { return h.URLTestStatus }),
+		historyBool(activeHistory, func(h *adapter.URLTestHistory) bool { return h.CombinedReady }),
+		historyTime(activeHistory),
+		result.History.UDPReady, result.History.UDPLoss,
 	))
+	for _, candidateTag := range s.topSmartActiveCandidates(decisionHistory, 0) {
+		if candidateTag == result.OutboundTag {
+			continue
+		}
+		candidateHistory := decisionHistory[candidateTag]
+		status := strategy.candidateStatus(candidateTag, candidateHistory, selectionGeneration)
+		s.logger.Info("[SmartActiveProbeCandidate] active=", result.OutboundTag,
+			" tag=", candidateTag, " selection_generation=", selectionGeneration,
+			" history_generation=", historyValue64(candidateHistory, func(h *adapter.URLTestHistory) uint64 { return h.CheckGeneration }),
+			" source=", resultSource, " success=", historyBool(candidateHistory, func(h *adapter.URLTestHistory) bool { return h.Success }),
+			" delay=", getTagDelay(candidateTag, decisionHistory), " health_score=", getTagHealthScore(candidateTag, decisionHistory),
+			" url_test_status=", historyString(candidateHistory, func(h *adapter.URLTestHistory) string { return h.URLTestStatus }),
+			" combined_ready=", historyBool(candidateHistory, func(h *adapter.URLTestHistory) bool { return h.CombinedReady }),
+			" result_time=", historyTime(candidateHistory), " eligible=", status.ok, " reject_reason=", status.reason)
+	}
 
 	if update.changed {
 		decisionHistory := make(map[string]*adapter.URLTestHistory, len(rankingHistory))
@@ -183,7 +214,7 @@ func (s *Balancer) applyActiveProbe(result monitoring.ActiveProbeResult) smartAc
 			"[ActiveServerChanged] group=%s active=%s",
 			s.Tag(), s.strategyFn.Now(),
 		))
-		s.interruptGroup.Interrupt(s.interruptExternalConnections)
+		s.applySwitchInterruption(strategy.switchInterruptionPolicy(), decision.from, strategy.Now())
 		s.signalActiveMonitor()
 	}
 	if update.refreshCandidates {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/taskmonitor"
+	"github.com/sagernet/sing-box/common/zeonvalidation"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -195,7 +196,16 @@ func (r *Router) matchDNS(ctx context.Context, allowFakeIP bool, ruleIndex int, 
 			}
 		}
 	}
-	return r.transport.Default(), nil, -1
+	transport := r.transport.Default()
+	if legacyTransport, isLegacy := transport.(adapter.LegacyDNSTransport); isLegacy {
+		if options.Strategy == C.DomainStrategyAsIS {
+			options.Strategy = legacyTransport.LegacyStrategy()
+		}
+		if !options.ClientSubnet.IsValid() {
+			options.ClientSubnet = legacyTransport.LegacyClientSubnet()
+		}
+	}
+	return transport, nil, -1
 }
 
 func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapter.DNSQueryOptions) (*mDNS.Msg, error) {
@@ -213,9 +223,11 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 	}
 	r.logger.DebugContext(ctx, "exchange ", FormatQuestion(message.Question[0].String()))
 	var (
-		response  *mDNS.Msg
-		transport adapter.DNSTransport
-		err       error
+		response          *mDNS.Msg
+		transport         adapter.DNSTransport
+		selectedRule      adapter.DNSRule
+		selectedRuleIndex = -1
+		err               error
 	)
 	var metadata *adapter.InboundContext
 	ctx, metadata = adapter.ExtendContext(ctx)
@@ -243,18 +255,14 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 		}
 		response, err = r.client.Exchange(ctx, transport, message, options, nil)
 	} else {
-		var (
-			rule      adapter.DNSRule
-			ruleIndex int
-		)
-		ruleIndex = -1
 		for {
 			dnsCtx := adapter.OverrideContext(ctx)
 			dnsOptions := options
-			transport, rule, ruleIndex = r.matchDNS(ctx, true, ruleIndex, isAddressQuery(message), &dnsOptions)
-			if rule != nil {
-				switch action := rule.Action().(type) {
+			transport, selectedRule, selectedRuleIndex = r.matchDNS(ctx, true, selectedRuleIndex, isAddressQuery(message), &dnsOptions)
+			if selectedRule != nil {
+				switch action := selectedRule.Action().(type) {
 				case *R.RuleActionReject:
+					zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, nil, nil, metadata.QueryType, selectedRule, selectedRuleIndex, nil, true, false)
 					switch action.Method {
 					case C.RuleActionRejectMethodDefault:
 						return &mDNS.Msg{
@@ -269,18 +277,24 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 						return nil, tun.ErrDrop
 					}
 				case *R.RuleActionPredefined:
-					return action.Response(message), nil
+					response = action.Response(message)
+					zeonvalidation.RecordDNS(
+						ctx,
+						r.logger,
+						metadata.Domain,
+						MessageToAddresses(response),
+						validationCNAMEChain(response),
+						metadata.QueryType,
+						selectedRule,
+						selectedRuleIndex,
+						nil,
+						predefinedDNSResponseBlocked(response),
+						false,
+					)
+					return response, nil
 				}
 			}
-
-			var responseCheck func(responseAddrs []netip.Addr) bool
-			if rule != nil && rule.WithAddressLimit() {
-				responseCheck = func(responseAddrs []netip.Addr) bool {
-					metadata.DestinationAddresses = responseAddrs
-					return rule.MatchAddressLimit(metadata)
-				}
-			}
-
+			responseCheck := addressLimitResponseCheck(selectedRule, metadata)
 			if dnsOptions.Strategy == C.DomainStrategyAsIS {
 				dnsOptions.Strategy = r.defaultDomainStrategy
 			}
@@ -299,7 +313,7 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 				} else {
 					r.logger.ErrorContext(ctx, E.Cause(err, "exchange ", transport.Tag(), " failed for <empty query>"))
 				}
-				if rule != nil && rule.BypassIfFailed() && ruleIndex != -1 {
+				if selectedRule != nil && selectedRule.BypassIfFailed() && selectedRuleIndex != -1 {
 					select {
 					case <-ctx.Done():
 					default:
@@ -318,21 +332,70 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg, options adapte
 		}
 	}
 	if err != nil {
+		zeonvalidation.RecordDNS(ctx, r.logger, metadata.Domain, nil, nil, metadata.QueryType, selectedRule, selectedRuleIndex, transport, false, true)
 		return nil, err
 	}
-	if r.dnsReverseMapping != nil && len(message.Question) > 0 && response != nil && len(response.Answer) > 0 {
-		if transport == nil || transport.Type() != C.DNSTypeFakeIP {
-			for _, answer := range response.Answer {
-				switch record := answer.(type) {
-				case *mDNS.A:
-					r.dnsReverseMapping.AddWithLifetime(M.AddrFromIP(record.A), FqdnToDomain(record.Hdr.Name), time.Duration(record.Hdr.Ttl)*time.Second)
-				case *mDNS.AAAA:
-					r.dnsReverseMapping.AddWithLifetime(M.AddrFromIP(record.AAAA), FqdnToDomain(record.Hdr.Name), time.Duration(record.Hdr.Ttl)*time.Second)
-				}
+	if r.dnsReverseMapping != nil && (transport == nil || transport.Type() != C.DNSTypeFakeIP) {
+		r.rememberDNSReverseMapping(message, response)
+	}
+	zeonvalidation.RecordDNS(
+		ctx,
+		r.logger,
+		metadata.Domain,
+		MessageToAddresses(response),
+		validationCNAMEChain(response),
+		metadata.QueryType,
+		selectedRule,
+		selectedRuleIndex,
+		transport,
+		false,
+		false,
+	)
+	return response, nil
+}
+
+func (r *Router) rememberDNSReverseMapping(message *mDNS.Msg, response *mDNS.Msg) {
+	if message == nil || response == nil || len(message.Question) == 0 {
+		return
+	}
+	questionDomain := strings.ToLower(FqdnToDomain(message.Question[0].Name))
+	if questionDomain == "" {
+		return
+	}
+
+	// Preserve the name the application actually queried. Mapping an A/AAAA
+	// record's owner instead loses the original domain after a CNAME hop (for
+	// example service.ru -> edge.example.com), allowing the later TUN IP
+	// connection to bypass domain-based routing.
+	lifetime := reverseMappingLifetime(response)
+	for _, address := range MessageToAddresses(response) {
+		if address.IsValid() {
+			r.dnsReverseMapping.AddWithLifetime(address.Unmap(), questionDomain, lifetime)
+		}
+	}
+}
+
+func reverseMappingLifetime(response *mDNS.Msg) time.Duration {
+	var minimumTTL uint32
+	var found bool
+	for _, answer := range response.Answer {
+		switch answer.(type) {
+		case *mDNS.A, *mDNS.AAAA, *mDNS.CNAME, *mDNS.HTTPS:
+			ttl := answer.Header().Ttl
+			if !found || ttl < minimumTTL {
+				minimumTTL = ttl
+				found = true
 			}
 		}
 	}
-	return response, nil
+	if !found {
+		return 0
+	}
+	return time.Duration(minimumTTL) * time.Second
+}
+
+func predefinedDNSResponseBlocked(response *mDNS.Msg) bool {
+	return response == nil || response.Rcode != mDNS.RcodeSuccess
 }
 
 func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQueryOptions) ([]netip.Addr, error) {
@@ -365,7 +428,7 @@ func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQ
 		transport := options.Transport
 		if legacyTransport, isLegacy := transport.(adapter.LegacyDNSTransport); isLegacy {
 			if options.Strategy == C.DomainStrategyAsIS {
-				options.Strategy = r.defaultDomainStrategy
+				options.Strategy = legacyTransport.LegacyStrategy()
 			}
 			if !options.ClientSubnet.IsValid() {
 				options.ClientSubnet = legacyTransport.LegacyClientSubnet()
@@ -391,9 +454,11 @@ func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQ
 				case *R.RuleActionReject:
 					return nil, &R.RejectedError{Cause: action.Error(ctx)}
 				case *R.RuleActionPredefined:
+					responseAddrs = nil
 					if action.Rcode != mDNS.RcodeSuccess {
 						err = RcodeError(action.Rcode)
 					} else {
+						err = nil
 						for _, answer := range action.Answer {
 							switch record := answer.(type) {
 							case *mDNS.A:
@@ -408,13 +473,7 @@ func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQ
 					goto response
 				}
 			}
-			var responseCheck func(responseAddrs []netip.Addr) bool
-			if rule != nil && rule.WithAddressLimit() {
-				responseCheck = func(responseAddrs []netip.Addr) bool {
-					metadata.DestinationAddresses = responseAddrs
-					return rule.MatchAddressLimit(metadata)
-				}
-			}
+			responseCheck := addressLimitResponseCheck(rule, metadata)
 			if dnsOptions.Strategy == C.DomainStrategyAsIS {
 				dnsOptions.Strategy = r.defaultDomainStrategy
 			}
@@ -443,6 +502,18 @@ func isAddressQuery(message *mDNS.Msg) bool {
 		}
 	}
 	return false
+}
+
+func addressLimitResponseCheck(rule adapter.DNSRule, metadata *adapter.InboundContext) func(responseAddrs []netip.Addr) bool {
+	if rule == nil || !rule.WithAddressLimit() {
+		return nil
+	}
+	responseMetadata := *metadata
+	return func(responseAddrs []netip.Addr) bool {
+		checkMetadata := responseMetadata
+		checkMetadata.DestinationAddresses = responseAddrs
+		return rule.MatchAddressLimit(&checkMetadata)
+	}
 }
 
 func (r *Router) ClearCache() {

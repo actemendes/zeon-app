@@ -72,7 +72,7 @@ void main() {
     expect(prefs.getString("balancer-strategy"), "round-robin");
   });
 
-  test("v16 enables ad blocking and removes Rutube from routing for existing installations", () async {
+  test("v16 enables ad blocking without deleting ambiguous former seed selections", () async {
     SharedPreferences.setMockInitialValues({
       PreferencesMigration.versionKey: 15,
       "block-ads": false,
@@ -84,18 +84,161 @@ void main() {
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
     expect(prefs.getBool("block-ads"), true);
-    expect(prefs.getStringList("per_app_proxy_exclude_list"), ["com.example.other"]);
-    expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), ["com.example.seeded"]);
-    expect(prefs.getBool(PreferencesMigration.v16RoutingCleanupPendingKey), true);
+    expect(prefs.getStringList("per_app_proxy_exclude_list"), [
+      "com.example.other",
+      PreferencesMigration.v16RemovedRoutingPackage,
+    ]);
+    expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), isEmpty);
+    expect(prefs.getBool(PreferencesMigration.v16RoutingCleanupPendingKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v16RoutingCleanupOwnedKey), false);
+    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey), false);
   });
 
-  test("latest migration version is 16", () async {
+  test("v16 preserves an explicit Rutube rule without seed ownership evidence", () async {
+    SharedPreferences.setMockInitialValues({
+      PreferencesMigration.versionKey: 15,
+      "per_app_proxy_mode": "exclude",
+      "per_app_proxy_exclude_list": [PreferencesMigration.v16RemovedRoutingPackage],
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs).migrate();
+
+    expect(prefs.getStringList("per_app_proxy_exclude_list"), [PreferencesMigration.v16RemovedRoutingPackage]);
+    expect(prefs.containsKey(PreferencesMigration.v16RoutingCleanupOwnedKey), false);
+    expect(prefs.getBool(PreferencesMigration.v16RoutingCleanupPendingKey), false);
+  });
+
+  test("v17 preserves ambiguous legacy seed rows and explicit user state", () async {
+    SharedPreferences.setMockInitialValues({
+      PreferencesMigration.versionKey: 16,
+      "per_app_proxy_mode": "exclude",
+      "per_app_proxy_include_list": ["com.example.explicit.include"],
+      "per_app_proxy_exclude_list": [
+        "com.example.seeded.one",
+        "com.example.explicit.exclude",
+        "com.example.seeded.two",
+      ],
+      "per_app_proxy_seeded_exclude_list": ["com.example.seeded.one", "com.example.seeded.two"],
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs).migrate();
+
+    expect(prefs.getString("per_app_proxy_mode"), "exclude");
+    expect(prefs.getStringList("per_app_proxy_include_list"), ["com.example.explicit.include"]);
+    expect(prefs.getStringList("per_app_proxy_exclude_list"), [
+      "com.example.seeded.one",
+      "com.example.explicit.exclude",
+      "com.example.seeded.two",
+    ]);
+    expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), isEmpty);
+    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey), false);
+  });
+
+  test("v17 keeps a cleanup request only for packages with separate exact ownership proof", () async {
+    SharedPreferences.setMockInitialValues({
+      PreferencesMigration.versionKey: 16,
+      "per_app_proxy_mode": "exclude",
+      "per_app_proxy_exclude_list": ["com.example.proven", "com.example.ambiguous"],
+      "per_app_proxy_seeded_exclude_list": ["com.example.proven", "com.example.ambiguous"],
+      PreferencesMigration.v17SeededRoutingCleanupPendingKey: true,
+      PreferencesMigration.v17SeededRoutingCleanupPackagesKey: ["com.example.ambiguous", "com.example.proven"],
+      PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey: ["com.example.proven"],
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs).migrate();
+
+    expect(prefs.getStringList("per_app_proxy_exclude_list"), ["com.example.proven", "com.example.ambiguous"]);
+    expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), isEmpty);
+    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), true);
+    expect(prefs.getStringList(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), ["com.example.proven"]);
+    expect(prefs.getStringList(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey), ["com.example.proven"]);
+  });
+
+  test("v17 preserves all per-app state when no seed ownership marker exists", () async {
+    SharedPreferences.setMockInitialValues({
+      PreferencesMigration.versionKey: 16,
+      "per_app_proxy_mode": "exclude",
+      "per_app_proxy_include_list": ["com.example.explicit.include"],
+      "per_app_proxy_exclude_list": ["com.example.explicit.exclude"],
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs).migrate();
+
+    expect(prefs.getString("per_app_proxy_mode"), "exclude");
+    expect(prefs.getStringList("per_app_proxy_include_list"), ["com.example.explicit.include"]);
+    expect(prefs.getStringList("per_app_proxy_exclude_list"), ["com.example.explicit.exclude"]);
+    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
+  });
+
+  test("v17 preserves legacy string-encoded selections and ignores malformed ownership evidence", () async {
+    SharedPreferences.setMockInitialValues({
+      PreferencesMigration.versionKey: 16,
+      "intro_completed": true,
+      "per_app_proxy_mode": "exclude",
+      "per_app_proxy_exclude_list": "ru.vk.store",
+      "per_app_proxy_seeded_exclude_list": "ru.vk.store",
+      PreferencesMigration.v17SeededRoutingCleanupPendingKey: true,
+      PreferencesMigration.v17SeededRoutingCleanupPackagesKey: "ru.vk.store",
+      PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey: "ru.vk.store",
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs).migrate();
+
+    expect(prefs.getInt(PreferencesMigration.versionKey), 17);
+    expect(prefs.getBool("intro_completed"), true);
+    expect(prefs.getString("per_app_proxy_mode"), "exclude");
+    expect(prefs.getString("per_app_proxy_exclude_list"), "ru.vk.store");
+    expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), isEmpty);
+    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey), false);
+  });
+
+  test("future migration failures preserve every existing preference", () async {
+    SharedPreferences.setMockInitialValues({
+      PreferencesMigration.versionKey: 16,
+      "intro_completed": true,
+      "per_app_proxy_mode": "exclude",
+      "per_app_proxy_exclude_list": "ru.vk.store",
+      "user_explicit_mode": "custom",
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    final failure = await runPreferencesMigrationPreservingState(
+      () => Future<void>.error(StateError("synthetic migration failure")),
+    );
+
+    expect(failure, isNotNull);
+    expect(prefs.getInt(PreferencesMigration.versionKey), 16);
+    expect(prefs.getBool("intro_completed"), true);
+    expect(prefs.getString("per_app_proxy_mode"), "exclude");
+    expect(prefs.getString("per_app_proxy_exclude_list"), "ru.vk.store");
+    expect(prefs.getString("user_explicit_mode"), "custom");
+  });
+
+  test("fresh install reaches v17 without creating RU package exclusions", () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
 
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
-    expect(prefs.getInt(PreferencesMigration.versionKey), 16);
+    expect(prefs.getInt(PreferencesMigration.versionKey), 17);
     expect(prefs.getBool("block-ads"), true);
+    expect(prefs.containsKey("per_app_proxy_mode"), false);
+    expect(prefs.getStringList("per_app_proxy_exclude_list"), isNull);
+    expect(prefs.getStringList("per_app_proxy_seeded_exclude_list"), isEmpty);
+    expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
+    expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey), false);
   });
 }

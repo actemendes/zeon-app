@@ -5,7 +5,6 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/experimental/deprecated"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
@@ -46,6 +45,10 @@ var _ adapter.Rule = (*DefaultRule)(nil)
 
 type DefaultRule struct {
 	abstractDefaultRule
+}
+
+func (r *DefaultRule) matchStates(metadata *adapter.InboundContext) ruleMatchStateSet {
+	return r.abstractDefaultRule.matchStates(metadata)
 }
 
 type RuleItem interface {
@@ -277,17 +280,16 @@ func NewDefaultRule(ctx context.Context, logger log.ContextLogger, options optio
 		rule.allItems = append(rule.allItems, item)
 	}
 	if len(options.RuleSet) > 0 {
+		//nolint:staticcheck
+		if options.Deprecated_RulesetIPCIDRMatchSource {
+			return nil, E.New("rule_set_ipcidr_match_source is deprecated in sing-box 1.10.0 and removed in sing-box 1.11.0")
+		}
 		var matchSource bool
 		if options.RuleSetIPCIDRMatchSource {
 			matchSource = true
-		} else
-		//nolint:staticcheck
-		if options.Deprecated_RulesetIPCIDRMatchSource {
-			matchSource = true
-			deprecated.Report(ctx, deprecated.OptionBadMatchSource)
 		}
 		item := NewRuleSetItem(router, options.RuleSet, matchSource, false)
-		rule.items = append(rule.items, item)
+		rule.ruleSetItem = item
 		rule.allItems = append(rule.allItems, item)
 	}
 	return rule, nil
@@ -297,6 +299,10 @@ var _ adapter.Rule = (*LogicalRule)(nil)
 
 type LogicalRule struct {
 	abstractLogicalRule
+}
+
+func (r *LogicalRule) matchStates(metadata *adapter.InboundContext) ruleMatchStateSet {
+	return r.abstractLogicalRule.matchStates(metadata)
 }
 
 func NewLogicalRule(ctx context.Context, logger log.ContextLogger, options option.LogicalRule) (*LogicalRule, error) {

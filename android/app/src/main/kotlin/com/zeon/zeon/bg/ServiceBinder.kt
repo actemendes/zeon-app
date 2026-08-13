@@ -11,14 +11,17 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-class ServiceBinder(private val status: MutableLiveData<Status>) : IService.Stub() {
+class ServiceBinder(
+    private val status: MutableLiveData<Status>,
+    private val generation: () -> Long,
+) : IService.Stub() {
     private val callbacks = RemoteCallbackList<IServiceCallback>()
     private val broadcastLock = Mutex()
 
     init {
         status.observeForever {
             broadcast { callback ->
-                callback.onServiceStatusChanged(it.ordinal)
+                callback.onServiceStatusChanged(it.ordinal, generation())
             }
         }
     }
@@ -43,6 +46,8 @@ class ServiceBinder(private val status: MutableLiveData<Status>) : IService.Stub
     }
 
     override fun getStatus(): Int = (status.value ?: Status.Stopped).ordinal
+
+    override fun getGeneration(): Long = generation()
 
     override fun registerCallback(callback: IServiceCallback) {
         callbacks.register(callback)

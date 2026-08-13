@@ -2,7 +2,9 @@ package hcore
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"runtime"
 	"sync"
 	"time"
@@ -11,13 +13,14 @@ import (
 	"github.com/hiddify/hiddify-core/v2/db"
 	hcommon "github.com/hiddify/hiddify-core/v2/hcommon"
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/conntrack"
 	"github.com/sagernet/sing-box/protocol/group"
 
 	"github.com/sagernet/sing-box/common/monitoring"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/memory"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var activeServerLogState struct {
@@ -29,7 +32,6 @@ func (h *HiddifyInstance) readStatus(prev *SystemInfo) *SystemInfo {
 	var message SystemInfo
 	message.Memory = int64(memory.Inuse())
 	message.Goroutines = int32(runtime.NumGoroutine())
-	message.ConnectionsOut = int32(conntrack.Count())
 
 	if ss := h.StartedService; ss != nil {
 		status := ss.ReadStatus()
@@ -130,23 +132,41 @@ func (h *HiddifyInstance) GetSystemInfo(stream grpc.ServerStreamingServer[System
 	}
 	current_status := h.readStatus(nil)
 	if err := stream.Send(current_status); err != nil {
-		Log(LogLevel_ERROR, LogType_CORE, "send System Info failed", err)
+		return handleSystemInfoStreamSendError(err)
 	}
 	for {
 		select {
 		case <-stream.Context().Done():
 			return nil
 		case <-ctx.Done():
-			return ctx.Err()
+			return normalizeSystemInfoStreamClose(ctx.Err())
 		case <-ticker.C:
 			current_status = h.readStatus(current_status)
 			if err := stream.Send(current_status); err != nil {
-				// return err
-				Log(LogLevel_ERROR, LogType_CORE, "send System Info failed", err)
+				return handleSystemInfoStreamSendError(err)
 			}
 		}
 	}
 
+}
+
+// normalizeSystemInfoStreamClose keeps expected stream teardown out of the
+// error path. Flutter replaces this client stream whenever the core restarts,
+// so cancellation and EOF are lifecycle signals rather than data-plane
+// failures.
+func normalizeSystemInfoStreamClose(err error) error {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {
+		return nil
+	}
+	return err
+}
+
+func handleSystemInfoStreamSendError(err error) error {
+	if normalized := normalizeSystemInfoStreamClose(err); normalized != nil {
+		Log(LogLevel_ERROR, LogType_CORE, "send System Info failed", normalized)
+		return normalized
+	}
+	return nil
 }
 
 // func (s *CoreService) OutboundsInfo(req *hcommon.Empty, stream grpc.ServerStreamingServer[OutboundGroupList]) error {

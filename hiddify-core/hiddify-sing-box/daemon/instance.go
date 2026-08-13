@@ -7,8 +7,10 @@ import (
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/urltest"
+	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/experimental/deprecated"
 	"github.com/sagernet/sing-box/include"
+	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -21,6 +23,7 @@ type Instance struct {
 	ctx                   context.Context
 	cancel                context.CancelFunc
 	instance              *box.Box
+	connectionManager     adapter.ConnectionManager
 	clashServer           adapter.ClashServer
 	cacheFile             adapter.CacheFile
 	pauseManager          pause.Manager
@@ -66,7 +69,7 @@ type OverrideOptions struct {
 }
 
 func (s *StartedService) newInstance(profileContent string, overrideOptions *OverrideOptions) (*Instance, error) {
-	ctx := s.ctx
+	ctx := service.ExtendContext(s.ctx)
 	service.MustRegister[deprecated.Manager](ctx, new(deprecatedManager))
 	// ctx, cancel := context.WithCancel(include.Context(ctx))
 	options, err := parseConfig(ctx, profileContent)
@@ -87,6 +90,15 @@ func (s *StartedService) newInstanceOptions(options option.Options, overrideOpti
 				tunInboundOptions.ExcludePackage = append(tunInboundOptions.ExcludePackage, overrideOptions.ExcludePackage...)
 				break
 			}
+		}
+	}
+	if s.oomKiller && C.IsIos {
+		if !common.Any(options.Services, func(it option.Service) bool {
+			return it.Type == C.TypeOOMKiller
+		}) {
+			options.Services = append(options.Services, option.Service{
+				Type: C.TypeOOMKiller,
+			})
 		}
 	}
 	urlTestHistoryStorage := urltest.NewHistoryStorage()
@@ -110,9 +122,11 @@ func (s *StartedService) newInstanceOptions(options option.Options, overrideOpti
 		ctx = urltest.ContextWithIsUnifiedDelay(ctx)
 	}
 	i.instance = boxInstance
+	i.connectionManager = service.FromContext[adapter.ConnectionManager](ctx)
 	i.clashServer = service.FromContext[adapter.ClashServer](ctx)
 	i.pauseManager = service.FromContext[pause.Manager](ctx)
 	i.cacheFile = service.FromContext[adapter.CacheFile](ctx)
+	log.SetStdLogger(boxInstance.LogFactory().Logger())
 	return i, nil
 }
 

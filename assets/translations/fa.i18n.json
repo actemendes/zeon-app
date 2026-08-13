@@ -641,6 +641,9 @@
   },
   "connection": {
     "tapToConnect": "برای اتصال ضربه بزنید",
+    "tapToDisconnect": "برای قطع اتصال ضربه بزنید",
+    "connectingSemantics": "اتصال در حال انجام است",
+    "disconnectingSemantics": "قطع اتصال در حال انجام است",
     "connect": "اتصال",
     "connecting": "در حال اتصال...",
     "connected": "متصل شد",

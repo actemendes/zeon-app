@@ -32,13 +32,24 @@ func Stop() (coreResponse *CoreInfoResponse, err error) {
 		return SetCoreStatus(CoreStates_STOPPED, MessageType_ALREADY_STOPPED, ""), nil
 	}
 
-	if err := ss.CloseService(); err != nil {
+	if err := closeStartedService(ss); err != nil {
 		static.StartedService = nil
 		dumpGoroutinesToFile(fmt.Sprint(sWorkingPath, "/data/goroutine-stop.log"))
 		return errorWrapper(MessageType_UNEXPECTED_ERROR, err)
 	}
-	// err = common.Close(static.StartedService)
 	static.StartedService = nil
 
 	return SetCoreStatus(CoreStates_STOPPED, MessageType_EMPTY, ""), nil
+}
+
+type startedServiceCloser interface {
+	CloseService() error
+	Close()
+}
+
+func closeStartedService(service startedServiceCloser) error {
+	// CloseService tears down the active sing-box instance. Close also owns the
+	// StartedService observables and must run on both success and error paths.
+	defer service.Close()
+	return service.CloseService()
 }

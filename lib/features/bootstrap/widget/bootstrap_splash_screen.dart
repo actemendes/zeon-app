@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:zeon/core/theme/app_color_tokens.dart';
 import 'package:zeon/core/theme/app_theme_mode.dart';
+import 'package:zeon/core/theme/system_bars_style.dart';
 
 class BootstrapSplashScreen extends StatefulWidget {
   const BootstrapSplashScreen({super.key, required this.themeMode});
@@ -70,13 +71,7 @@ class _BootstrapSplashScreenState extends State<BootstrapSplashScreen> with Tick
     final backgroundColor = isDark ? _darkBackground : _lightBackground;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: backgroundColor,
-        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-        systemNavigationBarColor: backgroundColor,
-        systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-      ),
+      value: systemBarsStyleFor(isDark ? Brightness.dark : Brightness.light),
       child: ColoredBox(
         color: backgroundColor,
         child: SafeArea(

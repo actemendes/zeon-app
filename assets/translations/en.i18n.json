@@ -710,6 +710,9 @@
   },
   "connection": {
     "tapToConnect": "Tap to connect",
+    "tapToDisconnect": "Tap to disconnect",
+    "connectingSemantics": "Connection in progress",
+    "disconnectingSemantics": "Disconnection in progress",
     "connect": "Connect",
     "connecting": "Connecting...",
     "connected": "Connected",

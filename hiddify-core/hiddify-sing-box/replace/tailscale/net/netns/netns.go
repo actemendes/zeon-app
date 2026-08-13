@@ -19,6 +19,7 @@ import (
 	"net/netip"
 	"runtime"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/sagernet/tailscale/net/netknob"
 	"github.com/sagernet/tailscale/net/netmon"
@@ -26,6 +27,18 @@ import (
 )
 
 var disabled atomic.Bool
+
+var controlOverride atomic.Pointer[func(network, address string, c syscall.RawConn) error]
+
+// SetControlFunc installs the socket control hook required by sing-box.
+// Passing nil restores the platform-specific default.
+func SetControlFunc(f func(network, address string, c syscall.RawConn) error) {
+	if f != nil {
+		controlOverride.Store(&f)
+	} else {
+		controlOverride.Store(nil)
+	}
+}
 
 // SetEnabled enables or disables netns for the process.
 // It defaults to being enabled.
@@ -82,6 +95,9 @@ func Listener(logf logger.Logf, netMon *netmon.Monitor) *net.ListenConfig {
 	if disabled.Load() {
 		return new(net.ListenConfig)
 	}
+	if f := controlOverride.Load(); f != nil {
+		return &net.ListenConfig{Control: *f}
+	}
 	return &net.ListenConfig{Control: control(logf, netMon)}
 }
 
@@ -121,7 +137,11 @@ func FromDialer(logf logger.Logf, netMon *netmon.Monitor, d *net.Dialer, ad bool
 	if disabled.Load() {
 		return d
 	}
-	d.Control = control(logf, netMon)
+	if f := controlOverride.Load(); f != nil {
+		d.Control = *f
+	} else {
+		d.Control = control(logf, netMon)
+	}
 	if wrapDialer != nil {
 		return wrapDialer(d)
 	}

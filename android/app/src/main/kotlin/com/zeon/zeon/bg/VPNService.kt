@@ -10,12 +10,12 @@ import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import com.hiddify.core.libbox.Notification
+import com.hiddify.core.libbox.PlatformInterface
 import com.zeon.zeon.constant.PerAppProxyMode
 import com.zeon.zeon.ktx.toIpPrefix
 import com.hiddify.core.libbox.TunOptions
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
+import java.net.DatagramSocket
+import java.net.InetSocketAddress
 
 class VPNService : VpnService(), PlatformInterfaceWrapper {
 
@@ -23,10 +23,26 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
         private const val TAG = "A/VPNService"
     }
 
-    private val service = BoxService(this, this)
+    private val service = BoxService(this, ::platformInterfaceForGeneration)
+
+    private fun platformInterfaceForGeneration(generation: Long): PlatformInterface =
+        GenerationBoundPlatformInterface(
+            ownerGeneration = generation,
+            delegate = this,
+            openTunForOwner = ::openTun,
+            controlSocketForOwner = ::autoDetectInterfaceControl,
+        )
+
+    override fun onCreate() {
+        super.onCreate()
+        VpnSessionCoordinator.event(
+            "vpn_service_create",
+            VpnSessionCoordinator.current(),
+        )
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) =
-        service.onStartCommand()
+        service.onStartCommand(intent)
 
     override fun onBind(intent: Intent): IBinder {
         val binder = super.onBind(intent)
@@ -37,19 +53,36 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     override fun onDestroy() {
-        service.onDestroy()
-    }
-
-    override fun onRevoke() {
-        runBlocking {
-            withContext(Dispatchers.Main) {
-                service.onRevoke()
-            }
+        VpnSessionCoordinator.event(
+            "vpn_service_destroy",
+            service.currentSessionGeneration(),
+        )
+        try {
+            service.onDestroy()
+        } finally {
+            super.onDestroy()
         }
     }
 
+    override fun onRevoke() {
+        service.onRevoke()
+    }
+
     override fun autoDetectInterfaceControl(fd: Int) {
-        protect(fd)
+        error("VPN core callbacks require a generation-bound platform interface")
+    }
+
+    private fun autoDetectInterfaceControl(ownerGeneration: Long, fd: Int) {
+        val protected = protect(fd)
+        VpnSessionCoordinator.event(
+            "protect_result",
+            ownerGeneration,
+            "source=core_socket success=$protected",
+            if (protected) Log.INFO else Log.ERROR,
+        )
+        if (!protected) {
+            error("android: VpnService.protect failed for core socket")
+        }
     }
 
     var systemProxyAvailable = false
@@ -72,6 +105,15 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     override fun openTun(options: TunOptions): Int {
+        error("VPN core callbacks require a generation-bound platform interface")
+    }
+
+    private fun openTun(ownerGeneration: Long, options: TunOptions): Int {
+        VpnSessionCoordinator.event("tun_open_requested", ownerGeneration)
+        // Reject stale callbacks before Builder.establish() can create or
+        // replace a platform VPN descriptor. BoxService repeats the check when
+        // handing off the established descriptor to close the race window.
+        service.requireTunCallbackSession(ownerGeneration)
         var hasPermission = false
         for (i in 0 until 20) {
             if (prepare(this) != null) {
@@ -103,9 +145,11 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
         }
 
         val inet6Address = options.inet6Address
+        var hasInet6Address = false
         while (inet6Address.hasNext()) {
             val address = inet6Address.next()
             builder.addAddress(address.address(), address.prefix())
+            hasInet6Address = true
         }
 
         if (options.autoRoute) {
@@ -121,13 +165,17 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
                     builder.addRoute("0.0.0.0", 0)
                 }
 
-                val inet6RouteAddress = options.inet6RouteAddress
-                if (inet6RouteAddress.hasNext()) {
-                    while (inet6RouteAddress.hasNext()) {
-                        builder.addRoute(inet6RouteAddress.next().toIpPrefix())
+                // Do not synthesize a catch-all IPv6 route when the core did
+                // not configure an IPv6 TUN address (IPv4-only mode).
+                if (shouldInstallIpv6Routes(hasInet6Address)) {
+                    val inet6RouteAddress = options.inet6RouteAddress
+                    if (inet6RouteAddress.hasNext()) {
+                        while (inet6RouteAddress.hasNext()) {
+                            builder.addRoute(inet6RouteAddress.next().toIpPrefix())
+                        }
+                    } else {
+                        builder.addRoute("::", 0)
                     }
-                } else {
-                    builder.addRoute("::", 0)
                 }
 
                 val inet4RouteExcludeAddress = options.inet4RouteExcludeAddress
@@ -208,8 +256,25 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
         }
 
         val pfd = builder.establish() ?: error("android: the application is not prepared or is revoked")
-        service.fileDescriptor = pfd
-        return pfd.fd
+        return service.openTun(ownerGeneration, pfd) {
+            verifyPlatformProtect(ownerGeneration)
+        }
+    }
+
+    private fun verifyPlatformProtect(generation: Long) {
+        DatagramSocket(null).use { socket ->
+            socket.bind(InetSocketAddress(0))
+            val protected = protect(socket)
+            VpnSessionCoordinator.event(
+                "protect_result",
+                generation,
+                "source=post_tun_probe success=$protected",
+                if (protected) Log.INFO else Log.ERROR,
+            )
+            if (!protected) {
+                error("android: post-TUN VpnService.protect self-check failed")
+            }
+        }
     }
 
 //    override fun writeLog(message: String) = service.writeLog(message)

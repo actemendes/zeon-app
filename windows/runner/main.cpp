@@ -3,12 +3,39 @@
 #include <windows.h>
 #include <shobjidl_core.h>
 
+#include <chrono>
+#include <fstream>
+#include <string>
+#include <thread>
+
 #include "flutter_window.h"
 #include "utils.h"
 #include "app_links/app_links_plugin_c_api.h"
 // #include <protocol_handler_windows/protocol_handler_windows_plugin_c_api.h>
 
 constexpr wchar_t kZeonAppUserModelId[] = L"ZEON.ZEON";
+constexpr wchar_t kZeonMutexName[] = L"ZEONMutex";
+constexpr wchar_t kZeonWindowClass[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
+constexpr wchar_t kZeonWindowTitle[] = L"ZEON";
+
+void WriteStartupMarker(const char* marker)
+{
+  wchar_t path[32768] = {};
+  const DWORD length = ::GetEnvironmentVariableW(
+      L"ZEON_STARTUP_DIAGNOSTICS_FILE", path, ARRAYSIZE(path));
+  if (length == 0 || length >= ARRAYSIZE(path))
+  {
+    return;
+  }
+
+  std::ofstream stream(path, std::ios::app);
+  if (!stream)
+  {
+    return;
+  }
+  stream << ::GetTickCount64() << " pid=" << ::GetCurrentProcessId()
+         << " marker=" << marker << '\n';
+}
 
 void HardenDllSearchPath()
 {
@@ -32,41 +59,50 @@ void HardenDllSearchPath()
   ::SetDllDirectoryW(L"");
 }
 
-bool SendAppLinkToInstance(const std::wstring &title)
+HWND FindZeonWindow()
 {
-  // Find our exact window
-  HWND hwnd = ::FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", title.c_str());
+  return ::FindWindowW(kZeonWindowClass, kZeonWindowTitle);
+}
 
-  if (hwnd)
+bool ActivateExistingInstance(HWND hwnd)
+{
+  if (hwnd == nullptr)
   {
-    // Dispatch new link to current window
-    SendAppLink(hwnd);
-
-    // (Optional) Restore our window to front in same state
-    WINDOWPLACEMENT place = {sizeof(WINDOWPLACEMENT)};
-    GetWindowPlacement(hwnd, &place);
-
-    switch (place.showCmd)
-    {
-    case SW_SHOWMAXIMIZED:
-      ShowWindow(hwnd, SW_SHOWMAXIMIZED);
-      break;
-    case SW_SHOWMINIMIZED:
-      ShowWindow(hwnd, SW_RESTORE);
-      break;
-    default:
-      ShowWindow(hwnd, SW_NORMAL);
-      break;
-    }
-
-    SetWindowPos(0, HWND_TOP, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOSIZE | SWP_NOMOVE);
-    SetForegroundWindow(hwnd);
-    // END (Optional) Restore
-
-    // Window has been found, don't create another one.
-    return true;
+    return false;
   }
 
+  SendAppLink(hwnd);
+
+  WINDOWPLACEMENT place = {sizeof(WINDOWPLACEMENT)};
+  if (::GetWindowPlacement(hwnd, &place) && place.showCmd == SW_SHOWMINIMIZED)
+  {
+    ::ShowWindow(hwnd, SW_RESTORE);
+  }
+  else
+  {
+    ::ShowWindow(hwnd, SW_SHOW);
+  }
+
+  ::SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+                 SWP_SHOWWINDOW | SWP_NOSIZE | SWP_NOMOVE);
+  ::SetForegroundWindow(hwnd);
+  WriteStartupMarker("existing_instance_activated");
+  return true;
+}
+
+bool WaitForAndActivateExistingInstance()
+{
+  // The primary process owns the mutex before Flutter creates its HWND.
+  // Bound the wait so a crashed primary can never leave secondary launches
+  // blocked indefinitely.
+  for (int attempt = 0; attempt < 100; ++attempt)
+  {
+    if (ActivateExistingInstance(FindZeonWindow()))
+    {
+      return true;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
   return false;
 }
 
@@ -75,33 +111,29 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 {
   HardenDllSearchPath();
   SetCurrentProcessExplicitAppUserModelID(kZeonAppUserModelId);
+  WriteStartupMarker("process_entry");
 
-  // Replace "example" with the generated title found as parameter of `window.Create` in this file.
-  // You may ignore the result if you need to create another window.
-  if (SendAppLinkToInstance(L"ZEON"))
+  if (ActivateExistingInstance(FindZeonWindow()))
   {
     return EXIT_SUCCESS;
   }
 
-  HANDLE hMutexInstance = CreateMutex(NULL, TRUE, L"ZEONMutex");
-  HWND handle = FindWindowA(NULL, "ZEON");
-
-  if (GetLastError() == ERROR_ALREADY_EXISTS)
+  HANDLE instance_mutex = ::CreateMutexW(nullptr, TRUE, kZeonMutexName);
+  if (instance_mutex == nullptr)
   {
-    flutter::DartProject project(L"data");
-    std::vector<std::string> command_line_arguments = GetCommandLineArguments();
-    project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
-    FlutterWindow window(project);
-    if (window.SendAppLinkToInstance(L"ZEON"))
-    {
-      return false;
-    }
-
-    WINDOWPLACEMENT place = {sizeof(WINDOWPLACEMENT)};
-    GetWindowPlacement(handle, &place);
-    ShowWindow(handle, SW_NORMAL);
-    return 0;
+    WriteStartupMarker("mutex_create_failed");
+    return EXIT_FAILURE;
   }
+  if (::GetLastError() == ERROR_ALREADY_EXISTS)
+  {
+    WriteStartupMarker("secondary_waiting_for_window");
+    const bool activated = WaitForAndActivateExistingInstance();
+    ::CloseHandle(instance_mutex);
+    WriteStartupMarker(activated ? "secondary_exit_success"
+                                 : "secondary_window_timeout");
+    return activated ? EXIT_SUCCESS : EXIT_FAILURE;
+  }
+  WriteStartupMarker("primary_mutex_acquired");
 
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
@@ -126,8 +158,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   Win32Window::Size size(1280, 720);
   if (!window.Create(L"ZEON", origin, size))
   {
+    WriteStartupMarker("window_create_failed");
+    ::ReleaseMutex(instance_mutex);
+    ::CloseHandle(instance_mutex);
+    ::CoUninitialize();
     return EXIT_FAILURE;
   }
+  WriteStartupMarker("window_created");
   window.SetQuitOnClose(true);
 
   ::MSG msg;
@@ -138,6 +175,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
 
   ::CoUninitialize();
-  ReleaseMutex(hMutexInstance);
+  ::ReleaseMutex(instance_mutex);
+  ::CloseHandle(instance_mutex);
+  WriteStartupMarker("process_exit_clean");
   return EXIT_SUCCESS;
 }

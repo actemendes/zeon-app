@@ -1,0 +1,14 @@
+pair,mode,transport,network_validated,download_bytes,total_ms,estimated_mbps,upload_bytes,latency_ms,jitter_ms,packet_loss_pct,radio,rsrp_dbm,rsrq_db,sinr_db,signal_level,vpn_result,classification,evidence
+1,Direct,CELLULAR LTE,false,0,5017,,0,,,,LTE,-99,-14,4,3,DNS failure during transition to direct,INVALID_FOR_RATIO,evidence/20260730T133517Z/redacted/pair1-direct.log
+1,VPN,CELLULAR LTE,true,0,10014,,0,,,,LTE,-99,-14,4,3,DNS UnknownHost,FAIL,evidence/20260730T133517Z/redacted/pair1-vpn-retry.log
+2,Direct,CELLULAR LTE,false,0,20000,,0,,,,LTE,-99,-14,4,3,TCP-TLS probe did not complete in observation window,INCONCLUSIVE,evidence/20260730T133517Z/redacted/pair2-direct-valid.log
+2,VPN,CELLULAR LTE,true,0,10016,,0,,,,LTE,-99,-14,4,3,DNS UnknownHost,FAIL,evidence/20260730T133517Z/redacted/pair2-vpn-valid.log
+3,Direct,CELLULAR LTE,true,65536,620,0.846,0,,,,LTE,-99,-14,4,3,HTTPS 200,SHORT_PROBE_PASS,evidence/20260730T133517Z/redacted/pair3-direct.log
+3,VPN,CELLULAR LTE,true,0,10021,,0,,,,LTE,-99,-14,4,3,DNS UnknownHost,FAIL,evidence/20260730T133517Z/redacted/pair3-vpn.log
+4,Direct,CELLULAR LTE,false,0,20000,,0,,,,LTE,-99,-14,4,3,TCP-TLS probe did not complete in observation window,INCONCLUSIVE,evidence/20260730T133517Z/redacted/pair4-direct.log
+4,VPN,CELLULAR LTE,true,0,10009,,0,,,,LTE,-99,-14,4,3,DNS UnknownHost,FAIL,evidence/20260730T133517Z/redacted/pair4-vpn.log
+5,Direct,CELLULAR LTE,true,65536,551,0.951,0,,,,LTE,-99,-14,4,3,HTTPS 200,SHORT_PROBE_PASS,evidence/20260730T133517Z/redacted/pair5-direct.log
+5,VPN,CELLULAR LTE,true,0,10018,,0,,,,LTE,-99,-14,4,3,DNS UnknownHost,FAIL,evidence/20260730T133517Z/redacted/pair5-vpn.log
+upload,Direct,CELLULAR LTE,true,0,30036,,0,,,,LTE,-99,-14,4,3,TCP connect timeout,FAIL,evidence/20260730T133517Z/redacted/upload-direct.log
+upload,VPN,CELLULAR LTE,true,0,10021,,0,,,,LTE,-99,-14,4,3,DNS UnknownHost,FAIL,evidence/20260730T133517Z/redacted/upload-vpn.log
+

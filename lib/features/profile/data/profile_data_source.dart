@@ -10,6 +10,7 @@ part 'profile_data_source.g.dart';
 
 abstract interface class ProfileDataSource {
   Future<ProfileEntry?> getById(String id);
+  Future<ProfileEntry?> getActiveProfile();
   Future<ProfileEntry?> getByUrl(String url);
   Future<ProfileEntry?> getByName(String name);
   Stream<ProfileEntry?> watchActiveProfile();
@@ -30,6 +31,14 @@ class ProfileDao extends DatabaseAccessor<Db> with _$ProfileDaoMixin, InfraLogge
   @override
   Future<ProfileEntry?> getById(String id) async {
     return await (profileEntries.select()..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+  }
+
+  @override
+  Future<ProfileEntry?> getActiveProfile() async {
+    return await (profileEntries.select()
+          ..where((tbl) => tbl.active.equals(true))
+          ..limit(1))
+        .getSingleOrNull();
   }
 
   @override
@@ -150,6 +159,12 @@ class ProtectedProfileDataSource implements ProfileDataSource {
   @override
   Future<ProfileEntry?> getById(String id) async {
     final entry = await _delegate.getById(id);
+    return _revealEntry(entry);
+  }
+
+  @override
+  Future<ProfileEntry?> getActiveProfile() async {
+    final entry = await _delegate.getActiveProfile();
     return _revealEntry(entry);
   }
 

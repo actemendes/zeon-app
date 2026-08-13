@@ -11,26 +11,63 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.net.NetworkInterface
+import java.util.concurrent.ConcurrentHashMap
 
 object DefaultNetworkMonitor {
 
+    private class MonitorOwner(val generation: Long)
+
+    private val ownerLock = Any()
+    private val owners = ConcurrentHashMap<Long, MonitorOwner>()
+    @Volatile
+    private var currentOwner: MonitorOwner? = null
+    @Volatile
     var defaultNetwork: Network? = null
+    @Volatile
     private var listener: InterfaceUpdateListener? = null
 
-    suspend fun start() {
-        DefaultNetworkListener.start(this) {
-            defaultNetwork = it
-            checkDefaultInterfaceUpdate(it)
+    suspend fun start(generation: Long) {
+        val owner = MonitorOwner(generation)
+        synchronized(ownerLock) {
+            owners[generation] = owner
+            currentOwner = owner
         }
-        defaultNetwork = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        DefaultNetworkListener.start(owner) { network ->
+            if (currentOwner === owner) {
+                defaultNetwork = network
+                checkDefaultInterfaceUpdate(network)
+            }
+        }
+        val resolvedNetwork = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Application.connectivity.activeNetwork
         } else {
             DefaultNetworkListener.get()
         }
+        val remainsCurrent = synchronized(ownerLock) {
+            if (currentOwner === owner && owners[generation] === owner) {
+                defaultNetwork = resolvedNetwork
+                true
+            } else {
+                false
+            }
+        }
+        if (!remainsCurrent) {
+            DefaultNetworkListener.stop(owner)
+        }
     }
 
-    suspend fun stop() {
-        DefaultNetworkListener.stop(this)
+    suspend fun stop(generation: Long) {
+        val owner = synchronized(ownerLock) {
+            val removed = owners.remove(generation) ?: return
+            if (currentOwner === removed) {
+                currentOwner = null
+                defaultNetwork = null
+            }
+            removed
+        }
+        // Each generation has a distinct actor key. A delayed Stop for an old
+        // generation therefore cannot unregister a newer monitor owner.
+        DefaultNetworkListener.stop(owner)
     }
 
     suspend fun require(): Network {
@@ -45,6 +82,22 @@ object DefaultNetworkMonitor {
         this.listener = listener
         checkDefaultInterfaceUpdate(defaultNetwork)
     }
+
+    fun clearListener(generation: Long) {
+        val cleared = synchronized(ownerLock) {
+            if (currentOwner?.generation != generation) {
+                false
+            } else {
+                listener = null
+                true
+            }
+        }
+        if (cleared) {
+            checkDefaultInterfaceUpdate(defaultNetwork)
+        }
+    }
+
+    internal fun currentGenerationForTesting(): Long = currentOwner?.generation ?: 0L
 
     private fun checkDefaultInterfaceUpdate(newNetwork: Network?) {
         val listener = listener ?: return

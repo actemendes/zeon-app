@@ -12,6 +12,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/hiddify/ipinfo"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/ntp"
@@ -33,6 +34,8 @@ func NewHistoryStorage() *HistoryStorage {
 }
 
 func (s *HistoryStorage) SetHook(hook *observable.Subscriber[struct{}]) {
+	s.access.Lock()
+	defer s.access.Unlock()
 	s.updateHook = hook
 }
 
@@ -42,7 +45,7 @@ func (s *HistoryStorage) LoadURLTestHistory(tag string) *adapter.URLTestHistory 
 	}
 	s.access.RLock()
 	defer s.access.RUnlock()
-	return s.delayHistory[tag]
+	return cloneURLTestHistory(s.delayHistory[tag])
 }
 
 func (s *HistoryStorage) DeleteURLTestHistory(tag string) {
@@ -63,17 +66,40 @@ func (s *HistoryStorage) DeleteURLTestHistory(tag string) {
 func (s *HistoryStorage) StoreURLTestHistory(tag string, history *adapter.URLTestHistory) *adapter.URLTestHistory {
 	s.access.Lock()
 	if old, ok := s.delayHistory[tag]; ok && history != nil {
-		mergeURLTestHistory(old, history)
+		updated := cloneURLTestHistory(old)
+		mergeURLTestHistory(updated, history)
 		if history.IpInfo != nil {
-			old.IpInfo = history.IpInfo
+			updated.IpInfo = cloneIPInfo(history.IpInfo)
 		}
+		s.delayHistory[tag] = updated
 	} else {
-		s.delayHistory[tag] = history
+		s.delayHistory[tag] = cloneURLTestHistory(history)
 	}
-	history = s.delayHistory[tag]
+	history = cloneURLTestHistory(s.delayHistory[tag])
 	s.access.Unlock()
 	s.notifyUpdated()
 	return history
+}
+
+// cloneURLTestHistory makes storage ownership explicit: callers receive an
+// immutable snapshot and storage never retains a pointer owned by its caller.
+// This prevents a later StoreURLTestHistory call from mutating an object that
+// has already been published to UI/ranking readers.
+func cloneURLTestHistory(history *adapter.URLTestHistory) *adapter.URLTestHistory {
+	if history == nil {
+		return nil
+	}
+	cloned := *history
+	cloned.IpInfo = cloneIPInfo(history.IpInfo)
+	return &cloned
+}
+
+func cloneIPInfo(info *ipinfo.IpInfo) *ipinfo.IpInfo {
+	if info == nil {
+		return nil
+	}
+	cloned := *info
+	return &cloned
 }
 
 func mergeURLTestHistory(old *adapter.URLTestHistory, history *adapter.URLTestHistory) {
@@ -107,16 +133,20 @@ func mergeURLTestHistory(old *adapter.URLTestHistory, history *adapter.URLTestHi
 func (s *HistoryStorage) AddOnlyIpToHistory(tag string, history *adapter.URLTestHistory) {
 	s.access.Lock()
 	if old, ok := s.delayHistory[tag]; ok && history != nil {
-		old.IpInfo = history.IpInfo
+		updated := cloneURLTestHistory(old)
+		updated.IpInfo = cloneIPInfo(history.IpInfo)
+		s.delayHistory[tag] = updated
 	} else {
-		s.delayHistory[tag] = history
+		s.delayHistory[tag] = cloneURLTestHistory(history)
 	}
 	s.access.Unlock()
 	s.notifyUpdated()
 }
 
 func (s *HistoryStorage) notifyUpdated() {
+	s.access.RLock()
 	updateHook := s.updateHook
+	s.access.RUnlock()
 	if updateHook != nil {
 		updateHook.Emit(struct{}{})
 	}

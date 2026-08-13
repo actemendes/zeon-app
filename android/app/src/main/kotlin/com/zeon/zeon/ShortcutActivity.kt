@@ -11,6 +11,7 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import com.zeon.zeon.bg.BoxService
 import com.zeon.zeon.bg.ServiceConnection
+import com.zeon.zeon.bg.VpnStopSource
 import com.zeon.zeon.constant.Status
 
 class ShortcutActivity : Activity(), ServiceConnection.Callback {
@@ -50,9 +51,9 @@ class ShortcutActivity : Activity(), ServiceConnection.Callback {
         moveTaskToBack(true)
     }
 
-    override fun onServiceStatusChanged(status: Status) {
+    override fun onServiceStatusChanged(status: Status, generation: Long) {
         when (status) {
-            Status.Started -> BoxService.stop()
+            Status.Started -> BoxService.stop(source = VpnStopSource.SHORTCUT)
             Status.Stopped -> BoxService.start()
             else -> {}
         }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:zeon/singbox/model/singbox_config_option.dart';
 import 'package:zeon/singbox/model/singbox_rule.dart';
 
@@ -41,6 +43,30 @@ abstract final class MobileApiProxyRoute {
     return <SingboxRule>[rule, ...rules.where((existing) => existing != rule)];
   }
 
+  /// Separates early user policy from late profile/global policy.
+  ///
+  /// Explicit user rules are evaluated immediately after the mandatory route.
+  /// Profile-provided rules retain their relative order but are sent in a
+  /// separate bucket so the Russia builder can place them after RU DIRECT
+  /// destination rules.
+  static ({List<Map<String, dynamic>> priorityRules, List<Map<String, dynamic>> profileRules}) planCoreRules({
+    required List<Map<String, dynamic>> configuredRules,
+    required List<Map<String, dynamic>> userRules,
+    String baseUrl = apiBaseUrl,
+  }) {
+    final mandatoryRule = ruleFor(baseUrl)?.toCoreJson();
+    final priority = _distinctCoreRules(<Map<String, dynamic>>[if (mandatoryRule != null) mandatoryRule, ...userRules]);
+    final priorityKeys = priority.map(_coreRuleKey).toSet();
+    final profile = _distinctCoreRules(
+      configuredRules.where((rule) => !priorityKeys.contains(_coreRuleKey(rule))).toList(),
+    );
+
+    // zeon-core sorts every enabled rule by list_order before compiling the
+    // sing-box config. Re-number each transport bucket so that boundary cannot
+    // undo its intended relative order. Persisted rules are untouched.
+    return (priorityRules: _withSequentialCoreOrder(priority), profileRules: _withSequentialCoreOrder(profile));
+  }
+
   static SingboxRule? ruleFor(String baseUrl) {
     final uri = Uri.tryParse(baseUrl.trim());
     final host = uri?.host.trim().toLowerCase() ?? '';
@@ -48,10 +74,10 @@ abstract final class MobileApiProxyRoute {
 
     final ipCidr = _asHostCidr(host);
     if (ipCidr != null) {
-      return SingboxRule(ip: ipCidr, outbound: RuleOutbound.proxy);
+      return SingboxRule(ip: ipCidr);
     }
 
-    return SingboxRule(domains: <String>[host], outbound: RuleOutbound.proxy);
+    return SingboxRule(domains: <String>[host]);
   }
 
   static String? _asHostCidr(String host) {
@@ -78,5 +104,28 @@ abstract final class MobileApiProxyRoute {
   static int _effectivePort(Uri uri) {
     if (uri.hasPort) return uri.port;
     return _isSecure(uri.scheme) ? 443 : 80;
+  }
+
+  static List<Map<String, dynamic>> _distinctCoreRules(List<Map<String, dynamic>> rules) {
+    final seen = <String>{};
+    final result = <Map<String, dynamic>>[];
+    for (final rule in rules) {
+      final key = _coreRuleKey(rule);
+      if (seen.add(key)) {
+        result.add(Map<String, dynamic>.from(rule));
+      }
+    }
+    return result;
+  }
+
+  static List<Map<String, dynamic>> _withSequentialCoreOrder(List<Map<String, dynamic>> rules) =>
+      <Map<String, dynamic>>[
+        for (final (index, rule) in rules.indexed) <String, dynamic>{...rule, 'list_order': index},
+      ];
+
+  static String _coreRuleKey(Map<String, dynamic> rule) {
+    // Presentation/order fields do not alter route matching.
+    final keys = rule.keys.where((key) => key != 'list_order' && key != 'name').toList()..sort();
+    return jsonEncode(<String, dynamic>{for (final key in keys) key: rule[key]});
   }
 }

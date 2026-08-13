@@ -1,0 +1,6 @@
+artifact,hostname,protocol,dns,route,outbound,stage,elapsed_ms,bytes_up,bytes_down,close_owner,error_class,interpretation
+stage28_exact_07158f91,example.com,TCP,REMOTE,VPN,TROJAN,OPEN,0,0,0,none,none,"route and DNS correlation present"
+stage28_exact_07158f91,example.com,TCP,REMOTE,VPN,TROJAN,OUTBOUND_ESTABLISHED,150-430,0,0,none,none,"VPN proxy stream established"
+stage28_exact_07158f91,example.com,TCP,REMOTE,VPN,TROJAN,CLOSED,1200-1500,0,0,OUTBOUND_OR_DESTINATION,EOF_OR_ORDERLY_CLOSE,"close occurred before application bytes"
+stage27_compat_core,example.com,TCP,REMOTE,VPN,TROJAN,CLOSED,observed,0,0,OUTBOUND_OR_DESTINATION,EOF_OR_ORDERLY_CLOSE,"same symptom with Stage 2.7 core"
+stage29_production_828d7ae9,speed.cloudflare.com,TCP,REMOTE,VPN,selected_control,UPLOAD,32000-34000,5242880,variable,CLIENT_TIMEOUT,SocketTimeoutException,"3 of 20 parallel uploads timed out"

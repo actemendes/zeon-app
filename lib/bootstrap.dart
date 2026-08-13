@@ -24,8 +24,8 @@ import 'package:zeon/features/diagnostics/data/diagnostics_providers.dart';
 import 'package:zeon/features/log/data/log_data_providers.dart';
 import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/per_app_proxy/data/legacy_seeded_routing_cleanup.dart';
 import 'package:zeon/features/per_app_proxy/data/selected_data_provider.dart';
-import 'package:zeon/features/per_app_proxy/model/per_app_proxy_backup.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/features/profile/data/debug_profile_bootstrap_service.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
@@ -180,18 +180,18 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
   await _init("preferences", () => container.read(sharedPreferencesProvider.future));
 
   await _init("preferences migration", () async {
-    try {
-      await PreferencesMigration(sharedPreferences: container.read(sharedPreferencesProvider).requireValue).migrate();
-    } catch (e, stackTrace) {
-      Logger.bootstrap.error("preferences migration failed", e, stackTrace);
-      if (env == Environment.dev) rethrow;
-      Logger.bootstrap.info("clearing preferences");
-      await container.read(sharedPreferencesProvider).requireValue.clear();
+    final failure = await runPreferencesMigrationPreservingState(
+      () => PreferencesMigration(sharedPreferences: container.read(sharedPreferencesProvider).requireValue).migrate(),
+      rethrowOnFailure: env == Environment.dev,
+    );
+    if (failure != null) {
+      Logger.bootstrap.error("preferences migration failed", failure.error, failure.stackTrace);
+      Logger.bootstrap.warning("preserving preferences after migration failure");
     }
   });
 
   final debug = container.read(debugModeNotifierProvider) || kDebugMode;
-  await _safeInit("per-app proxy defaults", () => _seedPerAppProxyDefaults(container), timeout: 5000);
+  await _safeInit("per-app proxy migration", () => _cleanupLegacyPerAppProxyDefaults(container), timeout: 5000);
 
   if (PlatformUtils.isDesktop) {
     await _init("window controller", () => container.read(windowNotifierProvider.future));
@@ -306,110 +306,17 @@ Future<bool> _shouldShowNativeSplashOnThisRun() async {
   return true;
 }
 
-Future<void> _seedPerAppProxyDefaults(ProviderContainer container) async {
+Future<void> _cleanupLegacyPerAppProxyDefaults(ProviderContainer container) async {
   if (!PlatformUtils.isAndroid) return;
   final prefs = container.read(sharedPreferencesProvider).requireValue;
+  final result = await LegacySeededRoutingCleanup(
+    preferences: prefs,
+    dataSource: container.read(appProxyDataSourceProvider),
+  ).run();
 
-  if (prefs.getBool(PreferencesMigration.v16RoutingCleanupPendingKey) ?? false) {
-    await container
-        .read(appProxyDataSourceProvider)
-        .removePkg(pkg: PreferencesMigration.v16RemovedRoutingPackage, mode: AppProxyMode.exclude);
-    await prefs.setBool(PreferencesMigration.v16RoutingCleanupPendingKey, false);
+  if (result.shouldDisableExcludeMode && container.read(Preferences.perAppProxyMode) == PerAppProxyMode.exclude) {
+    await container.read(Preferences.perAppProxyMode.notifier).update(PerAppProxyMode.off);
   }
-
-  const seedKey = "per_app_proxy_seed_v3_done";
-  if (prefs.getBool(seedKey) ?? false) return;
-
-  const excludePkgs = <String>[
-    "com.apteka.sklad",
-    "com.avito.android",
-    "com.carshering",
-    "com.gnivts.selfemployed",
-    "com.magnit.delivery.courier",
-    "com.platfomni.vita",
-    "com.profibackoffice.reactnative",
-    "com.uma.musicvk",
-    "com.vk.equals",
-    "com.vk.im",
-    "com.vk.vkvideo",
-    "com.vkontakte.android",
-    "com.vtosters.lite",
-    "com.wildberries.ru",
-    "com.yandex.bank",
-    "com.yandex.searchapp",
-    "ru.apteki.plus",
-    "ru.belkacar.belkacar",
-    "ru.dublgis.dgismobile",
-    "ru.fns.lkfl",
-    "ru.gazprombank.android.mobilebank.app",
-    "ru.gosuslugi.auto",
-    "ru.gosuslugi.goskey",
-    "ru.kinopoisk",
-    "ru.mail.cloud",
-    "ru.mail.mailapp",
-    "ru.megafon.mlk",
-    "ru.mts.mymts",
-    "ru.nspk.mirpay",
-    "ru.oneme.app",
-    "ru.ozon.app.android",
-    "ru.parkomatica",
-    "ru.poryadok.poryadok_flutter_app",
-    "ru.profi.client",
-    "ru.pyaterochka.app.browser",
-    "ru.qugo.mobile",
-    "ru.rostel",
-    "ru.sbcs.store",
-    "ru.sberbankmobile",
-    "ru.tander.magnit",
-    "ru.tele2.mytele2",
-    "ru.vk.store",
-    "ru.yandex.disk",
-    "ru.yandex.taxi",
-    "ru.yandex.taximeter",
-    "ru.yandex.telemost",
-    "ru.zenmoney.androidsub",
-    "shop.tornado.store",
-    "youdrive.today",
-  ];
-
-  final currentMode = container.read(Preferences.perAppProxyMode);
-  final currentInclude = container.read(Preferences.includeApps);
-  final currentExclude = container.read(Preferences.excludeApps);
-  final shouldApplyDefaults = currentMode == PerAppProxyMode.off && currentInclude.isEmpty && currentExclude.isEmpty;
-  if (shouldApplyDefaults) {
-    await container.read(Preferences.perAppProxyMode.notifier).update(PerAppProxyMode.exclude);
-    await container.read(Preferences.includeApps.notifier).update(const []);
-    await container.read(Preferences.excludeApps.notifier).update(excludePkgs);
-    await container.read(Preferences.seededExcludeApps.notifier).update(excludePkgs);
-    await container
-        .read(appProxyDataSourceProvider)
-        .importPkgs(
-          backup: const PerAppProxyBackup(
-            include: PerAppProxyBackupMode(selected: [], deselected: []),
-            exclude: PerAppProxyBackupMode(selected: excludePkgs, deselected: []),
-          ),
-        );
-    await prefs.setBool(seedKey, true);
-    return;
-  }
-  // One-time self-heal for existing installs:
-  // keep user's exclude mode, append only missing default direct apps so they appear in UI.
-  if (currentMode == PerAppProxyMode.exclude) {
-    final merged = <String>[...currentExclude, ...excludePkgs.where((pkg) => !currentExclude.contains(pkg))];
-    if (merged.length != currentExclude.length) {
-      await container.read(Preferences.excludeApps.notifier).update(merged);
-      await container.read(Preferences.seededExcludeApps.notifier).update(excludePkgs);
-      await container
-          .read(appProxyDataSourceProvider)
-          .importPkgs(
-            backup: PerAppProxyBackup(
-              include: const PerAppProxyBackupMode(selected: [], deselected: []),
-              exclude: PerAppProxyBackupMode(selected: merged, deselected: const []),
-            ),
-          );
-    }
-  }
-  await prefs.setBool(seedKey, true);
 }
 
 void _initSystemTrayInBackground(ProviderContainer container) {

@@ -641,6 +641,9 @@
   },
   "connection": {
     "tapToConnect": "Ketuk untuk menyambungkan",
+    "tapToDisconnect": "Ketuk untuk memutuskan",
+    "connectingSemantics": "Penyambungan sedang berlangsung",
+    "disconnectingSemantics": "Pemutusan sedang berlangsung",
     "connect": "Sambungkan",
     "connecting": "Menyambungkan...",
     "connected": "Tersambung",

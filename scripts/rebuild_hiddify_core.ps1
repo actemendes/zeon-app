@@ -9,16 +9,30 @@ param(
 
     [switch]$SkipGomobileInit,
 
+    [switch]$InstallPinnedMobileTools,
+
     [switch]$InstallWebDependencies,
 
     # Adds the smart_active_debug Go build tag. Never use this for releases.
     [switch]$SmartActiveDebug,
+
+    # Adds validation-only allowlisted route/DNS telemetry. Never use this for releases.
+    [switch]$RouteValidationTelemetry,
+
+    # Selects the Russia-mode DNS side of the Stage 2.8 browser A/B.
+    # REMOTE_DNS_BASELINE is validation-only and cannot be built without telemetry.
+    [ValidateSet("DIRECT_DNS", "REMOTE_DNS_BASELINE")]
+    [string]$RUDnsPolicy = "DIRECT_DNS",
 
     [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+if ($RUDnsPolicy -eq "REMOTE_DNS_BASELINE" -and -not $RouteValidationTelemetry) {
+    throw "REMOTE_DNS_BASELINE is validation-only and requires -RouteValidationTelemetry."
+}
 
 function Assert-Command {
     param([Parameter(Mandatory = $true)][string]$Name)
@@ -107,6 +121,20 @@ function Assert-WslBash {
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
 $coreDir = Join-Path $repoRoot "hiddify-core"
+$zeonRevision = (& git -C $repoRoot rev-parse HEAD).Trim()
+$hiddifyCoreTree = (& git -C $repoRoot rev-parse "HEAD:hiddify-core").Trim()
+$hiddifySingBoxTree = (& git -C $repoRoot rev-parse "HEAD:hiddify-core/hiddify-sing-box").Trim()
+if ($LASTEXITCODE -ne 0 -or -not $zeonRevision -or -not $hiddifyCoreTree -or -not $hiddifySingBoxTree) {
+    throw "Failed to resolve ZEON/core source provenance from Git."
+}
+& git -C $repoRoot diff --quiet
+if ($LASTEXITCODE -ne 0) {
+    throw "Tracked worktree changes are present. Commit them before building the baseline core."
+}
+& git -C $repoRoot diff --cached --quiet
+if ($LASTEXITCODE -ne 0) {
+    throw "Staged worktree changes are present. Commit them before building the baseline core."
+}
 
 Assert-Command "wsl.exe"
 Assert-WslBash
@@ -123,8 +151,10 @@ if (-not $wslRepoRoot) {
 
 $skipGoModDownloadValue = if ($SkipGoModDownload) { "1" } else { "0" }
 $skipGomobileInitValue = if ($SkipGomobileInit) { "1" } else { "0" }
+$installPinnedMobileToolsValue = if ($InstallPinnedMobileTools) { "1" } else { "0" }
 $installWebDependenciesValue = if ($InstallWebDependencies) { "1" } else { "0" }
 $smartActiveDebugValue = if ($SmartActiveDebug) { "1" } else { "0" }
+$routeValidationTelemetryValue = if ($RouteValidationTelemetry) { "1" } else { "0" }
 $selectedPlatforms = @($Platform | Select-Object -Unique)
 
 $bashScript = @'
@@ -133,9 +163,15 @@ set -euo pipefail
 repo_root="$1"
 skip_go_mod_download="$2"
 skip_gomobile_init="$3"
-install_web_dependencies="$4"
-smart_active_debug="$5"
-shift 5
+install_pinned_mobile_tools="$4"
+install_web_dependencies="$5"
+smart_active_debug="$6"
+route_validation_telemetry="$7"
+ru_dns_policy="$8"
+zeon_revision="$9"
+hiddify_core_tree="${10}"
+hiddify_sing_box_tree="${11}"
+shift 11
 platforms=("$@")
 
 core_dir="$repo_root/hiddify-core"
@@ -145,8 +181,39 @@ if [ "$smart_active_debug" = "1" ]; then
   core_build_tags="$core_build_tags,smart_active_debug"
   echo "Building Smart Active debug fault injection support."
 fi
+if [ "$route_validation_telemetry" = "1" ]; then
+  core_build_tags="$core_build_tags,zeon_route_validation"
+  echo "Building VALIDATION-ONLY allowlisted route/DNS telemetry; do not publish this artifact."
+fi
+case "$ru_dns_policy" in
+  DIRECT_DNS)
+    core_build_tags="$core_build_tags,zeon_ru_direct_dns"
+    echo "Building intended Russia DIRECT_DNS policy."
+    ;;
+  REMOTE_DNS_BASELINE)
+    if [ "$route_validation_telemetry" != "1" ]; then
+      echo "REMOTE_DNS_BASELINE requires validation telemetry." >&2
+      exit 1
+    fi
+    core_build_tags="$core_build_tags,zeon_ru_remote_dns_baseline"
+    echo "Building VALIDATION-ONLY Russia REMOTE_DNS_BASELINE policy; destination routes remain unchanged."
+    ;;
+  *)
+    echo "Unsupported Russia DNS policy: $ru_dns_policy" >&2
+    exit 1
+    ;;
+esac
 
-export PATH="/usr/local/go/bin:/usr/local/bin:$PATH"
+user_home="$(getent passwd "$(id -un)" | cut -d: -f6)"
+if [ -z "$user_home" ] || [ ! -d "$user_home" ]; then
+  echo "Unable to resolve the WSL user's home directory." >&2
+  exit 1
+fi
+export HOME="$user_home"
+export GOPATH="$user_home/go"
+export PATH="$GOPATH/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
+export GOFLAGS="-buildvcs=false"
+export SOURCE_DATE_EPOCH="0"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -165,60 +232,16 @@ require_directory() {
 require_directory "$core_dir"
 
 required_go_version="$(awk '$1 == "go" { print $2; exit }' "$core_dir/go.mod")"
-install_go_toolchain() {
-  if command -v go >/dev/null 2>&1; then
-    return
-  fi
-
-  if [ -z "$required_go_version" ]; then
-    echo "Required command 'go' was not found inside WSL and $core_dir/go.mod does not declare a Go version." >&2
-    exit 1
-  fi
-
-  case "$(uname -m)" in
-    x86_64|amd64) go_arch="amd64" ;;
-    aarch64|arm64) go_arch="arm64" ;;
-    *)
-      echo "Required command 'go' was not found inside WSL and automatic install does not support architecture: $(uname -m)" >&2
-      exit 1
-      ;;
-  esac
-
-  go_url="https://go.dev/dl/go${required_go_version}.linux-${go_arch}.tar.gz"
-  go_archive="$(mktemp)"
-  echo "Go was not found inside WSL. Installing Go ${required_go_version} from ${go_url}..."
-  if command -v curl >/dev/null 2>&1; then
-    curl -fL "$go_url" -o "$go_archive"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -O "$go_archive" "$go_url"
-  else
-    echo "Required command 'go' was not found inside WSL. Install Go ${required_go_version}, or install curl/wget so this script can download it." >&2
-    exit 1
-  fi
-
-  if [ "$(id -u)" -ne 0 ] && ! command -v sudo >/dev/null 2>&1; then
-    echo "Required command 'go' was not found inside WSL and sudo is unavailable. Install Go ${required_go_version} into /usr/local/go." >&2
-    exit 1
-  fi
-
-  install_cmd='rm -rf /usr/local/go && tar -C /usr/local -xzf "$1"'
-  if [ "$(id -u)" -eq 0 ]; then
-    sh -c "$install_cmd" sh "$go_archive"
-  else
-    sudo sh -c "$install_cmd" sh "$go_archive"
-  fi
-  rm -f "$go_archive"
-}
-
-install_go_toolchain
-
-if [ -n "$required_go_version" ]; then
-  export GOTOOLCHAIN="go$required_go_version"
-fi
 require_command go
-export GOPATH="${GOPATH:-$(go env GOPATH 2>/dev/null || true)}"
-if [ -n "$GOPATH" ]; then
-  export PATH="$PATH:$GOPATH/bin"
+if [ -z "$required_go_version" ]; then
+  echo "$core_dir/go.mod does not declare a Go version." >&2
+  exit 1
+fi
+export GOTOOLCHAIN="go$required_go_version"
+actual_go_version="$(go env GOVERSION)"
+if [ "$actual_go_version" != "go$required_go_version" ]; then
+  echo "Go toolchain mismatch: expected go$required_go_version, got $actual_go_version" >&2
+  exit 1
 fi
 echo "Using Go toolchain: $(go version)"
 
@@ -245,10 +268,31 @@ for platform in "${platforms[@]}"; do
 
       require_directory "$ANDROID_HOME"
       require_directory "$ANDROID_NDK_HOME"
+      ndk_revision="$(sed -n 's/^Pkg\.Revision[[:space:]]*=[[:space:]]*//p' "$ANDROID_NDK_HOME/source.properties" | head -n 1)"
+      if [ "$ndk_revision" != "28.2.13676358" ]; then
+        echo "Android NDK mismatch: expected 28.2.13676358, got ${ndk_revision:-unknown}" >&2
+        exit 1
+      fi
 
-      echo "Installing pinned gomobile tools..."
-      go install -v github.com/sagernet/gomobile/cmd/gomobile@v0.1.11
-      go install -v github.com/sagernet/gomobile/cmd/gobind@v0.1.11
+      if [ "$install_pinned_mobile_tools" = "1" ]; then
+        echo "Installing explicitly requested pinned gomobile tools..."
+        go install -v github.com/sagernet/gomobile/cmd/gomobile@v0.1.11
+        go install -v github.com/sagernet/gomobile/cmd/gobind@v0.1.11
+      fi
+      require_command gomobile
+      require_command gobind
+      for mobile_tool in gomobile gobind; do
+        tool_metadata="$(go version -m "$(command -v "$mobile_tool")")"
+        if ! printf '%s\n' "$tool_metadata" | grep -Eq $'\tmod\tgithub.com/sagernet/gomobile\tv0\\.1\\.11([[:space:]]|$)'; then
+          echo "$mobile_tool version mismatch: expected github.com/sagernet/gomobile v0.1.11" >&2
+          printf '%s\n' "$tool_metadata" >&2
+          exit 1
+        fi
+        if ! printf '%s\n' "$tool_metadata" | head -n 1 | grep -q 'go1.25.6'; then
+          echo "$mobile_tool was not built with baseline Go 1.25.6" >&2
+          exit 1
+        fi
+      done
 
       if [ "$skip_gomobile_init" != "1" ]; then
         echo "Initializing gomobile..."
@@ -259,6 +303,21 @@ for platform in "${platforms[@]}"; do
       mkdir -p "$core_dir/bin" "$(dirname "$android_aar")"
       (
         cd "$core_dir"
+        build_metadata_ldflags="-X github.com/hiddify/hiddify-core/platform/mobile.buildRevision=$zeon_revision"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.hiddifyCoreTree=$hiddify_core_tree"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.hiddifySingBoxTree=$hiddify_sing_box_tree"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.coreBuildTags=$core_build_tags"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.upstreamVersion=v1.13.14"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.upstreamCommit=25a600db24f7680ad9806ce5427bd0ab8afe1114"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.hiddifyCompatibilityRevision=$hiddify_core_tree"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.zeonPatchRevision=$hiddify_sing_box_tree"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.sourceDirty=false"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.gomobileVersion=v0.1.11"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.androidNDKVersion=28.2.13676358"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.buildTimestampPolicy=SOURCE_DATE_EPOCH=0"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/platform/mobile.buildIDPolicy=empty"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/hiddify/hiddify-core/v2/hcommon/constants.Version=zeon-$zeon_revision"
+        build_metadata_ldflags="$build_metadata_ldflags -X github.com/sagernet/sing-box/constant.Version=1.13.14-zeon.1-$zeon_revision"
         CGO_LDFLAGS="-O2 -g -s -w -Wl,-z,max-page-size=16384" \
           gomobile bind -v \
           -androidapi=21 \
@@ -266,7 +325,7 @@ for platform in "${platforms[@]}"; do
           -libname=hiddify-core \
           -tags="$core_build_tags" \
           -trimpath \
-          -ldflags="-w -s -checklinkname=0 -buildid=" \
+          -ldflags="-w -s -checklinkname=0 -buildid= $build_metadata_ldflags" \
           -target=android \
           -o bin/hiddify-core.aar \
           github.com/sagernet/sing-box/experimental/libbox ./platform/mobile
@@ -280,13 +339,26 @@ for platform in "${platforms[@]}"; do
       require_command x86_64-w64-mingw32-gcc
 
       echo "Building Windows core DLL, Cronet DLL and CLI..."
+      # c-shared command packages are linked under the synthetic "main"
+      # package name, even though go list reports the source import path.
+      desktop_metadata_ldflags="-X main.buildRevision=$zeon_revision"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X main.hiddifyCoreTree=$hiddify_core_tree"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X main.hiddifySingBoxTree=$hiddify_sing_box_tree"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X main.coreBuildTags=$core_build_tags"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X main.upstreamVersion=v1.13.14"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X main.upstreamCommit=25a600db24f7680ad9806ce5427bd0ab8afe1114"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X main.sourceDirty=false"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X main.buildTimestampPolicy=SOURCE_DATE_EPOCH=0"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X main.buildIDPolicy=empty"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/hiddify/hiddify-core/v2/hcommon/constants.Version=zeon-$zeon_revision"
+      desktop_metadata_ldflags="$desktop_metadata_ldflags -X github.com/sagernet/sing-box/constant.Version=1.13.14-zeon.1-$zeon_revision"
       windows_backup_dir="$(mktemp -d)"
       for artifact in hiddify-core.dll libcronet.dll HiddifyCli.exe; do
         if [ -f "$core_dir/bin/$artifact" ]; then
           cp -f "$core_dir/bin/$artifact" "$windows_backup_dir/$artifact"
         fi
       done
-      if ! make -C "$core_dir" TAGS="$core_build_tags" windows-amd64; then
+      if ! CODE_VERSION="$desktop_metadata_ldflags" make -C "$core_dir" TAGS="$core_build_tags" windows-amd64; then
         for artifact in hiddify-core.dll libcronet.dll HiddifyCli.exe; do
           if [ -f "$windows_backup_dir/$artifact" ]; then
             cp -f "$windows_backup_dir/$artifact" "$core_dir/bin/$artifact"
@@ -346,12 +418,20 @@ $bashArguments = @(
     $wslRepoRoot,
     $skipGoModDownloadValue,
     $skipGomobileInitValue,
+    $installPinnedMobileToolsValue,
     $installWebDependenciesValue,
-    $smartActiveDebugValue
+    $smartActiveDebugValue,
+    $routeValidationTelemetryValue,
+    $RUDnsPolicy,
+    $zeonRevision,
+    $hiddifyCoreTree,
+    $hiddifySingBoxTree
 ) + $selectedPlatforms
 
 Write-Host "Repository in WSL: $wslRepoRoot"
 Write-Host "Platforms: $($selectedPlatforms -join ', ')"
+Write-Host "Route validation telemetry: $($RouteValidationTelemetry.IsPresent)"
+Write-Host "Russia DNS policy: $RUDnsPolicy"
 
 try {
     Invoke-Wsl -Arguments @("bash", "-n", $wslBashScript)
@@ -359,7 +439,7 @@ try {
     if ($DryRun) {
         Write-Host ""
         Write-Host "Dry run: WSL build was not started."
-        Write-Host "Command: wsl.exe bash <temporary-build-script> $wslRepoRoot $skipGoModDownloadValue $skipGomobileInitValue $installWebDependenciesValue $smartActiveDebugValue $($selectedPlatforms -join ' ')"
+        Write-Host "Command: wsl.exe bash <temporary-build-script> $wslRepoRoot $skipGoModDownloadValue $skipGomobileInitValue $installPinnedMobileToolsValue $installWebDependenciesValue $smartActiveDebugValue $routeValidationTelemetryValue $RUDnsPolicy <revision> <core-tree> <sing-box-tree> $($selectedPlatforms -join ' ')"
     }
     else {
         Invoke-Wsl -Arguments $bashArguments

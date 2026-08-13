@@ -12,15 +12,22 @@ import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/utils/utils.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface.dart';
 import 'package:zeon/zeoncore/core_interface/mtls_channel_cred.dart';
+import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/generated/v2/hello/hello.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hello/hello_service.pbgrpc.dart';
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 class CoreInterfaceMobile extends CoreInterface with InfraLogger {
+  CoreInterfaceMobile({bool? androidOverride, Future<bool> Function(String, int)? portProbe})
+    : _isAndroid = androidOverride ?? Platform.isAndroid,
+      _portProbe = portProbe ?? isPortOpen;
+
   static const channelPrefix = "com.zeon.app";
   static const methodChannel = MethodChannel("$channelPrefix/method");
   static const statusChannel = EventChannel("$channelPrefix/service.status", JSONMethodCodec());
   static const alertsChannel = EventChannel("$channelPrefix/service.alerts", JSONMethodCodec());
+  static const snapshotChannel = EventChannel("$channelPrefix/service.snapshot", JSONMethodCodec());
 
   late Uint8List serverPublicKey;
   static final cert = CryptoUtils.generateEcKeyPair();
@@ -37,6 +44,12 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   bool _debug = false;
   ClientChannel? _fgChannel;
   ClientChannel? _bgChannel;
+  final bool _isAndroid;
+  final Future<bool> Function(String, int) _portProbe;
+  int _sessionGeneration = 0;
+  VpnSessionSnapshot? _authoritativeSessionSnapshot;
+  final VpnSessionSnapshotGate _snapshotGate = VpnSessionSnapshotGate();
+  final BehaviorSubject<VpnSessionSnapshot> _sessionSnapshots = BehaviorSubject<VpnSessionSnapshot>();
 
   LastStream<CoreStatus>? _status;
   @override
@@ -59,6 +72,12 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
         ]),
       ).autoConnect(),
     );
+    final status = _isAndroid
+        ? _androidSnapshotStatuses()
+        : statusChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent);
+    final alerts = Platform.isAndroid
+        ? const Stream<CoreStatus>.empty()
+        : alertsChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent);
 
     try {
       try {
@@ -125,6 +144,106 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     return "";
   }
 
+  Stream<CoreStatus> _androidSnapshotStatuses() async* {
+    await for (final event in snapshotChannel.receiveBroadcastStream()) {
+      final incoming = VpnSessionSnapshot.fromEvent(event);
+      final disposition = _snapshotGate.classify(incoming);
+      if (disposition == VpnSnapshotDisposition.duplicate || disposition == VpnSnapshotDisposition.stale) {
+        loggy.warning(
+          "event=stale_callback_ignored generation=${incoming.generation} "
+          "sequence=${incoming.sequenceNumber} source=android_snapshot disposition=${disposition.name}",
+        );
+        continue;
+      }
+      if (disposition == VpnSnapshotDisposition.gap) {
+        final resynced = await _getAuthoritativeSnapshot();
+        if (resynced == null) continue;
+        final accepted = _acceptResyncedSnapshot(resynced, publish: true);
+        if (accepted != null) yield accepted.toCoreStatus();
+        continue;
+      }
+      _acceptAuthoritativeSnapshot(incoming, publish: true);
+      yield incoming.toCoreStatus();
+    }
+  }
+
+  void _acceptAuthoritativeSnapshot(VpnSessionSnapshot snapshot, {required bool publish}) {
+    _snapshotGate.acceptAuthoritative(snapshot);
+    _recordAcceptedSnapshot(snapshot, publish: publish);
+  }
+
+  void _recordAcceptedSnapshot(VpnSessionSnapshot snapshot, {required bool publish}) {
+    _sessionGeneration = max(_sessionGeneration, snapshot.generation);
+    _authoritativeSessionSnapshot = snapshot;
+    if (!publish) return;
+    if (_sessionSnapshots.hasValue) {
+      final previous = _sessionSnapshots.value;
+      if (previous.runtimeEpoch == snapshot.runtimeEpoch &&
+          previous.sequenceNumber == snapshot.sequenceNumber &&
+          previous.snapshotVersion == snapshot.snapshotVersion) {
+        return;
+      }
+    }
+    _sessionSnapshots.add(snapshot);
+  }
+
+  VpnSessionSnapshot? _acceptResyncedSnapshot(VpnSessionSnapshot snapshot, {required bool publish}) {
+    final disposition = _snapshotGate.classify(snapshot);
+    if (!_snapshotGate.acceptResynced(snapshot)) {
+      loggy.info(
+        "event=vpn_snapshot_resync_ignored generation=${snapshot.generation} "
+        "sequence=${snapshot.sequenceNumber} disposition=${disposition.name}",
+      );
+      return _snapshotGate.current;
+    }
+    // A MethodChannel read is the platform's current authoritative value. A
+    // sequence gap therefore advances the gate just like a normal accepted
+    // snapshot, but it must never roll the gate back behind an EventChannel
+    // value that won the race while the method call was in flight.
+    _recordAcceptedSnapshot(snapshot, publish: publish);
+    return snapshot;
+  }
+
+  Future<VpnSessionSnapshot?> _getAuthoritativeSnapshot() async {
+    if (!_isAndroid) return null;
+    final event = await methodChannel.invokeMethod<Object?>("get_vpn_session_snapshot");
+    return VpnSessionSnapshot.fromEvent(event);
+  }
+
+  @override
+  Future<CoreStatus?> resyncSessionStatus() async {
+    final snapshot = await _getAuthoritativeSnapshot();
+    if (snapshot == null) return null;
+    final accepted = _acceptResyncedSnapshot(snapshot, publish: false);
+    if (accepted == null) return null;
+    loggy.info(
+      "event=vpn_snapshot_resync generation=${accepted.generation} "
+      "sequence=${accepted.sequenceNumber} phase=${accepted.phase.name}",
+    );
+    return accepted.toCoreStatus();
+  }
+
+  @override
+  int get authoritativeSessionGeneration => _sessionGeneration;
+
+  @override
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _authoritativeSessionSnapshot;
+
+  @override
+  Stream<VpnSessionSnapshot> watchSessionSnapshots() => _sessionSnapshots.stream;
+
+  @override
+  Future<int> requestPlatformStop({required int generation}) {
+    // Do not call setSessionGeneration first: Android may have advanced its
+    // process-local generation (tile/notification/service recovery) before the
+    // snapshot reached Dart. A preemptive user Stop must atomically rebase
+    // above that native generation and stop the current service.
+    return stopMethodChannel(generation: generation, preemptive: true);
+  }
+
+  @override
+  bool get supportsPreemptivePlatformStop => Platform.isAndroid;
+
   Future<HelloResponse> _sayHelloWhenReady(HelloClient client) async {
     const maxAttempts = 10;
     var delay = const Duration(milliseconds: 120);
@@ -168,43 +287,29 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   @override
-  Future<CoreStatus> setupBackground(String path, String name) async {
+  Future<BackgroundSetupResult> setupBackground(String path, String name, {int generation = 0}) async {
+    await setSessionGeneration(generation);
     // if (!await waitUntilPort(portBack, false, stop)) return const CoreStatus.stopped(alert: CoreAlert.createService);
-    if (!await stop()) return const CoreStatus.stopped(alert: CoreAlert.createService);
-    final status = _status;
-    if (status == null) {
-      return const CoreStatus.stopped(alert: CoreAlert.createService, message: "foreground core is not initialized");
+    if (!await stopForReplacement(generation: generation)) {
+      return BackgroundSetupResult(
+        generation: generation,
+        status: const CoreStatus.stopped(alert: CoreAlert.createService),
+        failure: BackgroundSetupFailure.replacementTeardown,
+        nativeSnapshot: _authoritativeSessionSnapshot,
+      );
     }
-    status.clean();
-    await methodChannel
-        .invokeMethod("start", {"path": path, "name": name, "grpcPort": portBack, "startBg": true, "debug": _debug})
-        .timeout(_nativeStartTimeout);
+    _status?.clean();
+    await methodChannel.invokeMethod("start", {
+      "path": path,
+      "name": name,
+      "grpcPort": portBack,
+      "startBg": true,
+      "debug": _debug,
+      "generation": generation,
+    });
 
     _isBgClientAvailable = true;
-    loggy.info("Waiting for starting core");
-    for (var i = 0; i < 20; i++) {
-      try {
-        final res = await status.get(timeout: const Duration(seconds: 1));
-
-        switch (res) {
-          case CoreStarted():
-            break;
-          case CoreStopped():
-            if (res.alert != null) {
-              return res;
-            }
-
-          case CoreStopping():
-          // return res;
-          case CoreStarting():
-        }
-        await Future.delayed(const Duration(milliseconds: 200));
-      } on TimeoutException {
-        // just retry
-      }
-    }
-    loggy.info("Waiting for starting core finished");
-
+    PortProbeObservation? lastPortProbe;
     if (!await waitUntilPort(
       portBack,
       true,
@@ -212,50 +317,186 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
       maxTry: 18,
       baseDelay: const Duration(milliseconds: 180),
       maxDelay: const Duration(milliseconds: 1600),
+      portProbe: _portProbe,
+      onObservation: (observation) => lastPortProbe = observation,
     )) {
-      await stopMethodChannel();
-      return const CoreStatus.stopped(alert: CoreAlert.startService, message: "starting background core...");
+      final nativeSnapshot = await _snapshotBeforeFailedStartCleanup();
+      await stopMethodChannel(generation: generation);
+      return BackgroundSetupResult(
+        generation: generation,
+        status: const CoreStatus.stopped(alert: CoreAlert.startService, message: "starting background core..."),
+        failure: _backgroundSetupFailureForProbe(lastPortProbe),
+        portProbe: lastPortProbe,
+        nativeSnapshot: nativeSnapshot,
+      );
     }
-    return const CoreStarted();
+    if (!await _waitForBackgroundCommandEndpoint(generation)) {
+      final nativeSnapshot = await _snapshotBeforeFailedStartCleanup();
+      await stopMethodChannel(generation: generation);
+      return BackgroundSetupResult(
+        generation: generation,
+        status: const CoreStatus.stopped(
+          alert: CoreAlert.startService,
+          message: "background command endpoint readiness timeout",
+        ),
+        failure: BackgroundSetupFailure.commandEndpointTimeout,
+        portProbe: lastPortProbe,
+        nativeSnapshot: nativeSnapshot,
+      );
+    }
+    // The daemon/control endpoint is reachable, but the tunnel core has not
+    // completed Mobile.start yet. This must never be exposed as Connected.
+    return BackgroundSetupResult(
+      generation: generation,
+      status: const CoreStarting(),
+      portProbe: lastPortProbe,
+      nativeSnapshot: _authoritativeSessionSnapshot,
+    );
+  }
+
+  Future<VpnSessionSnapshot?> _snapshotBeforeFailedStartCleanup() async {
+    if (!_isAndroid) return _authoritativeSessionSnapshot;
+    try {
+      await resyncSessionStatus();
+    } catch (_) {
+      // Failure cleanup must not be blocked by an observational snapshot read.
+    }
+    return _authoritativeSessionSnapshot;
+  }
+
+  BackgroundSetupFailure _backgroundSetupFailureForProbe(PortProbeObservation? observation) =>
+      switch (observation?.outcome) {
+        PortProbeOutcome.closed => BackgroundSetupFailure.controlPortClosed,
+        PortProbeOutcome.timeout => BackgroundSetupFailure.controlPortTimeout,
+        PortProbeOutcome.socketError => BackgroundSetupFailure.controlPortSocketError,
+        PortProbeOutcome.otherError => BackgroundSetupFailure.controlPortOtherError,
+        PortProbeOutcome.connected || null => BackgroundSetupFailure.controlPortOtherError,
+      };
+
+  @override
+  Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit, {int generation = 0}) async {
+    await setSessionGeneration(generation);
+    final prepared = await methodChannel.invokeMethod<bool>("prepare_vpn", {
+      "path": path,
+      "name": name,
+      "grpcPort": portBack,
+      "disableMemoryLimit": disableMemoryLimit,
+      "generation": generation,
+    });
+    return prepared ?? false;
   }
 
   @override
-  Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit) async {
-    await methodChannel
-        .invokeMethod("prepare_vpn", {
-          "path": path,
-          "name": name,
-          "grpcPort": portBack,
-          "disableMemoryLimit": disableMemoryLimit,
-        })
-        .timeout(_nativeControlTimeout);
-    return true;
-  }
+  Future<bool> stop({int generation = 0}) => _stopPlatform(generation: generation, replacement: false);
 
   @override
-  Future<bool> stop() async {
-    await stopMethodChannel();
+  Future<bool> stopForReplacement({int generation = 0}) => _stopPlatform(generation: generation, replacement: true);
+
+  Future<bool> _stopPlatform({required int generation, required bool replacement}) async {
+    if (generation > 0) {
+      await setSessionGeneration(generation);
+    }
+    final acceptedGeneration = await stopMethodChannel(
+      generation: generation,
+      replacement: replacement,
+    ).timeout(const Duration(seconds: 3), onTimeout: () => generation);
+    if (replacement && acceptedGeneration != generation) {
+      return false;
+    }
     final stopped = await waitUntilPort(
       portBack,
       false,
-      stopMethodChannel,
+      () => stopMethodChannel(generation: generation, replacement: replacement),
       baseDelay: const Duration(milliseconds: 160),
       maxDelay: const Duration(milliseconds: 900),
+      portProbe: _portProbe,
     ).timeout(const Duration(seconds: 12), onTimeout: () => false);
     _isBgClientAvailable = false;
     if (!stopped) {
       return false;
     }
-
-    return true;
+    if (!_isAndroid) return true;
+    for (var attempt = 0; attempt < 10; attempt++) {
+      try {
+        await resyncSessionStatus();
+        final snapshot = _authoritativeSessionSnapshot;
+        final terminalGenerationMatches = replacement
+            ? snapshot?.generation == generation && snapshot?.stopSource == VpnStopSource.replacement
+            : (snapshot?.generation ?? 0) >= generation;
+        if (terminalGenerationMatches && snapshot?.phase == VpnSessionPhase.disconnected) {
+          return true;
+        }
+      } catch (error, stackTrace) {
+        loggy.debug("Android terminal stop snapshot poll failed", error, stackTrace);
+      }
+      if (attempt < 9) {
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+    }
+    return false;
   }
 
-  Future<void> stopMethodChannel() async {
-    try {
-      await methodChannel.invokeMethod("stop").timeout(_nativeStopTimeout);
-    } on TimeoutException {
-      loggy.warning("native stop timed out after ${_nativeStopTimeout.inSeconds}s");
+  Future<int> stopMethodChannel({int? generation, bool preemptive = false, bool replacement = false}) async {
+    final requested = generation ?? _sessionGeneration;
+    final accepted =
+        await methodChannel.invokeMethod<int>("stop", {
+          "generation": requested,
+          "preemptive": preemptive,
+          "replacement": replacement,
+        }) ??
+        requested;
+    _sessionGeneration = max(_sessionGeneration, accepted);
+    return accepted;
+  }
+
+  @override
+  Future<void> setSessionGeneration(int generation) async {
+    if (generation <= 0 || generation == _sessionGeneration) return;
+    if (generation < _sessionGeneration) {
+      throw StateError("stale VPN session generation: requested=$generation current=$_sessionGeneration");
     }
+    _sessionGeneration = generation;
+    final accepted = await methodChannel.invokeMethod<int>("set_session_generation", {"generation": generation});
+    if (accepted != null && accepted != generation) {
+      _sessionGeneration = max(_sessionGeneration, accepted);
+      throw StateError("stale VPN session generation: requested=$generation current=$accepted");
+    }
+  }
+
+  @override
+  Future<void> markCoreStarted(int generation) async {
+    if (generation != _sessionGeneration) {
+      throw StateError("cannot mark stale VPN session ready");
+    }
+    await methodChannel.invokeMethod<int>("mark_core_started", {"generation": generation});
+  }
+
+  Future<bool> _waitForBackgroundCommandEndpoint(int generation) async {
+    const maxAttempts = 15;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (generation != _sessionGeneration) return false;
+      try {
+        await bgClient
+            .getSystemInfo(Empty(), options: CallOptions(timeout: const Duration(milliseconds: 800)))
+            .timeout(const Duration(seconds: 1));
+        return true;
+      } catch (error) {
+        if (attempt == maxAttempts) return false;
+        await Future<void>.delayed(Duration(milliseconds: min(1000, 100 + attempt * 80)));
+      }
+    }
+    return false;
+  }
+
+  bool _isCurrentEvent(dynamic event) {
+    final map = event as Map<dynamic, dynamic>?;
+    final raw = map?["generation"];
+    final generation = raw is int ? raw : int.tryParse(raw?.toString() ?? "") ?? 0;
+    if (_sessionGeneration <= 0 || generation == _sessionGeneration) return true;
+    loggy.warning(
+      "event=stale_callback_ignored generation=$generation current_generation=$_sessionGeneration source=android_event_channel",
+    );
+    return false;
   }
 
   @override
@@ -285,8 +526,8 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   @override
-  Future<bool> isActiveBg() async {
-    return await isPortOpen("127.0.0.1", portBack);
+  Future<bool> isActiveBg({PortProbeObserver? onPortProbe}) async {
+    return await isPortOpen("127.0.0.1", portBack, onObservation: onPortProbe);
   }
 }
 
@@ -298,11 +539,22 @@ Future<bool> waitUntilPort(
   Duration baseDelay = const Duration(milliseconds: 200),
   Duration maxDelay = const Duration(milliseconds: 1500),
   double factor = 1.8,
+  Future<bool> Function(String, int)? portProbe,
+  PortProbeObserver? onObservation,
 }) async {
   var delay = baseDelay;
   final random = Random();
   for (var i = 0; i < maxTry; i++) {
-    if (await isPortOpen("127.0.0.1", portNumber) == isOpen) {
+    final observed = portProbe == null
+        ? await isPortOpen("127.0.0.1", portNumber, onObservation: onObservation)
+        : await portProbe("127.0.0.1", portNumber);
+    if (portProbe != null) {
+      _notifyPortProbe(
+        onObservation,
+        PortProbeObservation(observed ? PortProbeOutcome.connected : PortProbeOutcome.closed),
+      );
+    }
+    if (observed == isOpen) {
       return true;
     }
     if (callFunctionAfterEachFail != null) {
@@ -319,14 +571,44 @@ Future<bool> waitUntilPort(
   return false;
 }
 
-Future<bool> isPortOpen(String host, int port, {Duration timeout = const Duration(milliseconds: 300)}) async {
+Future<bool> isPortOpen(
+  String host,
+  int port, {
+  Duration timeout = const Duration(milliseconds: 300),
+  PortProbeObserver? onObservation,
+}) async {
   try {
     final socket = await Socket.connect(host, port, timeout: timeout);
     await socket.close();
+    _notifyPortProbe(onObservation, const PortProbeObservation(PortProbeOutcome.connected));
     return true;
-  } on SocketException catch (_) {
+  } on TimeoutException {
+    _notifyPortProbe(onObservation, const PortProbeObservation(PortProbeOutcome.timeout));
+    return false;
+  } on SocketException catch (error) {
+    _notifyPortProbe(onObservation, PortProbeObservation(classifySocketProbeError(error)));
     return false;
   } catch (_) {
+    _notifyPortProbe(onObservation, const PortProbeObservation(PortProbeOutcome.otherError));
     return false;
   }
+}
+
+void _notifyPortProbe(PortProbeObserver? observer, PortProbeObservation observation) {
+  try {
+    observer?.call(observation);
+  } catch (_) {
+    // Diagnostics must not change the probe result used by the caller.
+  }
+}
+
+PortProbeOutcome classifySocketProbeError(SocketException error) {
+  final code = error.osError?.errorCode;
+  if (const {60, 110, 10060}.contains(code) || error.message.toLowerCase().contains('timed out')) {
+    return PortProbeOutcome.timeout;
+  }
+  if (const {61, 111, 10061}.contains(code) || error.message.toLowerCase().contains('refused')) {
+    return PortProbeOutcome.closed;
+  }
+  return PortProbeOutcome.socketError;
 }

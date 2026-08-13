@@ -26,15 +26,18 @@ type SmartActive struct {
 	// monitoring state is reset in-place when a new cycle starts, so keeping the
 	// snapshot here lets an active-only probe compare its live result with the
 	// last verified candidates without treating a partial generation as ready.
-	lastFullGeneration uint64
-	lastFullHistory    map[string]*adapter.URLTestHistory
-	confirmed          bool
-	startedAt          time.Time
-	evidence           map[string]*smartEvidence
-	avoidUntil         map[string]time.Time
-	decision           smartDecision
-	recovered          []string
-	activeProbe        smartActiveProbeEvidence
+	lastFullGeneration   uint64
+	lastFullHistory      map[string]*adapter.URLTestHistory
+	confirmed            bool
+	startedAt            time.Time
+	evidence             map[string]*smartEvidence
+	avoidUntil           map[string]time.Time
+	decision             smartDecision
+	recovered            []string
+	activeProbe          smartActiveProbeEvidence
+	diagnosticHistory    map[string]*adapter.URLTestHistory
+	diagnosticGeneration uint64
+	diagnosticSource     string
 }
 
 type smartEvidence struct {
@@ -127,9 +130,12 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 	s.updateEvidence(history)
 	current := s.active
 	decisionHistory := history
+	decisionSource := smartActiveHistorySource(history, generation)
 	if !s.bootstrap && generation != 0 && generation == s.lastFullGeneration {
 		decisionHistory = s.fullGenerationDecisionHistory(candidateTag(current), history)
+		decisionSource = "full_generation"
 	}
+	s.rememberDecisionDiagnostics(decisionHistory, generation, decisionSource)
 	if fullGenerationChanged {
 		s.reconcileActiveProbeAdvantage(decisionHistory, generation)
 	}
@@ -220,6 +226,20 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 	state = smartActiveState(currentHistory)
 	if changed, handled := s.handleConfirmedActiveProbe(current, history, generation); handled {
 		return changed
+	}
+	currentStatus := s.candidateStatus(current.Tag(), currentHistory, generation)
+	if !currentStatus.ok && !currentCheckInProgress(currentHistory) && state != "BAD" && state != "CRITICAL" {
+		candidate := s.bestCandidate(history, true, true, generation)
+		if candidate != nil && candidate.Tag() != current.Tag() {
+			changed := s.switchTo(current, candidate, "current_terminal_result_ineligible", "BAD", history, generation)
+			s.decision.mode = decisionMode(mode, s.bootstrap)
+			return changed
+		}
+		s.decision = smartDecision{
+			action: "keep", reason: "failed_active_without_fresh_candidate",
+			from: current.Tag(), state: "BAD", mode: decisionMode(mode, s.bootstrap),
+		}
+		return false
 	}
 	if mode == "user_refresh" {
 		candidate := s.bestCandidate(history, true, false, generation)
@@ -356,6 +376,12 @@ func (s *SmartActive) LastRecoveries() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string(nil), s.recovered...)
+}
+
+func (s *SmartActive) SelectionDiagnostics() (uint64, map[string]*adapter.URLTestHistory, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.diagnosticGeneration, cloneSmartActiveHistoryMap(s.diagnosticHistory), s.diagnosticSource
 }
 
 func (s *SmartActive) confirmActive(from, to adapter.Outbound, reason, mode string) bool {
@@ -1002,6 +1028,35 @@ func cloneSmartActiveHistory(history *adapter.URLTestHistory) *adapter.URLTestHi
 	return &cloned
 }
 
+func cloneSmartActiveHistoryMap(history map[string]*adapter.URLTestHistory) map[string]*adapter.URLTestHistory {
+	if history == nil {
+		return nil
+	}
+	cloned := make(map[string]*adapter.URLTestHistory, len(history))
+	for tag, item := range history {
+		cloned[tag] = cloneSmartActiveHistory(item)
+	}
+	return cloned
+}
+
+func (s *SmartActive) rememberDecisionDiagnostics(history map[string]*adapter.URLTestHistory, generation uint64, source string) {
+	s.diagnosticGeneration = generation
+	s.diagnosticHistory = cloneSmartActiveHistoryMap(history)
+	s.diagnosticSource = source
+}
+
+func smartActiveHistorySource(history map[string]*adapter.URLTestHistory, generation uint64) string {
+	for _, item := range history {
+		if item != nil && item.IsFromCache {
+			return "cache"
+		}
+	}
+	if generation == 0 {
+		return "partial_generation"
+	}
+	return "full_generation"
+}
+
 func (s *SmartActive) rememberFullGeneration(history map[string]*adapter.URLTestHistory, generation uint64) bool {
 	if generation == 0 || generation < s.lastFullGeneration {
 		return false
@@ -1035,6 +1090,7 @@ func (s *SmartActive) rememberFullGeneration(history map[string]*adapter.URLTest
 			return false
 		}
 		snapshot[tag] = cloneSmartActiveHistory(item)
+		snapshot[tag].HealthScore = getHealthScore(tag, snapshot[tag])
 	}
 	s.lastFullGeneration = generation
 	s.lastFullHistory = snapshot
@@ -1057,6 +1113,8 @@ func (s *SmartActive) fullGenerationDecisionHistory(activeTag string, current ma
 		}
 		if newerSmartActiveFailure(latest, saved) {
 			applySmartActiveFailure(item, latest)
+		} else if newerSmartActivePending(latest, saved) {
+			applySmartActivePending(item, latest)
 		}
 		history[tag] = item
 	}
@@ -1119,6 +1177,8 @@ func (s *SmartActive) activeProbeDecisionHistory(tag string, probe *adapter.URLT
 		// updated the candidate's failure streak.
 		if newerSmartActiveFailure(latest, saved) {
 			applySmartActiveFailure(candidate, latest)
+		} else if newerSmartActivePending(latest, saved) {
+			applySmartActivePending(candidate, latest)
 		}
 		decisionHistory[candidateTag] = candidate
 	}
@@ -1152,10 +1212,7 @@ func (s *SmartActive) reconcileActiveProbeAdvantage(history map[string]*adapter.
 }
 
 func newerSmartActiveFailure(latest, saved *adapter.URLTestHistory) bool {
-	if latest == nil || saved == nil || latest.CheckGeneration < saved.CheckGeneration {
-		return false
-	}
-	if latest.CheckGeneration == saved.CheckGeneration && !latest.Time.After(saved.Time) {
+	if !newerSmartActiveSnapshot(latest, saved) {
 		return false
 	}
 	if latest.URLTestStatus == urltest.StatusFailed {
@@ -1167,15 +1224,56 @@ func newerSmartActiveFailure(latest, saved *adapter.URLTestHistory) bool {
 	return !latest.Success && latest.ErrorType != "" && latest.ErrorType != urltest.ErrorTypeNone
 }
 
+func newerSmartActivePending(latest, saved *adapter.URLTestHistory) bool {
+	if !newerSmartActiveSnapshot(latest, saved) {
+		return false
+	}
+	return latest.URLTestStatus == urltest.StatusChecking || !latest.CombinedReady
+}
+
+func newerSmartActiveSnapshot(latest, saved *adapter.URLTestHistory) bool {
+	if latest == nil || saved == nil || latest.CheckGeneration < saved.CheckGeneration {
+		return false
+	}
+	return latest.CheckGeneration > saved.CheckGeneration || latest.Time.After(saved.Time)
+}
+
 func applySmartActiveFailure(target, latest *adapter.URLTestHistory) {
 	if target == nil || latest == nil {
 		return
 	}
+	// A terminal failure is a complete replacement of the transport snapshot,
+	// not a veto bit layered over an old success. Keeping the old timestamp,
+	// generation, score or readiness here made diagnostics and later ranking
+	// observe a logically impossible mixture of two results.
+	dynamic := *target
+	*target = *cloneSmartActiveHistory(latest)
 	target.Success = false
-	target.Delay = latest.Delay
-	target.ErrorType = latest.ErrorType
-	target.ErrorText = latest.ErrorText
 	target.URLTestStatus = urltest.StatusFailed
+	target.RuntimePenalty = max(target.RuntimePenalty, dynamic.RuntimePenalty)
+	target.RealUserPenalty = max(target.RealUserPenalty, dynamic.RealUserPenalty)
+	target.VolatilityPenalty = max(target.VolatilityPenalty, dynamic.VolatilityPenalty)
+	target.DegradationPoints = max(target.DegradationPoints, dynamic.DegradationPoints)
+	target.StabilityPoints = min(target.StabilityPoints, dynamic.StabilityPoints)
+	target.PolicyPenalty = max(target.PolicyPenalty, dynamic.PolicyPenalty)
+	target.HealthScore = getHealthScore("", target)
+}
+
+func applySmartActivePending(target, latest *adapter.URLTestHistory) {
+	if target == nil || latest == nil {
+		return
+	}
+	dynamic := *target
+	*target = *cloneSmartActiveHistory(latest)
+	target.Success = false
+	target.Delay = 0
+	target.HealthScore = 0
+	target.RuntimePenalty = max(target.RuntimePenalty, dynamic.RuntimePenalty)
+	target.RealUserPenalty = max(target.RealUserPenalty, dynamic.RealUserPenalty)
+	target.VolatilityPenalty = max(target.VolatilityPenalty, dynamic.VolatilityPenalty)
+	target.DegradationPoints = max(target.DegradationPoints, dynamic.DegradationPoints)
+	target.StabilityPoints = min(target.StabilityPoints, dynamic.StabilityPoints)
+	target.PolicyPenalty = max(target.PolicyPenalty, dynamic.PolicyPenalty)
 }
 
 func mergeSmartActiveWorseningEvidence(target, latest *adapter.URLTestHistory) {

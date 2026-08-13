@@ -4,6 +4,8 @@ import (
 	hcore "github.com/hiddify/hiddify-core/v2/hcore"
 
 	_ "net/http/pprof"
+	"os"
+	"strconv"
 
 	_ "github.com/sagernet/gomobile"
 	"github.com/sagernet/sing-box/experimental/libbox"
@@ -79,4 +81,11 @@ func Pause() {
 
 func Wake() {
 	hcore.Wake()
+}
+
+// SetSessionGeneration updates the Go runtime environment used by the core's
+// lifecycle, selector, and validation telemetry. Calling libc setenv from Java
+// alone does not update Go's process environment map.
+func SetSessionGeneration(generation int64) error {
+	return os.Setenv("ZEON_SESSION_GENERATION", strconv.FormatInt(generation, 10))
 }

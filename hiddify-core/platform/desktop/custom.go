@@ -70,9 +70,10 @@ func emptyOrErrorC(err error) *C.char {
 		return C.CString("")
 	}
 	log.Error(err.Error())
-	str := C.CString(err.Error())
-	defer C.free(unsafe.Pointer(str))
-	return str
+	// The caller owns the returned allocation and must release it through
+	// freeString after copying the value. Freeing it here would return a
+	// dangling pointer across the FFI boundary.
+	return C.CString(err.Error())
 }
 
 //export setup

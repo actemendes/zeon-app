@@ -24,9 +24,14 @@ abstract interface class ConnectionRepository {
   TaskEither<ConnectionFailure, Unit> setup();
   TaskEither<ConnectionFailure, Unit> prepareSystemVpn(ProfileEntity activeProfile, bool disableMemoryLimit);
   Stream<ConnectionStatus> watchConnectionStatus();
+  Future<ConnectionStatus?> resyncConnectionStatus(String source);
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit);
   TaskEither<ConnectionFailure, Unit> disconnect();
-  TaskEither<ConnectionFailure, Unit> reconnect(ProfileEntity activeProfile, bool disableMemoryLimit);
+  TaskEither<ConnectionFailure, Unit> reconnect(
+    ProfileEntity activeProfile,
+    bool disableMemoryLimit, {
+    String source = "reconnect",
+  });
 }
 
 class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements ConnectionRepository {
@@ -88,97 +93,171 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   }
 
   @override
+  Future<ConnectionStatus?> resyncConnectionStatus(String source) async {
+    final status = await singbox.resyncFromPlatform(source);
+    return switch (status) {
+      null => null,
+      CoreStopped() => Disconnected(status.getCoreAlert()),
+      CoreStarting() => const Connecting(),
+      CoreStarted() => const Connected(),
+      CoreStopping() => const Disconnecting(),
+    };
+  }
+
+  @override
   TaskEither<ConnectionFailure, Unit> prepareSystemVpn(ProfileEntity activeProfile, bool disableMemoryLimit) =>
       TaskEither.tryCatch(() async {
         final runtimeFile = await _createRuntimeConfigFile(activeProfile);
-        return (await singbox.prepareVpnConfiguration(runtimeFile.path, activeProfile.name, disableMemoryLimit).run())
+        final generation = singbox.beginVpnOperation("prepare_system_vpn");
+        return (await singbox
+                .prepareVpnConfiguration(
+                  runtimeFile.path,
+                  activeProfile.name,
+                  disableMemoryLimit,
+                  generation: generation,
+                )
+                .run())
             .match((failure) => throw _vpnPreparationFailure(failure), (_) => unit);
       }, (err, st) => err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st));
 
   @override
-  TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit) => setup().flatMap(
-    (_) => applyConfigOption(activeProfile).flatMap(
-      (_) => TaskEither.tryCatch(() async {
-        // TODO: Move core startup to in-memory config once the background service
-        // no longer persists config_content or requires a readable config path.
-        final runtimeFile = await _createRuntimeConfigFile(activeProfile);
-        final prepared = await _prepareVpnBeforeCoreStart(runtimeFile.path, activeProfile.name, disableMemoryLimit);
-        if (prepared.isLeft()) {
-          throw prepared.getLeft().toNullable() ?? const ConnectionFailure.missingVpnPermission();
+  TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit) =>
+      TaskEither(() async {
+        // Reserve the lifecycle generation before setup/config/file I/O. A
+        // later Stop can then supersede this attempt even while preflight is
+        // still awaiting work outside ZeonCoreService's lifecycle queue.
+        final generation = singbox.beginVpnOperation("connect");
+        final setupResult = await setup().run();
+        if (setupResult.isLeft()) return setupResult;
+        final optionsResult = await applyConfigOption(activeProfile).run();
+        if (optionsResult.isLeft()) return optionsResult;
+        try {
+          // TODO: Move core startup to in-memory config once the background service
+          // no longer persists config_content or requires a readable config path.
+          final runtimeFile = await _createRuntimeConfigFile(activeProfile);
+          final prepared = await _prepareVpnBeforeCoreStart(
+            runtimeFile.path,
+            activeProfile.name,
+            disableMemoryLimit,
+            generation,
+          );
+          if (prepared.isLeft()) {
+            throw prepared.getLeft().toNullable() ?? const ConnectionFailure.missingVpnPermission();
+          }
+          return await singbox
+              .start(runtimeFile.path, activeProfile.name, disableMemoryLimit, generation: generation)
+              .run();
+        } catch (err, st) {
+          return left(err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st));
         }
-        return (await singbox.start(runtimeFile.path, activeProfile.name, disableMemoryLimit).run()).match(
-          (failure) => throw failure,
-          (_) => unit,
-        );
-      }, (err, st) => err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st)),
-      // .mapLeft(UnexpectedConnectionFailure.new),
-    ),
-  );
+      });
 
   @override
   TaskEither<ConnectionFailure, Unit> disconnect() => singbox.stop().mapLeft(UnexpectedConnectionFailure.new);
 
   @override
-  TaskEither<ConnectionFailure, Unit> reconnect(ProfileEntity activeProfile, bool disableMemoryLimit) =>
-      applyConfigOption(activeProfile).flatMap(
-        (_) => TaskEither(() async {
-          late final String path;
-          Either<ConnectionFailure, Unit> result;
-          try {
-            // TODO: Move core restart to in-memory config once the background service
-            // no longer persists config_content or requires a readable config path.
-            final runtimeFile = await _createRuntimeConfigFile(activeProfile);
-            path = runtimeFile.path;
-            final prepared = await _prepareVpnBeforeCoreStart(path, activeProfile.name, disableMemoryLimit);
-            if (prepared.isLeft()) {
-              return left(prepared.getLeft().toNullable() ?? const ConnectionFailure.missingVpnPermission());
-            }
-            result = (await singbox.restart(path, activeProfile.name, disableMemoryLimit).run()).mapLeft(
-              UnexpectedConnectionFailure.new,
-            );
-          } catch (err, st) {
-            return left(err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st));
-          }
+  TaskEither<ConnectionFailure, Unit> reconnect(
+    ProfileEntity activeProfile,
+    bool disableMemoryLimit, {
+    String source = "reconnect",
+  }) => TaskEither(() async {
+    // See connect(): Stop must own a newer generation even when this
+    // reconnect is still applying options or creating its runtime file.
+    final generation = singbox.beginVpnOperation(source);
+    final optionsResult = await applyConfigOption(activeProfile).run();
+    if (optionsResult.isLeft()) return optionsResult;
+    late final String path;
+    Either<ConnectionFailure, Unit> result;
+    try {
+      // TODO: Move core restart to in-memory config once the background service
+      // no longer persists config_content or requires a readable config path.
+      final runtimeFile = await _createRuntimeConfigFile(activeProfile);
+      path = runtimeFile.path;
+      final prepared = await _prepareVpnBeforeCoreStart(path, activeProfile.name, disableMemoryLimit, generation);
+      if (prepared.isLeft()) {
+        return left(prepared.getLeft().toNullable() ?? const ConnectionFailure.missingVpnPermission());
+      }
+      result =
+          (await singbox
+                  .restart(path, activeProfile.name, disableMemoryLimit, generation: generation, source: source)
+                  .run())
+              .mapLeft(UnexpectedConnectionFailure.new);
+    } catch (err, st) {
+      return left(err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st));
+    }
 
-          for (var attempt = 1; attempt <= _tunRecoveryRestartAttempts && result.isLeft(); attempt++) {
-            final failure = result.getLeft().toNullable();
-            if (failure == null || !isTunInterfacePermissionDenied(failure)) {
-              break;
-            }
+    var recoveryOwnerGeneration = generation;
+    for (var attempt = 1; attempt <= _tunRecoveryRestartAttempts && result.isLeft(); attempt++) {
+      final failure = result.getLeft().toNullable();
+      if (failure == null || !isTunInterfacePermissionDenied(failure)) {
+        break;
+      }
+      if (!singbox.isVpnOperationCurrent(recoveryOwnerGeneration, source: "tun_recovery_entry")) {
+        loggy.info("TUN recovery cancelled: a newer VPN intent owns the lifecycle");
+        return right(unit);
+      }
 
-            loggy.warning(
-              "TUN recovery attempt "
-              "[$attempt/$_tunRecoveryRestartAttempts]",
-            );
-
-            await _waitForTunRecoveryCooldown();
-            final stopResult = await singbox.stop(force: true).run();
-            stopResult.match(
-              (error) => loggy.warning(
-                "core stop reported an error during TUN recovery; "
-                "continuing because local cleanup has completed",
-                error,
-              ),
-              (_) {},
-            );
-            await Future<void>.delayed(_tunReleaseDelay);
-            final prepared = await _prepareVpnBeforeCoreStart(path, activeProfile.name, disableMemoryLimit);
-            if (prepared.isLeft()) {
-              return left(prepared.getLeft().toNullable() ?? const ConnectionFailure.missingVpnPermission());
-            }
-            result = await singbox.start(path, activeProfile.name, disableMemoryLimit).run();
-          }
-
-          return result;
-        }),
+      loggy.warning(
+        "TUN recovery attempt "
+        "[$attempt/$_tunRecoveryRestartAttempts]",
       );
+
+      await _waitForTunRecoveryCooldown();
+      if (!singbox.isVpnOperationCurrent(recoveryOwnerGeneration, source: "tun_recovery_before_cleanup")) {
+        loggy.info("TUN recovery cancelled before cleanup: a newer VPN intent owns the lifecycle");
+        return right(unit);
+      }
+
+      // stop(force:true) reserves exactly the next monotonic generation when
+      // run. Remember it so a manual/native Stop that arrives during cleanup
+      // or the release delay cannot be overwritten by a recovery Start.
+      final cleanupGeneration = recoveryOwnerGeneration + 1;
+      final stopResult = await singbox.stop(force: true).run();
+      stopResult.match(
+        (error) => loggy.warning(
+          "core stop reported an error during TUN recovery; "
+          "continuing because local cleanup has completed",
+          error,
+        ),
+        (_) {},
+      );
+      if (!singbox.isVpnOperationCurrent(cleanupGeneration, source: "tun_recovery_after_cleanup")) {
+        loggy.info("TUN recovery cancelled after cleanup: a newer VPN intent owns the lifecycle");
+        return right(unit);
+      }
+      await Future<void>.delayed(_tunReleaseDelay);
+      if (!singbox.isVpnOperationCurrent(cleanupGeneration, source: "tun_recovery_after_release_delay")) {
+        loggy.info("TUN recovery cancelled during release delay: a newer VPN intent owns the lifecycle");
+        return right(unit);
+      }
+      final recoveryGeneration = singbox.beginVpnOperation("tun_recovery");
+      recoveryOwnerGeneration = recoveryGeneration;
+      final prepared = await _prepareVpnBeforeCoreStart(
+        path,
+        activeProfile.name,
+        disableMemoryLimit,
+        recoveryGeneration,
+      );
+      if (!singbox.isVpnOperationCurrent(recoveryGeneration, source: "tun_recovery_permission_result")) {
+        loggy.info("TUN recovery cancelled after permission result: a newer VPN intent owns the lifecycle");
+        return right(unit);
+      }
+      if (prepared.isLeft()) {
+        return left(prepared.getLeft().toNullable() ?? const ConnectionFailure.missingVpnPermission());
+      }
+      result = await singbox.start(path, activeProfile.name, disableMemoryLimit, generation: recoveryGeneration).run();
+    }
+
+    return result;
+  });
 
   Future<Either<ConnectionFailure, Unit>> _prepareVpnBeforeCoreStart(
     String path,
     String name,
     bool disableMemoryLimit,
+    int generation,
   ) async {
-    final result = await singbox.prepareVpnConfiguration(path, name, disableMemoryLimit).run();
+    final result = await singbox.prepareVpnConfiguration(path, name, disableMemoryLimit, generation: generation).run();
     return result.mapLeft(_vpnPreparationFailure);
   }
 

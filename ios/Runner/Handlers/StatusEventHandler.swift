@@ -23,18 +23,17 @@ public class StatusEventHandler: NSObject, FlutterPlugin, FlutterStreamHandler {
     
     public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
         cancellable = VPNManager.shared.$state.sink { [events] status in
-            switch status {
-            case .reasserting, .connecting:
-                events(["status": "Starting"])
-            case .connected:
-                events(["status": "Started"])
-            case .disconnecting:
-                events(["status": "Stopping"])
-            case .disconnected, .invalid:
-                events(["status": "Stopped"])
-            @unknown default:
-                events(["status": "Stopped"])
+            var snapshot = VPNManager.shared.sessionSnapshot()
+            let phase = snapshot["phase"] as? String
+            let statusName: String
+            switch phase {
+            case "connected": statusName = "Started"
+            case "stopping": statusName = "Stopping"
+            case "disconnected": statusName = "Stopped"
+            default: statusName = "Starting"
             }
+            snapshot["status"] = statusName
+            events(snapshot)
         }
         return nil
     }

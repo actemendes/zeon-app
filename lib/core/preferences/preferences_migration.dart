@@ -1,6 +1,23 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/utils/utils.dart';
 
+typedef PreferencesMigrationFailure = ({Object error, StackTrace stackTrace});
+
+Future<PreferencesMigrationFailure?> runPreferencesMigrationPreservingState(
+  Future<void> Function() migrate, {
+  bool rethrowOnFailure = false,
+}) async {
+  try {
+    await migrate();
+    return null;
+  } catch (error, stackTrace) {
+    if (rethrowOnFailure) {
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    return (error: error, stackTrace: stackTrace);
+  }
+}
+
 class PreferencesMigration with InfraLogger {
   PreferencesMigration({required this.sharedPreferences});
 
@@ -9,6 +26,10 @@ class PreferencesMigration with InfraLogger {
   static const versionKey = "preferences_version";
   static const v16RemovedRoutingPackage = "ru.rutube.app";
   static const v16RoutingCleanupPendingKey = "per_app_proxy_v16_rutube_cleanup_pending";
+  static const v16RoutingCleanupOwnedKey = "per_app_proxy_v16_rutube_cleanup_owned";
+  static const v17SeededRoutingCleanupPendingKey = "per_app_proxy_v17_seeded_cleanup_pending";
+  static const v17SeededRoutingCleanupPackagesKey = "per_app_proxy_v17_seeded_cleanup_packages";
+  static const v17SeededRoutingExactOwnedPackagesKey = "per_app_proxy_v17_seeded_exact_owned_packages";
 
   Future<void> migrate() async {
     final currentVersion = sharedPreferences.getInt(versionKey) ?? 0;
@@ -30,6 +51,7 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion14Migration(sharedPreferences),
       PreferencesVersion15Migration(sharedPreferences, currentVersion),
       PreferencesVersion16Migration(sharedPreferences),
+      PreferencesVersion17Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -428,15 +450,61 @@ class PreferencesVersion16Migration extends PreferencesMigrationStep with InfraL
       await sharedPreferences.setBool("block-ads", true);
     }
 
-    for (final key in const ["per_app_proxy_exclude_list", "per_app_proxy_seeded_exclude_list"]) {
-      final packages = sharedPreferences.getStringList(key);
-      if (packages != null && packages.contains(PreferencesMigration.v16RemovedRoutingPackage)) {
-        final updated = packages.where((pkg) => pkg != PreferencesMigration.v16RemovedRoutingPackage).toList();
-        loggy.debug("v16: removing [${PreferencesMigration.v16RemovedRoutingPackage}] from [$key]");
-        await sharedPreferences.setStringList(key, updated);
+    // The legacy seed list records that ZEON selected a package at some point,
+    // but not whether the user later removed and explicitly selected it again.
+    // Do not use that ambiguous marker to remove a current user selection.
+    await sharedPreferences.remove(PreferencesMigration.v16RoutingCleanupOwnedKey);
+    await sharedPreferences.setBool(PreferencesMigration.v16RoutingCleanupPendingKey, false);
+  }
+}
+
+class PreferencesVersion17Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion17Migration(super.sharedPreferences);
+
+  static const _seededExcludeAppsKey = "per_app_proxy_seeded_exclude_list";
+
+  Set<String> _readExactStringListEvidence(String key) {
+    final rawValue = sharedPreferences.get(key);
+    if (rawValue is! List<String>) {
+      if (rawValue != null) {
+        loggy.warning("v17: ignoring malformed exact-ownership evidence [$key]; preserving user state");
       }
+      return const <String>{};
+    }
+    return rawValue.where((pkg) => pkg.isNotEmpty).toSet();
+  }
+
+  @override
+  Future<void> migrate() async {
+    final rawSeededPackages = sharedPreferences.get(_seededExcludeAppsKey);
+    final seededPackages = rawSeededPackages is List<String> ? rawSeededPackages : const <String>[];
+    if (seededPackages.isNotEmpty) {
+      loggy.debug(
+        "v17: preserving [${seededPackages.length}] ambiguous legacy package selections; "
+        "the old format has no user-reselection provenance",
+      );
+    } else if (rawSeededPackages != null) {
+      loggy.warning("v17: malformed legacy seed hint is ambiguous; preserving active package selections");
     }
 
-    await sharedPreferences.setBool(PreferencesMigration.v16RoutingCleanupPendingKey, true);
+    // Retire only the obsolete ownership hint. The active exclusion list is
+    // user state and must stay untouched. A database cleanup may be scheduled
+    // only by code that also writes the separate exact-ownership list.
+    await sharedPreferences.remove(_seededExcludeAppsKey);
+    await sharedPreferences.setStringList(_seededExcludeAppsKey, const <String>[]);
+    final exactOwnedPackages = _readExactStringListEvidence(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey);
+    final requestedCleanup = _readExactStringListEvidence(PreferencesMigration.v17SeededRoutingCleanupPackagesKey);
+    final provenCleanup = requestedCleanup.intersection(exactOwnedPackages).toList(growable: false)..sort();
+
+    if (provenCleanup.isEmpty) {
+      await sharedPreferences.remove(PreferencesMigration.v17SeededRoutingCleanupPackagesKey);
+      await sharedPreferences.remove(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey);
+      await sharedPreferences.setBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey, false);
+      return;
+    }
+
+    await sharedPreferences.setStringList(PreferencesMigration.v17SeededRoutingCleanupPackagesKey, provenCleanup);
+    await sharedPreferences.setStringList(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey, provenCleanup);
+    await sharedPreferences.setBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey, true);
   }
 }

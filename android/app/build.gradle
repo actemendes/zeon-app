@@ -117,8 +117,17 @@ android {
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        // Shared code can call the evidence bridge, but every normal artifact
+        // compiles it as a hard no-op. physicalValidation overrides this flag.
+        buildConfigField "boolean", "ROUTE_EVIDENCE_ENABLED", "false"
         multiDexEnabled true
+        testInstrumentationRunner "test.com.zeon.zeon.bg.VpnTestInstrumentation"
     }
+
+    // Instrumentation must never target the production package on a device
+    // that contains user profiles. The validation target has independent app
+    // data, permissions and VPN ownership.
+    testBuildType "validation"
 
     splits {
         abi {
@@ -143,28 +152,101 @@ android {
     }
 
     buildTypes {
+        validation {
+            initWith debug
+            applicationIdSuffix ".validation"
+            matchingFallbacks = ["debug"]
+            debuggable true
+        }
         release {
             if (hasKeyStore) {
                 signingConfig signingConfigs.release
             }
             debuggable false
             jniDebuggable false
+            // Keep the Play release contract explicit even though the Flutter
+            // Gradle plugin currently applies the same optimization defaults.
+            minifyEnabled true
+            shrinkResources true
+            proguardFile 'proguard-rules.pro'
             ndk {
                 //noinspection ChromeOsAbiSupport
                 abiFilters "x86_64", "armeabi-v7a", "arm64-v8a"
                 debugSymbolLevel 'FULL'
             }
         }
+        // Manual, same-package validation on the physical device. This variant
+        // intentionally replaces the installed production package in-place so
+        // migration and browser routing can be exercised against preserved app
+        // data. It must never be used for instrumentation or publication.
+        physicalValidation {
+            initWith release
+            if (hasKeyStore) {
+                signingConfig signingConfigs.release
+            }
+            matchingFallbacks = ["release"]
+            // Flutter selects its runtime mode from this flag. Keep this false
+            // so the inherited release engine receives an AOT snapshot.
+            debuggable false
+            jniDebuggable false
+            // Release remains minified. This telemetry-bearing install-only
+            // artifact keeps plugins intact and is deliberately not published.
+            minifyEnabled false
+            shrinkResources false
+            buildConfigField "boolean", "ROUTE_EVIDENCE_ENABLED", "true"
+        }
     }
 
     buildFeatures {
         viewBinding true
         aidl true
+        buildConfig true
     }
 
 }
 
+// The Flutter plugin observes a custom build type before the `initWith debug`
+// closure has finished configuring it. Without this narrow substitution the
+// validation variant gets release libflutter.so together with debug/JIT Dart
+// assets and aborts at startup. Keep the isolated validation package entirely
+// on the debug engine; production release configurations are not affected.
+configurations.configureEach { configuration ->
+    if (configuration.name.toLowerCase().startsWith("validation")) {
+        configuration.resolutionStrategy.eachDependency { details ->
+            def requested = details.requested
+            if (requested.group == "io.flutter" &&
+                requested.name ==~ /^(armeabi_v7a|arm64_v8a|x86_64)_release$/) {
+                details.useTarget(
+                    "${requested.group}:${requested.name.replace('_release', '_debug')}:${requested.version}"
+                )
+                details.because("validation is a debug/JIT Flutter build")
+            }
+        }
+    }
+}
+
 gradle.taskGraph.whenReady { graph ->
+    def unsafeManagedAndroidTests = graph.allTasks.findAll { task ->
+        def name = task.name.toLowerCase()
+        def managedTestTask =
+            name.contains("androidtest") &&
+            (name.startsWith("connected") ||
+                name.startsWith("device") ||
+                name.startsWith("install") ||
+                name.startsWith("uninstall"))
+        def isolatedValidationAndroidTest =
+            name.contains("validationandroidtest") &&
+            !name.contains("physicalvalidation")
+        managedTestTask && !isolatedValidationAndroidTest
+    }
+    if (!unsafeManagedAndroidTests.isEmpty()) {
+        throw new GradleException(
+            "Refusing Android instrumentation against com.zeon.hiddify. " +
+            "Use the isolated validation target (:app:connectedValidationAndroidTest). " +
+            "Blocked tasks: ${unsafeManagedAndroidTests*.path.join(', ')}"
+        )
+    }
+
     def buildsReleaseArtifact = graph.allTasks.any { task ->
         task.project == project && task.name.toLowerCase().contains('release')
     }
@@ -172,6 +254,34 @@ gradle.taskGraph.whenReady { graph ->
         throw new GradleException(
             "Refusing to build a release artifact without android/key.properties. " +
             "Production releases must never use the public Android debug signing key."
+        )
+    }
+
+    def buildsPhysicalValidationArtifact = graph.allTasks.any { task ->
+        task.project == project && task.name.toLowerCase().contains('physicalvalidation')
+    }
+    if (buildsPhysicalValidationArtifact && !hasKeyStore) {
+        throw new GradleException(
+            "Refusing to build same-package physicalValidation without android/key.properties. " +
+            "It must be signed by the configured production release certificate."
+        )
+    }
+
+    def forbiddenPhysicalValidationPublication = graph.allTasks.findAll { task ->
+        if (task.project != project) {
+            return false
+        }
+        def name = task.name.toLowerCase()
+        name == "bundlephysicalvalidation" ||
+            name.startsWith("publishphysicalvalidation") ||
+            name.startsWith("uploadphysicalvalidation") ||
+            name.startsWith("publishbundlephysicalvalidation")
+    }
+    if (!forbiddenPhysicalValidationPublication.isEmpty()) {
+        throw new GradleException(
+            "physicalValidation is an install-only APK for manual device evidence and must never be published. " +
+            "Use :app:assemblePhysicalValidation or :app:installPhysicalValidation. " +
+            "Blocked tasks: ${forbiddenPhysicalValidationPublication*.path.join(', ')}"
         )
     }
 }

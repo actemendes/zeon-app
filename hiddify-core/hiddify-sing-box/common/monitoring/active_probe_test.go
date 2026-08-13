@@ -306,6 +306,49 @@ func TestActiveProbePresentationIsInvalidatedByNewGenerationAndFullResult(t *tes
 			t.Fatalf("newer full result did not replace active overlay: %+v", presentation)
 		}
 	})
+
+	t.Run("newer failed full result", func(t *testing.T) {
+		monitor := newActiveProbePresentationTestMonitor(t, adapter.URLTestHistory{
+			Time: now, Delay: 50, Success: true, ErrorType: urltest.ErrorTypeNone,
+			URLTestStatus: urltest.StatusSuccess, HealthScore: 100, CheckGeneration: 6,
+			PingReady: true, QualityReady: true, SpeedReady: true, CombinedReady: true,
+		})
+		state := monitor.outbounds["active"]
+		if !monitor.PublishActiveProbePresentation(ActiveProbeResult{
+			OutboundTag: "active",
+			History: adapter.URLTestHistory{
+				Time: now.Add(time.Second), Delay: 40, Success: true,
+				ErrorType: urltest.ErrorTypeNone, URLTestStatus: urltest.StatusSuccess,
+			},
+			rankingRevision: state.rankingRevision,
+		}) {
+			t.Fatal("active presentation was rejected")
+		}
+
+		failedAt := now.Add(2 * time.Second)
+		full := monitor.applyResult(testOutcome{
+			outboundTag:    "active",
+			cycleID:        6,
+			fullGeneration: true,
+			err:            errors.New("connection reset"),
+			history: adapter.URLTestHistory{
+				Time: failedAt, Delay: TimeoutDelay, Success: false,
+				ErrorType: urltest.ErrorTypeReset, URLTestStatus: urltest.StatusFailed,
+			},
+		})
+		if full == nil {
+			t.Fatal("failed full result was unexpectedly rejected")
+		}
+		presentation := monitor.OutboundsHistory("")["active"]
+		ranking := monitor.OutboundsRankingHistory("")["active"]
+		for name, result := range map[string]*adapter.URLTestHistory{"presentation": presentation, "ranking": ranking} {
+			if result.Success || result.URLTestStatus != urltest.StatusFailed ||
+				result.Delay != TimeoutDelay || result.HealthScore != 0 ||
+				result.CheckGeneration != 6 || !result.Time.Equal(failedAt) {
+				t.Fatalf("%s restored active probe success over full failure: %+v", name, result)
+			}
+		}
+	})
 }
 
 func TestLateActiveProbeDoesNotCoverNewerRankingRevision(t *testing.T) {

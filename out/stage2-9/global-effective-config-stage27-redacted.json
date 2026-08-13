@@ -1,0 +1,2204 @@
+﻿{
+  "dns": {
+    "disable_expire": true,
+    "final": "dns-remote",
+    "independent_cache": true,
+    "rules": [
+      {
+        "bypass_if_failed": true,
+        "domain": {
+          "count": 1,
+          "ipv4Like": 0,
+          "ipv6Like": 0,
+          "other": 1
+        },
+        "rewrite_ttl": 86400,
+        "server": "<redacted-endpoint:hostname>"
+      },
+      {
+        "bypass_if_failed": true,
+        "domain": {
+          "count": 5,
+          "ipv4Like": 0,
+          "ipv6Like": 0,
+          "other": 5
+        },
+        "rewrite_ttl": 86400,
+        "server": "<redacted-endpoint:hostname>"
+      },
+      {
+        "action": "predefined",
+        "rcode": "REFUSED",
+        "rule_set": [
+          "tag-087",
+          "tag-088",
+          "tag-089",
+          "tag-090",
+          "tag-091"
+        ]
+      },
+      {
+        "rewrite_ttl": 86400,
+        "server": "<redacted-endpoint:hostname>"
+      }
+    ],
+    "servers": [
+      {
+        "tag": "tag-001",
+        "type": "hosts"
+      },
+      {
+        "detour": "select",
+        "server": "<redacted-endpoint:ipv4-or-host>",
+        "tag": "dns-remote",
+        "type": "tcp"
+      },
+      {
+        "detour": "select",
+        "server": "<redacted-endpoint:ipv4-or-host>",
+        "tag": "tag-002",
+        "tls": {
+          "enabled": true
+        },
+        "type": "https"
+      },
+      {
+        "detour": "tag-086",
+        "domain_resolver": {
+          "server": "<redacted-endpoint:hostname>",
+          "strategy": "prefer_ipv4"
+        },
+        "server": "<redacted-endpoint:hostname>",
+        "tag": "tag-003",
+        "tls": {
+          "enabled": true,
+          "fragment": true,
+          "fragment_fallback_delay": "300ms",
+          "record_fragment": true
+        },
+        "type": "https"
+      },
+      {
+        "connect_timeout": "5s",
+        "disable_tcp_keep_alive": true,
+        "server": "<redacted-endpoint:ipv4-or-host>",
+        "tag": "dns-direct",
+        "type": "udp"
+      },
+      {
+        "prefer_go": true,
+        "tag": "tag-004",
+        "type": "local"
+      },
+      {
+        "detour": "tag-086",
+        "server": "<redacted-endpoint:ipv4-or-host>",
+        "tag": "tag-005",
+        "type": "tcp"
+      }
+    ]
+  },
+  "experimental": {
+    "cache_file": "<redacted-path>",
+    "clash_api": {
+      "external_controller": "<redacted-endpoint:ipv6-or-host-port>",
+      "secret": "<redacted-secret>"
+    },
+    "monitoring": {
+      "debounce_window": "500ms",
+      "idle_timeout": "9m0s",
+      "interval": "3m0s",
+      "udp_probe_cooldown": "1m0s",
+      "udp_probe_count": 10,
+      "udp_probe_endpoint": "<redacted-endpoint:ipv6-or-host-port>",
+      "udp_probe_interval": "40ms",
+      "udp_probe_size": 160,
+      "udp_probe_timeout": "1s",
+      "udp_probe_top_n": 3,
+      "urls": [
+        "<redacted-url:https>",
+        "<redacted-url:https>",
+        "<redacted-url:http>",
+        "<redacted-url:https>",
+        "<redacted-url:https>"
+      ]
+    },
+    "unified_delay": {
+      "enabled": true
+    }
+  },
+  "inbounds": [
+    {
+      "address": "<redacted-endpoint>",
+      "auto_route": true,
+      "mtu": 1500,
+      "stack": "gvisor",
+      "strict_route": true,
+      "tag": "tun-in",
+      "type": "tun"
+    },
+    {
+      "listen": "<redacted-endpoint:ipv6-or-host-port>",
+      "listen_port": 12334,
+      "tag": "tag-006",
+      "type": "mixed"
+    },
+    {
+      "listen": "<redacted-endpoint:ipv6-or-host-port>",
+      "listen_port": 12337,
+      "tag": "tag-007",
+      "type": "direct"
+    },
+    {
+      "listen": "<redacted-endpoint:ipv4-or-host>",
+      "listen_port": 12334,
+      "tag": "tag-008",
+      "type": "mixed"
+    },
+    {
+      "listen": "<redacted-endpoint:ipv4-or-host>",
+      "listen_port": 12337,
+      "tag": "tag-009",
+      "type": "direct"
+    }
+  ],
+  "log": {
+    "level": "warn",
+    "output": "<redacted-path>"
+  },
+  "outbounds": [
+    {
+      "default": "tag-010",
+      "outbounds": [
+        "tag-011",
+        "tag-010",
+        "tag-012",
+        "tag-013",
+        "tag-014",
+        "tag-015",
+        "tag-016",
+        "tag-017",
+        "tag-018",
+        "tag-019",
+        "tag-020",
+        "tag-021",
+        "tag-022",
+        "tag-023",
+        "tag-024",
+        "tag-025",
+        "tag-026",
+        "tag-027",
+        "tag-028",
+        "tag-029",
+        "tag-030",
+        "tag-031",
+        "tag-032",
+        "tag-033",
+        "tag-034",
+        "tag-035",
+        "tag-036",
+        "tag-037",
+        "tag-038",
+        "tag-039",
+        "tag-040",
+        "tag-041",
+        "tag-042",
+        "tag-043",
+        "tag-044",
+        "tag-045",
+        "tag-046",
+        "tag-047",
+        "tag-048",
+        "tag-049",
+        "tag-050",
+        "tag-051",
+        "tag-052",
+        "tag-053",
+        "tag-054",
+        "tag-055",
+        "tag-056",
+        "tag-057",
+        "tag-058",
+        "tag-059",
+        "tag-060",
+        "tag-061",
+        "tag-062",
+        "tag-063",
+        "tag-064",
+        "tag-065",
+        "tag-066",
+        "tag-067",
+        "tag-068",
+        "tag-069",
+        "tag-070",
+        "tag-071",
+        "tag-072",
+        "tag-073",
+        "tag-074",
+        "tag-075",
+        "tag-076",
+        "tag-077",
+        "tag-078",
+        "tag-079",
+        "tag-080",
+        "tag-081",
+        "tag-082",
+        "tag-083",
+        "tag-084"
+      ],
+      "tag": "select",
+      "type": "selector"
+    },
+    {
+      "delay_acceptable_ratio": 2,
+      "interrupt_exist_connections": true,
+      "outbounds": [
+        "tag-012",
+        "tag-013",
+        "tag-014",
+        "tag-015",
+        "tag-016",
+        "tag-017",
+        "tag-018",
+        "tag-019",
+        "tag-020",
+        "tag-021",
+        "tag-022",
+        "tag-023",
+        "tag-024",
+        "tag-025",
+        "tag-026",
+        "tag-027",
+        "tag-028",
+        "tag-029",
+        "tag-030",
+        "tag-031",
+        "tag-032",
+        "tag-033",
+        "tag-034",
+        "tag-035",
+        "tag-036",
+        "tag-037",
+        "tag-038",
+        "tag-039",
+        "tag-040",
+        "tag-041",
+        "tag-042",
+        "tag-043",
+        "tag-044",
+        "tag-045",
+        "tag-046",
+        "tag-047",
+        "tag-048",
+        "tag-049",
+        "tag-050",
+        "tag-051",
+        "tag-052",
+        "tag-053",
+        "tag-054",
+        "tag-055",
+        "tag-056",
+        "tag-057",
+        "tag-058",
+        "tag-059",
+        "tag-060",
+        "tag-061",
+        "tag-062",
+        "tag-063",
+        "tag-064",
+        "tag-065",
+        "tag-066",
+        "tag-067",
+        "tag-068",
+        "tag-069",
+        "tag-070",
+        "tag-071",
+        "tag-072",
+        "tag-073",
+        "tag-074",
+        "tag-075",
+        "tag-076",
+        "tag-077",
+        "tag-078",
+        "tag-079",
+        "tag-080",
+        "tag-081",
+        "tag-082",
+        "tag-083",
+        "tag-084"
+      ],
+      "strategy": "smart-active-auto",
+      "tag": "tag-010",
+      "tolerance": 1,
+      "type": "balancer"
+    },
+    {
+      "delay_acceptable_ratio": 2,
+      "outbounds": [
+        "tag-012",
+        "tag-013",
+        "tag-014",
+        "tag-015",
+        "tag-016",
+        "tag-017",
+        "tag-018",
+        "tag-019",
+        "tag-020",
+        "tag-021",
+        "tag-022",
+        "tag-023",
+        "tag-024",
+        "tag-025",
+        "tag-026",
+        "tag-027",
+        "tag-028",
+        "tag-029",
+        "tag-030",
+        "tag-031",
+        "tag-032",
+        "tag-033",
+        "tag-034",
+        "tag-035",
+        "tag-036",
+        "tag-037",
+        "tag-038",
+        "tag-039",
+        "tag-040",
+        "tag-041",
+        "tag-042",
+        "tag-043",
+        "tag-044",
+        "tag-045",
+        "tag-046",
+        "tag-047",
+        "tag-048",
+        "tag-049",
+        "tag-050",
+        "tag-051",
+        "tag-052",
+        "tag-053",
+        "tag-054",
+        "tag-055",
+        "tag-056",
+        "tag-057",
+        "tag-058",
+        "tag-059",
+        "tag-060",
+        "tag-061",
+        "tag-062",
+        "tag-063",
+        "tag-064",
+        "tag-065",
+        "tag-066",
+        "tag-067",
+        "tag-068",
+        "tag-069",
+        "tag-070",
+        "tag-071",
+        "tag-072",
+        "tag-073",
+        "tag-074",
+        "tag-075",
+        "tag-076",
+        "tag-077",
+        "tag-078",
+        "tag-079",
+        "tag-080",
+        "tag-081",
+        "tag-082",
+        "tag-083",
+        "tag-084"
+      ],
+      "strategy": "lowest-delay",
+      "tag": "tag-011",
+      "tolerance": 1,
+      "type": "balancer"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-012",
+      "tls": {
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-013",
+      "tls": {
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-014",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-015",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-016",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-017",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-018",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-019",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-020",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-021",
+      "tls": {
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-022",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-023",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-024",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-025",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-026",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-027",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-028",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-029",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-030",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-031",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-032",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-033",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-034",
+      "tls": {
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-035",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-036",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-037",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-038",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-039",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-040",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-041",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-042",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-043",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-044",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-045",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-046",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-047",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-048",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-049",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-050",
+      "tls": {
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>"
+      },
+      "type": "hysteria2"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-051",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-052",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-053",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-054",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-055",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-056",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-057",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-058",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-059",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-060",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-061",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-062",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-063",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-064",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-065",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-066",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-067",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-068",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-069",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-070",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-071",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-072",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-073",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-074",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-075",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-076",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-077",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-078",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-079",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-080",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-081",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-082",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "qq"
+        }
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "password": "<redacted-secret>",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-083",
+      "tls": {
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "enabled": true,
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "<redacted-endpoint:ipv4-or-host>",
+      "server_port": "<redacted-endpoint-number>",
+      "tag": "tag-084",
+      "tls": {
+        "alpn": "h2",
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "<redacted-secret>",
+          "short_id": "<redacted-secret>"
+        },
+        "server_name": "<redacted-endpoint:hostname>",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "15s",
+        "service_name": "<redacted-secret>",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "<redacted-secret>"
+    },
+    {
+      "tag": "tag-085",
+      "type": "direct"
+    },
+    {
+      "tag": "tag-086",
+      "tls_fragment": {
+        "enabled": true,
+        "size": "10-30",
+        "sleep": "2-8"
+      },
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "default_domain_resolver": "dns-direct",
+    "final": "select",
+    "rule_set": [
+      {
+        "rules": [
+          {
+            "domain": {
+              "count": 33,
+              "ipv4Like": 0,
+              "ipv6Like": 0,
+              "other": 33
+            },
+            "domain_suffix": {
+              "count": 33,
+              "ipv4Like": 0,
+              "ipv6Like": 0,
+              "other": 33
+            }
+          }
+        ],
+        "tag": "tag-087"
+      },
+      {
+        "download_detour": "select",
+        "tag": "tag-088",
+        "type": "remote",
+        "update_interval": "120h0m0s",
+        "url": "<redacted-url:https>"
+      },
+      {
+        "download_detour": "select",
+        "tag": "tag-089",
+        "type": "remote",
+        "update_interval": "120h0m0s",
+        "url": "<redacted-url:https>"
+      },
+      {
+        "download_detour": "select",
+        "tag": "tag-090",
+        "type": "remote",
+        "update_interval": "120h0m0s",
+        "url": "<redacted-url:https>"
+      },
+      {
+        "download_detour": "select",
+        "tag": "tag-091",
+        "type": "remote",
+        "update_interval": "120h0m0s",
+        "url": "<redacted-url:https>"
+      },
+      {
+        "download_detour": "select",
+        "tag": "tag-092",
+        "type": "remote",
+        "update_interval": "120h0m0s",
+        "url": "<redacted-url:https>"
+      },
+      {
+        "download_detour": "select",
+        "tag": "tag-093",
+        "type": "remote",
+        "update_interval": "120h0m0s",
+        "url": "<redacted-url:https>"
+      }
+    ],
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "action": "hijack-dns",
+        "protocol": "dns"
+      },
+      {
+        "ip_cidr": {
+          "count": 2,
+          "ipv4Like": 1,
+          "ipv6Like": 1,
+          "other": 0
+        },
+        "outbound": "select"
+      },
+      {
+        "ip_cidr": {
+          "count": 1,
+          "ipv4Like": 1,
+          "ipv6Like": 0,
+          "other": 0
+        },
+        "outbound": "select"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "tag-085"
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "tag-087",
+          "tag-088",
+          "tag-089",
+          "tag-090",
+          "tag-091",
+          "tag-093",
+          "tag-092"
+        ]
+      }
+    ]
+  }
+}

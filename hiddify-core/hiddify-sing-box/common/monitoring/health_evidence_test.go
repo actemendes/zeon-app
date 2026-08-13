@@ -300,6 +300,44 @@ func TestLateResultPreviousGenerationIsIgnored(t *testing.T) {
 	}
 }
 
+func TestLateOldSuccessCannotRestoreMetricsAfterCurrentFailure(t *testing.T) {
+	old := probeHistory(true, urltest.ErrorTypeNone)
+	old.CheckGeneration = 20
+	old.Delay = 50
+	old.HealthScore = 100
+	monitor := runtimeHealthMonitor("active", old)
+	monitor.beginCheckGeneration(21, []string{"active"}, "background_refresh")
+
+	failedAt := time.Now()
+	monitor.applyResult(testOutcome{
+		outboundTag:    "active",
+		cycleID:        21,
+		fullGeneration: true,
+		err:            errors.New("connection reset"),
+		history: adapter.URLTestHistory{
+			Time: failedAt, Delay: TimeoutDelay, Success: false,
+			ErrorType: urltest.ErrorTypeReset, URLTestStatus: urltest.StatusFailed,
+		},
+	})
+	monitor.applyResult(testOutcome{
+		outboundTag:    "active",
+		cycleID:        20,
+		fullGeneration: true,
+		history: adapter.URLTestHistory{
+			Time: failedAt.Add(time.Second), Delay: 50, Success: true,
+			ErrorType: urltest.ErrorTypeNone, URLTestStatus: urltest.StatusSuccess,
+			HealthScore: 100,
+		},
+	})
+
+	after := runtimeHistory(monitor, "active")
+	if after.CheckGeneration != 21 || after.Success || after.Delay != TimeoutDelay ||
+		after.HealthScore != 0 || after.URLTestStatus != urltest.StatusFailed ||
+		!after.Time.Equal(failedAt) {
+		t.Fatalf("late old success restored stale metrics: %+v", after)
+	}
+}
+
 func TestCurrentGenerationResultBecomesReady(t *testing.T) {
 	monitor := runtimeHealthMonitor("active", probeHistory(true, urltest.ErrorTypeNone))
 	monitor.beginCheckGeneration(11, []string{"active"}, "background_refresh")
@@ -318,6 +356,58 @@ func TestCurrentGenerationResultBecomesReady(t *testing.T) {
 	}
 	if after.Delay != 42 || after.HealthScore != 100 || !after.Success {
 		t.Fatalf("current generation did not apply result: %+v", after)
+	}
+}
+
+func TestCurrentGenerationInvalidTerminalTupleBecomesFailure(t *testing.T) {
+	monitor := runtimeHealthMonitor("active", probeHistory(true, urltest.ErrorTypeNone))
+	monitor.beginCheckGeneration(13, []string{"active"}, "background_refresh")
+
+	monitor.applyResult(testOutcome{
+		outboundTag:    "active",
+		cycleID:        13,
+		fullGeneration: true,
+		history: adapter.URLTestHistory{
+			Time: time.Now(), Delay: 0, Success: true,
+			ErrorType: urltest.ErrorTypeNone, URLTestStatus: urltest.StatusSuccess,
+			HealthScore: 100,
+		},
+	})
+
+	after := runtimeHistory(monitor, "active")
+	if after.Success || after.Delay != TimeoutDelay || after.HealthScore != 0 ||
+		after.URLTestStatus != urltest.StatusFailed || after.ErrorType == "" ||
+		!after.CombinedReady || after.CheckGeneration != 13 {
+		t.Fatalf("invalid terminal result remained eligible: %+v", after)
+	}
+}
+
+func TestFullGenerationFailureIsConsistentInPresentationAndRanking(t *testing.T) {
+	monitor := runtimeHealthMonitor("active", probeHistory(true, urltest.ErrorTypeNone))
+	monitor.beginCheckGeneration(14, []string{"active"}, "background_refresh")
+	failedAt := time.Now()
+	monitor.applyResult(testOutcome{
+		outboundTag:    "active",
+		cycleID:        14,
+		fullGeneration: true,
+		err:            errors.New("connection reset"),
+		history: adapter.URLTestHistory{
+			Time: failedAt, Delay: TimeoutDelay, Success: false,
+			ErrorType: urltest.ErrorTypeReset, URLTestStatus: urltest.StatusFailed,
+		},
+	})
+
+	presentation := monitor.getURLTest("active", true)
+	ranking := monitor.getURLTest("active", false)
+	for name, result := range map[string]*adapter.URLTestHistory{
+		"presentation": presentation,
+		"ranking":      ranking,
+	} {
+		if result == nil || result.Success || result.Delay != TimeoutDelay ||
+			result.HealthScore != 0 || result.URLTestStatus != urltest.StatusFailed ||
+			result.CheckGeneration != 14 || !result.CombinedReady || !result.Time.Equal(failedAt) {
+			t.Fatalf("%s diverged from fresh failure: %+v", name, result)
+		}
 	}
 }
 

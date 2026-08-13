@@ -42,6 +42,14 @@ class DioHttpClient with InfraLogger {
       _dio[mode]!.httpClientAdapter = IOHttpClientAdapter(
         createHttpClient: () {
           final client = HttpClient();
+          // dart:io presets `user-agent` on an auto-redirect request from
+          // HttpClient.userAgent and then copies the original headers only
+          // where they are still unset, so a per-request User-Agent is
+          // silently replaced by `Dart/x.y (dart:io)` on every redirect hop.
+          // Subscription endpoints negotiate their response format on this
+          // header, so losing it downgrades a redirected download to the
+          // legacy format that carries no TLS trust material.
+          client.userAgent = userAgent;
           client.findProxy = (_) => mode == "proxy" ? "PROXY localhost:$port" : "DIRECT";
           return client;
         },
@@ -92,6 +100,7 @@ class DioHttpClient with InfraLogger {
   Future<AdaptiveHttpClientRoute> createAdaptiveHttpClient(String url) async {
     final mode = await _resolveMode(url: url, directOnly: false, proxyOnly: false);
     final client = HttpClient();
+    client.userAgent = userAgent;
     client.findProxy = (_) => mode == "proxy" ? "PROXY 127.0.0.1:$port" : "DIRECT";
     return AdaptiveHttpClientRoute(client: client, usesProxy: mode == "proxy");
   }
