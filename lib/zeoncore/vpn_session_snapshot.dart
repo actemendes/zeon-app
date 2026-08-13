@@ -161,7 +161,6 @@ class VpnSessionSnapshot {
       commandEndpointReady &&
       tunnelReady &&
       protectSucceeded &&
-      platformVpnValidated &&
       selectedOutboundId.isNotEmpty;
 
   CoreStatus toCoreStatus() => switch (phase) {

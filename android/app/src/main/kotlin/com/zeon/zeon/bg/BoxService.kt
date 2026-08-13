@@ -69,6 +69,11 @@ internal data class CommandEndpointProbe(
     val failureCategory: String = "none",
 )
 
+internal data class PlatformVpnObservation(
+    val present: Boolean,
+    val validated: Boolean,
+)
+
 internal fun ownsCurrentStartupFailure(
     generation: Long,
     currentGeneration: Long,
@@ -1256,21 +1261,22 @@ class BoxService(
             it.copy(coreStarted = true)
         }
 
-        if (!awaitValidatedVpn(generation)) {
-            VpnSessionCoordinator.event(
-                "start_gate_rejected",
-                generation,
-                "source=platform_vpn_validation reason=vpn_network_not_validated",
-                Log.ERROR,
-            )
-            stopAndAlert(generation, Alert.StartService, "Android VPN network validation timeout")
-            return false
-        }
+        // NET_CAPABILITY_VALIDATED is Android's public-internet probe result,
+        // not proof that VpnService.establish(), TUN, or the core failed. Some
+        // OEM builds publish it late or never publish it for an otherwise
+        // working user-space VPN, so keep it as diagnostics only.
+        val platformVpn = observePlatformVpn()
+        VpnSessionCoordinator.event(
+            "platform_vpn_observed",
+            generation,
+            "present=${platformVpn.present} validated=${platformVpn.validated}",
+            if (platformVpn.validated) Log.INFO else Log.WARN,
+        )
         val connectedSnapshot = VpnSessionSnapshotCoordinator.transition(
             generation,
             VpnSessionPhase.CONNECTED,
         ) {
-            it.copy(platformVpnValidated = true)
+            it.copy(platformVpnValidated = platformVpn.validated)
         }
         if (!connectedSnapshot.provesConnected()) {
             VpnSessionCoordinator.event(
@@ -1301,19 +1307,22 @@ class BoxService(
         return true
     }
 
-    private suspend fun awaitValidatedVpn(generation: Long): Boolean {
+    private fun observePlatformVpn(): PlatformVpnObservation {
         val connectivity = service.getSystemService(ConnectivityManager::class.java)
-        repeat(50) {
-            if (!VpnSessionCoordinator.isCurrent(generation)) return false
-            val validated = connectivity.allNetworks.any { network ->
-                val capabilities = connectivity.getNetworkCapabilities(network) ?: return@any false
-                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
-                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        var present = false
+        var validated = false
+        runCatching {
+            connectivity.allNetworks.forEach { network ->
+                val capabilities = connectivity.getNetworkCapabilities(network) ?: return@forEach
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                    present = true
+                    if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+                        validated = true
+                    }
+                }
             }
-            if (validated) return true
-            delay(100L)
         }
-        return false
+        return PlatformVpnObservation(present = present, validated = validated)
     }
 
     private suspend fun awaitSelectedOutbound(generation: Long): String {
