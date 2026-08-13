@@ -1,7 +1,7 @@
 name: zeon
 description: ZEON cross-platform VPN client.
 publish_to: "none"
-version: 1.4.1+1040301
+version: 1.4.2+1040302
 
 environment:
   sdk: ^3.10.4
