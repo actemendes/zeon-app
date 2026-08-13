@@ -12,9 +12,11 @@ class Logger {
   static const _maxPendingSilentErrors = 20;
   static final List<_PendingSilentError> _pendingSilentErrors = [];
   static SilentErrorReporter? _silentErrorReporter;
+  static Object? _silentErrorReporterOwner;
 
-  static void setSilentErrorReporter(SilentErrorReporter reporter) {
+  static void setSilentErrorReporter(SilentErrorReporter reporter, {Object? owner}) {
     _silentErrorReporter = reporter;
+    _silentErrorReporterOwner = owner ?? reporter;
     if (_pendingSilentErrors.isEmpty) return;
     final pending = List<_PendingSilentError>.of(_pendingSilentErrors);
     _pendingSilentErrors.clear();
@@ -23,8 +25,11 @@ class Logger {
     }
   }
 
-  static void clearSilentErrorReporter() {
-    _silentErrorReporter = null;
+  static void clearSilentErrorReporter([Object? owner]) {
+    if (owner == null || identical(_silentErrorReporterOwner, owner)) {
+      _silentErrorReporter = null;
+      _silentErrorReporterOwner = null;
+    }
   }
 
   static void logFlutterError(FlutterErrorDetails details) {

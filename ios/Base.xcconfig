@@ -6,9 +6,13 @@
 //
 
 BASE_BUNDLE_IDENTIFIER=app.zeon.ios
-SERVICE_IDENTIFIER=app.zeon.ios
 APPLE_DEVELOPMENT_TEAM=
 
 // Keep developer credentials outside git. Copy AppleSigning.xcconfig.example
 // to AppleSigning.xcconfig and fill it in before creating a signed IPA.
 #include? "AppleSigning.xcconfig"
+
+// Method/Event channel namespace. This is an application protocol constant,
+// not a signing value, so local signing configuration must not override it.
+SERVICE_IDENTIFIER=com.zeon.app
+ZEON_FLUTTER_ENVIRONMENT=dev

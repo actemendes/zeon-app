@@ -67,6 +67,8 @@ APP_VERSION_DEFINES=--dart-define app_version=$(PUBSPEC_APP_VERSION) --dart-defi
 DISTRIBUTOR_APP_VERSION_DEFINES=--build-dart-define app_version=$(PUBSPEC_APP_VERSION) --build-dart-define app_build_number=$(PUBSPEC_APP_BUILD_NUMBER)
 BUILD_ARGS=--dart-define sentry_dsn=$(SENTRY_DSN) $(APP_VERSION_DEFINES)
 DISTRIBUTOR_ARGS=--skip-clean --build-target $(TARGET) --build-dart-define sentry_dsn=$(SENTRY_DSN) $(DISTRIBUTOR_APP_VERSION_DEFINES)
+APPLE_PRODUCTION_TARGET=lib/main_prod.dart
+APPLE_DISTRIBUTOR_ARGS=--skip-clean --build-target $(APPLE_PRODUCTION_TARGET) --build-dart-define sentry_dsn=$(SENTRY_DSN) $(DISTRIBUTOR_APP_VERSION_DEFINES)
 
 
 
@@ -95,7 +97,7 @@ windows-prepare: common-prepare windows-libs
 ios-prepare: common-prepare ios-libs 
 	cd ios; pod repo update; pod install;echo "done ios prepare"
 	
-macos-prepare: common-prepare macos-libs
+macos-prepare: common-prepare macos-libs macos-core-xcframework
 linux-prepare: common-prepare linux-amd64-libs
 
 
@@ -478,16 +480,24 @@ linux-docker-release:
 
 	@$(GREEN)Successful. Output is in 'dist_docker' folder.$(DONE)
 
-macos-release:
-	fastforge package --platform macos --targets dmg,pkg $(DISTRIBUTOR_ARGS)
+macos-release: apple-config-check macos-core-xcframework
+	fastforge package --platform macos --targets dmg,pkg $(APPLE_DISTRIBUTOR_ARGS)
 
-ios-release: #not tested
-	fastforge package --platform ios --targets ipa --build-export-options-plist  ios/exportOptions.plist $(DISTRIBUTOR_ARGS) --build-dart-define=release=app-store
+ios-release: apple-config-check #not tested
+	fastforge package --platform ios --targets ipa --build-export-options-plist ios/exportOptions.plist $(APPLE_DISTRIBUTOR_ARGS) --build-dart-define=release=app-store
+
+.PHONY: apple-config-check
+apple-config-check:
+	./scripts/apple/test_build_config.sh
+
+.PHONY: macos-core-xcframework
+macos-core-xcframework:
+	bash -c 'source scripts/apple/env.sh && source scripts/apple/core_xcframework.sh && apple_ensure_macos_core_xcframework'
 
 apple-setup:
 	./scripts/apple/bootstrap.sh
 
-apple-doctor:
+apple-doctor: apple-config-check
 	./scripts/apple/build.sh doctor
 
 apple-upload:

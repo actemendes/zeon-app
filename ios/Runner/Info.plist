@@ -63,6 +63,8 @@
 	<string>This app needs photos access to get QR code from photo library</string>
 	<key>SERVICE_IDENTIFIER</key>
 	<string>$(SERVICE_IDENTIFIER)</string>
+	<key>ZEON_FLUTTER_ENVIRONMENT</key>
+	<string>$(ZEON_FLUTTER_ENVIRONMENT)</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

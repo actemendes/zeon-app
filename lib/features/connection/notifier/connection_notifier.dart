@@ -24,7 +24,6 @@ import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:zeon/zeoncore/init_signal.dart';
 
 part 'connection_notifier.g.dart';
 
@@ -105,8 +104,6 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       yield const Disconnected();
       return;
     }
-    ref.watch(coreRestartSignalProvider);
-
     yield* _connectionRepo.watchConnectionStatus().doOnData((event) {
       final previousStatus = _lastObservedConnectionStatus;
       final wasUpBefore = _connectionWasUp;

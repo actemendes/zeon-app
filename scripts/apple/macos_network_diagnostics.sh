@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/env.sh"
+source "${SCRIPT_DIR}/core_xcframework.sh"
 cd "${PROJECT_ROOT}"
 
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
@@ -485,8 +486,8 @@ cleanup_stale_registered_apps
 run_shell environment 'sw_vers; echo XCODE; xcodebuild -version; echo XCODE_SELECT; xcode-select -p; echo FLUTTER; flutter --version; echo DART; dart --version; echo POD; pod --version; echo DEVICES; flutter devices'
 run_shell project_inventory 'xcodebuild -list -project macos/Runner.xcodeproj; echo BUILD_SETTINGS; xcodebuild -showBuildSettings -project macos/Runner.xcodeproj -scheme Runner | grep -E "PRODUCT_BUNDLE_IDENTIFIER|DEVELOPMENT_TEAM|CODE_SIGN_ENTITLEMENTS|BASE_BUNDLE_IDENTIFIER|SERVICE_IDENTIFIER" || true; echo DEBUG_ENTITLEMENTS; plutil -p macos/Runner/DebugProfile.entitlements; echo RELEASE_ENTITLEMENTS; plutil -p macos/Runner/Release.entitlements; echo PACKET_TUNNEL_ENTITLEMENTS; plutil -p macos/ZeonPacketTunnel/ZeonPacketTunnel.entitlements 2>/dev/null || true; echo PACKET_TUNNEL_INFO; plutil -p macos/ZeonPacketTunnel/Info.plist 2>/dev/null || true; echo MACOS_NE_REFS; if command -v rg >/dev/null 2>&1; then rg -n "NetworkExtension|SystemExtension|PacketTunnel|Provider|com.apple.developer.networking.networkextension|com.apple.security.application-groups|ZeonPacketTunnel" macos ios/Base.xcconfig macos/Runner.xcodeproj/project.pbxproj || true; else grep -REn "NetworkExtension|SystemExtension|PacketTunnel|Provider|com.apple.developer.networking.networkextension|com.apple.security.application-groups|ZeonPacketTunnel" macos ios/Base.xcconfig macos/Runner.xcodeproj/project.pbxproj || true; fi'
 
-  if [[ "${BUILD_CORE}" -eq 1 && ! -d "${PROJECT_ROOT}/hiddify-core/bin/HiddifyCore.xcframework" ]]; then
-  run_shell build_hiddify_core_xcframework 'cd hiddify-core && go run ./cmd/internal/build_libcore -target ios'
+if [[ "${BUILD_CORE}" -eq 1 ]] && ! apple_macos_core_xcframework_is_valid; then
+  run_shell build_hiddify_core_xcframework 'source scripts/apple/env.sh && source scripts/apple/core_xcframework.sh && apple_ensure_macos_core_xcframework'
 else
   run_shell hiddify_core_xcframework_inventory 'test -d hiddify-core/bin/HiddifyCore.xcframework && plutil -p hiddify-core/bin/HiddifyCore.xcframework/Info.plist || true'
 fi

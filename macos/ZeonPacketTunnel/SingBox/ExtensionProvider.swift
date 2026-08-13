@@ -7,7 +7,11 @@ open class ExtensionProvider: NEPacketTunnelProvider {
   private var platformInterface: ExtensionPlatformInterface!
 
   override open func startTunnel(options: [String: NSObject]?) async throws {
-    try? FileManager.default.removeItem(at: ExtensionProvider.errorFile)
+    let previousErrorFile = FilePath.workingDirectory.appendingPathComponent("network_extension_error.previous.log")
+    try? FileManager.default.removeItem(at: previousErrorFile)
+    if FileManager.default.fileExists(atPath: ExtensionProvider.errorFile.path) {
+      try? FileManager.default.moveItem(at: ExtensionProvider.errorFile, to: previousErrorFile)
+    }
     writeMessage("(packet-tunnel) starting")
 
     do {

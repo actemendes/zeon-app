@@ -1,0 +1,4 @@
+// The extension must use the exact version/build generated from pubspec.yaml.
+// Base.xcconfig supplies shared signing, bundle-id and channel invariants.
+#include "../Flutter/Generated.xcconfig"
+#include "../Base.xcconfig"

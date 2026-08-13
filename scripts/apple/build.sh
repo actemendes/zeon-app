@@ -3,11 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/env.sh"
+source "${SCRIPT_DIR}/build_config.sh"
+source "${SCRIPT_DIR}/core_xcframework.sh"
 cd "${PROJECT_ROOT}"
 
 OUT_DIR="${PROJECT_ROOT}/out/apple"
-TARGET="${FLUTTER_TARGET:-lib/main.dart}"
-APPLE_RELEASE="${APPLE_RELEASE:-app-store}"
+TARGET="$(apple_target_for_mode release)"
+COMMAND="${1:-doctor}"
+DEFAULT_APPLE_RELEASE="$(apple_release_for_command "${COMMAND}")"
+APPLE_RELEASE="${APPLE_RELEASE:-${DEFAULT_APPLE_RELEASE}}"
 MACOS_EXPORT_DESTINATION="${MACOS_EXPORT_DESTINATION:-export}"
 IOS_UPLOAD_SKIP_BUILD="${IOS_UPLOAD_SKIP_BUILD:-0}"
 PUBSPEC_VERSION="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d " '\"")"
@@ -50,6 +54,19 @@ require_file() {
     echo "Missing $1. Run ./scripts/apple/bootstrap.sh first." >&2
     exit 1
   }
+}
+
+prepare_release_build() {
+  apple_validate_build_config
+  apple_validate_flutter_target release "${TARGET}" "Apple release build"
+}
+
+require_app_store_release() {
+  local context="$1"
+  if [[ "${APPLE_RELEASE}" != "${APPLE_APP_STORE_RELEASE}" ]]; then
+    echo "${context}: APPLE_RELEASE must be ${APPLE_APP_STORE_RELEASE}; got ${APPLE_RELEASE}." >&2
+    exit 2
+  fi
 }
 
 set_plist_string() {
@@ -97,6 +114,10 @@ doctor() {
   pod --version
   require_file hiddify-core/bin/hiddify-core.dylib
   require_file ios/Frameworks/HiddifyCore.xcframework
+  if ! apple_macos_core_xcframework_is_valid; then
+    echo "Invalid macOS HiddifyCore.xcframework: missing universal macOS slice." >&2
+    failed=1
+  fi
   if ! flutter --version; then
     echo "Flutter failed to start. Sandboxed shells may block Dart CPU detection." >&2
     failed=1
@@ -108,11 +129,17 @@ doctor() {
 
 build_macos_app() {
   require_file hiddify-core/bin/hiddify-core.dylib
+  apple_ensure_macos_core_xcframework
   ensure_generated_sources
   flutter build macos "${BUILD_ARGS[@]}"
+  local built_app="${PROJECT_ROOT}/build/macos/Build/Products/Release/ZEON.app"
+  apple_validate_built_info_plist \
+    "${built_app}/Contents/Info.plist" \
+    "macOS release app" \
+    "${APPLE_PRODUCTION_ENVIRONMENT}"
   mkdir -p "${OUT_DIR}"
   rm -rf "${OUT_DIR}/ZEON.app"
-  cp -R build/macos/Build/Products/Release/ZEON.app "${OUT_DIR}/ZEON.app"
+  cp -R "${built_app}" "${OUT_DIR}/ZEON.app"
   codesign --force --deep --sign - "${OUT_DIR}/ZEON.app"
   codesign --verify --deep --strict --verbose=2 "${OUT_DIR}/ZEON.app"
   echo "${OUT_DIR}/ZEON.app"
@@ -137,6 +164,7 @@ build_macos_artifacts() {
 }
 
 build_macos_app_store() {
+  require_app_store_release "macOS App Store build"
   case "${MACOS_EXPORT_DESTINATION}" in
     export|upload) ;;
     *)
@@ -147,7 +175,7 @@ build_macos_app_store() {
 
   require_file macos/Runner/Configs/AppleSigning.xcconfig
   require_file macos/exportOptions.plist
-  require_file hiddify-core/bin/HiddifyCore.xcframework
+  apple_ensure_macos_core_xcframework
   ensure_generated_sources
 
   flutter build macos "${BUILD_ARGS[@]}" --config-only
@@ -172,6 +200,11 @@ build_macos_app_store() {
     -allowProvisioningUpdates \
     archive
 
+  apple_validate_built_info_plist \
+    "${archive_path}/Products/Applications/ZEON.app/Contents/Info.plist" \
+    "macOS App Store archive" \
+    "${APPLE_PRODUCTION_ENVIRONMENT}"
+
   run_xcodebuild \
     -exportArchive \
     -archivePath "${archive_path}" \
@@ -190,6 +223,10 @@ build_ios_unsigned() {
   require_file ios/Frameworks/HiddifyCore.xcframework
   ensure_generated_sources
   flutter build ios "${BUILD_ARGS[@]}" --no-codesign
+  apple_validate_built_info_plist \
+    "${PROJECT_ROOT}/build/ios/iphoneos/Runner.app/Info.plist" \
+    "unsigned iOS app" \
+    "${APPLE_PRODUCTION_ENVIRONMENT}"
   mkdir -p "${OUT_DIR}"
   rm -rf "${OUT_DIR}/ZEON-iOS-unsigned.app"
   cp -R build/ios/iphoneos/Runner.app "${OUT_DIR}/ZEON-iOS-unsigned.app"
@@ -197,6 +234,7 @@ build_ios_unsigned() {
 }
 
 build_ios_ipa() {
+  require_app_store_release "iOS IPA build"
   require_file ios/AppleSigning.xcconfig
   require_file ios/Frameworks/HiddifyCore.xcframework
   ensure_generated_sources
@@ -206,6 +244,10 @@ build_ios_ipa() {
   fi
   flutter build ipa "${BUILD_ARGS[@]}" \
     --export-options-plist ios/exportOptions.plist
+  apple_validate_built_info_plist \
+    "${PROJECT_ROOT}/build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app/Info.plist" \
+    "iOS App Store archive" \
+    "${APPLE_PRODUCTION_ENVIRONMENT}"
   mkdir -p "${OUT_DIR}"
   find build/ios/ipa -maxdepth 1 -name '*.ipa' -exec cp {} "${OUT_DIR}/ZEON-iOS.ipa" \;
   require_file "${OUT_DIR}/ZEON-iOS.ipa"
@@ -213,6 +255,7 @@ build_ios_ipa() {
 }
 
 upload_ios_app_store() {
+  require_app_store_release "iOS App Store upload"
   require_file ios/AppleSigning.xcconfig
   require_file ios/exportOptions.plist
   require_file ios/Frameworks/HiddifyCore.xcframework
@@ -229,6 +272,10 @@ upload_ios_app_store() {
 
   local archive_path="${PROJECT_ROOT}/build/ios/archive/Runner.xcarchive"
   require_file "${archive_path}"
+  apple_validate_built_info_plist \
+    "${archive_path}/Products/Applications/Runner.app/Info.plist" \
+    "iOS App Store archive" \
+    "${APPLE_PRODUCTION_ENVIRONMENT}"
 
   mkdir -p "${OUT_DIR}" "${PROJECT_ROOT}/.apple-build"
   local export_path="${OUT_DIR}/ZEON-iOS-upload"
@@ -257,16 +304,49 @@ upload_all_app_store() {
   upload_macos_app_store
 }
 
-case "${1:-doctor}" in
-  doctor) doctor ;;
-  apple-upload) upload_all_app_store ;;
-  macos-app) build_macos_app ;;
-  macos-artifacts) build_macos_artifacts ;;
-  macos-app-store) build_macos_app_store ;;
-  macos-app-store-upload) upload_macos_app_store ;;
-  ios-unsigned) build_ios_unsigned ;;
-  ios-ipa) build_ios_ipa ;;
-  ios-upload) upload_ios_app_store ;;
+case "${COMMAND}" in
+  doctor)
+    apple_validate_build_config
+    doctor
+    ;;
+  apple-upload)
+    prepare_release_build
+    upload_all_app_store
+    ;;
+  macos-app)
+    prepare_release_build
+    build_macos_app
+    ;;
+  macos-artifacts)
+    prepare_release_build
+    build_macos_artifacts
+    ;;
+  macos-app-store)
+    prepare_release_build
+    build_macos_app_store
+    ;;
+  macos-app-store-upload)
+    prepare_release_build
+    upload_macos_app_store
+    ;;
+  ios-unsigned)
+    prepare_release_build
+    build_ios_unsigned
+    ;;
+  ios-ipa)
+    prepare_release_build
+    build_ios_ipa
+    ;;
+  ios-upload)
+    if [[ "${IOS_UPLOAD_SKIP_BUILD}" == "1" ]]; then
+      # The ambient target is unused. Validate the tracked configuration here;
+      # upload_ios_app_store validates the archived Info.plist below.
+      apple_validate_build_config
+    else
+      prepare_release_build
+    fi
+    upload_ios_app_store
+    ;;
   *)
     echo "Usage: $0 {doctor|apple-upload|macos-app|macos-artifacts|macos-app-store|macos-app-store-upload|ios-unsigned|ios-ipa|ios-upload}" >&2
     exit 2

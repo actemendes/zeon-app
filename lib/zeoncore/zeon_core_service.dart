@@ -15,6 +15,8 @@ import 'package:rxdart/rxdart.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/utils/desired_state_coordinator.dart';
+import 'package:zeon/core/utils/single_flight.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/log/model/log_level.dart' as config_log_level;
 import 'package:zeon/features/settings/data/config_option_repository.dart';
@@ -36,7 +38,12 @@ import 'package:zeon/zeoncore/init_signal.dart';
 enum _CoreLifecycleState { stopped, starting, started, stopping }
 
 class ZeonCoreService with InfraLogger {
-  ZeonCoreService(this.ref);
+  ZeonCoreService(this.ref) {
+    _foregroundStateCoordinator = DesiredStateCoordinator<bool>(
+      initialState: true,
+      apply: _applyDesiredForegroundState,
+    );
+  }
   final Ref ref;
   static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
   static const _debugNetworkProfile = String.fromEnvironment("debug_network_profile");
@@ -60,6 +67,9 @@ class ZeonCoreService with InfraLogger {
   static const _debugUdpProbeTopN = int.fromEnvironment("debug_udp_probe_top_n", defaultValue: 3);
   static const _listenerBackoffBaseMs = 300;
   static const _listenerBackoffMaxMs = 6000;
+  static const _grpcControlTimeout = Duration(seconds: 6);
+  static const _grpcLifecycleTimeout = Duration(seconds: 15);
+  static const _grpcCloseTimeout = Duration(seconds: 3);
 
   bool get _useMockCore => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
 
@@ -75,7 +85,10 @@ class ZeonCoreService with InfraLogger {
   final Map<String, Future<void>> _statusListenerRecoveryByKey = {};
   int _stoppingStatusWatchdogGeneration = 0;
   Future<void> _lifecycleQueueTail = Future<void>.value();
+  final SingleFlight<Either<String, Unit>> _setupSingleFlight = SingleFlight<Either<String, Unit>>();
+  late final DesiredStateCoordinator<bool> _foregroundStateCoordinator;
   _CoreLifecycleState _lifecycleState = _CoreLifecycleState.stopped;
+  bool _foregroundSetupReady = false;
   ChangeHiddifySettingsRequest? _latestCoreOptionsRequest;
   static const _platformChannel = MethodChannel("com.zeon.app/platform");
   List<OutboundGroup> latest = [];
@@ -363,21 +376,54 @@ class ZeonCoreService with InfraLogger {
   }
 
   Future<void> init() async {
-    await _deleteCoreCurrentConfigSnapshot();
-    await setup()
-        .mapLeft((e) {
-          loggy.error(e);
-          if (PlatformUtils.isIOS) return;
+    try {
+      await setForegroundDesired(true);
+    } catch (_) {
+      // Bootstrap historically treats foreground-core setup as non-fatal. The
+      // setup error is logged and surfaced by _initializeForegroundCore.
+    }
+  }
+
+  Future<bool> setForegroundDesired(bool desired) async {
+    loggy.debug("foreground desired state: ${desired ? 'ready' : 'closed'}");
+    await _foregroundStateCoordinator.setDesiredState(desired);
+    return !desired || _foregroundSetupReady;
+  }
+
+  Future<void> _applyDesiredForegroundState(bool desired, int generation) async {
+    if (desired) {
+      final setupError = await _initializeForegroundCore();
+      if (setupError != null) {
+        throw StateError("foreground core setup failed: $setupError");
+      }
+      return;
+    }
+
+    await _enqueueLifecycle("closeFront", () async {
+      if (!_foregroundStateCoordinator.isCurrent(generation, false)) {
+        loggy.debug("closeFront skipped: superseded by a newer foreground request");
+        return;
+      }
+      await _closeFront();
+    });
+  }
+
+  Future<String?> _initializeForegroundCore() async {
+    final result = await setup().run();
+    return result.match(
+      (error) {
+        loggy.error(error);
+        if (!PlatformUtils.isIOS) {
           statusController.add(const CoreStatus.stopped());
-          ref.read(inAppNotificationControllerProvider).showErrorToast(e);
-        })
-        .map((_) {
-          loggy.info("ZEON-core setup done");
-          if (!_useMockCore) {
-            ref.read(coreRestartSignalProvider.notifier).restart();
-          }
-        })
-        .run();
+          ref.read(inAppNotificationControllerProvider).showErrorToast(error);
+        }
+        return error;
+      },
+      (_) {
+        loggy.info("ZEON-core setup done");
+        return null;
+      },
+    );
   }
 
   /// validates config by path and save it
@@ -464,54 +510,83 @@ class ZeonCoreService with InfraLogger {
   }
 
   TaskEither<String, Unit> setup() {
-    return TaskEither(() async {
-      if (_useMockCore) {
-        currentState = const CoreStatus.stopped();
-        _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock setup");
-        statusController.add(currentState);
-        return right(unit);
-      }
+    return TaskEither(() => _setupSingleFlight.run(() => _enqueueLifecycle("setup", _performSetup)));
+  }
+
+  Future<Either<String, Unit>> _performSetup() async {
+    if (_useMockCore) {
+      _foregroundSetupReady = true;
+      currentState = const CoreStatus.stopped();
+      _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock setup");
+      statusController.add(currentState);
+      return right(unit);
+    }
+
+    if (_foregroundSetupReady && core.isInitialized()) {
       try {
-        await _deleteCoreCurrentConfigSnapshot();
-        final directories = ref.read(appDirectoriesProvider).requireValue;
-        // In Flutter debug builds we need the core platform log bridge enabled
-        // even when the user-facing debug setting is off. The hcore bridge still
-        // exposes only warning+ logs by default, with selected Smart Active
-        // diagnostics promoted explicitly on the Go side.
-        final debug = ref.read(debugModeNotifierProvider) || kDebugMode;
-        final setupResponse = await core.setup(directories, debug, 3);
-
-        if (setupResponse.isNotEmpty) {
-          return left(setupResponse);
+        if (await core.isActiveFg()) {
+          loggy.debug("setup skipped: foreground core is already ready");
+          return right(unit);
         }
-
-        await startListeningLogs("fg", core.fgClient);
-        // await startListeningStatus("fg", core.fgClient);
-        final bgActive = await _isBackgroundCoreReachable(attempts: PlatformUtils.isIOS ? 8 : 1);
-        if (bgActive && !core.isSingleChannel()) {
-          await startListeningLogs("bg", core.bgClient);
-        }
-        if (!core.isSingleChannel()) {
-          try {
-            currentState = bgActive ? const CoreStatus.started() : const CoreStatus.stopped();
-            _transitionLifecycle(
-              bgActive ? _CoreLifecycleState.started : _CoreLifecycleState.stopped,
-              reason: "setup background probe",
-            );
-          } catch (e) {
-            loggy.warning("failed to detect background core state: $e");
-          }
-        }
-        statusController.add(currentState);
-        if (bgActive) {
-          await startListeningStatus("bg", core.bgClient);
-        }
-        // ref.read(coreRestartSignalProvider.notifier).restart();
-        return right(unit);
       } catch (e) {
-        return left(e.toString());
+        loggy.debug("foreground readiness probe failed; setting up again", e);
       }
-    });
+    }
+
+    _foregroundSetupReady = false;
+    try {
+      await _deleteCoreCurrentConfigSnapshot();
+      // Cancel streams before replacing their channels. Otherwise the normal
+      // replacement is reported as an HTTP/2 transport failure.
+      await stopListenSingle("fg");
+      await stopListenSingle("bg");
+
+      final directories = ref.read(appDirectoriesProvider).requireValue;
+      // In Flutter debug builds we need the core platform log bridge enabled
+      // even when the user-facing debug setting is off. The hcore bridge still
+      // exposes only warning+ logs by default, with selected Smart Active
+      // diagnostics promoted explicitly on the Go side.
+      final debug = ref.read(debugModeNotifierProvider) || kDebugMode;
+      final setupResponse = await core.setup(directories, debug, 3);
+
+      if (setupResponse.isNotEmpty) {
+        return left(setupResponse);
+      }
+
+      await startListeningLogs("fg", core.fgClient);
+      // await startListeningStatus("fg", core.fgClient);
+      final bgActive = await _isBackgroundCoreReachable(attempts: PlatformUtils.isIOS ? 8 : 1);
+      if (bgActive && !core.isSingleChannel()) {
+        await startListeningLogs("bg", core.bgClient);
+      }
+      if (!core.isSingleChannel()) {
+        try {
+          currentState = bgActive ? const CoreStatus.started() : const CoreStatus.stopped();
+          _transitionLifecycle(
+            bgActive ? _CoreLifecycleState.started : _CoreLifecycleState.stopped,
+            reason: "setup background probe",
+          );
+        } catch (e) {
+          loggy.warning("failed to detect background core state: $e");
+        }
+      }
+      statusController.add(currentState);
+      if (bgActive) {
+        await startListeningStatus("bg", core.bgClient);
+      }
+      _foregroundSetupReady = true;
+      // setup() replaces the foreground gRPC channel. Notify consumers only
+      // after the replacement and all service-owned listeners are ready.
+      try {
+        ref.read(coreRestartSignalProvider.notifier).restart();
+      } catch (e, st) {
+        loggy.warning("failed to notify consumers after core setup", e, st);
+      }
+      return right(unit);
+    } catch (e, st) {
+      loggy.warning("core setup failed", e, st);
+      return left(e.toString());
+    }
   }
 
   TaskEither<String, Unit> changeOptions(SingboxConfigOption options) {
@@ -536,12 +611,12 @@ class ZeonCoreService with InfraLogger {
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           final client = await _clientForForegroundOperation("change options");
-          final res = await client.ChangeHiddifySettings(request);
+          final res = await client.ChangeHiddifySettings(request, options: CallOptions(timeout: _grpcControlTimeout));
           if (res.messageType != MessageType.EMPTY) {
             return left("${res.messageType} ${res.message}");
           }
           try {
-            await core.bgClient.ChangeHiddifySettings(request);
+            await core.bgClient.ChangeHiddifySettings(request, options: CallOptions(timeout: _grpcControlTimeout));
           } on GrpcError catch (e) {
             if (e.code == StatusCode.unavailable || _isTransientGrpcTransportClose(e)) {
               loggy.debug("background core is not started yet! $e");
@@ -613,7 +688,7 @@ class ZeonCoreService with InfraLogger {
     Object? lastTransientError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        final res = await client.ChangeHiddifySettings(request);
+        final res = await client.ChangeHiddifySettings(request, options: CallOptions(timeout: _grpcControlTimeout));
         if (res.messageType != MessageType.EMPTY) {
           return left("${res.messageType} ${res.message}");
         }
@@ -959,8 +1034,8 @@ class ZeonCoreService with InfraLogger {
         try {
           final res = await core.bgClient.start(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
+            options: CallOptions(timeout: _grpcLifecycleTimeout),
           );
-          ref.read(coreRestartSignalProvider.notifier).restart();
           if (res.messageType != MessageType.ALREADY_STARTED && res.messageType != MessageType.EMPTY) {
             final alert = isVpnPermissionDenied(res.message) ? CoreAlert.requestVPNPermission : CoreAlert.startFailed;
             currentState = CoreStatus.stopped(
@@ -975,7 +1050,6 @@ class ZeonCoreService with InfraLogger {
             );
           }
         } on GrpcError catch (e) {
-          ref.read(coreRestartSignalProvider.notifier).restart();
           if (isVpnPermissionDenied(e)) {
             final message = e.message ?? e.toString();
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "vpn permission denied on start");
@@ -989,6 +1063,7 @@ class ZeonCoreService with InfraLogger {
             loggy.warning("start bg core transport closed after start, but background core is active: $e");
             _transitionLifecycle(_CoreLifecycleState.started, reason: "start transport closed with active bg");
             statusController.add(currentState = const CoreStatus.started());
+            ref.read(coreRestartSignalProvider.notifier).restart();
             return right(unit);
           }
           _transitionLifecycle(_CoreLifecycleState.stopped, reason: "grpc error on start");
@@ -1005,6 +1080,7 @@ class ZeonCoreService with InfraLogger {
 
         _transitionLifecycle(_CoreLifecycleState.started, reason: "start complete");
         statusController.add(currentState = const CoreStatus.started());
+        ref.read(coreRestartSignalProvider.notifier).restart();
         return right(unit);
       }),
     );
@@ -1121,6 +1197,7 @@ class ZeonCoreService with InfraLogger {
           }
           final res = await core.bgClient.restart(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit, delayStart: true),
+            options: CallOptions(timeout: _grpcLifecycleTimeout),
           );
           if (res.messageType != MessageType.EMPTY) {
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "restart failed");
@@ -1694,6 +1771,11 @@ class ZeonCoreService with InfraLogger {
   }
 
   Future<void> closeFront() async {
+    await setForegroundDesired(false);
+  }
+
+  Future<void> _closeFront() async {
+    _foregroundSetupReady = false;
     if (!core.isInitialized()) {
       return;
     }
@@ -1709,12 +1791,18 @@ class ZeonCoreService with InfraLogger {
       await stopListenSingle("fg");
       await stopListenSingle("bg");
       try {
-        await core.fgClient.close(CloseRequest(mode: SetupMode.GRPC_NORMAL_INSECURE));
+        await core.fgClient.close(
+          CloseRequest(mode: SetupMode.GRPC_NORMAL_INSECURE),
+          options: CallOptions(timeout: _grpcCloseTimeout),
+        );
       } catch (_) {
         // Best-effort close; the alternate mode below may still succeed.
       }
       try {
-        await core.fgClient.close(CloseRequest(mode: SetupMode.GRPC_NORMAL));
+        await core.fgClient.close(
+          CloseRequest(mode: SetupMode.GRPC_NORMAL),
+          options: CallOptions(timeout: _grpcCloseTimeout),
+        );
       } catch (_) {
         // Best-effort close during shutdown.
       }

@@ -35,12 +35,14 @@ import 'package:zeon/utils/utils.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
 bool _debugAccessibility = false;
-bool isOnPauseCalled = false;
+bool _wasPaused = false;
+int _appLifecycleGeneration = 0;
 
 class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   const App({super.key});
 
   void onInactive(WidgetRef ref) {
+    _appLifecycleGeneration++;
     if (PlatformUtils.isDesktop) return;
     // Android enters inactive during transient system UI (e.g. VPN permission dialog).
     // Closing front core here causes unnecessary start/stop flapping.
@@ -48,20 +50,54 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   }
 
   void onPause(WidgetRef ref) {
+    _appLifecycleGeneration++;
     if (PlatformUtils.isDesktop) return;
-    isOnPauseCalled = true;
-    ref.read(zeonCoreServiceProvider).closeFront();
+    _wasPaused = true;
+    unawaited(
+      _logLifecycleFailure(ref.read(zeonCoreServiceProvider).setForegroundDesired(false), operationName: "pause"),
+    );
   }
 
   void onResume(WidgetRef ref) {
-    // if (PlatformUtils.isDesktop) return;
+    final generation = ++_appLifecycleGeneration;
+    final wasPaused = _wasPaused;
+    final shouldRestoreForegroundCore = wasPaused && !PlatformUtils.isDesktop;
+    final foregroundReady = shouldRestoreForegroundCore
+        ? _logLifecycleFailure(ref.read(zeonCoreServiceProvider).setForegroundDesired(true), operationName: "resume")
+        : Future<bool>.value(true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(zeonCoreServiceProvider).init();
-      ref.invalidate(activeProxyNotifierProvider);
-      if (isOnPauseCalled && PlatformUtils.isAndroid) ref.invalidate(perAppProxyServiceProvider);
-      isOnPauseCalled = false;
-      unawaited(ref.read(notificationPollingServiceProvider).onForeground());
+      unawaited(_finishResume(ref, generation, wasPaused, foregroundReady));
     });
+  }
+
+  Future<void> _finishResume(WidgetRef ref, int generation, bool wasPaused, Future<bool> foregroundReady) async {
+    final setupSucceeded = await foregroundReady;
+    if (generation != _appLifecycleGeneration || WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      loggy.debug("skip stale resume callback [generation=$generation]");
+      return;
+    }
+
+    // Consumers must bind only after the foreground channel replacement has
+    // completed. setup() also emits coreRestartSignal for other gRPC streams.
+    if (setupSucceeded) {
+      ref.invalidate(activeProxyNotifierProvider);
+    } else {
+      loggy.warning("skip active proxy refresh: foreground setup did not complete");
+    }
+    if (wasPaused && PlatformUtils.isAndroid) ref.invalidate(perAppProxyServiceProvider);
+    // Keep the restore intent after a failed setup so the next resumed event
+    // can retry without requiring another pause first.
+    _wasPaused = wasPaused && !setupSucceeded;
+    unawaited(ref.read(notificationPollingServiceProvider).onForeground());
+  }
+
+  Future<bool> _logLifecycleFailure(Future<bool> operation, {required String operationName}) async {
+    try {
+      return await operation;
+    } catch (error, stackTrace) {
+      loggy.warning("foreground lifecycle $operationName failed", error, stackTrace);
+      return false;
+    }
   }
 
   @override

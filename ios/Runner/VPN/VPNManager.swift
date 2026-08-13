@@ -252,7 +252,7 @@ class VPNManager: ObservableObject {
         guard let keys = nsDict["__SCOPED__"] as? NSDictionary else {
             return false
         }
-        for key: String in keys.allKeys as! [String] {
+        for key in keys.allKeys.compactMap({ $0 as? String }) {
             if key == "tap" || key == "tun" || key == "ppp" || key == "ipsec" || key == "ipsec0" {
                 return true
             } else if key.starts(with: "utun") {

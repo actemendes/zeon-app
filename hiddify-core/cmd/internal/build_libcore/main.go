@@ -12,10 +12,16 @@ import (
 	"github.com/sagernet/sing-box/log"
 )
 
-var target string
+var (
+	target     string
+	outputPath string
+	verbose    bool
+)
 
 func init() {
 	flag.StringVar(&target, "target", "android", "target platform")
+	flag.StringVar(&outputPath, "output", "", "optional output path for the generated artifact")
+	flag.BoolVar(&verbose, "verbose", true, "enable verbose gomobile build output")
 }
 
 func main() {
@@ -190,9 +196,11 @@ func buildIOS() {
 
 	args := []string{
 		"bind",
-		"-v",
 		"-libname=hiddify-core",
 		"-target", "ios,iossimulator,macos",
+	}
+	if verbose {
+		args = append(args, "-v")
 	}
 
 	args = append(args, sharedFlags...)
@@ -200,7 +208,10 @@ func buildIOS() {
 	args = append(args, "-tags")
 	args = append(args, strings.Join(tags, ","))
 
-	output := filepath.Join("bin", "HiddifyCore.xcframework")
+	output := outputPath
+	if output == "" {
+		output = filepath.Join("bin", "HiddifyCore.xcframework")
+	}
 	args = append(args, "-o", output, "github.com/sagernet/sing-box/experimental/libbox", "./platform/mobile")
 
 	command := exec.Command(build_shared.GoBinPath+"/gomobile", args...)

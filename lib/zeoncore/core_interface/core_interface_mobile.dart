@@ -28,44 +28,63 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   // Keep app-specific gRPC ports to avoid collisions with other ZEON-based apps on device.
   static const portBack = int.fromEnvironment("mobile_grpc_port_back", defaultValue: 17179);
   static const portFront = int.fromEnvironment("mobile_grpc_port_front", defaultValue: 17178);
+  static const _nativeSetupTimeout = Duration(seconds: 15);
+  static const _nativeStartTimeout = Duration(seconds: 25);
+  static const _nativeControlTimeout = Duration(seconds: 10);
+  static const _nativeStopTimeout = Duration(seconds: 3);
 
   bool _isBgClientAvailable = false;
   bool _debug = false;
+  ClientChannel? _fgChannel;
+  ClientChannel? _bgChannel;
 
-  late LastStream<CoreStatus> _status;
+  LastStream<CoreStatus>? _status;
   @override
   Future<String> setup(Directories directories, bool debug, int mode) async {
     final channelOption = [1, 2].contains(mode)
         ? MTLSChannelCredentials(serverPublicKey: serverPublicKey, clientKey: cert)
         : const ChannelCredentials.insecure();
     _debug = debug;
-    final helloClient = HelloClient(
-      ClientChannel(
-        '127.0.0.1',
-        port: portFront,
-        options: ChannelOptions(credentials: channelOption),
-      ),
+    final helloChannel = ClientChannel(
+      '127.0.0.1',
+      port: portFront,
+      options: ChannelOptions(credentials: channelOption),
     );
-    final status = statusChannel.receiveBroadcastStream().map(CoreStatus.fromEvent);
-    final alerts = alertsChannel.receiveBroadcastStream().map(CoreStatus.fromEvent);
+    final helloClient = HelloClient(helloChannel);
+    _status ??= LastStream(
+      ValueConnectableStream(
+        Rx.merge([
+          statusChannel.receiveBroadcastStream().map(CoreStatus.fromEvent),
+          alertsChannel.receiveBroadcastStream().map(CoreStatus.fromEvent),
+        ]),
+      ).autoConnect(),
+    );
 
-    _status = LastStream(ValueConnectableStream(Rx.merge([status, alerts])).autoConnect());
     try {
-      await helloClient.sayHello(HelloRequest(name: "test"));
-      loggy.info("core is already started!");
-    } catch (e) {
-      //core is not started yet
+      try {
+        await helloClient.sayHello(
+          HelloRequest(name: "test"),
+          options: CallOptions(timeout: const Duration(seconds: 1)),
+        );
+        loggy.info("core is already started!");
+      } catch (e) {
+        // core is not started yet
 
-      await methodChannel.invokeMethod("setup", {
-        "baseDir": directories.baseDir.path,
-        "workingDir": directories.workingDir.path,
-        "tempDir": directories.tempDir.path,
-        "grpcPort": portFront,
-        "mode": mode,
-        "debug": debug,
-      });
-      final res = await _sayHelloWhenReady(helloClient);
-      loggy.info(res.toString());
+        await methodChannel
+            .invokeMethod("setup", {
+              "baseDir": directories.baseDir.path,
+              "workingDir": directories.workingDir.path,
+              "tempDir": directories.tempDir.path,
+              "grpcPort": portFront,
+              "mode": mode,
+              "debug": debug,
+            })
+            .timeout(_nativeSetupTimeout);
+        final res = await _sayHelloWhenReady(helloClient);
+        loggy.info(res.toString());
+      }
+    } finally {
+      await _shutdownChannel(helloChannel);
     }
 
     // serverPublicKey = await methodChannel.invokeMethod<Uint8List>("get_grpc_server_public_key") ?? Uint8List.fromList([]);
@@ -79,21 +98,29 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     // var chanelOption = ChannelOptions(
     //   credentials: MTLSChannelCredentials(serverPublicKey: serverPublicKey, clientPrivateKey: cert.privateKey as ECPrivateKey),
     // );
-    fgClient = CoreClient(
-      ClientChannel(
-        '127.0.0.1',
-        port: portFront,
-        options: ChannelOptions(credentials: channelOption),
-      ),
+    final nextFgChannel = ClientChannel(
+      '127.0.0.1',
+      port: portFront,
+      options: ChannelOptions(credentials: channelOption),
     );
-
-    bgClient = CoreClient(
-      ClientChannel(
+    final previousFgChannel = _fgChannel;
+    _fgChannel = nextFgChannel;
+    fgClient = CoreClient(nextFgChannel);
+    // The background channel owns long-lived stats/proxy streams. It connects
+    // to a different native process and does not need replacement when only the
+    // foreground core is restored after app resume.
+    if (_bgChannel == null) {
+      final nextBgChannel = ClientChannel(
         '127.0.0.1',
         port: portBack,
         options: ChannelOptions(credentials: channelOption),
-      ),
-    );
+      );
+      _bgChannel = nextBgChannel;
+      bgClient = CoreClient(nextBgChannel);
+    }
+    if (previousFgChannel != null) {
+      await _shutdownChannel(previousFgChannel);
+    }
     // await start("/sdcard/Android/data/app.zeonvpn.com/files/configs/cdc633e9-8cfc-4a67-948d-009f779a5c91.json", "zeon");
     return "";
   }
@@ -107,7 +134,10 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await client.sayHello(HelloRequest(name: "test"));
+        return await client.sayHello(
+          HelloRequest(name: "test"),
+          options: CallOptions(timeout: const Duration(seconds: 1)),
+        );
       } catch (e, st) {
         lastError = e;
         lastStackTrace = st;
@@ -125,24 +155,36 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     );
   }
 
+  Future<void> _shutdownChannel(ClientChannel channel) async {
+    try {
+      await channel.shutdown().timeout(const Duration(seconds: 1));
+    } catch (_) {
+      try {
+        await channel.terminate().timeout(const Duration(seconds: 1));
+      } catch (_) {
+        // The native core may already be gone. Channel cleanup is best-effort.
+      }
+    }
+  }
+
   @override
   Future<CoreStatus> setupBackground(String path, String name) async {
     // if (!await waitUntilPort(portBack, false, stop)) return const CoreStatus.stopped(alert: CoreAlert.createService);
     if (!await stop()) return const CoreStatus.stopped(alert: CoreAlert.createService);
-    _status.clean();
-    await methodChannel.invokeMethod("start", {
-      "path": path,
-      "name": name,
-      "grpcPort": portBack,
-      "startBg": true,
-      "debug": _debug,
-    });
+    final status = _status;
+    if (status == null) {
+      return const CoreStatus.stopped(alert: CoreAlert.createService, message: "foreground core is not initialized");
+    }
+    status.clean();
+    await methodChannel
+        .invokeMethod("start", {"path": path, "name": name, "grpcPort": portBack, "startBg": true, "debug": _debug})
+        .timeout(_nativeStartTimeout);
 
     _isBgClientAvailable = true;
     loggy.info("Waiting for starting core");
     for (var i = 0; i < 20; i++) {
       try {
-        final res = await _status.get(timeout: const Duration(seconds: 1));
+        final res = await status.get(timeout: const Duration(seconds: 1));
 
         switch (res) {
           case CoreStarted():
@@ -179,18 +221,20 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
   @override
   Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit) async {
-    await methodChannel.invokeMethod("prepare_vpn", {
-      "path": path,
-      "name": name,
-      "grpcPort": portBack,
-      "disableMemoryLimit": disableMemoryLimit,
-    });
+    await methodChannel
+        .invokeMethod("prepare_vpn", {
+          "path": path,
+          "name": name,
+          "grpcPort": portBack,
+          "disableMemoryLimit": disableMemoryLimit,
+        })
+        .timeout(_nativeControlTimeout);
     return true;
   }
 
   @override
   Future<bool> stop() async {
-    await stopMethodChannel().timeout(const Duration(seconds: 3), onTimeout: () {});
+    await stopMethodChannel();
     final stopped = await waitUntilPort(
       portBack,
       false,
@@ -206,8 +250,12 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     return true;
   }
 
-  Future stopMethodChannel() async {
-    await methodChannel.invokeMethod("stop");
+  Future<void> stopMethodChannel() async {
+    try {
+      await methodChannel.invokeMethod("stop").timeout(_nativeStopTimeout);
+    } on TimeoutException {
+      loggy.warning("native stop timed out after ${_nativeStopTimeout.inSeconds}s");
+    }
   }
 
   @override
@@ -217,13 +265,23 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
   @override
   Future<bool> resetTunnel() async {
-    await methodChannel.invokeMethod("reset");
+    await methodChannel.invokeMethod("reset").timeout(_nativeControlTimeout);
     return true;
   }
 
   @override
   Future<bool> isActiveFg() async {
-    return await isPortOpen("127.0.0.1", portFront);
+    final channel = _fgChannel;
+    if (channel == null) return false;
+    try {
+      await HelloClient(channel).sayHello(
+        HelloRequest(name: "health"),
+        options: CallOptions(timeout: const Duration(seconds: 1)),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override

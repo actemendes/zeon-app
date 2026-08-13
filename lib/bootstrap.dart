@@ -42,8 +42,19 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   }
   LoggerController.preInit();
-  FlutterError.onError = Logger.logFlutterError;
-  WidgetsBinding.instance.platformDispatcher.onError = Logger.logPlatformDispatcherError;
+  FlutterError.onError = (details) {
+    Logger.logFlutterError(details);
+    if (!details.silent && Sentry.isEnabled) {
+      unawaited(Sentry.captureException(details.exception, stackTrace: details.stack));
+    }
+  };
+  WidgetsBinding.instance.platformDispatcher.onError = (error, stackTrace) {
+    final handled = Logger.logPlatformDispatcherError(error, stackTrace);
+    if (Sentry.isEnabled) {
+      unawaited(Sentry.captureException(error, stackTrace: stackTrace));
+    }
+    return handled;
+  };
 
   runApp(_BootstrapHost(environment: env, shouldRemoveNativeSplash: shouldPreserveNativeSplash));
 }
