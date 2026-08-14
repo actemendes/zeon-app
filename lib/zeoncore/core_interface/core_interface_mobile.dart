@@ -21,6 +21,10 @@ import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   CoreInterfaceMobile({bool? androidOverride, Future<bool> Function(String, int)? portProbe})
     : _isAndroid = androidOverride ?? Platform.isAndroid,
+      // Tests use androidOverride=false to exercise the iOS bridge. At
+      // runtime only Android and iOS expose authoritative session snapshots;
+      // macOS still uses its legacy status channel.
+      _supportsSessionSnapshots = androidOverride != null || Platform.isAndroid || Platform.isIOS,
       _portProbe = portProbe ?? isPortOpen;
 
   static const channelPrefix = "com.zeon.app";
@@ -36,15 +40,14 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   static const portBack = int.fromEnvironment("mobile_grpc_port_back", defaultValue: 17179);
   static const portFront = int.fromEnvironment("mobile_grpc_port_front", defaultValue: 17178);
   static const _nativeSetupTimeout = Duration(seconds: 15);
-  static const _nativeStartTimeout = Duration(seconds: 25);
   static const _nativeControlTimeout = Duration(seconds: 10);
-  static const _nativeStopTimeout = Duration(seconds: 3);
 
   bool _isBgClientAvailable = false;
   bool _debug = false;
   ClientChannel? _fgChannel;
   ClientChannel? _bgChannel;
   final bool _isAndroid;
+  final bool _supportsSessionSnapshots;
   final Future<bool> Function(String, int) _portProbe;
   int _sessionGeneration = 0;
   VpnSessionSnapshot? _authoritativeSessionSnapshot;
@@ -67,17 +70,16 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     _status ??= LastStream(
       ValueConnectableStream(
         Rx.merge([
-          statusChannel.receiveBroadcastStream().map(CoreStatus.fromEvent),
-          alertsChannel.receiveBroadcastStream().map(CoreStatus.fromEvent),
+          if (_isAndroid)
+            _androidSnapshotStatuses()
+          else if (_supportsSessionSnapshots)
+            _appleSnapshotStatuses()
+          else
+            statusChannel.receiveBroadcastStream().map(CoreStatus.fromEvent),
+          if (!_isAndroid) alertsChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent),
         ]),
       ).autoConnect(),
     );
-    final status = _isAndroid
-        ? _androidSnapshotStatuses()
-        : statusChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent);
-    final alerts = Platform.isAndroid
-        ? const Stream<CoreStatus>.empty()
-        : alertsChannel.receiveBroadcastStream().where(_isCurrentEvent).map(CoreStatus.fromEvent);
 
     try {
       try {
@@ -167,6 +169,20 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     }
   }
 
+  Stream<CoreStatus> _appleSnapshotStatuses() async* {
+    await for (final event in statusChannel.receiveBroadcastStream().where(_isCurrentEvent)) {
+      final snapshot = VpnSessionSnapshot.fromEvent(event);
+      final disposition = _snapshotGate.classify(snapshot);
+      if (disposition != VpnSnapshotDisposition.stale && disposition != VpnSnapshotDisposition.duplicate) {
+        // Every iOS status event contains a complete synchronous snapshot, so
+        // it can bridge directly into the same authoritative stream used by
+        // Android and by the main VPN button.
+        _acceptAuthoritativeSnapshot(snapshot, publish: true);
+      }
+      yield CoreStatus.fromEvent(event);
+    }
+  }
+
   void _acceptAuthoritativeSnapshot(VpnSessionSnapshot snapshot, {required bool publish}) {
     _snapshotGate.acceptAuthoritative(snapshot);
     _recordAcceptedSnapshot(snapshot, publish: publish);
@@ -205,7 +221,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   Future<VpnSessionSnapshot?> _getAuthoritativeSnapshot() async {
-    if (!_isAndroid) return null;
+    if (!_supportsSessionSnapshots) return null;
     final event = await methodChannel.invokeMethod<Object?>("get_vpn_session_snapshot");
     return VpnSessionSnapshot.fromEvent(event);
   }
@@ -355,7 +371,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   Future<VpnSessionSnapshot?> _snapshotBeforeFailedStartCleanup() async {
-    if (!_isAndroid) return _authoritativeSessionSnapshot;
+    if (!_supportsSessionSnapshots) return _authoritativeSessionSnapshot;
     try {
       await resyncSessionStatus();
     } catch (_) {
@@ -438,13 +454,21 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
   Future<int> stopMethodChannel({int? generation, bool preemptive = false, bool replacement = false}) async {
     final requested = generation ?? _sessionGeneration;
-    final accepted =
-        await methodChannel.invokeMethod<int>("stop", {
-          "generation": requested,
-          "preemptive": preemptive,
-          "replacement": replacement,
-        }) ??
-        requested;
+    final response = await methodChannel.invokeMethod<Object?>("stop", {
+      "generation": requested,
+      "preemptive": preemptive,
+      "replacement": replacement,
+    });
+    // Older iOS runners returned `true` even though this method has always
+    // needed the accepted generation. Tolerate that response during upgrades;
+    // current runners return an integer on every path.
+    final accepted = switch (response) {
+      final int value => value,
+      final num value => value.toInt(),
+      true => requested,
+      null => requested,
+      _ => throw StateError("invalid native stop response: ${response.runtimeType}"),
+    };
     _sessionGeneration = max(_sessionGeneration, accepted);
     return accepted;
   }
@@ -494,7 +518,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     final generation = raw is int ? raw : int.tryParse(raw?.toString() ?? "") ?? 0;
     if (_sessionGeneration <= 0 || generation == _sessionGeneration) return true;
     loggy.warning(
-      "event=stale_callback_ignored generation=$generation current_generation=$_sessionGeneration source=android_event_channel",
+      "event=stale_callback_ignored generation=$generation current_generation=$_sessionGeneration source=platform_event_channel",
     );
     return false;
   }

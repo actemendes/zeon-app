@@ -17,6 +17,12 @@ with `arm64` and `x86_64` macOS slices. The result is cached under
 `hiddify-core/bin`; subsequent builds only validate it. Set
 `MACOS_CORE_AUTOBUILD=0` to require a prebuilt framework instead.
 
+The standalone macOS `hiddify-core.dylib` is linked with dead stripping. This
+preserves the Naive/Cronet implementation while removing an unused Cronet
+function that references the private CoreFoundation symbol
+`__kCFBundleNumericVersionKey`. Apple build commands validate both universal
+slices and reject any cached or embedded core that still imports this symbol.
+
 Версии Flutter и Go закреплены в `scripts/apple/bootstrap.sh`. Bootstrap также
 скачивает core 4.1.0, устанавливает CocoaPods и готовит оба Xcode workspace.
 Версия host app и Packet Tunnel берётся из одного `pubspec.yaml`; автоматическое

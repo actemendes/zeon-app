@@ -112,7 +112,10 @@ doctor() {
   xcodebuild -version
   go version
   pod --version
-  require_file hiddify-core/bin/hiddify-core.dylib
+  if ! apple_macos_desktop_core_is_valid; then
+    echo "Invalid macOS hiddify-core.dylib: missing universal slices or references ${APPLE_MACOS_FORBIDDEN_CORE_SYMBOL}." >&2
+    failed=1
+  fi
   require_file ios/Frameworks/HiddifyCore.xcframework
   if ! apple_macos_core_xcframework_is_valid; then
     echo "Invalid macOS HiddifyCore.xcframework: missing universal macOS slice." >&2
@@ -128,7 +131,7 @@ doctor() {
 }
 
 build_macos_app() {
-  require_file hiddify-core/bin/hiddify-core.dylib
+  apple_ensure_macos_desktop_core
   apple_ensure_macos_core_xcframework
   ensure_generated_sources
   flutter build macos "${BUILD_ARGS[@]}"
@@ -137,10 +140,24 @@ build_macos_app() {
     "${built_app}/Contents/Info.plist" \
     "macOS release app" \
     "${APPLE_PRODUCTION_ENVIRONMENT}"
+  apple_validate_macos_app_core "${built_app}" "macOS release app"
   mkdir -p "${OUT_DIR}"
   rm -rf "${OUT_DIR}/ZEON.app"
   cp -R "${built_app}" "${OUT_DIR}/ZEON.app"
-  codesign --force --deep --sign - "${OUT_DIR}/ZEON.app"
+  # Keep Xcode's Apple Development signature. Re-signing the copied bundle
+  # ad-hoc strips the application groups and Keychain access groups, which
+  # makes secure profile storage fail with errSecMissingEntitlement (-34018)
+  # immediately after launch.
+  local signing_team
+  local keychain_group
+  signing_team="$(codesign -dvv "${OUT_DIR}/ZEON.app" 2>&1 | awk -F= '/^TeamIdentifier=/{print $2}')"
+  keychain_group="$({ codesign -d --entitlements :- "${OUT_DIR}/ZEON.app" 2>&1 || true; } \
+    | sed -n '/<?xml/,$p' \
+    | plutil -extract keychain-access-groups.0 raw -o - - 2>/dev/null || true)"
+  if [[ -z "${signing_team}" || "${signing_team}" == "not set" || -z "${keychain_group}" ]]; then
+    echo "macOS release app must retain an Apple signature with Keychain entitlements." >&2
+    exit 1
+  fi
   codesign --verify --deep --strict --verbose=2 "${OUT_DIR}/ZEON.app"
   echo "${OUT_DIR}/ZEON.app"
 }
@@ -175,6 +192,7 @@ build_macos_app_store() {
 
   require_file macos/Runner/Configs/AppleSigning.xcconfig
   require_file macos/exportOptions.plist
+  apple_ensure_macos_desktop_core
   apple_ensure_macos_core_xcframework
   ensure_generated_sources
 
@@ -204,6 +222,9 @@ build_macos_app_store() {
     "${archive_path}/Products/Applications/ZEON.app/Contents/Info.plist" \
     "macOS App Store archive" \
     "${APPLE_PRODUCTION_ENVIRONMENT}"
+  apple_validate_macos_app_core \
+    "${archive_path}/Products/Applications/ZEON.app" \
+    "macOS App Store archive"
 
   run_xcodebuild \
     -exportArchive \

@@ -7,6 +7,7 @@ import 'package:zeon/core/localization/locale_preferences.dart';
 import 'package:zeon/core/model/environment.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/core/utils/preferences_utils.dart';
+import 'package:zeon/features/app_update/app_update_policy.dart';
 import 'package:zeon/features/app_update/data/app_update_data_providers.dart';
 import 'package:zeon/features/app_update/model/app_update_failure.dart';
 import 'package:zeon/features/app_update/model/remote_version_entity.dart';
@@ -50,6 +51,10 @@ class AppUpdateNotifier extends _$AppUpdateNotifier with AppLogger {
   }
 
   Future<AppUpdateState> check() async {
+    if (!ref.read(appUpdateChecksEnabledProvider)) {
+      loggy.debug("app update checks are disabled on this platform");
+      return state = const AppUpdateState.disabled();
+    }
     loggy.debug("checking for update");
     state = const AppUpdateState.checking();
     final updateChannel = UpdateChannel.read();

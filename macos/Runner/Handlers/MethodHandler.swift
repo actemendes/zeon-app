@@ -23,6 +23,30 @@ public class MethodHandler: NSObject, FlutterPlugin {
     }
 
     switch call.method {
+    case "set_session_generation":
+      guard let generation = sessionGeneration(from: call.arguments) else {
+        result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+        return
+      }
+      result(NSNumber(value: VPNManager.shared.setSessionGeneration(generation)))
+    case "mark_core_started":
+      guard let generation = sessionGeneration(from: call.arguments) else {
+        result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+        return
+      }
+      guard VPNManager.shared.isCurrentSessionGeneration(generation) else {
+        result(
+          FlutterError(
+            code: "STALE_GENERATION",
+            message: "stale VPN session generation",
+            details: NSNumber(value: VPNManager.shared.currentSessionGeneration())
+          )
+        )
+        return
+      }
+      // The macOS packet-tunnel status channel remains the readiness source;
+      // this acknowledgement only completes Dart's lifecycle fence.
+      result(NSNumber(value: generation))
     case "setup":
       Task {
         guard
@@ -75,7 +99,8 @@ public class MethodHandler: NSObject, FlutterPlugin {
           let args = call.arguments as? [String: Any?],
           let path = args["path"] as? String,
           let name = args["name"] as? String,
-          let grpcPort = args["grpcPort"] as? Int
+          let grpcPort = args["grpcPort"] as? Int,
+          let generation = sessionGeneration(from: args)
         else {
           await mainResult(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
           return
@@ -86,10 +111,15 @@ public class MethodHandler: NSObject, FlutterPlugin {
         VPNConfig.shared.grpcServiceModePort = grpcPort
 
         do {
+          guard VPNManager.shared.isCurrentSessionGeneration(generation) else {
+            await mainResult(true)
+            return
+          }
           try await VPNManager.shared.connect(
             with: path,
             grpcServiceModePort: grpcPort,
-            disableMemoryLimit: VPNConfig.shared.disableMemoryLimit
+            disableMemoryLimit: VPNConfig.shared.disableMemoryLimit,
+            generation: generation
           )
           await mainResult(true)
         } catch {
@@ -97,8 +127,16 @@ public class MethodHandler: NSObject, FlutterPlugin {
         }
       }
     case "stop":
-      VPNManager.shared.disconnect()
-      result(true)
+      guard let generation = sessionGeneration(from: call.arguments) else {
+        result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+        return
+      }
+      if VPNManager.shared.isCurrentSessionGeneration(generation) {
+        VPNManager.shared.disconnect()
+      } else {
+        NSLog("event=stale_completion_ignored source=macos_stop")
+      }
+      result(NSNumber(value: VPNManager.shared.currentSessionGeneration()))
     case "reset":
       VPNManager.shared.reset()
       result(true)
@@ -114,5 +152,19 @@ public class MethodHandler: NSObject, FlutterPlugin {
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  private func sessionGeneration(from arguments: Any?) -> Int64? {
+    guard let args = arguments as? [String: Any?] else { return nil }
+    if let value = args["generation"] as? NSNumber {
+      return value.int64Value
+    }
+    if let value = args["generation"] as? Int64 {
+      return value
+    }
+    if let value = args["generation"] as? Int {
+      return Int64(value)
+    }
+    return nil
   }
 }

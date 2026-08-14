@@ -22,6 +22,7 @@ import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dar
 import 'package:zeon/core/theme/app_theme.dart';
 import 'package:zeon/core/theme/system_bars_style.dart';
 import 'package:zeon/core/theme/theme_preferences.dart';
+import 'package:zeon/features/app_update/app_update_policy.dart';
 import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/features/connection/widget/connection_wrapper.dart';
 import 'package:zeon/features/notifications/data/notification_data_providers.dart';
@@ -74,7 +75,10 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
     final themeMode = ref.watch(themePreferencesProvider);
     final theme = AppTheme(themeMode, locale.preferredFontFamily);
     final appInfo = ref.watch(appInfoProvider).requireValue;
-    final upgrader = appInfo.release == Release.googlePlay ? ref.watch(upgraderProvider) : null;
+    final appUpdateChecksEnabled = ref.watch(appUpdateChecksEnabledProvider);
+    final upgrader = appUpdateChecksEnabled && appInfo.release == Release.googlePlay
+        ? ref.watch(upgraderProvider)
+        : null;
     final activeBreakpoint = Breakpoint(context).activeBreakpoint;
 
     ref.listen(foregroundProfilesUpdateNotifierProvider, (_, _) {});
@@ -98,7 +102,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
       return null;
     }, [activeBreakpoint]);
     useEffect(() {
-      if (appInfo.release != Release.general) return null;
+      if (!appUpdateChecksEnabled || appInfo.release != Release.general) return null;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         final newVersion = await ref.read(appUpdateNotifierProvider.notifier).checkAutomatically();
         if (!context.mounted || newVersion == null) return;
@@ -107,7 +111,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
             .showNewVersion(currentVersion: appInfo.presentVersion, newVersion: newVersion, canIgnore: false);
       });
       return null;
-    }, [appInfo.release]);
+    }, [appInfo.release, appUpdateChecksEnabled]);
     return WindowWrapper(
       ShortcutWrapper(
         ToastificationWrapper(
@@ -149,10 +153,19 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
 
   void setupStateListener(WidgetRef ref) {
     final appLifecycleState = useAppLifecycleState();
+    final hasObservedInitialState = useRef(false);
 
     useEffect(() {
       loggy.info("current app state");
       loggy.info(appLifecycleState);
+      // Bootstrap has already initialized the foreground core before the App
+      // widget is mounted. Treat the hook's first value as initial state, not
+      // as a resume transition; otherwise startup immediately runs init() a
+      // second time and force-closes the first gRPC transport.
+      if (!hasObservedInitialState.value) {
+        hasObservedInitialState.value = true;
+        return null;
+      }
       if (appLifecycleState == AppLifecycleState.paused) {
         onPause(ref);
       } else if (appLifecycleState == AppLifecycleState.inactive) {

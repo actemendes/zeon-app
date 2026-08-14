@@ -21,9 +21,19 @@ open class ExtensionProvider: NEPacketTunnelProvider {
         platformInterface = ExtensionPlatformInterface(self)
       }
 
-      let disableMemoryLimit = (options?["DisableMemoryLimit"] as? NSString as? String ?? "NO") == "YES"
-      let grpcServiceModePort = (options?["GrpcServiceModePort"] as? NSNumber)?.intValue ?? 17179
-      let configPath = options?["Config"] as? NSString as? String ?? ""
+      let providerConfiguration = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration ?? [:]
+      let disableMemoryLimit = optionString(
+        "DisableMemoryLimit",
+        options: options,
+        providerConfiguration: providerConfiguration
+      ) == "YES"
+      let grpcServiceModePort = optionInt(
+        "GrpcServiceModePort",
+        options: options,
+        providerConfiguration: providerConfiguration
+      ) ?? 17179
+      let generation = optionInt("Generation", options: options, providerConfiguration: providerConfiguration) ?? 0
+      let configPath = optionString("Config", options: options, providerConfiguration: providerConfiguration) ?? ""
       guard !configPath.isEmpty else {
         writeFatalError("(packet-tunnel) error: config path is empty")
         return
@@ -47,7 +57,7 @@ open class ExtensionProvider: NEPacketTunnelProvider {
       }
 
       LibboxSetMemoryLimit(!disableMemoryLimit)
-      writeMessage("(packet-tunnel) setup completed")
+      writeMessage("(packet-tunnel) setup completed generation=\(generation)")
 
       var startError: NSError?
       MobileStart(providerConfigPath, "", &startError)
@@ -120,6 +130,30 @@ open class ExtensionProvider: NEPacketTunnelProvider {
     for directory in [FilePath.sharedDirectory, FilePath.cacheDirectory, FilePath.workingDirectory] {
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
+  }
+
+  private func optionString(
+    _ key: String,
+    options: [String: NSObject]?,
+    providerConfiguration: [String: Any]
+  ) -> String? {
+    if let value = options?[key] as? NSString { return value as String }
+    if let value = options?[key] as? String { return value }
+    if let value = providerConfiguration[key] as? NSString { return value as String }
+    return providerConfiguration[key] as? String
+  }
+
+  private func optionInt(
+    _ key: String,
+    options: [String: NSObject]?,
+    providerConfiguration: [String: Any]
+  ) -> Int? {
+    if let value = options?[key] as? NSNumber { return value.intValue }
+    if let value = options?[key] as? NSString { return Int(value as String) }
+    if let value = providerConfiguration[key] as? NSNumber { return value.intValue }
+    if let value = providerConfiguration[key] as? Int { return value }
+    if let value = providerConfiguration[key] as? String { return Int(value) }
+    return nil
   }
 
   private func prepareProviderConfig(_ configPath: String) throws -> String {

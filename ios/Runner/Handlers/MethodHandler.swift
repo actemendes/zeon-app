@@ -255,7 +255,11 @@ public class MethodHandler: NSObject, FlutterPlugin {
                 } else {
                     NSLog("event=stale_completion_ignored source=ios_stop")
                 }
-                await mainResult(true)
+                // The Dart side uses the returned generation to fence a
+                // replacement stop from a newer VPN session. Returning Bool
+                // here violates invokeMethod<int>'s runtime contract and makes
+                // every iOS startup fail before the tunnel can be launched.
+                await mainResult(NSNumber(value: VPNManager.shared.currentSessionGeneration()))
             }
         case "reset":
             VPNManager.shared.reset()

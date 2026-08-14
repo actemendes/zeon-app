@@ -2,6 +2,80 @@
 
 APPLE_GOMOBILE_VERSION="v0.1.11"
 APPLE_MACOS_CORE_XCFRAMEWORK="${PROJECT_ROOT}/hiddify-core/bin/HiddifyCore.xcframework"
+APPLE_MACOS_DESKTOP_CORE="${PROJECT_ROOT}/hiddify-core/bin/hiddify-core.dylib"
+APPLE_MACOS_FORBIDDEN_CORE_SYMBOL="__kCFBundleNumericVersionKey"
+
+apple_macos_desktop_core_is_valid() {
+  local binary="${1:-${APPLE_MACOS_DESKTOP_CORE}}"
+  local architectures=""
+  local undefined_symbols=""
+
+  [[ -f "${binary}" ]] || return 1
+  architectures="$(xcrun lipo -archs "${binary}" 2>/dev/null)" || return 1
+
+  case " ${architectures} " in
+    *" arm64 "*) ;;
+    *) return 1 ;;
+  esac
+  case " ${architectures} " in
+    *" x86_64 "*) ;;
+    *) return 1 ;;
+  esac
+
+  undefined_symbols="$(nm -u "${binary}" 2>/dev/null)" || return 1
+  [[ "${undefined_symbols}" != *"${APPLE_MACOS_FORBIDDEN_CORE_SYMBOL}"* ]]
+}
+
+apple_build_macos_desktop_core() {
+  command -v go >/dev/null 2>&1 || {
+    echo "Go is required to build the macOS hiddify-core.dylib." >&2
+    return 1
+  }
+  command -v xcrun >/dev/null 2>&1 || {
+    echo "Xcode command line tools are required to build the macOS core." >&2
+    return 1
+  }
+
+  echo "Building App Store-safe universal hiddify-core.dylib..."
+  (cd "${PROJECT_ROOT}/hiddify-core" && make -f Makefile macos)
+
+  if ! apple_macos_desktop_core_is_valid; then
+    echo "Generated hiddify-core.dylib is invalid or references ${APPLE_MACOS_FORBIDDEN_CORE_SYMBOL}." >&2
+    return 1
+  fi
+
+  echo "hiddify-core.dylib is ready for macOS (arm64 + x86_64, private API check passed)."
+}
+
+apple_ensure_macos_desktop_core() {
+  local autobuild="${MACOS_CORE_AUTOBUILD:-1}"
+
+  if apple_macos_desktop_core_is_valid; then
+    return 0
+  fi
+
+  if [[ "${autobuild}" != "1" ]]; then
+    echo "${APPLE_MACOS_DESKTOP_CORE} is missing, not universal, or references ${APPLE_MACOS_FORBIDDEN_CORE_SYMBOL}." >&2
+    echo "Rerun with MACOS_CORE_AUTOBUILD=1 or build it with:" >&2
+    echo "  source scripts/apple/env.sh" >&2
+    echo "  make build-macos-libs" >&2
+    return 1
+  fi
+
+  echo "macOS desktop core failed validation. Rebuilding it..."
+  apple_build_macos_desktop_core
+}
+
+apple_validate_macos_app_core() {
+  local app="$1"
+  local context="$2"
+  local binary="${app}/Contents/Frameworks/hiddify-core.dylib"
+
+  if ! apple_macos_desktop_core_is_valid "${binary}"; then
+    echo "${context}: embedded hiddify-core.dylib is missing, not universal, or references ${APPLE_MACOS_FORBIDDEN_CORE_SYMBOL}." >&2
+    return 1
+  fi
+}
 
 apple_xcframework_has_platform() {
   local framework="$1"

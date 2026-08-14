@@ -946,6 +946,7 @@ bool nativeSnapshotIndicatesExplicitStop(VpnSessionSnapshot? snapshot) {
   if (!stopInProgressOrComplete) return false;
   return switch (snapshot.stopSource) {
     VpnStopSource.flutter ||
+    VpnStopSource.system ||
     VpnStopSource.notification ||
     VpnStopSource.tile ||
     VpnStopSource.shortcut ||

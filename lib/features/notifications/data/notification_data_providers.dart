@@ -1,3 +1,4 @@
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/db/provider/db_providers.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
@@ -14,7 +15,6 @@ import 'package:zeon/features/notifications/service/notification_polling_service
 import 'package:zeon/features/notifications/service/notification_receipt_queue.dart';
 import 'package:zeon/features/notifications/service/system_notification_service.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 final notificationLocalDataSourceProvider = Provider<NotificationLocalDataSource>((ref) {
   return NotificationDao(ref.watch(dbProvider));
@@ -64,7 +64,7 @@ final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
     receiptQueue: ref.watch(notificationReceiptQueueProvider),
     systemNotificationService: ref.watch(systemNotificationServiceProvider),
     actionHandler: ref.watch(notificationActionHandlerProvider),
-    notificationsEnabled: () => ref.read(Preferences.remoteNotifications),
+    notificationsEnabled: () => notificationPollingSupported && ref.read(Preferences.remoteNotifications),
     categoryEnabled: (_) => true,
   );
 });
@@ -72,11 +72,16 @@ final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
 final notificationPollingServiceProvider = Provider<NotificationPollingService>((ref) {
   final service = NotificationPollingService(
     repository: ref.watch(notificationRepositoryProvider),
-    notificationsEnabled: () => ref.read(Preferences.remoteNotifications),
+    notificationsEnabled: () => notificationPollingSupported && ref.read(Preferences.remoteNotifications),
   );
   ref.onDispose(service.dispose);
   return service;
 });
+
+/// Remote polling currently has a production server and background-delivery
+/// contract only on Android and Windows. Other platforms must not issue the
+/// request: the server rejects their platform header with HTTP 400.
+bool get notificationPollingSupported => PlatformUtils.isAndroid || PlatformUtils.isWindows;
 
 final notificationLastSuccessfulSyncProvider = FutureProvider<DateTime?>((ref) {
   return ref.watch(notificationLocalDataSourceProvider).getLastSuccessfulSync();

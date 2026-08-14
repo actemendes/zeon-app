@@ -18,6 +18,8 @@ class VPNManager: ObservableObject {
   static let shared = VPNManager()
 
   private var cancelBag: Set<AnyCancellable> = []
+  private let generationLock = NSLock()
+  private var sessionGeneration: Int64 = 0
   private var observer: NSObjectProtocol?
   private var manager = NETunnelProviderManager()
 
@@ -43,6 +45,31 @@ class VPNManager: ObservableObject {
 
   func setup() async throws {
     try await loadVPNPreference()
+  }
+
+  /// Accepts monotonically increasing lifecycle generations from Flutter.
+  /// macOS still publishes legacy status events, but it must fence start/stop
+  /// method calls with the same generation contract as the other platforms.
+  @discardableResult
+  func setSessionGeneration(_ generation: Int64) -> Int64 {
+    generationLock.lock()
+    defer { generationLock.unlock() }
+    if generation > sessionGeneration {
+      sessionGeneration = generation
+    }
+    return sessionGeneration
+  }
+
+  func currentSessionGeneration() -> Int64 {
+    generationLock.lock()
+    defer { generationLock.unlock() }
+    return sessionGeneration
+  }
+
+  func isCurrentSessionGeneration(_ generation: Int64) -> Bool {
+    generationLock.lock()
+    defer { generationLock.unlock() }
+    return generation > 0 && generation == sessionGeneration
   }
 
   private func loadVPNPreference() async throws {
@@ -74,26 +101,51 @@ class VPNManager: ObservableObject {
     state = newManager.connection.status
   }
 
-  private func enableVPNManager() async throws {
+  private func enableVPNManager(
+    configPath: String,
+    grpcServiceModePort: Int,
+    disableMemoryLimit: Bool,
+    generation: Int64
+  ) async throws {
     manager.isEnabled = true
     manager.isOnDemandEnabled = false
     manager.onDemandRules = []
+    if let providerProtocol = manager.protocolConfiguration as? NETunnelProviderProtocol {
+      providerProtocol.providerConfiguration = [
+        "Config": configPath,
+        "GrpcServiceModePort": grpcServiceModePort,
+        "DisableMemoryLimit": disableMemoryLimit ? "YES" : "NO",
+        "Generation": generation,
+      ]
+      manager.protocolConfiguration = providerProtocol
+    }
     try await manager.saveToPreferences()
     try await manager.loadFromPreferences()
   }
 
-  func connect(with configPath: String, grpcServiceModePort: Int, disableMemoryLimit: Bool = false) async throws {
+  func connect(
+    with configPath: String,
+    grpcServiceModePort: Int,
+    disableMemoryLimit: Bool = false,
+    generation: Int64
+  ) async throws {
     guard !configPath.isEmpty else {
       alert = .init(alert: .EmptyConfiguration, message: "empty VPN configuration path")
       throw NSError(domain: "VPNManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "empty VPN configuration path"])
     }
     do {
       try await setup()
-      try await enableVPNManager()
+      try await enableVPNManager(
+        configPath: configPath,
+        grpcServiceModePort: grpcServiceModePort,
+        disableMemoryLimit: disableMemoryLimit,
+        generation: generation
+      )
       try manager.connection.startVPNTunnel(options: [
         "Config": configPath as NSString,
         "GrpcServiceModePort": NSNumber(value: grpcServiceModePort),
         "DisableMemoryLimit": (disableMemoryLimit ? "YES" : "NO") as NSString,
+        "Generation": NSNumber(value: generation),
       ])
     } catch {
       alert = .init(alert: .StartService, message: error.localizedDescription)

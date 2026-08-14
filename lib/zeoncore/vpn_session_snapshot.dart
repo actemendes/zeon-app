@@ -37,6 +37,7 @@ enum VpnSessionPhase {
 enum VpnStopSource {
   none,
   flutter,
+  system,
   notification,
   tile,
   shortcut,
@@ -51,6 +52,7 @@ enum VpnStopSource {
     return switch (normalized) {
       '' => none,
       'flutter' => flutter,
+      'system' => system,
       'notification' => notification,
       'tile' => tile,
       'shortcut' => shortcut,
@@ -63,7 +65,7 @@ enum VpnStopSource {
   }
 
   bool get isExternalIntentional => switch (this) {
-    notification || tile || shortcut || revoke => true,
+    system || notification || tile || shortcut || revoke => true,
     _ => false,
   };
 }

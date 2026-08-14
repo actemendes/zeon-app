@@ -70,6 +70,7 @@ TransportCloseDisposition classifyTransportClose({
       snapshotMatchesOperation &&
       switch (snapshot.stopSource) {
         VpnStopSource.flutter ||
+        VpnStopSource.system ||
         VpnStopSource.notification ||
         VpnStopSource.tile ||
         VpnStopSource.shortcut ||
@@ -172,7 +173,7 @@ class ZeonCoreService with InfraLogger {
     _platformSnapshotSubscription = core.watchSessionSnapshots().listen(
       _queuePlatformSessionSnapshot,
       onError: (Object error, StackTrace stackTrace) {
-        loggy.warning("Android VPN snapshot bridge failed", error, stackTrace);
+        loggy.warning("platform VPN snapshot bridge failed", error, stackTrace);
       },
     );
     ref.onDispose(() {
@@ -207,7 +208,6 @@ class ZeonCoreService with InfraLogger {
   static const _listenerBackoffMaxMs = 6000;
   static const _grpcControlTimeout = Duration(seconds: 6);
   static const _grpcLifecycleTimeout = Duration(seconds: 15);
-  static const _grpcCloseTimeout = Duration(seconds: 3);
 
   bool get _useMockCore => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
 
@@ -421,7 +421,7 @@ class ZeonCoreService with InfraLogger {
       try {
         await _applyPlatformSessionSnapshot(snapshot);
       } catch (error, stackTrace) {
-        loggy.warning("failed to apply Android VPN snapshot", error, stackTrace);
+        loggy.warning("failed to apply platform VPN snapshot", error, stackTrace);
       }
     }();
   }
@@ -433,12 +433,13 @@ class ZeonCoreService with InfraLogger {
           "stale_callback_ignored",
           snapshot.generation,
           details:
-              "current_generation=${_sessionGeneration.current} source=android_snapshot_bridge "
+              "current_generation=${_sessionGeneration.current} source=platform_snapshot_bridge "
               "phase=${snapshot.phase.name}",
         ),
       );
       return;
     }
+    final wasProvenConnected = _latestPlatformSnapshot?.provesConnected ?? false;
     _sessionGeneration.advanceTo(snapshot.generation);
     _latestPlatformSnapshot = snapshot;
     _publishAuthoritativeSnapshot(snapshot);
@@ -457,10 +458,24 @@ class ZeonCoreService with InfraLogger {
     currentState = authoritative;
     _syncLifecycleFromCoreStatus(
       authoritative,
-      reason: "Android snapshot/${snapshot.phase.name}/${snapshot.stopSource.name}",
+      reason: "Platform snapshot/${snapshot.phase.name}/${snapshot.stopSource.name}",
     );
     if (!statusController.isClosed) {
       statusController.add(authoritative);
+    }
+    if (snapshot.provesConnected && !wasProvenConnected) {
+      try {
+        if (!core.isSingleChannel()) {
+          await startListeningLogs("bg", core.bgClient);
+          await startListeningStatus("bg", core.bgClient, generation: snapshot.generation);
+        }
+      } catch (error, stackTrace) {
+        loggy.warning("failed to attach background listeners after platform VPN start", error, stackTrace);
+      }
+      // A VPN started from iOS Settings has no Flutter connect completion to
+      // invalidate the proxy/stats providers. Publish the same restart signal
+      // used by an app-initiated successful start.
+      ref.read(coreRestartSignalProvider.notifier).restart();
     }
     loggy.info(
       vpnDiagnosticEvent(
@@ -609,7 +624,13 @@ class ZeonCoreService with InfraLogger {
     if (!_sessionGeneration.isCurrent(generation, source: "coreInfoListener[$key]")) {
       return currentState;
     }
-    final gatedNext = _gateTerminalStatus(next, generation, "coreInfoListener[$key]");
+    var gatedNext = _gateTerminalStatus(next, generation, "coreInfoListener[$key]");
+    // The core may emit STOPPED/ALREADY_STOPPED while an explicit local stop
+    // is already in progress. That is a successful terminal acknowledgement,
+    // not a create-service failure that should replace DISCONNECTED in UI.
+    if (gatedNext is CoreStopped && _lifecycleState == _CoreLifecycleState.stopping) {
+      gatedNext = const CoreStatus.stopped();
+    }
     // A local control listener cannot declare the platform VPN stopped unless
     // the background endpoint or authoritative native session confirms it.
     if (gatedNext is CoreStopped && _lifecycleState == _CoreLifecycleState.started) {
@@ -740,9 +761,14 @@ class ZeonCoreService with InfraLogger {
       return;
     }
 
-    if (teardownIntent != TransportCloseIntent.none) {
+    final effectiveTeardownIntent = teardownIntent != TransportCloseIntent.none
+        ? teardownIntent
+        : (_lifecycleState == _CoreLifecycleState.stopping || _lifecycleState == _CoreLifecycleState.stopped)
+        ? TransportCloseIntent.stop
+        : TransportCloseIntent.none;
+    if (effectiveTeardownIntent != TransportCloseIntent.none) {
       final disposition = classifyTransportClose(
-        intent: teardownIntent,
+        intent: effectiveTeardownIntent,
         stage: TransportCloseStage.teardown,
         operationGeneration: generation,
         operationCurrent: _sessionGeneration.isCurrent(generation, source: "${key}_teardown_close"),
@@ -1231,7 +1257,6 @@ class ZeonCoreService with InfraLogger {
   }
 
   Future<VpnSessionSnapshot?> _refreshStartupSnapshot(int generation, String source) async {
-    if (!PlatformUtils.isAndroid) return authoritativeSessionSnapshot;
     try {
       return await readAuthoritativeSessionSnapshot();
     } catch (error, stackTrace) {
@@ -1678,15 +1703,21 @@ class ZeonCoreService with InfraLogger {
             options: CallOptions(timeout: _grpcLifecycleTimeout),
           );
           if (_isStaleOperation(generation, "core_start_result")) return right(unit);
-          ref.read(coreRestartSignalProvider.notifier).restart();
-          if (res.messageType == MessageType.ALREADY_STARTED) {
+          final macOSPacketTunnelAlreadyStarted =
+              PlatformUtils.isMacOS && res.messageType == MessageType.ALREADY_STARTED;
+          if (macOSPacketTunnelAlreadyStarted) {
+            loggy.info(vpnDiagnosticEvent("core_start_adopted", generation, details: "owner=macos_packet_tunnel"));
+          } else {
+            ref.read(coreRestartSignalProvider.notifier).restart();
+          }
+          if (res.messageType == MessageType.ALREADY_STARTED && !macOSPacketTunnelAlreadyStarted) {
             loggy.warning(vpnDiagnosticEvent("core_already_started_conflict", generation));
             await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "duplicate native core");
             statusController.add(currentState = const CoreStatus.stopped());
             return left(const ConnectionFailure.unexpected("core is already started by another session"));
           }
-          if (res.messageType != MessageType.EMPTY) {
+          if (res.messageType != MessageType.EMPTY && !macOSPacketTunnelAlreadyStarted) {
             final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_start_response");
             final disposition = _classifyStartupFailure(
               generation: generation,
@@ -2280,14 +2311,19 @@ class ZeonCoreService with InfraLogger {
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
           );
           if (_isStaleOperation(generation, "core_restart_start_result")) return right(unit);
-          if (res.messageType == MessageType.ALREADY_STARTED) {
+          final macOSPacketTunnelAlreadyStarted =
+              PlatformUtils.isMacOS && res.messageType == MessageType.ALREADY_STARTED;
+          if (macOSPacketTunnelAlreadyStarted) {
+            loggy.info(vpnDiagnosticEvent("core_start_adopted", generation, details: "owner=macos_packet_tunnel"));
+          }
+          if (res.messageType == MessageType.ALREADY_STARTED && !macOSPacketTunnelAlreadyStarted) {
             loggy.warning(vpnDiagnosticEvent("core_already_started_conflict", generation));
             await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "duplicate native core on restart");
             statusController.add(currentState = const CoreStatus.stopped());
             return left("core is already started by another session");
           }
-          if (res.messageType != MessageType.EMPTY) {
+          if (res.messageType != MessageType.EMPTY && !macOSPacketTunnelAlreadyStarted) {
             final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_restart_response");
             final disposition = _classifyStartupFailure(
               generation: generation,

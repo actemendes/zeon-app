@@ -28,6 +28,10 @@ class VPNManager: ObservableObject {
     private let generationLock = NSLock()
     private var sessionGeneration: Int64 = 0
     private var coreReadyGeneration: Int64 = 0
+    private var requestedAction = ""
+    private var stopSource = ""
+    private var lastObservedStatus: NEVPNStatus = .invalid
+    private var providerStatusRequestInFlight = false
     private let runtimeEpoch = UUID().uuidString
     private var snapshotSequence: Int64 = 1
     
@@ -77,6 +81,7 @@ class VPNManager: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
             updateStats()
+            refreshProviderReadinessIfNeeded()
             elapsedTime = -1 * (connectTime?.timeIntervalSinceNow ?? 0)
         }
     }
@@ -167,10 +172,32 @@ class VPNManager: ObservableObject {
 
     private func setState(_ status: NEVPNStatus) {
         generationLock.lock()
+        let previousStatus = lastObservedStatus
+        lastObservedStatus = status
+        switch status {
+        case .connected, .connecting, .reasserting:
+            requestedAction = "connect"
+            stopSource = ""
+        case .disconnecting:
+            if requestedAction != "stop" {
+                requestedAction = "stop"
+                stopSource = "system"
+            }
+        case .disconnected, .invalid:
+            if isActiveTunnelStatus(previousStatus), requestedAction != "stop" {
+                requestedAction = "stop"
+                stopSource = "system"
+            }
+        @unknown default:
+            break
+        }
         snapshotSequence += 1
         generationLock.unlock()
         DispatchQueue.main.async { [weak self] in
             self?.state = status
+        }
+        if status == .connected {
+            refreshProviderReadinessIfNeeded()
         }
     }
 
@@ -181,6 +208,8 @@ class VPNManager: ObservableObject {
         if generation > sessionGeneration {
             sessionGeneration = generation
             coreReadyGeneration = 0
+            requestedAction = "connect"
+            stopSource = ""
             snapshotSequence += 1
         }
         return sessionGeneration
@@ -241,8 +270,19 @@ class VPNManager: ObservableObject {
         defer { generationLock.unlock() }
         guard generation == sessionGeneration else { return false }
         coreReadyGeneration = generation
+        requestedAction = "connect"
+        stopSource = ""
         snapshotSequence += 1
         return true
+    }
+
+    private func markStopRequested(_ generation: Int64, source: String) {
+        generationLock.lock()
+        defer { generationLock.unlock() }
+        guard generation == sessionGeneration else { return }
+        requestedAction = "stop"
+        stopSource = source
+        snapshotSequence += 1
     }
 
     private func clearCoreReady() {
@@ -257,6 +297,8 @@ class VPNManager: ObservableObject {
         defer { generationLock.unlock() }
         let generation = sessionGeneration
         let ready = generation > 0 && coreReadyGeneration == generation
+        let action = requestedAction
+        let currentStopSource = stopSource
         let status = manager.connection.status
         let phase: String
         switch status {
@@ -277,15 +319,19 @@ class VPNManager: ObservableObject {
             "sequenceNumber": snapshotSequence,
             "snapshotVersion": snapshotSequence,
             "phase": phase,
-            "requestedAction": "",
+            "requestedAction": action,
+            "stopSource": currentStopSource,
             "coreReady": ready,
             "coreStarted": ready,
             "commandEndpointReady": ready,
             "tunnelReady": status == .connected,
             "protectSucceeded": status == .connected,
             "platformVpnValidated": status == .connected,
-            "selectedOutboundId": "",
-            "selectedOutboundLabel": "",
+            // The concrete selector is owned by the Go core and is fetched by
+            // the proxy providers. A stable opaque id is enough for the common
+            // snapshot contract to prove that this iOS core is usable.
+            "selectedOutboundId": ready ? "ios-session-\(generation)" : "",
+            "selectedOutboundLabel": ready ? VPNConfig.shared.activeProfileName : "",
             "strategy": "",
             "failureCode": "",
             "failureOwner": "",
@@ -518,6 +564,8 @@ class VPNManager: ObservableObject {
         if let generation, !isCurrentGeneration(generation) {
             return
         }
+        let stoppingGeneration = generation ?? currentSessionGeneration()
+        markStopRequested(stoppingGeneration, source: "flutter")
         if manager.isOnDemandEnabled {
             manager.isOnDemandEnabled = false
             manager.onDemandRules = []
@@ -541,5 +589,60 @@ class VPNManager: ObservableObject {
         _ = await waitForInactiveTunnel()
         clearCoreReady()
         connectTime = nil
+    }
+
+    private func refreshProviderReadinessIfNeeded() {
+        generationLock.lock()
+        let needsRefresh = manager.connection.status == .connected &&
+            (sessionGeneration <= 0 || coreReadyGeneration != sessionGeneration) &&
+            !providerStatusRequestInFlight
+        if needsRefresh {
+            providerStatusRequestInFlight = true
+        }
+        generationLock.unlock()
+        guard needsRefresh, let connection = manager.connection as? NETunnelProviderSession else { return }
+
+        do {
+            try connection.sendProviderMessage(Data("session_status".utf8)) { [weak self] response in
+                guard let self else { return }
+                self.acceptProviderSessionStatus(response)
+            }
+        } catch {
+            generationLock.lock()
+            providerStatusRequestInFlight = false
+            generationLock.unlock()
+            NSLog("event=ios_provider_status_failed error=%@", error.localizedDescription)
+        }
+    }
+
+    private func acceptProviderSessionStatus(_ response: Data?) {
+        var providerGeneration: Int64 = 0
+        var providerCoreStarted = false
+        if let response,
+           let object = try? JSONSerialization.jsonObject(with: response) as? [String: Any]
+        {
+            if let value = object["generation"] as? NSNumber {
+                providerGeneration = value.int64Value
+            } else if let value = object["generation"] as? Int64 {
+                providerGeneration = value
+            }
+            providerCoreStarted = object["coreStarted"] as? Bool ?? false
+        }
+
+        generationLock.lock()
+        providerStatusRequestInFlight = false
+        if providerCoreStarted && providerGeneration > 0 && providerGeneration >= sessionGeneration {
+            sessionGeneration = providerGeneration
+            coreReadyGeneration = providerGeneration
+            requestedAction = "connect"
+            stopSource = ""
+            snapshotSequence += 1
+        }
+        let shouldRepublish = providerCoreStarted && providerGeneration > 0 && providerGeneration == sessionGeneration
+        generationLock.unlock()
+
+        if shouldRepublish {
+            setState(manager.connection.status)
+        }
     }
 }

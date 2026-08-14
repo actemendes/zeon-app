@@ -13,6 +13,7 @@ open class ExtensionProvider: NEPacketTunnelProvider {
     private var platformInterface: ExtensionPlatformInterface!
     private var config: String!
     private var sessionGeneration: Int64 = 0
+    private var serviceStarted = false
 
     override open func startTunnel(options: [String: NSObject]?) async throws {
         // Preserve the previous provider session. A crash/jetsam cannot upload
@@ -25,6 +26,7 @@ open class ExtensionProvider: NEPacketTunnelProvider {
         try? FileManager.default.removeItem(at: FilePath.workingDirectory.appendingPathComponent("TestLog"))
         
         do {
+            serviceStarted = false
             writeMessage("(packet-tunnel) starting")
             
             let providerConfiguration = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration ?? [:]
@@ -120,6 +122,7 @@ open class ExtensionProvider: NEPacketTunnelProvider {
                 throw error
             }
             writeMessage("(packet-tunnel) service started successfully")
+            serviceStarted = true
         } catch {
             writeFatalError("(packet-tunnel) error: start service: \(error.localizedDescription)")
             throw error
@@ -224,6 +227,7 @@ open class ExtensionProvider: NEPacketTunnelProvider {
 //        logger.debug("Stopping tunnel with reason: \(reason)")
         writeMessage("(packet-tunnel) stopping, reason: \(reason)")
         stopService()
+        serviceStarted = false
         sessionGeneration = 0
         
 //        // Allow time for cleanup
@@ -264,6 +268,13 @@ open class ExtensionProvider: NEPacketTunnelProvider {
     override open func handleAppMessage(_ messageData: Data) async -> Data? {
         logger.debug("Handling app message")
         return messageData
+    }
+
+    func sessionStatusData() -> Data? {
+        try? JSONSerialization.data(withJSONObject: [
+            "generation": sessionGeneration,
+            "coreStarted": serviceStarted,
+        ])
     }
     
     override open func sleep() async {

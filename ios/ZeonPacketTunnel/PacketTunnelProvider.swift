@@ -35,6 +35,8 @@ class PacketTunnelProvider: ExtensionProvider {
         switch message {
         case "stats":
             return "\(upload),\(download)".data(using: .utf8)!
+        case "session_status":
+            return sessionStatusData()
         default:
             return nil
         }

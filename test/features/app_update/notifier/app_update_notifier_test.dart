@@ -8,6 +8,7 @@ import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/model/app_info_entity.dart';
 import 'package:zeon/core/model/environment.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/app_update/app_update_policy.dart';
 import 'package:zeon/features/app_update/data/app_update_data_providers.dart';
 import 'package:zeon/features/app_update/data/app_update_repository.dart';
 import 'package:zeon/features/app_update/model/app_update_failure.dart';
@@ -64,10 +65,26 @@ void main() {
     expect(container.read(appUpdateNotifierProvider), isA<AppUpdateStateDisabled>());
     expect(repository.callCount, 0);
   });
+
+  test('disabled platform policy prevents manual and automatic update requests', () async {
+    final setup = await _createContainer(_remoteVersion('1.1.0'), updateChecksEnabled: false);
+    final container = setup.container;
+    final repository = setup.repository;
+    addTearDown(container.dispose);
+    final notifier = container.read(appUpdateNotifierProvider.notifier);
+
+    expect(await notifier.checkAutomatically(), isNull);
+    expect(await notifier.check(), isA<AppUpdateStateDisabled>());
+    expect(repository.callCount, 0);
+  });
 }
 
 Future<({ProviderContainer container, SharedPreferences preferences, _FakeAppUpdateRepository repository})>
-_createContainer(RemoteVersionEntity latest, {Release release = Release.general}) async {
+_createContainer(
+  RemoteVersionEntity latest, {
+  Release release = Release.general,
+  bool updateChecksEnabled = true,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
   final repository = _FakeAppUpdateRepository(latest);
@@ -76,6 +93,7 @@ _createContainer(RemoteVersionEntity latest, {Release release = Release.general}
       sharedPreferencesProvider.overrideWith((ref) => preferences),
       appInfoProvider.overrideWith(() => _TestAppInfo(release)),
       appUpdateRepositoryProvider.overrideWith((ref) => repository),
+      appUpdateChecksEnabledProvider.overrideWithValue(updateChecksEnabled),
     ],
   );
   await container.read(sharedPreferencesProvider.future);

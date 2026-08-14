@@ -15,6 +15,11 @@ CRONET_WINDOWS_AMD64_DIR := $(shell go list -m -f '{{.Dir}}' github.com/sagernet
 TAGS=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack
 IOS_ADD_TAGS=with_dhcp,with_low_memory,with_purego
 MACOS_ADD_TAGS=with_dhcp
+# Cronet contains an unused function that references the private CoreFoundation
+# symbol __kCFBundleNumericVersionKey. Dead stripping removes that function and
+# its import while preserving the Naive outbound implementation that uses the
+# rest of Cronet.
+MACOS_LDFLAGS=-mmacosx-version-min=10.11 -O2 -lpthread -Wl,-dead_strip
 WINDOWS_ADD_TAGS=with_purego
 LDFLAGS=-w -s -checklinkname=0 -buildid= $${CODE_VERSION}
 GOBUILDLIB=CGO_ENABLED=1 go build -trimpath -ldflags="$(LDFLAGS)" -buildmode=c-shared
@@ -164,13 +169,17 @@ linux-custom: prepare  install_cronet
 	make webui
 
 macos-amd64:
-	env GOOS=darwin GOARCH=amd64 CGO_CFLAGS="-mmacosx-version-min=10.11 -O2" CGO_LDFLAGS="-mmacosx-version-min=10.11 -O2 -lpthread" CGO_ENABLED=1 go build -trimpath -tags $(TAGS),$(MACOS_ADD_TAGS) -buildmode=c-shared -o $(BINDIR)/$(LIBNAME)-amd64.dylib ./platform/desktop
+	env GOOS=darwin GOARCH=amd64 CGO_CFLAGS="-mmacosx-version-min=10.11 -O2" CGO_LDFLAGS="$(MACOS_LDFLAGS)" CGO_ENABLED=1 go build -trimpath -tags $(TAGS),$(MACOS_ADD_TAGS) -buildmode=c-shared -o $(BINDIR)/$(LIBNAME)-amd64.dylib ./platform/desktop
 macos-arm64:
-	env GOOS=darwin GOARCH=arm64 CGO_CFLAGS="-mmacosx-version-min=10.11 -O2" CGO_LDFLAGS="-mmacosx-version-min=10.11 -O2 -lpthread" CGO_ENABLED=1 go build -trimpath -tags $(TAGS),$(MACOS_ADD_TAGS) -buildmode=c-shared -o $(BINDIR)/$(LIBNAME)-arm64.dylib ./platform/desktop
+	env GOOS=darwin GOARCH=arm64 CGO_CFLAGS="-mmacosx-version-min=10.11 -O2" CGO_LDFLAGS="$(MACOS_LDFLAGS)" CGO_ENABLED=1 go build -trimpath -tags $(TAGS),$(MACOS_ADD_TAGS) -buildmode=c-shared -o $(BINDIR)/$(LIBNAME)-arm64.dylib ./platform/desktop
 	
 macos: prepare macos-amd64 macos-arm64 
 	
 	lipo -create $(BINDIR)/$(LIBNAME)-amd64.dylib $(BINDIR)/$(LIBNAME)-arm64.dylib -output $(BINDIR)/$(LIBNAME).dylib
+	if nm -u $(BINDIR)/$(LIBNAME).dylib | grep -Fq '__kCFBundleNumericVersionKey'; then \
+		echo "Error: $(BINDIR)/$(LIBNAME).dylib references private API __kCFBundleNumericVersionKey" >&2; \
+		exit 1; \
+	fi
 	cp $(BINDIR)/$(LIBNAME).dylib ./$(LIBNAME).dylib 
 	mv $(BINDIR)/$(LIBNAME)-arm64.h $(BINDIR)/desktop.h 
 	# env GOOS=darwin GOARCH=amd64 CGO_CFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="-mmacosx-version-min=10.15" CGO_LDFLAGS="bin/$(LIBNAME).dylib"  CGO_ENABLED=1 $(GOBUILDSRV)  -o $(BINDIR)/$(CLINAME) ./cmd/bydll
@@ -190,5 +199,3 @@ clean:
 release: # Create a new tag for release.	
 	@bash -c '.github/change_version.sh'
 	
-
-

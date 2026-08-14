@@ -218,6 +218,49 @@ void main() {
     expect(calls[1].arguments, {'generation': 9002, 'preemptive': true, 'replacement': false});
   });
 
+  test('legacy iOS Boolean stop acknowledgement preserves the requested generation', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      CoreInterfaceMobile.methodChannel,
+      (call) async => true,
+    );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        CoreInterfaceMobile.methodChannel,
+        null,
+      ),
+    );
+
+    final core = CoreInterfaceMobile();
+
+    expect(await core.stopMethodChannel(generation: 9010, replacement: true), 9010);
+  });
+
+  test('iOS authoritative snapshot is available for startup failure diagnostics', () async {
+    const generation = 9011;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      CoreInterfaceMobile.methodChannel,
+      (call) async => _androidSnapshotEvent(
+        generation: generation,
+        sequenceNumber: 1,
+        phase: VpnSessionPhase.verifying,
+        stopSource: VpnStopSource.none,
+      ),
+    );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        CoreInterfaceMobile.methodChannel,
+        null,
+      ),
+    );
+
+    final core = CoreInterfaceMobile(androidOverride: false);
+
+    final status = await core.resyncSessionStatus();
+    expect(status, isA<CoreStarting>());
+    expect(core.authoritativeSessionSnapshot?.generation, generation);
+    expect(core.authoritativeSessionSnapshot?.phase, VpnSessionPhase.verifying);
+  });
+
   test('Android VPN preparation denial is propagated instead of starting the core', () async {
     const generation = 9050;
     final calls = <MethodCall>[];
