@@ -185,8 +185,8 @@ class VpnTestInstrumentation : Instrumentation() {
             TestCase(activeSessionTests.javaClass.name, "teardownOrderIsStableAndCloseIsIdempotent") {
                 activeSessionTests.teardownOrderIsStableAndCloseIsIdempotent()
             },
-            TestCase(snapshotTests.javaClass.name, "connectedRequiresEveryGate") {
-                snapshotTests.connectedRequiresEveryGate()
+            TestCase(snapshotTests.javaClass.name, "connectedRequiresLocalStartupEvidence") {
+                snapshotTests.connectedRequiresLocalStartupEvidence()
             },
             TestCase(snapshotTests.javaClass.name, "nonConnectedPhaseCannotPassTheGate") {
                 snapshotTests.nonConnectedPhaseCannotPassTheGate()

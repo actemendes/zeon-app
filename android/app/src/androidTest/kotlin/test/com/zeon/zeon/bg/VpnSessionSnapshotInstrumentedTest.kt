@@ -18,6 +18,7 @@ class VpnSessionSnapshotInstrumentedTest {
         phase: VpnSessionPhase,
         ready: Boolean,
         outbound: String = if (ready) "opaque" else "",
+        platformValidated: Boolean = ready,
     ) = VpnSessionSnapshot(
         generation = 10L,
         runtimeEpoch = "test",
@@ -29,13 +30,14 @@ class VpnSessionSnapshotInstrumentedTest {
         commandEndpointReady = ready,
         tunnelReady = ready,
         protectSucceeded = ready,
-        platformVpnValidated = ready,
+        platformVpnValidated = platformValidated,
         selectedOutboundId = outbound,
     )
 
-    fun connectedRequiresEveryGate() {
+    fun connectedRequiresLocalStartupEvidence() {
         check(!snapshot(VpnSessionPhase.CONNECTED, ready = false).provesConnected())
         check(!snapshot(VpnSessionPhase.CONNECTED, ready = true, outbound = "").provesConnected())
+        check(snapshot(VpnSessionPhase.CONNECTED, ready = true, platformValidated = false).provesConnected())
         check(snapshot(VpnSessionPhase.CONNECTED, ready = true).provesConnected())
     }
 

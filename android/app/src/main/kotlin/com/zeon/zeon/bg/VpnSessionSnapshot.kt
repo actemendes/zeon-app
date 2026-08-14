@@ -80,7 +80,6 @@ data class VpnSessionSnapshot(
             commandEndpointReady &&
             tunnelReady &&
             protectSucceeded &&
-            platformVpnValidated &&
             selectedOutboundId.isNotBlank()
 
     fun toEvent(): Map<String, Any> = mapOf(

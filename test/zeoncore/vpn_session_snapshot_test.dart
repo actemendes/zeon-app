@@ -79,10 +79,11 @@ void main() {
       expect(gate.accept(snapshot(epoch: 'process-b')), isTrue);
     });
 
-    test('Connected requires every platform gate and an outbound', () {
+    test('Connected requires local startup evidence and an outbound', () {
       expect(snapshot(phase: VpnSessionPhase.connected).toCoreStatus(), isA<CoreStarting>());
       expect(snapshot(phase: VpnSessionPhase.connected, ready: true).provesConnected, isTrue);
       expect(snapshot(phase: VpnSessionPhase.connected, ready: true).toCoreStatus(), isA<CoreStarted>());
+      expect(completeSnapshot(platformVpnValidated: false).provesConnected, isTrue);
     });
 
     test('transient CoreReady cannot replace Connected', () {
@@ -163,7 +164,6 @@ void main() {
       'commandEndpointReady': () => completeSnapshot(commandEndpointReady: false),
       'tunnelReady': () => completeSnapshot(tunnelReady: false),
       'protectSucceeded': () => completeSnapshot(protectSucceeded: false),
-      'platformVpnValidated': () => completeSnapshot(platformVpnValidated: false),
       'selectedOutbound': () => completeSnapshot(selectedOutboundId: ''),
     }.entries) {
       test('Connected is blocked without ${missingGate.key}', () {
