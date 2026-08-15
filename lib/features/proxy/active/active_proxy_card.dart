@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
@@ -8,10 +9,12 @@ import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/proxy/active/ip_widget.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/utils/custom_loggers.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
-  const ActiveProxyFooter({super.key});
+  const ActiveProxyFooter({required this.activeProxy, super.key});
+
+  final AsyncValue<OutboundInfo> activeProxy;
 
   static const _panelRadius = 16.0;
 
@@ -20,17 +23,18 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
     final connectionState = ref.watch(
       connectionNotifierProvider.select((value) => value.valueOrNull ?? const Disconnected()),
     );
-
-    final activeProxy = ref.watch(activeProxyNotifierProvider.select((value) => value.valueOrNull));
-    final t = ref.watch(translationsProvider).requireValue;
-
-    // Early return if required data is not available
-    if (connectionState != const Connected() || activeProxy == null) {
+    if (connectionState != const Connected()) {
       return const SizedBox.shrink();
     }
 
+    final proxy = activeProxy.valueOrNull;
+    if (proxy == null) {
+      return const SizedBox.shrink();
+    }
+    final t = ref.watch(translationsProvider).requireValue;
+
     final theme = Theme.of(context);
-    final displayInfo = resolveOutboundDisplayInfo(activeProxy);
+    final displayInfo = resolveOutboundDisplayInfo(proxy);
     final navBarBackground = theme.navigationBarTheme.backgroundColor ?? theme.colorScheme.surface;
     final navBarTextColor =
         theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
@@ -75,14 +79,14 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                 InkWell(
                   onTap: () async {
                     await handleUrlTest();
-                    await ref.read(dialogNotifierProvider.notifier).showProxyInfo(outboundInfo: activeProxy);
+                    await ref.read(dialogNotifierProvider.notifier).showProxyInfo(outboundInfo: proxy);
                   },
                   onLongPress: () {},
                   borderRadius: BorderRadius.circular(_panelRadius),
                   child: IPCountryFlag(
                     countryCode: resolveProxyCountryCode(
-                      tagDisplay: activeProxy.tagDisplay,
-                      fallbackCountryCode: displayInfo.countryCode ?? activeProxy.ipinfo.countryCode,
+                      tagDisplay: proxy.tagDisplay,
+                      fallbackCountryCode: displayInfo.countryCode ?? proxy.ipinfo.countryCode,
                     ),
                     size: 40,
                   ),

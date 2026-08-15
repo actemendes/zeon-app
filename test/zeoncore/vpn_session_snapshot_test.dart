@@ -31,9 +31,19 @@ VpnSessionSnapshot snapshot({
 
 void main() {
   group('iOS system VPN preparation guard', () {
-    test('allows first setup and a preparation after an explicit stop', () {
-      expect(shouldPrepareSystemVpnForSnapshot(null), isTrue);
+    test('fails closed for unknown state and allows preparation after an explicit stop', () {
+      expect(
+        shouldPrepareSystemVpnForSnapshot(null),
+        isFalse,
+        reason: 'unknown bootstrap state may belong to a live tunnel from the previous host process',
+      );
       expect(shouldPrepareSystemVpnForSnapshot(snapshot(generation: 0, phase: VpnSessionPhase.disconnected)), isTrue);
+      expect(
+        shouldPrepareSystemVpnForSnapshot(
+          snapshot(generation: 10, phase: VpnSessionPhase.disconnected, requestedAction: 'prepare'),
+        ),
+        isTrue,
+      );
       expect(
         shouldPrepareSystemVpnForSnapshot(
           snapshot(generation: 10, phase: VpnSessionPhase.disconnected, requestedAction: 'stop'),
@@ -55,6 +65,13 @@ void main() {
         ),
         isFalse,
       );
+      for (final phase in [VpnSessionPhase.startingPlatform, VpnSessionPhase.verifying, VpnSessionPhase.connected]) {
+        expect(
+          shouldPrepareSystemVpnForSnapshot(snapshot(generation: 0, phase: phase, requestedAction: 'connect')),
+          isFalse,
+          reason: 'cold-host adoption must win even before its provider generation is known',
+        );
+      }
     });
   });
 

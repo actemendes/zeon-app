@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
@@ -102,6 +104,10 @@ class PreferencesNotifier<T, P> extends StateNotifier<T> {
   final PreferencesEntry<T, P> entry;
   final T? overrideValue;
   final List<T>? possibleValues;
+  late final LatestPreferenceWriteCoordinator<T> _writeCoordinator = LatestPreferenceWriteCoordinator<T>(
+    persist: entry.write,
+    commit: (value) => state = value,
+  );
 
   static StateNotifierProvider<PreferencesNotifier<T, P>, T> create<T, P>(
     String key,
@@ -161,12 +167,78 @@ class PreferencesNotifier<T, P> extends StateNotifier<T> {
     if (value != null) state = value;
   }
 
-  Future<void> update(T value) async {
-    if (await entry.write(value)) state = value;
+  Future<void> update(T value) {
+    return _writeCoordinator.update(value);
+  }
+
+  /// The newest requested value, including a write that has not completed.
+  /// Lifecycle conflict resolution must compare ownership against this value,
+  /// not only against [state], which intentionally commits normal updates
+  /// after persistence succeeds.
+  T get latestRequestedValue => _writeCoordinator.latestRequested ?? state;
+
+  /// Updates the in-memory owner immediately, then persists it with the same
+  /// latest-write-wins ordering as [update]. This is reserved for lifecycle
+  /// intent that must be observable before the corresponding native status is
+  /// published; disk I/O must not make a proven platform transition look
+  /// stale to synchronous consumers.
+  Future<void> updateOptimistically(T value) {
+    state = value;
+    return _writeCoordinator.update(value);
   }
 
   Future<void> reset() async {
+    _writeCoordinator.invalidate();
     await entry.remove();
     _ref.invalidateSelf();
+  }
+}
+
+/// Lets newer preference writes proceed even if an older platform write is
+/// hung, while still repairing persistence if that older write eventually
+/// completes after the newer value.
+///
+/// This is intentionally latest-wins instead of a serial Future chain: a
+/// timeout at a lifecycle caller cannot cancel SharedPreferences I/O, and a
+/// never-completing head of a serial queue would otherwise poison every later
+/// Start/Stop intent until process restart.
+class LatestPreferenceWriteCoordinator<T> {
+  LatestPreferenceWriteCoordinator({required this.persist, required this.commit});
+
+  final Future<bool> Function(T value) persist;
+  final void Function(T value) commit;
+
+  int _revision = 0;
+  ({int revision, T value})? _latest;
+
+  T? get latestRequested => _latest?.value;
+
+  Future<void> update(T value) {
+    final request = (revision: ++_revision, value: value);
+    _latest = request;
+    return _persist(request);
+  }
+
+  void invalidate() {
+    _revision += 1;
+    _latest = null;
+  }
+
+  Future<void> _persist(({int revision, T value}) request) async {
+    final succeeded = await persist(request.value);
+    if (!succeeded) return;
+
+    final latest = _latest;
+    if (latest == null) return;
+    if (latest.revision == request.revision) {
+      commit(request.value);
+      return;
+    }
+
+    // The stale write may just have overwritten the latest value on disk.
+    // Reassert the current value without making its caller wait for this old
+    // operation. If another update wins meanwhile, the same revision check
+    // will repair to that still-newer value.
+    unawaited(_persist(latest));
   }
 }

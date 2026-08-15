@@ -2,11 +2,15 @@ import 'package:dartx/dartx.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:sliver_tools/sliver_tools.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/features/connection/model/connection_status.dart';
+import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/home/widget/connection_button.dart';
 import 'package:zeon/features/home/widget/home_premium_access_button.dart';
 import 'package:zeon/features/profile/data/profile_name_parser.dart';
@@ -15,9 +19,9 @@ import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/profile/notifier/profile_notifier.dart';
 import 'package:zeon/features/proxy/active/active_proxy_card.dart';
 import 'package:zeon/features/proxy/active/active_proxy_delay_indicator.dart';
+import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:sliver_tools/sliver_tools.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 class HomePage extends HookConsumerWidget {
   const HomePage({super.key});
@@ -29,6 +33,15 @@ class HomePage extends HookConsumerWidget {
         ? 'assets/images/2x/dark-back@2x.png'
         : 'assets/images/2x/light-back@2x.png';
     final t = ref.watch(translationsProvider).requireValue;
+    final isConnected = ref.watch(connectionNotifierProvider.select((value) => value.valueOrNull is Connected));
+    if (isConnected) {
+      // STOP and START may coalesce before Flutter receives another frame.
+      // Resolve a dirty active-proxy provider while this non-subscribing
+      // ancestor is building. Any retained child subscription is then a
+      // descendant of the current build target, and `_HomeVpnContent` reads
+      // an already-flushed value instead of notifying itself during build.
+      ref.read(activeProxyNotifierProvider);
+    }
     // final hasAnyProfile = ref.watch(hasAnyProfileProvider);
     final activeProfile = ref.watch(activeProfileProvider);
     final isUpdatingProfile = switch (activeProfile.valueOrNull) {
@@ -147,21 +160,7 @@ class HomePage extends HookConsumerWidget {
                         children: [
                           SliverFillRemaining(
                             hasScrollBody: false,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Expanded(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [ConnectionButton(), ActiveProxyDelayIndicator()],
-                                  ),
-                                ),
-                                _HomeQuickSettingsButton(label: t.pages.home.quickSettings),
-                                const ActiveProxyFooter(),
-                                const HomePremiumAccessButton(),
-                              ],
-                            ),
+                            child: _HomeVpnContent(quickSettingsLabel: t.pages.home.quickSettings),
                           ),
                         ],
                       ),
@@ -173,6 +172,39 @@ class HomePage extends HookConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _HomeVpnContent extends ConsumerWidget {
+  const _HomeVpnContent({required this.quickSettingsLabel});
+
+  final String quickSettingsLabel;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isConnected = ref.watch(connectionNotifierProvider.select((value) => value.valueOrNull is Connected));
+    final AsyncValue<OutboundInfo> activeProxy = isConnected
+        ? ref.watch(activeProxyNotifierProvider)
+        : const AsyncLoading();
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ConnectionButton(activeProxy: activeProxy),
+              ActiveProxyDelayIndicator(activeProxy: activeProxy),
+            ],
+          ),
+        ),
+        _HomeQuickSettingsButton(label: quickSettingsLabel),
+        ActiveProxyFooter(activeProxy: activeProxy),
+        const HomePremiumAccessButton(),
+      ],
     );
   }
 }

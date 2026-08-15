@@ -42,6 +42,8 @@ import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 enum _CoreLifecycleState { stopped, starting, started, stopping }
 
+enum _PreemptiveStopOutcome { stopped, superseded, timedOut }
+
 enum TransportCloseIntent { none, stop, restartReplacement, foregroundClose }
 
 enum TransportCloseStage { teardown, start, listener }
@@ -169,7 +171,14 @@ CloseFrontPublicationDecision classifyCloseFrontPublication({
 }
 
 class ZeonCoreService with InfraLogger {
-  ZeonCoreService(this.ref, {CoreInterface? coreInterface}) : core = coreInterface ?? getCoreInterface() {
+  ZeonCoreService(
+    this.ref, {
+    CoreInterface? coreInterface,
+    Future<void> Function(VpnSessionSnapshot snapshot)? platformIntentSyncBarrierForTesting,
+    bool? mobilePlatformOverride,
+  }) : core = coreInterface ?? getCoreInterface(),
+       _platformIntentSyncBarrierForTesting = platformIntentSyncBarrierForTesting,
+       _isMobilePlatform = mobilePlatformOverride ?? (PlatformUtils.isIOS || PlatformUtils.isAndroid) {
     _platformSnapshotSubscription = core.watchSessionSnapshots().listen(
       _queuePlatformSessionSnapshot,
       onError: (Object error, StackTrace stackTrace) {
@@ -213,6 +222,8 @@ class ZeonCoreService with InfraLogger {
 
   // CoreZeonCoreService() {}
   final CoreInterface core;
+  final Future<void> Function(VpnSessionSnapshot snapshot)? _platformIntentSyncBarrierForTesting;
+  final bool _isMobilePlatform;
 
   CoreStatus currentState = const CoreStatus.stopped();
   final statusController = BehaviorSubject<CoreStatus>();
@@ -234,6 +245,7 @@ class ZeonCoreService with InfraLogger {
   late final StreamSubscription<VpnSessionSnapshot> _platformSnapshotSubscription;
   Future<void> _platformSnapshotTail = Future<void>.value();
   VpnSessionSnapshot? _latestPlatformSnapshot;
+  ({int generation, int previousGeneration})? _provisionalVpnPreparation;
   final BehaviorSubject<VpnSessionSnapshot> _authoritativeSnapshotController = BehaviorSubject<VpnSessionSnapshot>();
   _CoreLifecycleState _lifecycleState = _CoreLifecycleState.stopped;
   int _connectedGeneration = 0;
@@ -427,7 +439,7 @@ class ZeonCoreService with InfraLogger {
   }
 
   Future<void> _applyPlatformSessionSnapshot(VpnSessionSnapshot snapshot) async {
-    if (snapshot.generation < _sessionGeneration.current) {
+    if (!_acceptPlatformSnapshotGeneration(snapshot, source: "platform_snapshot_bridge")) {
       loggy.warning(
         vpnDiagnosticEvent(
           "stale_callback_ignored",
@@ -441,13 +453,17 @@ class ZeonCoreService with InfraLogger {
     }
     final wasProvenConnected = _latestPlatformSnapshot?.provesConnected ?? false;
     _sessionGeneration.advanceTo(snapshot.generation);
-    _latestPlatformSnapshot = snapshot;
-    _publishAuthoritativeSnapshot(snapshot);
 
     // Synchronize explicit platform stops and platform-owned starts before
     // their status reaches ConnectionNotifier. Persistence is best-effort and
     // can never suppress the authoritative state event.
     await _syncRunningIntentFromPlatformSnapshot(snapshot);
+    if (!_isPlatformSnapshotFresh(snapshot, source: "platform_snapshot_post_intent_sync")) {
+      return;
+    }
+
+    _latestPlatformSnapshot = snapshot;
+    _publishAuthoritativeSnapshot(snapshot);
 
     final authoritative = snapshot.toCoreStatus();
     if (snapshot.provesConnected) {
@@ -466,8 +482,17 @@ class ZeonCoreService with InfraLogger {
     if (snapshot.provesConnected && !wasProvenConnected) {
       try {
         if (!core.isSingleChannel()) {
+          if (!_isPlatformSnapshotFresh(snapshot, source: "platform_snapshot_before_log_listener")) {
+            return;
+          }
           await startListeningLogs("bg", core.bgClient);
+          if (!_isPlatformSnapshotFresh(snapshot, source: "platform_snapshot_after_log_listener")) {
+            return;
+          }
           await startListeningStatus("bg", core.bgClient, generation: snapshot.generation);
+          if (!_isPlatformSnapshotFresh(snapshot, source: "platform_snapshot_after_status_listener")) {
+            return;
+          }
         }
       } catch (error, stackTrace) {
         loggy.warning("failed to attach background listeners after platform VPN start", error, stackTrace);
@@ -475,6 +500,9 @@ class ZeonCoreService with InfraLogger {
       // A VPN started from iOS Settings has no Flutter connect completion to
       // invalidate the proxy/stats providers. Publish the same restart signal
       // used by an app-initiated successful start.
+      if (!_isPlatformSnapshotFresh(snapshot, source: "platform_snapshot_before_restart_signal")) {
+        return;
+      }
       ref.read(coreRestartSignalProvider.notifier).restart();
     }
     loggy.info(
@@ -489,8 +517,102 @@ class ZeonCoreService with InfraLogger {
   }
 
   bool _platformConfirmsStopped(int generation) {
-    final snapshot = _latestPlatformSnapshot;
+    final snapshot = authoritativeSessionSnapshot;
     return snapshot != null && snapshot.generation == generation && snapshot.phase == VpnSessionPhase.disconnected;
+  }
+
+  bool _provenPlatformConnectSupersedesStop(int generation, {required String source}) {
+    final snapshot = authoritativeSessionSnapshot;
+    final superseded =
+        snapshot != null &&
+        snapshot.generation == generation &&
+        snapshot.requestedAction == 'connect' &&
+        snapshot.provesConnected;
+    if (!superseded) return false;
+    // A Settings/Control Center Start is a newer user intent than the Stop
+    // whose asynchronous cleanup is still running. Make that ownership
+    // visible before CoreStarted reaches ConnectionNotifier; otherwise its
+    // stale local desired=false fence would reject the proven external Start.
+    unawaited(_persistPlatformRunningIntent(true, source: "stop_superseded/$source"));
+    _connectedGeneration = generation;
+    _transitionLifecycle(_CoreLifecycleState.started, reason: "platform Connect superseded Stop/$source");
+    if (currentState is! CoreStarted) {
+      statusController.add(currentState = const CoreStatus.started());
+    }
+    loggy.info(
+      vpnDiagnosticEvent(
+        "stale_completion_ignored",
+        generation,
+        details: "source=stop/$source reason=proven_same_generation_platform_connect",
+      ),
+    );
+    return true;
+  }
+
+  Future<_PreemptiveStopOutcome> _awaitPreemptivePlatformStop(int generation) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 12));
+    while (DateTime.now().isBefore(deadline)) {
+      if (!_sessionGeneration.isCurrent(generation, source: "preemptive_stop_wait")) {
+        return _PreemptiveStopOutcome.superseded;
+      }
+      if (_provenPlatformConnectSupersedesStop(generation, source: "preemptive_wait")) {
+        return _PreemptiveStopOutcome.superseded;
+      }
+      if (_platformConfirmsStopped(generation)) return _PreemptiveStopOutcome.stopped;
+      try {
+        await core.resyncSessionStatus().timeout(const Duration(milliseconds: 800), onTimeout: () => null);
+        final observed = core.authoritativeSessionSnapshot;
+        if (observed != null) {
+          _recordObservedAuthoritativeSnapshot(observed, source: "preemptive_stop_wait");
+        }
+      } catch (error, stackTrace) {
+        loggy.debug("preemptive stop snapshot poll failed", error, stackTrace);
+      }
+      if (_provenPlatformConnectSupersedesStop(generation, source: "preemptive_resync")) {
+        return _PreemptiveStopOutcome.superseded;
+      }
+      if (_platformConfirmsStopped(generation)) return _PreemptiveStopOutcome.stopped;
+      await Future<void>.delayed(const Duration(milliseconds: 160));
+    }
+    return _PreemptiveStopOutcome.timedOut;
+  }
+
+  bool _snapshotPrecedes(VpnSessionSnapshot candidate, VpnSessionSnapshot authority) {
+    // Sequence/version ordering is scoped to one native runtime. A cached
+    // snapshot from the previous process cannot supersede the first accepted
+    // snapshot of a restarted runtime merely because the epoch differs.
+    if (candidate.runtimeEpoch != authority.runtimeEpoch) return false;
+    if (candidate.generation != authority.generation) {
+      return candidate.generation < authority.generation;
+    }
+    if (candidate.snapshotVersion != authority.snapshotVersion) {
+      return candidate.snapshotVersion < authority.snapshotVersion;
+    }
+    return candidate.sequenceNumber < authority.sequenceNumber;
+  }
+
+  bool _isPlatformSnapshotFresh(VpnSessionSnapshot snapshot, {required String source}) {
+    if (!_sessionGeneration.isCurrent(snapshot.generation, source: source)) return false;
+    final native = core.authoritativeSessionSnapshot;
+    final cached = _latestPlatformSnapshot;
+    final superseding = switch ((native, cached)) {
+      (final VpnSessionSnapshot native, _)
+          when native.runtimeEpoch != snapshot.runtimeEpoch || _snapshotPrecedes(snapshot, native) =>
+        native,
+      (_, final VpnSessionSnapshot cached) when _snapshotPrecedes(snapshot, cached) => cached,
+      _ => null,
+    };
+    if (superseding == null) return true;
+    loggy.warning(
+      vpnDiagnosticEvent(
+        "stale_callback_ignored",
+        snapshot.generation,
+        details:
+            "source=$source sequence=${snapshot.sequenceNumber} version=${snapshot.snapshotVersion} "
+            "current_sequence=${superseding.sequenceNumber} current_version=${superseding.snapshotVersion}",
+      ),
+    );
+    return false;
   }
 
   Future<void> _syncRunningIntentFromPlatformSnapshot(VpnSessionSnapshot snapshot) async {
@@ -501,20 +623,56 @@ class ZeonCoreService with InfraLogger {
         : null;
     if (running == null) return;
     try {
-      await ref.read(Preferences.startedByUser.notifier).update(running).timeout(const Duration(seconds: 1));
+      await _platformIntentSyncBarrierForTesting?.call(snapshot);
+      if (!_isPlatformSnapshotFresh(snapshot, source: "platform_intent_preference_write")) {
+        return;
+      }
+      await _persistPlatformRunningIntent(
+        running,
+        source: "snapshot/${snapshot.phase.name}",
+      ).timeout(const Duration(seconds: 1));
     } catch (error, stackTrace) {
       loggy.warning("failed to persist platform running intent", error, stackTrace);
     }
   }
 
+  Future<void> _persistPlatformRunningIntent(bool running, {required String source}) {
+    // Avoid turning an otherwise fast native resync into a preference-write
+    // wait on every tap. More importantly, update Riverpod synchronously when
+    // the platform proves a new external intent so status consumers observe
+    // the owner before the status itself.
+    final notifier = ref.read(Preferences.startedByUser.notifier);
+    if (ref.read(Preferences.startedByUser) == running && notifier.latestRequestedValue == running) {
+      return Future<void>.value();
+    }
+    loggy.debug("adopting platform running intent=$running source=$source");
+    return notifier.updateOptimistically(running);
+  }
+
   Future<CoreStatus?> resyncFromPlatform(String source, {bool publish = false}) async {
-    final authoritative = await core.resyncSessionStatus();
+    var authoritative = await core.resyncSessionStatus();
     final snapshot = core.authoritativeSessionSnapshot;
     if (snapshot != null) {
+      if (!_acceptPlatformSnapshotGeneration(snapshot, source: "platform_resync/$source")) {
+        loggy.warning(
+          vpnDiagnosticEvent(
+            "stale_callback_ignored",
+            snapshot.generation,
+            details:
+                "current_generation=${_sessionGeneration.current} source=platform_resync/$source "
+                "phase=${snapshot.phase.name}",
+          ),
+        );
+        return null;
+      }
       _sessionGeneration.advanceTo(snapshot.generation);
+      await _syncRunningIntentFromPlatformSnapshot(snapshot);
+      if (!_isPlatformSnapshotFresh(snapshot, source: "platform_resync_post_intent_sync/$source")) {
+        return null;
+      }
       _latestPlatformSnapshot = snapshot;
       _publishAuthoritativeSnapshot(snapshot);
-      await _syncRunningIntentFromPlatformSnapshot(snapshot);
+      authoritative = snapshot.toCoreStatus();
     } else {
       _sessionGeneration.advanceTo(core.authoritativeSessionGeneration);
     }
@@ -534,7 +692,19 @@ class ZeonCoreService with InfraLogger {
     return authoritative;
   }
 
-  VpnSessionSnapshot? get authoritativeSessionSnapshot => _latestPlatformSnapshot ?? core.authoritativeSessionSnapshot;
+  VpnSessionSnapshot? get authoritativeSessionSnapshot {
+    final cached = _latestPlatformSnapshot;
+    final native = core.authoritativeSessionSnapshot;
+    final candidate = cached == null
+        ? native
+        : native == null
+        ? cached
+        : cached.runtimeEpoch != native.runtimeEpoch || _snapshotPrecedes(cached, native)
+        ? native
+        : cached;
+    if (candidate == null || candidate.generation < _sessionGeneration.current) return null;
+    return candidate;
+  }
 
   /// Refreshes the native snapshot cache without publishing [CoreStatus] or
   /// synchronizing persisted running intent. Telemetry classification must be
@@ -542,7 +712,22 @@ class ZeonCoreService with InfraLogger {
   /// authoritative evidence.
   Future<VpnSessionSnapshot?> readAuthoritativeSessionSnapshot() async {
     await core.resyncSessionStatus();
-    return core.authoritativeSessionSnapshot;
+    final snapshot = core.authoritativeSessionSnapshot;
+    if (snapshot == null || !_acceptPlatformSnapshotGeneration(snapshot, source: "observational_read")) return null;
+    // Keep the long-lived BehaviorSubject at least as fresh as this direct
+    // read. Otherwise a provider can yield the fresh initial snapshot and
+    // immediately replay an older cached value when it subscribes to watch().
+    _recordObservedAuthoritativeSnapshot(snapshot, source: "observational_read");
+    return authoritativeSessionSnapshot;
+  }
+
+  bool _recordObservedAuthoritativeSnapshot(VpnSessionSnapshot snapshot, {required String source}) {
+    if (!_acceptPlatformSnapshotGeneration(snapshot, source: "observed_snapshot/$source")) return false;
+    _sessionGeneration.advanceTo(snapshot.generation);
+    if (!_isPlatformSnapshotFresh(snapshot, source: "observed_snapshot/$source")) return false;
+    _latestPlatformSnapshot = snapshot;
+    _publishAuthoritativeSnapshot(snapshot);
+    return true;
   }
 
   Stream<VpnSessionSnapshot> watchAuthoritativeSessionSnapshots() => _authoritativeSnapshotController.stream;
@@ -568,6 +753,7 @@ class ZeonCoreService with InfraLogger {
 
   int beginVpnOperation(String source) {
     final generation = _sessionGeneration.next();
+    _provisionalVpnPreparation = null;
     _connectedGeneration = 0;
     _transitionLifecycle(_CoreLifecycleState.starting, reason: "$source requested");
     statusController.add(currentState = const CoreStatus.starting());
@@ -584,6 +770,101 @@ class ZeonCoreService with InfraLogger {
       loggy.info(operationEvent);
     }
     return generation;
+  }
+
+  /// Reserves ordering for background permission/configuration preparation.
+  /// Preparation is not a user Connect intent and must not publish Starting or
+  /// replace the current stopped UI state.
+  int beginVpnPreparation(String source) {
+    final previousGeneration = _sessionGeneration.current;
+    final generation = _sessionGeneration.next();
+    _provisionalVpnPreparation = (generation: generation, previousGeneration: previousGeneration);
+    loggy.info(
+      vpnDiagnosticEvent(
+        "vpn_session_prepare",
+        generation,
+        details:
+            "operation_generation=$generation current_generation=${_sessionGeneration.current} "
+            "session_state=${_lifecycleState.name} source=$source reason=requested",
+      ),
+    );
+    return generation;
+  }
+
+  bool _releaseProvisionalVpnPreparation(int generation, int replacementGeneration, {required String source}) {
+    final provisional = _provisionalVpnPreparation;
+    if (provisional == null || provisional.generation != generation) return false;
+    final released = _sessionGeneration.replaceCurrentIf(generation, replacementGeneration);
+    if (!released) return false;
+    _provisionalVpnPreparation = null;
+    loggy.info(
+      vpnDiagnosticEvent(
+        "vpn_session_prepare_released",
+        generation,
+        details:
+            "replacement_generation=$replacementGeneration previous_generation=${provisional.previousGeneration} "
+            "source=$source",
+      ),
+    );
+    return true;
+  }
+
+  bool _acceptPlatformSnapshotGeneration(VpnSessionSnapshot snapshot, {required String source}) {
+    if (snapshot.generation >= _sessionGeneration.current) {
+      final provisional = _provisionalVpnPreparation;
+      if (provisional?.generation == snapshot.generation &&
+          (snapshot.provesConnected || snapshot.isTerminalStop || snapshot.phase == VpnSessionPhase.failed)) {
+        _provisionalVpnPreparation = null;
+      }
+      return true;
+    }
+    final provisional = _provisionalVpnPreparation;
+    final platformConnectOwnsSession =
+        snapshot.requestedAction == 'connect' &&
+        (snapshot.isPendingConnectWhileInactive ||
+            snapshot.provesConnected ||
+            switch (snapshot.phase) {
+              VpnSessionPhase.startRequested ||
+              VpnSessionPhase.startingPlatform ||
+              VpnSessionPhase.startingCore ||
+              VpnSessionPhase.waitingTun ||
+              VpnSessionPhase.verifying ||
+              VpnSessionPhase.connected => true,
+              _ => false,
+            });
+    if (provisional == null || provisional.generation != _sessionGeneration.current || !platformConnectOwnsSession) {
+      return false;
+    }
+    // Bootstrap preparation is optional and carries no user Start intent. A
+    // live provider that won the resync->prepare TOCTOU must replace that
+    // provisional generation even when it belongs to the previous process.
+    return _releaseProvisionalVpnPreparation(
+      provisional.generation,
+      snapshot.generation,
+      source: "platform_connect/$source",
+    );
+  }
+
+  int get currentVpnGeneration => _sessionGeneration.current;
+
+  /// Atomically reserves bootstrap preparation only if no local lifecycle
+  /// intent won while the caller was awaiting native resync/config I/O.
+  int? tryBeginVpnPreparation(String source, {required int expectedGeneration}) {
+    if (_sessionGeneration.current != expectedGeneration ||
+        _lifecycleState != _CoreLifecycleState.stopped ||
+        currentState is! CoreStopped) {
+      loggy.info(
+        vpnDiagnosticEvent(
+          "vpn_session_prepare_skipped",
+          _sessionGeneration.current,
+          details:
+              "expected_generation=$expectedGeneration current_generation=${_sessionGeneration.current} "
+              "session_state=${_lifecycleState.name} source=$source reason=local_intent_won",
+        ),
+      );
+      return null;
+    }
+    return beginVpnPreparation(source);
   }
 
   bool isVpnOperationCurrent(int generation, {String source = "external_operation_guard"}) =>
@@ -1943,9 +2224,10 @@ class ZeonCoreService with InfraLogger {
     String name,
     bool disableMemoryLimit, {
     required int generation,
+    bool bootstrapOnly = false,
   }) {
     return TaskEither(() async {
-      if ((!PlatformUtils.isIOS && !PlatformUtils.isAndroid) ||
+      if (!_isMobilePlatform ||
           (PlatformUtils.isAndroid && ref.read(ConfigOptions.serviceMode) != ServiceMode.tun) ||
           _useMockCore) {
         return right(unit);
@@ -1961,7 +2243,25 @@ class ZeonCoreService with InfraLogger {
                 "session_state=${_lifecycleState.name} source=flutter reason=prepare_vpn",
           ),
         );
-        await core.setSessionGeneration(generation);
+        try {
+          if (bootstrapOnly) {
+            await core.setPreparationGeneration(generation);
+          } else {
+            // This preparation belongs to an already accepted user Start.
+            // Publish Connect ownership before permission/configuration work;
+            // only background bootstrap uses the weaker `prepare` intent.
+            await core.setSessionGeneration(generation);
+          }
+        } on SessionGenerationRejectedException catch (error) {
+          if (bootstrapOnly &&
+              _releaseProvisionalVpnPreparation(generation, error.accepted, source: "native_deferred")) {
+            // Native observed an active/cold owner after Dart's last resync.
+            // Preparation is optional, so preserve that owner without
+            // publishing a false terminal status or poisoning the Dart gate.
+            return right(unit);
+          }
+          rethrow;
+        }
         final prepared = await core.prepareVpn(path, name, disableMemoryLimit, generation: generation);
         if (_isStaleOperation(generation, "permission_result")) return right(unit);
         loggy.info(
@@ -1980,6 +2280,20 @@ class ZeonCoreService with InfraLogger {
         }
         return right(unit);
       } catch (e) {
+        if (bootstrapOnly && _provisionalVpnPreparation?.generation != generation) {
+          // A deferred native owner already released this optional
+          // preparation. Its authoritative stream/resync owns UI state.
+          return right(unit);
+        }
+        if (bootstrapOnly) {
+          // A timeout cannot tell whether native accepted the optional
+          // preparation. Keep it provisional: a later proven platform Connect
+          // may adopt its older generation, while any local user action will
+          // allocate above the retained high-watermark. Never publish a false
+          // terminal lifecycle event for this background-only work.
+          loggy.warning("bootstrap VPN preparation did not complete", e);
+          return left(e.toString());
+        }
         if (_isStaleOperation(generation, "permission_exception", error: e)) return right(unit);
         _transitionLifecycle(_CoreLifecycleState.stopped, reason: "VPN permission failure");
         statusController.add(currentState = const CoreStatus.stopped(alert: CoreAlert.requestVPNPermission));
@@ -2026,6 +2340,7 @@ class ZeonCoreService with InfraLogger {
 
   Future<Either<String, Unit>> _stopInternal({required bool force, required int generation}) async {
     var operationGeneration = generation;
+    var preemptiveStopAccepted = false;
     var requireNativeStopDespiteLocalState =
         force || _lifecycleState != _CoreLifecycleState.stopped || currentState != const CoreStatus.stopped();
     if (!requireNativeStopDespiteLocalState && !core.supportsPreemptivePlatformStop) {
@@ -2054,7 +2369,7 @@ class ZeonCoreService with InfraLogger {
       return right(unit);
     }
     if (!_useMockCore && core.supportsPreemptivePlatformStop) {
-      _transitionLifecycle(_CoreLifecycleState.stopping, reason: "preemptive Android stop requested");
+      _transitionLifecycle(_CoreLifecycleState.stopping, reason: "preemptive mobile stop requested");
       statusController.add(currentState = const CoreStatus.stopping());
       try {
         final acceptedGeneration = await core
@@ -2068,20 +2383,25 @@ class ZeonCoreService with InfraLogger {
           operationGeneration = acceptedGeneration;
           _sessionGeneration.advanceTo(acceptedGeneration);
         }
+        preemptiveStopAccepted = true;
         requireNativeStopDespiteLocalState = true;
       } catch (error, stackTrace) {
         // The serialized cleanup below retries the idempotent native stop.
-        loggy.warning("preemptive Android VPN stop request failed; queued cleanup will retry", error, stackTrace);
+        loggy.warning("preemptive mobile VPN stop request failed; queued cleanup will retry", error, stackTrace);
       }
     }
     return await _enqueueLifecycle("stop", () async {
       if (_isStaleOperation(operationGeneration, "stop_queue_entry")) return right(unit);
+      if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "queue_entry")) return right(unit);
       try {
         await core.setSessionGeneration(operationGeneration);
       } catch (error) {
         if (_isStaleOperation(operationGeneration, "stop_set_generation", error: error)) return right(unit);
         loggy.error("failed to synchronize native stop generation", error);
         return left("failed to synchronize VPN stop generation (${error.runtimeType})");
+      }
+      if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "post_generation_sync")) {
+        return right(unit);
       }
       if (_useMockCore) {
         _transitionLifecycle(_CoreLifecycleState.stopping, reason: "mock stop");
@@ -2100,6 +2420,21 @@ class ZeonCoreService with InfraLogger {
       }
 
       var platformStopped = _platformConfirmsStopped(operationGeneration);
+      if (preemptiveStopAccepted && !platformStopped) {
+        final outcome = await _awaitPreemptivePlatformStop(operationGeneration);
+        switch (outcome) {
+          case _PreemptiveStopOutcome.stopped:
+            platformStopped = true;
+          case _PreemptiveStopOutcome.superseded:
+            return right(unit);
+          case _PreemptiveStopOutcome.timedOut:
+            loggy.warning("preemptive native VPN stop did not reach a terminal snapshot");
+            return left("native VPN service did not confirm stop");
+        }
+      }
+      if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_stopping_publication")) {
+        return right(unit);
+      }
       if (!platformStopped) {
         _transitionLifecycle(_CoreLifecycleState.stopping, reason: "stop requested");
         statusController.add(currentState = const CoreStatus.stopping());
@@ -2110,10 +2445,16 @@ class ZeonCoreService with InfraLogger {
       GrpcError? grpcStopError;
       try {
         await _withinExpectedTransportTeardown(TransportCloseIntent.stop, () async {
-          await _logRuntimeIndicators(operationGeneration, "before_stop");
+          if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_listener_cleanup")) return;
+          if (!preemptiveStopAccepted) {
+            await _logRuntimeIndicators(operationGeneration, "before_stop");
+          }
+          if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "after_runtime_probe")) return;
           await _closeSessionListeners(operationGeneration);
+          if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "after_listener_cleanup")) return;
           platformStopped = _platformConfirmsStopped(operationGeneration);
-          if (!platformStopped) {
+          if (!platformStopped && !preemptiveStopAccepted) {
+            if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_grpc_stop")) return;
             await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
           }
         });
@@ -2141,9 +2482,15 @@ class ZeonCoreService with InfraLogger {
       } catch (e) {
         loggy.error("failed to stop bg core: $e");
       }
+      if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "after_transport_cleanup")) {
+        return right(unit);
+      }
       var nativeStopped = platformStopped || _platformConfirmsStopped(operationGeneration);
       try {
         if (!nativeStopped) {
+          if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_native_stop")) {
+            return right(unit);
+          }
           nativeStopped = await core
               .stop(generation: operationGeneration)
               .timeout(const Duration(seconds: 14), onTimeout: () => false);
@@ -2155,9 +2502,14 @@ class ZeonCoreService with InfraLogger {
         }
         loggy.error("native VPN service stop failed", error, stackTrace);
       } finally {
-        await _deleteCoreCurrentConfigSnapshot();
+        if (!_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_config_cleanup")) {
+          await _deleteCoreCurrentConfigSnapshot();
+        }
       }
       if (_isStaleOperation(operationGeneration, "stop_native_result")) return right(unit);
+      if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_terminal_publication")) {
+        return right(unit);
+      }
       if (!nativeStopped && grpcStopError != null && errMsg.isEmpty) {
         errMsg = grpcStopError.message ?? "failed to stop background core";
       }

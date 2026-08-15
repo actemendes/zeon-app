@@ -276,6 +276,24 @@ open class ExtensionProvider: NEPacketTunnelProvider {
             "coreStarted": serviceStarted,
         ])
     }
+
+    func markCoreStartedData(generation: Int64) -> Data? {
+        let accepted = generation > 0 && generation == sessionGeneration
+        if accepted {
+            serviceStarted = true
+            writeMessage("(packet-tunnel) app core readiness acknowledged generation=\(generation)")
+        } else {
+            writeMessage(
+                "(packet-tunnel) rejected app core readiness generation=\(generation) current=\(sessionGeneration)"
+            )
+        }
+        return try? JSONSerialization.data(withJSONObject: [
+            "ack": "mark_core_started",
+            "accepted": accepted,
+            "generation": sessionGeneration,
+            "coreStarted": serviceStarted,
+        ])
+    }
     
     override open func sleep() async {
         logger.debug("Entering sleep mode")

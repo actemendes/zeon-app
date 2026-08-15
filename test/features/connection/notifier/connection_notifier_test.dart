@@ -17,6 +17,7 @@ import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/singbox/model/singbox_config_option.dart';
+import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 void main() {
@@ -53,6 +54,94 @@ void main() {
         isFalse,
       );
     });
+  });
+
+  group('transient stop filtering during START', () {
+    test('preparation, replacement, and pending-connect DISCONNECTED callbacks are ignored', () {
+      final transientSnapshots = [
+        _snapshot(VpnSessionPhase.disconnected, requestedAction: 'prepare'),
+        _snapshot(VpnSessionPhase.disconnected, requestedAction: 'stop', stopSource: VpnStopSource.replacement),
+        _snapshot(VpnSessionPhase.disconnected, requestedAction: 'connect'),
+      ];
+
+      for (final nativeSnapshot in transientSnapshots) {
+        expect(
+          shouldIgnoreTransientStopDuringStart(
+            desiredRunning: true,
+            status: const Disconnected(),
+            nativeSnapshot: nativeSnapshot,
+          ),
+          isTrue,
+        );
+      }
+    });
+
+    test('external stop and failure evidence remain terminal during optimistic START', () {
+      final externalStop = _snapshot(
+        VpnSessionPhase.disconnected,
+        requestedAction: 'stop',
+        stopSource: VpnStopSource.system,
+      );
+      final failedStart = _snapshot(
+        VpnSessionPhase.failed,
+        requestedAction: 'connect',
+        failureCode: 'native_start_failed',
+      );
+
+      expect(
+        shouldIgnoreTransientStopDuringStart(
+          desiredRunning: true,
+          status: const Disconnected(),
+          nativeSnapshot: externalStop,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldIgnoreTransientStopDuringStart(
+          desiredRunning: true,
+          status: const Disconnected(ConnectionFailure.unexpected('platform failure')),
+          nativeSnapshot: _snapshot(VpnSessionPhase.disconnected, requestedAction: 'connect'),
+        ),
+        isFalse,
+      );
+      expect(
+        shouldIgnoreTransientStopDuringStart(
+          desiredRunning: true,
+          status: const Disconnected(),
+          nativeSnapshot: failedStart,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  test('mobile main-button resync failure never authorizes an action from stale cache', () {
+    expect(shouldFailClosedMainButtonSnapshotResync(isMobile: true), isTrue);
+    expect(shouldFailClosedMainButtonSnapshotResync(isMobile: false), isFalse);
+  });
+
+  testWidgets('core restart signal does not rebuild the connection owner during Start', (tester) async {
+    final repository = _FakeConnectionRepository()
+      ..initialStatus = const Disconnected()
+      ..authoritativeStatus = const Connected();
+    final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.disconnected));
+    final setup = await _createContainer(repository, startedByUser: false, snapshotSource: snapshots);
+    addTearDown(setup.dispose);
+    repository.onConnectSuccess = () {
+      // ZeonCoreService publishes Started and then invalidates proxy/stat
+      // consumers. ConnectionNotifier owns a stable BehaviorSubject stream
+      // and must not be rebuilt in the narrow interval between those events.
+      repository.emit(const Connected());
+      setup.container.read(coreRestartSignalProvider.notifier).restart();
+    };
+
+    await setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+    await _pumpUntil(tester, () => setup.status is Connected, diagnostics: () => setup.observedStates.join(' -> '));
+
+    expect(repository.watchCalls, 1);
+    expect(setup.container.read(connectionNotifierProvider).hasError, isFalse);
+    expect(repository.resyncSources, contains('connect_completion'));
+    await tester.pump(const Duration(seconds: 12));
   });
 
   group('disconnect reconciliation', () {
@@ -145,6 +234,83 @@ void main() {
       await tester.pump(const Duration(seconds: 12));
     });
 
+    testWidgets('terminal Stop releases its token before old cleanup so a later session can stop', (tester) async {
+      final repository = _FakeConnectionRepository();
+      final firstStop = Completer<void>();
+      final secondStop = Completer<void>();
+      repository.disconnectBarriers.addAll([firstStop, secondStop]);
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.connected, provesConnected: true));
+      final setup = await _createContainer(repository, snapshotSource: snapshots);
+      addTearDown(setup.dispose);
+
+      final oldStop = setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      await _pumpUntil(tester, () => repository.disconnectCalls == 1);
+
+      snapshots.currentSnapshot = _snapshot(
+        VpnSessionPhase.disconnected,
+        sequence: 2,
+        version: 2,
+        requestedAction: 'stop',
+      );
+      repository.emit(const Disconnected());
+      await _pumpUntil(tester, () => setup.status is Disconnected);
+
+      await setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      expect(repository.connectCalls, 1);
+
+      snapshots.currentSnapshot = _snapshot(VpnSessionPhase.connected, sequence: 3, version: 3, provesConnected: true);
+      repository.emit(const Connected());
+      await _pumpUntil(tester, () => setup.status is Connected);
+
+      final newStop = setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      await _pumpUntil(tester, () => repository.disconnectCalls == 2);
+      expect(firstStop.isCompleted, isFalse);
+
+      firstStop.complete();
+      await oldStop;
+      // A stale finally from Stop #1 must not release Stop #2's token.
+      expect(setup.notifier.mainButtonStopInFlightForTesting, isTrue);
+
+      secondStop.complete();
+      await newStop;
+      expect(setup.notifier.mainButtonStopInFlightForTesting, isFalse);
+      await tester.pump(const Duration(seconds: 12));
+    });
+
+    testWidgets('external Start supersedes a hung Stop token and the new session remains stoppable', (tester) async {
+      final repository = _FakeConnectionRepository();
+      final firstStop = Completer<void>();
+      final secondStop = Completer<void>();
+      repository.disconnectBarriers.addAll([firstStop, secondStop]);
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.connected, provesConnected: true));
+      final setup = await _createContainer(repository, snapshotSource: snapshots);
+      addTearDown(setup.dispose);
+
+      final oldStop = setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      await _pumpUntil(tester, () => repository.disconnectCalls == 1);
+
+      // Settings/Control Center starts the tunnel while the old Dart cleanup
+      // is still pending and no intermediate Disconnected event was observed.
+      final persistExternalStart = setup.container.read(Preferences.startedByUser.notifier).updateOptimistically(true);
+      snapshots.currentSnapshot = _snapshot(VpnSessionPhase.connected, sequence: 2, version: 2, provesConnected: true);
+      repository.emit(const Connected());
+      await _pumpUntil(tester, () => setup.status is Connected);
+      await persistExternalStart;
+      expect(setup.notifier.mainButtonStopInFlightForTesting, isFalse);
+
+      final newStop = setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      await _pumpUntil(tester, () => repository.disconnectCalls == 2);
+      expect(firstStop.isCompleted, isFalse);
+
+      firstStop.complete();
+      await oldStop;
+      expect(setup.notifier.mainButtonStopInFlightForTesting, isTrue);
+
+      secondStop.complete();
+      await newStop;
+      await tester.pump(const Duration(seconds: 12));
+    });
+
     testWidgets('manual stop supersedes a mode restart and remains terminal', (tester) async {
       final repository = _FakeConnectionRepository();
       repository.authoritativeStatus = const Disconnected();
@@ -197,26 +363,61 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
     });
 
-    testWidgets('a second connect is not lost while an older connect is pending', (tester) async {
+    testWidgets('watchdog releases the START latch so retry starts while the first Future is pending', (tester) async {
+      final firstBarrier = Completer<void>();
+      final retryBarrier = Completer<void>();
       final repository = _FakeConnectionRepository()
         ..initialStatus = const Disconnected()
-        ..authoritativeStatus = const Connected()
-        ..connectBarrier = Completer<void>();
-      final setup = await _createContainer(repository, startedByUser: false);
+        ..authoritativeStatus = const Connecting()
+        ..connectBarriers.addAll([firstBarrier, retryBarrier]);
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.disconnected));
+      final setup = await _createContainer(repository, startedByUser: false, snapshotSource: snapshots);
       addTearDown(setup.dispose);
+      final displayed = MainVpnButtonState.fromSnapshot(snapshots.current!);
+      var firstCompleted = false;
 
-      final first = setup.notifier.mayConnect();
+      final first = setup.notifier
+          .handleMainVpnButtonTap(displayed, confirmStart: () async => true)
+          .whenComplete(() => firstCompleted = true);
       await _pumpUntil(tester, () => repository.connectCalls == 1);
-      final second = setup.notifier.mayConnect();
-      await _pumpUntil(tester, () => repository.connectCalls == 2);
+      expect(setup.status, const Connecting());
 
-      repository.connectBarrier!.complete();
-      await Future.wait([first, second]);
+      await tester.pump(const Duration(seconds: 12));
+      await tester.pump();
+      expect(setup.container.read(connectionNotifierProvider).hasError, isTrue);
+      expect(firstCompleted, isFalse, reason: 'the first repository Future is deliberately still unresolved');
+
+      snapshots.currentSnapshot = _snapshot(VpnSessionPhase.disconnected, sequence: 2, version: 2);
+      final retryDisplayed = MainVpnButtonState.fromSources(
+        snapshot: snapshots.current,
+        localStatus: setup.status,
+        localHasError: setup.container.read(connectionNotifierProvider).hasError,
+      );
+      final retry = setup.notifier.handleMainVpnButtonTap(retryDisplayed, confirmStart: () async => true);
+      await _pumpUntil(
+        tester,
+        () => repository.connectCalls == 2,
+        diagnostics: () =>
+            '${setup.observedStates.join(' -> ')}; calls=${repository.connectCalls}; '
+            'resync=${repository.resyncSources}; snapshotResync=${snapshots.resyncSources}',
+      );
+
+      expect(firstCompleted, isFalse);
+      expect(firstBarrier.isCompleted, isFalse);
+
+      repository.authoritativeStatus = const Connected();
+      snapshots.currentSnapshot = _snapshot(VpnSessionPhase.connected, sequence: 3, version: 3, provesConnected: true);
+      repository.emit(const Connected());
+      retryBarrier.complete();
+      await retry;
 
       expect(repository.connectCalls, 2);
       expect(repository.resyncSources.where((source) => source == 'connect_completion'), hasLength(1));
       await _pumpUntil(tester, () => setup.status is Connected, diagnostics: () => setup.observedStates.join(' -> '));
       expect(setup.status, const Connected());
+
+      firstBarrier.complete();
+      await first;
       await tester.pump(const Duration(seconds: 12));
     });
 
@@ -308,6 +509,100 @@ void main() {
       await disconnect;
     });
 
+    testWidgets('Stop watchdog releases the button token so a hung transport can be retried', (tester) async {
+      final repository = _FakeConnectionRepository()..authoritativeStatus = const Connected();
+      final firstStop = Completer<void>();
+      final secondStop = Completer<void>();
+      repository.disconnectBarriers.addAll([firstStop, secondStop]);
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.connected, provesConnected: true));
+      final setup = await _createContainer(repository, snapshotSource: snapshots);
+      addTearDown(setup.dispose);
+
+      final first = setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      await _pumpUntil(tester, () => repository.disconnectCalls == 1);
+      snapshots.currentSnapshot = _snapshot(
+        VpnSessionPhase.stopping,
+        sequence: 2,
+        version: 2,
+        requestedAction: 'stop',
+        stopSource: VpnStopSource.flutter,
+      );
+      for (var attempt = 0; attempt < 3; attempt++) {
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pump();
+      }
+
+      expect(setup.container.read(connectionNotifierProvider).hasError, isTrue);
+      expect(setup.notifier.mainButtonStopInFlightForTesting, isFalse);
+
+      final retryDisplayed = MainVpnButtonState.fromSources(
+        snapshot: snapshots.current,
+        localStatus: setup.status,
+        localDesiredRunning: setup.notifier.desiredRunningForTesting,
+        localHasError: setup.container.read(connectionNotifierProvider).hasError,
+      );
+      expect(retryDisplayed.action, MainVpnButtonAction.stop);
+      final retry = setup.notifier.handleMainVpnButtonTap(retryDisplayed);
+      await _pumpUntil(
+        tester,
+        () => repository.disconnectCalls == 2,
+        step: const Duration(milliseconds: 1),
+        diagnostics: () =>
+            'calls=${repository.disconnectCalls} state=${setup.container.read(connectionNotifierProvider)} '
+            'token=${setup.notifier.mainButtonStopInFlightForTesting} '
+            'intent=${setup.notifier.connectionIntentEpochForTesting}',
+      );
+
+      expect(repository.connectCalls, 0);
+      expect(repository.disconnectForceValues, [false, true]);
+
+      firstStop.complete();
+      secondStop.complete();
+      await Future.wait([first, retry]);
+      await tester.pump(const Duration(seconds: 12));
+    });
+
+    testWidgets('Stop watchdog retries STOP while native still owns a pending Connect', (tester) async {
+      final repository = _FakeConnectionRepository()..authoritativeStatus = const Connected();
+      final firstStop = Completer<void>();
+      final secondStop = Completer<void>();
+      repository.disconnectBarriers.addAll([firstStop, secondStop]);
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.connected, provesConnected: true));
+      final setup = await _createContainer(repository, snapshotSource: snapshots);
+      addTearDown(setup.dispose);
+
+      final first = setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      await _pumpUntil(tester, () => repository.disconnectCalls == 1);
+      snapshots.currentSnapshot = _snapshot(
+        VpnSessionPhase.verifying,
+        sequence: 2,
+        version: 2,
+        requestedAction: 'connect',
+      );
+      for (var attempt = 0; attempt < 3; attempt++) {
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pump();
+      }
+
+      final retryDisplayed = MainVpnButtonState.fromSources(
+        snapshot: snapshots.current,
+        localStatus: setup.status,
+        localDesiredRunning: setup.notifier.desiredRunningForTesting,
+        localHasError: setup.container.read(connectionNotifierProvider).hasError,
+      );
+      expect(retryDisplayed.action, MainVpnButtonAction.stop);
+
+      final retry = setup.notifier.handleMainVpnButtonTap(retryDisplayed);
+      await _pumpUntil(tester, () => repository.disconnectCalls == 2, step: const Duration(milliseconds: 1));
+
+      expect(repository.connectCalls, 0);
+      expect(repository.disconnectForceValues, [false, true]);
+      firstStop.complete();
+      secondStop.complete();
+      await Future.wait([first, retry]);
+      await tester.pump(const Duration(seconds: 12));
+    });
+
     testWidgets('external notification stop rejects a stale connected callback', (tester) async {
       final repository = _FakeConnectionRepository();
       final setup = await _createContainer(repository);
@@ -389,6 +684,143 @@ void main() {
       await tester.pump(const Duration(seconds: 12));
     });
 
+    testWidgets('one-tap START uses one native fence and immediately publishes Connecting', (tester) async {
+      final repository = _FakeConnectionRepository()
+        ..initialStatus = const Disconnected()
+        ..authoritativeStatus = const Connecting()
+        ..connectBarrier = Completer<void>();
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.disconnected));
+      final setup = await _createContainer(repository, snapshotSource: snapshots, startedByUser: false);
+      addTearDown(setup.dispose);
+
+      final connect = setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      await _pumpUntil(tester, () => repository.connectCalls == 1);
+
+      expect(snapshots.resyncSources, ['main_button_tap']);
+      expect(setup.status, const Connecting());
+
+      repository.connectBarrier!.complete();
+      await connect;
+      await tester.pump(const Duration(seconds: 12));
+    });
+
+    testWidgets('stale confirmation cannot start after a newer button attempt owns the latch', (tester) async {
+      final repository = _FakeConnectionRepository()
+        ..initialStatus = const Disconnected()
+        ..authoritativeStatus = const Connecting()
+        ..connectBarrier = Completer<void>();
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.disconnected));
+      final setup = await _createContainer(repository, snapshotSource: snapshots, startedByUser: false);
+      addTearDown(setup.dispose);
+      final confirmationEntered = Completer<void>();
+      final releaseConfirmation = Completer<void>();
+      final displayed = MainVpnButtonState.fromSnapshot(snapshots.current!);
+
+      final staleAttempt = setup.notifier.handleMainVpnButtonTap(
+        displayed,
+        confirmStart: () async {
+          confirmationEntered.complete();
+          await releaseConfirmation.future;
+          return true;
+        },
+      );
+      await confirmationEntered.future;
+
+      // A terminal platform event releases attempt #1 while its dialog is
+      // open. A newer tap may now acquire attempt #2.
+      repository.emit(const Disconnected());
+      await tester.pump();
+      final currentAttempt = setup.notifier.handleMainVpnButtonTap(displayed);
+      await _pumpUntil(tester, () => repository.connectCalls == 1);
+
+      releaseConfirmation.complete();
+      await staleAttempt;
+      expect(repository.connectCalls, 1, reason: 'the stale dialog continuation must not issue a second START');
+
+      repository.authoritativeStatus = const Connected();
+      repository.connectBarrier!.complete();
+      await currentAttempt;
+      await tester.pump(const Duration(seconds: 12));
+    });
+
+    testWidgets('replacement DISCONNECTED callback never overwrites an accepted START', (tester) async {
+      final repository = _FakeConnectionRepository()
+        ..initialStatus = const Disconnected()
+        ..authoritativeStatus = const Connecting()
+        ..connectBarrier = Completer<void>();
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.disconnected));
+      final setup = await _createContainer(repository, snapshotSource: snapshots, startedByUser: false);
+      addTearDown(setup.dispose);
+      final displayed = MainVpnButtonState.fromSnapshot(snapshots.current!);
+      final transitionStart = setup.observedStates.length;
+
+      final connect = setup.notifier.handleMainVpnButtonTap(displayed, confirmStart: () async => true);
+      await _pumpUntil(tester, () => repository.connectCalls == 1);
+      expect(setup.status, const Connecting());
+
+      snapshots.currentSnapshot = _snapshot(
+        VpnSessionPhase.disconnected,
+        sequence: 2,
+        version: 2,
+        requestedAction: 'stop',
+        stopSource: VpnStopSource.replacement,
+      );
+      repository.emit(const Disconnected());
+      await tester.pump();
+
+      expect(setup.status, const Connecting());
+      expect(
+        setup.observedStates.skip(transitionStart).map((value) => value.valueOrNull).whereType<Disconnected>(),
+        isEmpty,
+      );
+
+      repository.authoritativeStatus = const Connected();
+      snapshots.currentSnapshot = _snapshot(VpnSessionPhase.connected, sequence: 3, version: 3, provesConnected: true);
+      repository.emit(const Connected());
+      repository.connectBarrier!.complete();
+      await connect;
+      await _pumpUntil(tester, () => setup.status is Connected);
+      await tester.pump(const Duration(seconds: 12));
+    });
+
+    testWidgets('prepare DISCONNECTED callback never makes an accepted START flash OFF', (tester) async {
+      final repository = _FakeConnectionRepository()
+        ..initialStatus = const Disconnected()
+        ..authoritativeStatus = const Connecting()
+        ..connectBarrier = Completer<void>();
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.disconnected));
+      final setup = await _createContainer(repository, snapshotSource: snapshots, startedByUser: false);
+      addTearDown(setup.dispose);
+      final transitionStart = setup.observedStates.length;
+
+      final connect = setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      await _pumpUntil(tester, () => repository.connectCalls == 1);
+      expect(setup.status, const Connecting());
+
+      snapshots.currentSnapshot = _snapshot(
+        VpnSessionPhase.disconnected,
+        sequence: 2,
+        version: 2,
+        requestedAction: 'prepare',
+      );
+      repository.emit(const Disconnected());
+      await tester.pump();
+
+      expect(setup.status, const Connecting());
+      expect(
+        setup.observedStates.skip(transitionStart).map((value) => value.valueOrNull).whereType<Disconnected>(),
+        isEmpty,
+      );
+
+      repository.authoritativeStatus = const Connected();
+      snapshots.currentSnapshot = _snapshot(VpnSessionPhase.connected, sequence: 3, version: 3, provesConnected: true);
+      repository.emit(const Connected());
+      repository.connectBarrier!.complete();
+      await connect;
+      await _pumpUntil(tester, () => setup.status is Connected);
+      await tester.pump(const Duration(seconds: 12));
+    });
+
     testWidgets('STOPPING authoritative snapshot blocks every command', (tester) async {
       final repository = _FakeConnectionRepository();
       final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.stopping));
@@ -399,6 +831,32 @@ void main() {
 
       expect(repository.connectCalls, 0);
       expect(repository.disconnectCalls, 0);
+    });
+
+    testWidgets('recoverable native Stop failure dispatches STOP and never START', (tester) async {
+      final repository = _FakeConnectionRepository()..authoritativeStatus = const Disconnected();
+      final snapshots = _FakeSnapshotSource(
+        _snapshot(
+          VpnSessionPhase.failed,
+          requestedAction: 'stop',
+          stopSource: VpnStopSource.flutter,
+          failureCode: 'teardown_timeout',
+        ),
+      );
+      final setup = await _createContainer(repository, snapshotSource: snapshots);
+      addTearDown(setup.dispose);
+      final displayed = MainVpnButtonState.fromSources(
+        snapshot: snapshots.current,
+        localStatus: setup.status,
+        localDesiredRunning: false,
+      );
+
+      expect(displayed.action, MainVpnButtonAction.stop);
+      await setup.notifier.handleMainVpnButtonTap(displayed);
+
+      expect(repository.disconnectCalls, 1);
+      expect(repository.connectCalls, 0);
+      await tester.pump(const Duration(seconds: 2));
     });
 
     testWidgets('notification/resume resync to CONNECTED makes a stale button stop', (tester) async {
@@ -530,13 +988,18 @@ class _FakeConnectionRepository implements ConnectionRepository {
   ConnectionStatus initialStatus = const Connected();
   ConnectionStatus? authoritativeStatus = const Connected();
   Completer<void>? disconnectBarrier;
+  final disconnectBarriers = <Completer<void>>[];
   Completer<void>? reconnectBarrier;
   Completer<void>? connectBarrier;
+  final connectBarriers = <Completer<void>>[];
   ConnectionStatus? reconnectStatus;
   int connectCalls = 0;
   int disconnectCalls = 0;
+  final disconnectForceValues = <bool>[];
   int reconnectCalls = 0;
+  int watchCalls = 0;
   final resyncSources = <String>[];
+  void Function()? onConnectSuccess;
 
   void emit(ConnectionStatus status) => _events.add(status);
 
@@ -545,6 +1008,7 @@ class _FakeConnectionRepository implements ConnectionRepository {
 
   @override
   Stream<ConnectionStatus> watchConnectionStatus() async* {
+    watchCalls++;
     yield initialStatus;
     if (!eventsListening.isCompleted) eventsListening.complete();
     yield* _events.stream;
@@ -559,18 +1023,22 @@ class _FakeConnectionRepository implements ConnectionRepository {
   @override
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit) {
     return TaskEither(() async {
+      final callIndex = connectCalls;
       connectCalls++;
-      final barrier = connectBarrier;
+      final barrier = callIndex < connectBarriers.length ? connectBarriers[callIndex] : connectBarrier;
       if (barrier != null) await barrier.future;
+      onConnectSuccess?.call();
       return right(unit);
     });
   }
 
   @override
-  TaskEither<ConnectionFailure, Unit> disconnect() {
+  TaskEither<ConnectionFailure, Unit> disconnect({bool force = false}) {
     return TaskEither(() async {
+      final callIndex = disconnectCalls;
       disconnectCalls++;
-      final barrier = disconnectBarrier;
+      disconnectForceValues.add(force);
+      final barrier = callIndex < disconnectBarriers.length ? disconnectBarriers[callIndex] : disconnectBarrier;
       if (barrier != null) await barrier.future;
       return right(unit);
     });
@@ -623,17 +1091,36 @@ class _FakeSnapshotSource implements VpnSessionSnapshotSource {
   Stream<VpnSessionSnapshot> watch() => _events.stream;
 }
 
-VpnSessionSnapshot _snapshot(VpnSessionPhase phase, {int sequence = 1, int version = 1}) {
+VpnSessionSnapshot _snapshot(
+  VpnSessionPhase phase, {
+  int sequence = 1,
+  int version = 1,
+  String? requestedAction,
+  VpnStopSource stopSource = VpnStopSource.none,
+  bool provesConnected = false,
+  String failureCode = '',
+}) {
   return VpnSessionSnapshot(
     generation: 50,
     runtimeEpoch: 'runtime-main-button',
     sequenceNumber: sequence,
     snapshotVersion: version,
     phase: phase,
-    requestedAction: switch (phase) {
-      VpnSessionPhase.stopRequested || VpnSessionPhase.stopping || VpnSessionPhase.disconnected => 'stop',
-      _ => 'connect',
-    },
+    requestedAction:
+        requestedAction ??
+        switch (phase) {
+          VpnSessionPhase.stopRequested || VpnSessionPhase.stopping || VpnSessionPhase.disconnected => 'stop',
+          _ => 'connect',
+        },
+    stopSource: stopSource,
+    coreReady: provesConnected,
+    coreStarted: provesConnected,
+    commandEndpointReady: provesConnected,
+    tunnelReady: provesConnected,
+    protectSucceeded: provesConnected,
+    platformVpnValidated: provesConnected,
+    selectedOutboundId: provesConnected ? 'proxy-1' : '',
+    failureCode: failureCode,
     recoverable: true,
   );
 }

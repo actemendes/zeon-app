@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:basic_utils/basic_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:grpc/grpc.dart';
+import 'package:meta/meta.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:zeon/core/model/directories.dart';
 import 'package:zeon/core/utils/laststeam.dart';
@@ -19,13 +20,25 @@ import 'package:zeon/zeoncore/generated/v2/hello/hello_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 class CoreInterfaceMobile extends CoreInterface with InfraLogger {
-  CoreInterfaceMobile({bool? androidOverride, Future<bool> Function(String, int)? portProbe})
-    : _isAndroid = androidOverride ?? Platform.isAndroid,
-      // Tests use androidOverride=false to exercise the iOS bridge. At
-      // runtime only Android and iOS expose authoritative session snapshots;
-      // macOS still uses its legacy status channel.
-      _supportsSessionSnapshots = androidOverride != null || Platform.isAndroid || Platform.isIOS,
-      _portProbe = portProbe ?? isPortOpen;
+  CoreInterfaceMobile({
+    bool? androidOverride,
+    Future<bool> Function(String, int)? portProbe,
+    Duration nativeSetupTimeout = const Duration(seconds: 15),
+    Duration nativeControlTimeout = const Duration(seconds: 10),
+    Duration platformStopTimeout = const Duration(seconds: 12),
+    Duration terminalSnapshotTimeout = const Duration(seconds: 2),
+    Duration terminalSnapshotPollInterval = const Duration(milliseconds: 120),
+  }) : _nativeSetupTimeout = nativeSetupTimeout,
+       _nativeControlTimeout = nativeControlTimeout,
+       _platformStopTimeout = platformStopTimeout,
+       _terminalSnapshotTimeout = terminalSnapshotTimeout,
+       _terminalSnapshotPollInterval = terminalSnapshotPollInterval,
+       _isAndroid = androidOverride ?? Platform.isAndroid,
+       // Tests use androidOverride=false to exercise the iOS bridge. At
+       // runtime only Android and iOS expose authoritative session snapshots;
+       // macOS still uses its legacy status channel.
+       _supportsSessionSnapshots = androidOverride != null || Platform.isAndroid || Platform.isIOS,
+       _portProbe = portProbe ?? isPortOpen;
 
   static const channelPrefix = "com.zeon.app";
   static const methodChannel = MethodChannel("$channelPrefix/method");
@@ -39,8 +52,6 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   // Keep app-specific gRPC ports to avoid collisions with other ZEON-based apps on device.
   static const portBack = int.fromEnvironment("mobile_grpc_port_back", defaultValue: 17179);
   static const portFront = int.fromEnvironment("mobile_grpc_port_front", defaultValue: 17178);
-  static const _nativeSetupTimeout = Duration(seconds: 15);
-  static const _nativeControlTimeout = Duration(seconds: 10);
 
   bool _isBgClientAvailable = false;
   bool _debug = false;
@@ -49,7 +60,14 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   final bool _isAndroid;
   final bool _supportsSessionSnapshots;
   final Future<bool> Function(String, int) _portProbe;
+  final Duration _nativeSetupTimeout;
+  final Duration _nativeControlTimeout;
+  final Duration _platformStopTimeout;
+  final Duration _terminalSnapshotTimeout;
+  final Duration _terminalSnapshotPollInterval;
   int _sessionGeneration = 0;
+  String? _sessionRequestedAction;
+  int _sessionActionRevision = 0;
   VpnSessionSnapshot? _authoritativeSessionSnapshot;
   final VpnSessionSnapshotGate _snapshotGate = VpnSessionSnapshotGate();
   final BehaviorSubject<VpnSessionSnapshot> _sessionSnapshots = BehaviorSubject<VpnSessionSnapshot>();
@@ -169,17 +187,30 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     }
   }
 
-  Stream<CoreStatus> _appleSnapshotStatuses() async* {
-    await for (final event in statusChannel.receiveBroadcastStream().where(_isCurrentEvent)) {
+  Stream<CoreStatus> _appleSnapshotStatuses() => _projectAppleSnapshotStatuses(statusChannel.receiveBroadcastStream());
+
+  @visibleForTesting
+  Stream<CoreStatus> projectAppleSnapshotStatusesForTesting(Stream<Object?> events) =>
+      _projectAppleSnapshotStatuses(events);
+
+  Stream<CoreStatus> _projectAppleSnapshotStatuses(Stream<Object?> events) async* {
+    await for (final event in events.where(_isCurrentEvent)) {
       final snapshot = VpnSessionSnapshot.fromEvent(event);
       final disposition = _snapshotGate.classify(snapshot);
-      if (disposition != VpnSnapshotDisposition.stale && disposition != VpnSnapshotDisposition.duplicate) {
-        // Every iOS status event contains a complete synchronous snapshot, so
-        // it can bridge directly into the same authoritative stream used by
-        // Android and by the main VPN button.
-        _acceptAuthoritativeSnapshot(snapshot, publish: true);
+      if (disposition == VpnSnapshotDisposition.stale || disposition == VpnSnapshotDisposition.duplicate) {
+        loggy.warning(
+          "event=stale_callback_ignored generation=${snapshot.generation} "
+          "sequence=${snapshot.sequenceNumber} source=ios_snapshot disposition=${disposition.name}",
+        );
+        continue;
       }
-      yield CoreStatus.fromEvent(event);
+      // Every iOS status event contains a complete synchronous snapshot. The
+      // snapshot, rather than the legacy `status` string in the same payload,
+      // is the single authority for both storage and CoreStatus projection.
+      // A sequence gap is safe to accept here because this event itself is a
+      // complete native state, not a partial delta.
+      _acceptAuthoritativeSnapshot(snapshot, publish: true);
+      yield snapshot.toCoreStatus();
     }
   }
 
@@ -189,7 +220,11 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   void _recordAcceptedSnapshot(VpnSessionSnapshot snapshot, {required bool publish}) {
-    _sessionGeneration = max(_sessionGeneration, snapshot.generation);
+    if (snapshot.generation >= _sessionGeneration) {
+      _sessionActionRevision += 1;
+      _sessionGeneration = snapshot.generation;
+      _sessionRequestedAction = snapshot.requestedAction;
+    }
     _authoritativeSessionSnapshot = snapshot;
     if (!publish) return;
     if (_sessionSnapshots.hasValue) {
@@ -222,7 +257,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
   Future<VpnSessionSnapshot?> _getAuthoritativeSnapshot() async {
     if (!_supportsSessionSnapshots) return null;
-    final event = await methodChannel.invokeMethod<Object?>("get_vpn_session_snapshot");
+    final event = await methodChannel.invokeMethod<Object?>("get_vpn_session_snapshot").timeout(_nativeControlTimeout);
     return VpnSessionSnapshot.fromEvent(event);
   }
 
@@ -258,7 +293,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   }
 
   @override
-  bool get supportsPreemptivePlatformStop => Platform.isAndroid;
+  bool get supportsPreemptivePlatformStop => Platform.isAndroid || Platform.isIOS;
 
   Future<HelloResponse> _sayHelloWhenReady(HelloClient client) async {
     const maxAttempts = 10;
@@ -315,14 +350,16 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
       );
     }
     _status?.clean();
-    await methodChannel.invokeMethod("start", {
-      "path": path,
-      "name": name,
-      "grpcPort": portBack,
-      "startBg": true,
-      "debug": _debug,
-      "generation": generation,
-    });
+    await methodChannel
+        .invokeMethod("start", {
+          "path": path,
+          "name": name,
+          "grpcPort": portBack,
+          "startBg": true,
+          "debug": _debug,
+          "generation": generation,
+        })
+        .timeout(_nativeSetupTimeout);
 
     _isBgClientAvailable = true;
     PortProbeObservation? lastPortProbe;
@@ -391,14 +428,16 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
   @override
   Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit, {int generation = 0}) async {
-    await setSessionGeneration(generation);
-    final prepared = await methodChannel.invokeMethod<bool>("prepare_vpn", {
-      "path": path,
-      "name": name,
-      "grpcPort": portBack,
-      "disableMemoryLimit": disableMemoryLimit,
-      "generation": generation,
-    });
+    await setPreparationGeneration(generation);
+    final prepared = await methodChannel
+        .invokeMethod<bool>("prepare_vpn", {
+          "path": path,
+          "name": name,
+          "grpcPort": portBack,
+          "disableMemoryLimit": disableMemoryLimit,
+          "generation": generation,
+        })
+        .timeout(_nativeSetupTimeout);
     return prepared ?? false;
   }
 
@@ -412,10 +451,16 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     if (generation > 0) {
       await setSessionGeneration(generation);
     }
-    final acceptedGeneration = await stopMethodChannel(
-      generation: generation,
-      replacement: replacement,
-    ).timeout(const Duration(seconds: 3), onTimeout: () => generation);
+    late final int acceptedGeneration;
+    try {
+      acceptedGeneration = await stopMethodChannel(generation: generation, replacement: replacement);
+    } on TimeoutException catch (error, stackTrace) {
+      // A MethodChannel timeout does not cancel work already accepted by the
+      // platform. Continue with bounded transport and snapshot confirmation
+      // so a late native completion can still be recognized without hanging.
+      loggy.warning("native stop acknowledgement timed out", error, stackTrace);
+      acceptedGeneration = generation;
+    }
     if (replacement && acceptedGeneration != generation) {
       return false;
     }
@@ -426,39 +471,75 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
       baseDelay: const Duration(milliseconds: 160),
       maxDelay: const Duration(milliseconds: 900),
       portProbe: _portProbe,
-    ).timeout(const Duration(seconds: 12), onTimeout: () => false);
+    ).timeout(_platformStopTimeout, onTimeout: () => false);
     _isBgClientAvailable = false;
     if (!stopped) {
       return false;
     }
-    if (!_isAndroid) return true;
-    for (var attempt = 0; attempt < 10; attempt++) {
+    if (!_supportsSessionSnapshots) return true;
+    return _waitForTerminalStopSnapshot(
+      generation: replacement ? generation : max(generation, acceptedGeneration),
+      replacement: replacement,
+    );
+  }
+
+  Future<bool> _waitForTerminalStopSnapshot({required int generation, required bool replacement}) async {
+    final stopwatch = Stopwatch()..start();
+    do {
       try {
-        await resyncSessionStatus();
+        final remaining = _terminalSnapshotTimeout - stopwatch.elapsed;
+        if (remaining <= Duration.zero) return false;
+        await resyncSessionStatus().timeout(remaining);
         final snapshot = _authoritativeSessionSnapshot;
-        final terminalGenerationMatches = replacement
-            ? snapshot?.generation == generation && snapshot?.stopSource == VpnStopSource.replacement
-            : (snapshot?.generation ?? 0) >= generation;
-        if (terminalGenerationMatches && snapshot?.phase == VpnSessionPhase.disconnected) {
+        if (_confirmsPlatformStop(snapshot, generation: generation, replacement: replacement)) {
           return true;
         }
       } catch (error, stackTrace) {
-        loggy.debug("Android terminal stop snapshot poll failed", error, stackTrace);
+        loggy.debug("terminal stop snapshot poll failed", error, stackTrace);
       }
-      if (attempt < 9) {
-        await Future<void>.delayed(const Duration(milliseconds: 120));
-      }
-    }
+      final remaining = _terminalSnapshotTimeout - stopwatch.elapsed;
+      if (remaining <= Duration.zero) return false;
+      await Future<void>.delayed(remaining < _terminalSnapshotPollInterval ? remaining : _terminalSnapshotPollInterval);
+    } while (stopwatch.elapsed < _terminalSnapshotTimeout);
     return false;
+  }
+
+  @visibleForTesting
+  bool confirmsPlatformStopForTesting(
+    VpnSessionSnapshot? snapshot, {
+    required int generation,
+    required bool replacement,
+  }) => _confirmsPlatformStop(snapshot, generation: generation, replacement: replacement);
+
+  bool _confirmsPlatformStop(VpnSessionSnapshot? snapshot, {required int generation, required bool replacement}) {
+    if (snapshot == null) return false;
+    if (replacement) {
+      if (snapshot.generation != generation) return false;
+      // A real replacement teardown is tagged `replacement`. When the tunnel
+      // was already inactive, iOS deliberately preserves the pending Connect
+      // intent instead of fabricating a terminal user Stop. This method runs
+      // only after the control port has independently proved the old owner is
+      // down, so the pending-connect phases are valid replacement completion.
+      final replacementDisconnected =
+          snapshot.phase == VpnSessionPhase.disconnected && snapshot.stopSource == VpnStopSource.replacement;
+      final inactivePendingConnect =
+          snapshot.requestedAction == "connect" &&
+          (snapshot.phase == VpnSessionPhase.idle ||
+              snapshot.phase == VpnSessionPhase.startRequested ||
+              snapshot.phase == VpnSessionPhase.disconnected);
+      return replacementDisconnected || inactivePendingConnect;
+    }
+    return snapshot.phase == VpnSessionPhase.disconnected &&
+        snapshot.generation >= generation &&
+        snapshot.isTerminalStop;
   }
 
   Future<int> stopMethodChannel({int? generation, bool preemptive = false, bool replacement = false}) async {
     final requested = generation ?? _sessionGeneration;
-    final response = await methodChannel.invokeMethod<Object?>("stop", {
-      "generation": requested,
-      "preemptive": preemptive,
-      "replacement": replacement,
-    });
+    final requestRevision = ++_sessionActionRevision;
+    final response = await methodChannel
+        .invokeMethod<Object?>("stop", {"generation": requested, "preemptive": preemptive, "replacement": replacement})
+        .timeout(_nativeControlTimeout);
     // Older iOS runners returned `true` even though this method has always
     // needed the accepted generation. Tolerate that response during upgrades;
     // current runners return an integer on every path.
@@ -470,29 +551,67 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
       _ => throw StateError("invalid native stop response: ${response.runtimeType}"),
     };
     _sessionGeneration = max(_sessionGeneration, accepted);
+    final ownsAcceptedStop = preemptive ? accepted >= requested : accepted == requested;
+    if (requestRevision == _sessionActionRevision && ownsAcceptedStop && accepted == _sessionGeneration) {
+      _sessionRequestedAction = 'stop';
+    }
     return accepted;
   }
 
   @override
-  Future<void> setSessionGeneration(int generation) async {
-    if (generation <= 0 || generation == _sessionGeneration) return;
+  Future<void> setSessionGeneration(int generation) => _setSessionGeneration(generation, requestedAction: 'connect');
+
+  @override
+  Future<void> setPreparationGeneration(int generation) =>
+      _setSessionGeneration(generation, requestedAction: 'prepare');
+
+  Future<void> _setSessionGeneration(int generation, {required String requestedAction}) async {
+    if (generation <= 0) return;
     if (generation < _sessionGeneration) {
       throw StateError("stale VPN session generation: requested=$generation current=$_sessionGeneration");
     }
-    _sessionGeneration = generation;
-    final accepted = await methodChannel.invokeMethod<int>("set_session_generation", {"generation": generation});
+    if (generation == _sessionGeneration) {
+      if (requestedAction == _sessionRequestedAction) return;
+      // Preparation and the subsequent user Start deliberately share one
+      // generation. That is the only same-generation action promotion native
+      // accepts; in particular, never revive a generation already owned by
+      // Stop or demote an accepted Connect back to Prepare.
+      if (!(_sessionRequestedAction == 'prepare' && requestedAction == 'connect')) return;
+    }
+    final requestRevision = ++_sessionActionRevision;
+    final accepted = await methodChannel
+        .invokeMethod<int>("set_session_generation", {"generation": generation, "requestedAction": requestedAction})
+        .timeout(_nativeControlTimeout);
     if (accepted != null && accepted != generation) {
-      _sessionGeneration = max(_sessionGeneration, accepted);
-      throw StateError("stale VPN session generation: requested=$generation current=$accepted");
+      if (accepted > _sessionGeneration) {
+        _sessionGeneration = accepted;
+        _sessionRequestedAction = null;
+      }
+      throw SessionGenerationRejectedException(requested: generation, accepted: accepted);
+    }
+    // Advance only after the native owner acknowledges. If the MethodChannel
+    // times out, a retry with the same generation must resend instead of being
+    // suppressed by a poisoned local cache.
+    _sessionGeneration = max(_sessionGeneration, generation);
+    if (requestRevision == _sessionActionRevision && generation == _sessionGeneration) {
+      _sessionRequestedAction = requestedAction;
     }
   }
+
+  @visibleForTesting
+  int get cachedSessionGenerationForTesting => _sessionGeneration;
+
+  @visibleForTesting
+  String? get cachedSessionRequestedActionForTesting => _sessionRequestedAction;
 
   @override
   Future<void> markCoreStarted(int generation) async {
     if (generation != _sessionGeneration) {
       throw StateError("cannot mark stale VPN session ready");
     }
-    await methodChannel.invokeMethod<int>("mark_core_started", {"generation": generation});
+    await methodChannel
+        .invokeMethod<int>("mark_core_started", {"generation": generation})
+        .timeout(_nativeControlTimeout);
   }
 
   Future<bool> _waitForBackgroundCommandEndpoint(int generation) async {

@@ -13,6 +13,16 @@ class PortProbeObservation {
 
 typedef PortProbeObserver = void Function(PortProbeObservation observation);
 
+class SessionGenerationRejectedException implements Exception {
+  const SessionGenerationRejectedException({required this.requested, required this.accepted});
+
+  final int requested;
+  final int accepted;
+
+  @override
+  String toString() => 'VPN session generation rejected: requested=$requested accepted=$accepted';
+}
+
 enum BackgroundSetupFailure {
   none,
   replacementTeardown,
@@ -75,6 +85,10 @@ class CoreInterface {
   }
 
   Future<void> setSessionGeneration(int generation) async {}
+
+  /// Reserves a generation for permission/configuration preparation without
+  /// declaring that the user has requested a live VPN connection.
+  Future<void> setPreparationGeneration(int generation) => setSessionGeneration(generation);
 
   /// Sends the platform-owned VPN service a lightweight stop request. The
   /// caller performs slower gRPC/listener cleanup separately.

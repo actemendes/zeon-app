@@ -24,17 +24,27 @@ public class MethodHandler: NSObject, FlutterPlugin {
 
     switch call.method {
     case "set_session_generation":
-      guard let generation = sessionGeneration(from: call.arguments) else {
+      guard
+        let generation = sessionGeneration(from: call.arguments),
+        let requestedAction = requestedLifecycleAction(from: call.arguments)
+      else {
         result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
         return
       }
-      result(NSNumber(value: VPNManager.shared.setSessionGeneration(generation)))
+      result(
+        NSNumber(
+          value: VPNManager.shared.setSessionGeneration(
+            generation,
+            requestedAction: requestedAction
+          )
+        )
+      )
     case "mark_core_started":
       guard let generation = sessionGeneration(from: call.arguments) else {
         result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
         return
       }
-      guard VPNManager.shared.isCurrentSessionGeneration(generation) else {
+      guard VPNManager.shared.isCurrentConnectSessionGeneration(generation) else {
         result(
           FlutterError(
             code: "STALE_GENERATION",
@@ -123,17 +133,24 @@ public class MethodHandler: NSObject, FlutterPlugin {
           )
           await mainResult(true)
         } catch {
+          if VPNManager.shared.isStaleGenerationError(error) {
+            NSLog("event=stale_completion_ignored source=macos_start")
+            await mainResult(true)
+            return
+          }
           await mainResult(FlutterError(code: "SETUP_CONNECTION", message: error.localizedDescription, details: nil))
         }
       }
     case "stop":
-      guard let generation = sessionGeneration(from: call.arguments) else {
+      guard
+        let args = call.arguments as? [String: Any?],
+        let generation = sessionGeneration(from: args)
+      else {
         result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
         return
       }
-      if VPNManager.shared.isCurrentSessionGeneration(generation) {
-        VPNManager.shared.disconnect()
-      } else {
+      let replacement = args["replacement"] as? Bool ?? false
+      if !VPNManager.shared.disconnect(generation: generation, replacement: replacement) {
         NSLog("event=stale_completion_ignored source=macos_stop")
       }
       result(NSNumber(value: VPNManager.shared.currentSessionGeneration()))
@@ -166,5 +183,17 @@ public class MethodHandler: NSObject, FlutterPlugin {
       return Int64(value)
     }
     return nil
+  }
+
+  private func requestedLifecycleAction(from arguments: Any?) -> MacVPNLifecycleAction? {
+    guard let args = arguments as? [String: Any?] else { return nil }
+    let rawValue = args["requestedAction"] as? String ?? MacVPNLifecycleAction.connect.rawValue
+    guard let action = MacVPNLifecycleAction(rawValue: rawValue) else { return nil }
+    switch action {
+    case .prepare, .connect:
+      return action
+    case .none, .stop:
+      return nil
+    }
   }
 }

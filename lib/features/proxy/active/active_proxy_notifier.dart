@@ -89,19 +89,23 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
     if (!_useMockProxyFlow) {
       ref.watch(coreRestartSignalProvider);
     }
+    // Capture every Riverpod dependency before the first suspension. A core
+    // restart may invalidate this build while serviceRunning is pending; late
+    // ref.watch calls would then trip Riverpod's outdated-ref assertion on a
+    // physical START/STOP transition.
+    final proxyProvider = ref.watch(proxyRepositoryProvider);
+    final statsProvider = ref.watch(statsRepositoryProvider);
     final serviceRunning = await ref.watch(serviceRunningProvider.future);
     if (!serviceRunning) {
       loggy.debug("service is not running, skipping active proxy stream");
       return;
     }
-    final proxyProvider = ref.watch(proxyRepositoryProvider);
     final activeProxyStream = proxyProvider
         .watchActiveProxies()
         .map((event) => event.getOrElse((l) => List<OutboundGroup>.empty()))
         .map(_activeProxyFromGroups);
     final selectorStream = proxyProvider.watchProxies().map((event) => event.getOrElse((l) => null)).startWith(null);
-    final statsStream = ref
-        .watch(statsRepositoryProvider)
+    final statsStream = statsProvider
         .watchStats()
         .map((event) => event.getOrElse((_) => SystemInfo.create()))
         .startWith(SystemInfo.create());

@@ -27,7 +27,7 @@ abstract interface class ConnectionRepository {
   Stream<ConnectionStatus> watchConnectionStatus();
   Future<ConnectionStatus?> resyncConnectionStatus(String source);
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit);
-  TaskEither<ConnectionFailure, Unit> disconnect();
+  TaskEither<ConnectionFailure, Unit> disconnect({bool force = false});
   TaskEither<ConnectionFailure, Unit> reconnect(
     ProfileEntity activeProfile,
     bool disableMemoryLimit, {
@@ -37,9 +37,15 @@ abstract interface class ConnectionRepository {
 
 @visibleForTesting
 bool shouldPrepareSystemVpnForSnapshot(VpnSessionSnapshot? snapshot) {
-  if (snapshot == null || snapshot.generation <= 0) return true;
-  return (snapshot.phase == VpnSessionPhase.disconnected && snapshot.requestedAction != 'connect') ||
-      snapshot.phase == VpnSessionPhase.failed;
+  // Bootstrap preparation is optional. Unknown native state may belong to a
+  // tunnel that survived a cold Runner relaunch, so it must fail closed.
+  if (snapshot == null) return false;
+  return switch (snapshot.phase) {
+    VpnSessionPhase.idle => true,
+    VpnSessionPhase.disconnected when snapshot.requestedAction != 'connect' => true,
+    VpnSessionPhase.failed => true,
+    _ => false,
+  };
 }
 
 class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements ConnectionRepository {
@@ -140,10 +146,18 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
       // start (or a system start) to win the race. Check again immediately
       // before reserving a generation; preparation must never supersede a
       // running tunnel.
+      final expectedGeneration = singbox.currentVpnGeneration;
       if (!await _systemVpnPreparationAllowed("before_generation")) return right(unit);
-      final generation = singbox.beginVpnOperation("prepare_system_vpn");
+      final generation = singbox.tryBeginVpnPreparation("prepare_system_vpn", expectedGeneration: expectedGeneration);
+      if (generation == null) return right(unit);
       return (await singbox
-              .prepareVpnConfiguration(runtimeFile.path, activeProfile.name, disableMemoryLimit, generation: generation)
+              .prepareVpnConfiguration(
+                runtimeFile.path,
+                activeProfile.name,
+                disableMemoryLimit,
+                generation: generation,
+                bootstrapOnly: true,
+              )
               .run())
           .mapLeft(_vpnPreparationFailure);
     } catch (err, st) {
@@ -156,10 +170,10 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
     try {
       snapshot = await singbox.resyncSessionSnapshot("prepare_system_vpn_$stage");
     } catch (error, stackTrace) {
-      // This preparation is best-effort bootstrap work. Preserve the old
-      // behavior when the observational snapshot channel is unavailable.
+      // This is best-effort bootstrap work. Unknown native state must not
+      // supersede a live tunnel owned by a previous Runner process.
       loggy.warning("could not guard iOS system VPN preparation [$stage]", error, stackTrace);
-      return true;
+      return false;
     }
     final allowed = shouldPrepareSystemVpnForSnapshot(snapshot);
     if (!allowed) {
@@ -205,7 +219,8 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
       });
 
   @override
-  TaskEither<ConnectionFailure, Unit> disconnect() => singbox.stop().mapLeft(UnexpectedConnectionFailure.new);
+  TaskEither<ConnectionFailure, Unit> disconnect({bool force = false}) =>
+      singbox.stop(force: force).mapLeft(UnexpectedConnectionFailure.new);
 
   @override
   TaskEither<ConnectionFailure, Unit> reconnect(
