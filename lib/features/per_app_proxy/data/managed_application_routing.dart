@@ -489,7 +489,7 @@ class ManagedApplicationSyncService with InfraLogger {
       final previousETag = identityMatches ? _normalizeETag(_preferences.getString(eTagKey)) : null;
       final fetched = await _remoteDataSource.fetch(eTag: previousETag);
       if (fetched.notModified) {
-        if (!identityMatches || current == null || previousETag == null) {
+        if (!identityMatches || previousETag == null) {
           await _preferences.remove(eTagKey);
           throw const ManagedApplicationValidationException('304 without matching managed application cache identity');
         }
