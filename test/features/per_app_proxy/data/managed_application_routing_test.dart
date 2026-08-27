@@ -248,7 +248,7 @@ void main() {
           ManagedApplicationFetchResult(
             notModified: false,
             config: v2,
-            eTag: '"managed-apps-2-${await v2.contentChecksum()}"',
+            eTag: 'W/"managed-apps-2-${await v2.contentChecksum()}"',
           ),
         ]),
         store: store,
