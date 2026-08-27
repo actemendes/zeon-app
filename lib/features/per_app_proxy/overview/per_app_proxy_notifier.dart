@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:dartx/dartx_io.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:installed_apps/index.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/region.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
@@ -19,15 +21,29 @@ import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/features/per_app_proxy/model/pkg_flag.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:installed_apps/index.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'per_app_proxy_notifier.g.dart';
+
+Set<String> managedApplicationPackagesForMode(ManagedApplicationConfig config, AppProxyMode mode) {
+  final route = switch (mode) {
+    AppProxyMode.include => ManagedApplicationRoute.vpn,
+    AppProxyMode.exclude => ManagedApplicationRoute.direct,
+  };
+  return config.applications
+      .where(
+        (application) =>
+            application.enabled &&
+            application.platform == ManagedApplicationPlatform.android &&
+            application.route == route,
+      )
+      .map((application) => application.stableIdentifier)
+      .toSet();
+}
 
 @riverpod
 class PerAppProxy extends _$PerAppProxy with AppLogger {
   late final AppProxyMode? _mode;
-  Set<String> _managedDirectPackages = const <String>{};
+  Set<String> _managedPackages = const <String>{};
 
   @override
   Stream<Map<String, int>> build(AppProxyMode? mode) {
@@ -37,17 +53,7 @@ class PerAppProxy extends _$PerAppProxy with AppLogger {
     return Stream.fromFuture(() async {
       final appsInfo = await InstalledApps.getInstalledApps(false);
       final config = await managedConfig;
-      _managedDirectPackages = mode == AppProxyMode.exclude
-          ? config.applications
-                .where(
-                  (application) =>
-                      application.enabled &&
-                      application.platform == ManagedApplicationPlatform.android &&
-                      application.route == ManagedApplicationRoute.direct,
-                )
-                .map((application) => application.stableIdentifier)
-                .toSet()
-          : const <String>{};
+      _managedPackages = managedApplicationPackagesForMode(config, mode!);
       return appsInfo;
     }()).asyncExpand((appsInfo) {
       final phonePkgs = appsInfo.map((e) => e.packageName).toSet();
@@ -55,7 +61,7 @@ class PerAppProxy extends _$PerAppProxy with AppLogger {
         entryList,
       ) {
         final result = <String, int>{for (final entry in entryList) entry.pkgName: entry.flags};
-        for (final pkg in _managedDirectPackages.intersection(phonePkgs)) {
+        for (final pkg in _managedPackages.intersection(phonePkgs)) {
           result[pkg] = PkgFlag.managedSelection.add(result[pkg] ?? 0);
         }
         return result;
@@ -65,7 +71,7 @@ class PerAppProxy extends _$PerAppProxy with AppLogger {
 
   Future<void> updatePkg(String pkg) async {
     loggy.info('Updationg $pkg status');
-    if (_mode == AppProxyMode.exclude && _managedDirectPackages.contains(pkg)) {
+    if (_managedPackages.contains(pkg)) {
       await ref.read(appProxyDataSourceProvider).toggleManagedPkgOverride(pkg: pkg, mode: _mode!);
       return;
     }

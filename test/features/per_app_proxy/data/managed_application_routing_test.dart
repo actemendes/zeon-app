@@ -10,6 +10,7 @@ import 'package:zeon/features/per_app_proxy/data/app_proxy_data_source.dart';
 import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/features/per_app_proxy/model/pkg_flag.dart';
+import 'package:zeon/features/per_app_proxy/overview/per_app_proxy_notifier.dart';
 
 void main() {
   group('managed application schema', () {
@@ -259,7 +260,7 @@ void main() {
       final active = await store.readActive();
       expect(active?.version, 2);
       expect(active?.applications.map((value) => value.stableIdentifier), ['com.example.added']);
-      expect(jsonDecode(await store.lastKnownGoodFile.readAsString())['version'], 1);
+      expect((jsonDecode(await store.lastKnownGoodFile.readAsString()) as Map<String, dynamic>)['version'], 1);
     });
 
     test('rejects a body whose checksum does not match the versioned ETag', () async {
@@ -376,6 +377,45 @@ void main() {
     await dataSource.toggleManagedPkgOverride(pkg: 'com.example.managed', mode: AppProxyMode.exclude);
     expect(await db.select(db.appProxyEntries).get(), isEmpty);
   });
+
+  test('managed VPN is selected in include UI and a manual override removes its core rule', () async {
+    final config = ManagedApplicationConfig(
+      formatVersion: 1,
+      version: 5,
+      updatedAt: DateTime.utc(2026, 8, 27),
+      applications: [
+        _model(id: 'direct', identifier: 'com.example.direct', route: ManagedApplicationRoute.direct, order: 1),
+        _model(id: 'vpn', identifier: 'com.example.vpn', route: ManagedApplicationRoute.vpn, order: 2),
+        _model(id: 'block', identifier: 'com.example.block', route: ManagedApplicationRoute.block, order: 3),
+        _model(
+          id: 'disabled-vpn',
+          identifier: 'com.example.disabled',
+          route: ManagedApplicationRoute.vpn,
+          order: 4,
+          enabled: false,
+        ),
+      ],
+    );
+
+    expect(managedApplicationPackagesForMode(config, AppProxyMode.exclude), {'com.example.direct'});
+    expect(managedApplicationPackagesForMode(config, AppProxyMode.include), {'com.example.vpn'});
+
+    final db = Db(NativeDatabase.memory());
+    addTearDown(db.close);
+    final dataSource = AppProxyDao(db);
+    await dataSource.toggleManagedPkgOverride(pkg: 'com.example.vpn', mode: AppProxyMode.include);
+    final disabled = (await dataSource.getPkgsByFlag(
+      flag: PkgFlag.forceDeselection,
+      mode: AppProxyMode.include,
+    )).toSet();
+
+    final rules = const ManagedApplicationRuleCompiler().compile(
+      config,
+      platform: ManagedApplicationPlatform.android,
+      disabledIdentifiers: disabled,
+    );
+    expect(rules.expand((rule) => rule['package_names'] as List<String>), isNot(contains('com.example.vpn')));
+  });
 }
 
 Map<String, Object?> _application({required String id, required String identifier, required int sortOrder}) => {
@@ -404,13 +444,14 @@ ManagedApplication _model({
   required ManagedApplicationRoute route,
   required int order,
   ManagedApplicationPlatform platform = ManagedApplicationPlatform.android,
+  bool enabled = true,
 }) => ManagedApplication(
   id: id,
   platform: platform,
   stableIdentifier: identifier,
   displayName: identifier,
   route: route,
-  enabled: true,
+  enabled: enabled,
   sortOrder: order,
 );
 
