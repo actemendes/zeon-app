@@ -11,7 +11,7 @@ import 'package:zeon/singbox/model/singbox_rule.dart';
 /// cannot move proxied control-plane requests outside the VPN. When the local
 /// VPN proxy is not running, DioHttpClient connects to this origin directly.
 abstract final class MobileApiProxyRoute {
-  static const apiBaseUrl = String.fromEnvironment('mobile_api_base_url', defaultValue: 'https://130.49.151.173');
+  static const apiBaseUrl = String.fromEnvironment('mobile_api_base_url', defaultValue: 'https://api.zeon-vps.online');
 
   /// Returns true only for requests to the configured control-plane origin.
   ///

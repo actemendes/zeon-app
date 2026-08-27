@@ -21,7 +21,7 @@ Outputs are written to `out/diagnostics/profile_timeout_diag_YYYYMMDD_HHMMSS/`:
 Defaults:
 
 - user: `649669380`
-- primary: `https://130.49.151.173`
+- primary: `https://api.zeon-vps.online`
 - fallback: `https://zeon-vps.link`
 - iterations: `100` (default endpoints), `40` (fallback open)
 

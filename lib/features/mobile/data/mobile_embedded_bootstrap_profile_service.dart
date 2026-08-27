@@ -50,11 +50,11 @@ class MobileEmbeddedBootstrapProfileService with InfraLogger {
        _preferences = preferences;
 
   static const profileId = 'mobile-embedded-bootstrap-anonymous-v1';
-  static const profileUrl = 'embedded://mobile-bootstrap/open/7697542005?v=6';
+  static const profileUrl = 'embedded://mobile-bootstrap/open/7697542005?v=7';
   static const profileName = 'anonimous';
 
   static const _profileUrlPrefix = 'embedded://mobile-bootstrap/';
-  static const _version = 6;
+  static const _version = 7;
   static const _prefProfileId = 'mobile_embedded_bootstrap_profile_id';
   static const _prefVersion = 'mobile_embedded_bootstrap_profile_version';
   static const _profileUpdateInterval = Duration(hours: 1);
@@ -62,8 +62,8 @@ class MobileEmbeddedBootstrapProfileService with InfraLogger {
     'profile-title': 'ZEON | anonimous',
     'profile-update-interval': '1',
     'subscription-userinfo': 'upload=0; download=0; total=0; expire=32535162000',
-    'support-url': 'https://130.49.151.173',
-    'profile-web-page-url': 'https://130.49.151.173',
+    'support-url': 'https://api.zeon-vps.online',
+    'profile-web-page-url': 'https://api.zeon-vps.online',
   };
 
   final ProfileDataSource _profileDataSource;
