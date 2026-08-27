@@ -169,10 +169,21 @@ void main() {
       );
       expect((await store.readActive())?.version, 3);
     });
+
+    test('rejects a same-version content collision without rotating LKG', () async {
+      await store.install(_config(version: 2, identifier: 'com.example.original'));
+
+      await expectLater(
+        store.install(_config(version: 2, identifier: 'com.example.collision')),
+        throwsA(isA<ManagedApplicationValidationException>()),
+      );
+      expect((await store.readActive())?.applications.single.stableIdentifier, 'com.example.original');
+      expect(await store.lastKnownGoodFile.exists(), isFalse);
+    });
   });
 
   group('managed application sync', () {
-    test('keeps LKG on 304 and bounds ETag use to a proven cache identity', () async {
+    test('rejects an unsolicited 304 and keeps LKG without trusting an unbound ETag', () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
       final directory = await Directory.systemTemp.createTemp('zeon-managed-app-sync-');
@@ -186,7 +197,7 @@ void main() {
       ]);
       final service = ManagedApplicationSyncService(remoteDataSource: remote, store: store, preferences: preferences);
 
-      expect(await service.sync(force: true), ManagedApplicationSyncResult.notModified);
+      expect(await service.sync(force: true), ManagedApplicationSyncResult.failed);
       expect((await store.readActive())?.version, 2);
       expect(remote.eTags, [null]);
     });
@@ -234,7 +245,11 @@ void main() {
       );
       final service = ManagedApplicationSyncService(
         remoteDataSource: _FakeRemote([
-          ManagedApplicationFetchResult(notModified: false, config: v2, eTag: '"managed-apps-2"'),
+          ManagedApplicationFetchResult(
+            notModified: false,
+            config: v2,
+            eTag: '"managed-apps-2-${await v2.contentChecksum()}"',
+          ),
         ]),
         store: store,
         preferences: preferences,
@@ -245,6 +260,32 @@ void main() {
       expect(active?.version, 2);
       expect(active?.applications.map((value) => value.stableIdentifier), ['com.example.added']);
       expect(jsonDecode(await store.lastKnownGoodFile.readAsString())['version'], 1);
+    });
+
+    test('rejects a body whose checksum does not match the versioned ETag', () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final directory = await Directory.systemTemp.createTemp('zeon-managed-app-sync-checksum-');
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      final store = ManagedApplicationStore(directory: directory);
+      await store.install(_config(version: 1, identifier: 'com.example.lkg'));
+      final candidate = _config(version: 2, identifier: 'com.example.candidate');
+      final service = ManagedApplicationSyncService(
+        remoteDataSource: _FakeRemote([
+          ManagedApplicationFetchResult(
+            notModified: false,
+            config: candidate,
+            eTag: '"managed-apps-2-${List<String>.filled(64, '0').join()}"',
+          ),
+        ]),
+        store: store,
+        preferences: preferences,
+      );
+
+      expect(await service.sync(force: true), ManagedApplicationSyncResult.failed);
+      expect((await store.readActive())?.applications.single.stableIdentifier, 'com.example.lkg');
     });
   });
 

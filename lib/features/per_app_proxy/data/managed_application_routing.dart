@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -214,6 +215,8 @@ class ManagedApplicationConfig {
     'updatedAt': updatedAt.toUtc().toIso8601String(),
     'applications': applications.map((application) => application.toJson()).toList(growable: false),
   };
+
+  Future<String> contentChecksum() => _sha256Hex(utf8.encode(jsonEncode(toJson())));
 }
 
 const embeddedAndroidDirectApplicationIds = <String>[
@@ -294,8 +297,16 @@ class ManagedApplicationStore {
 
   Future<ManagedApplicationConfig> install(ManagedApplicationConfig candidate) async {
     final current = await readActive();
-    if (current != null && candidate.version < current.version) {
-      throw const ManagedApplicationValidationException('managed application version rollback');
+    if (current != null) {
+      if (candidate.version < current.version) {
+        throw const ManagedApplicationValidationException('managed application version rollback');
+      }
+      if (candidate.version == current.version) {
+        if (await candidate.contentChecksum() != await current.contentChecksum()) {
+          throw const ManagedApplicationValidationException('managed application same-version content collision');
+        }
+        return current;
+      }
     }
     await directory.create(recursive: true);
     await temporaryFile.writeAsString(jsonEncode(candidate.toJson()), flush: true);
@@ -429,6 +440,7 @@ class ManagedApplicationSyncService with InfraLogger {
   static const lastSuccessfulCheckKey = 'managed_applications_last_successful_check';
   static const eTagKey = 'managed_applications_etag';
   static const activeVersionKey = 'managed_applications_active_version';
+  static const activeChecksumKey = 'managed_applications_active_checksum';
 
   final ManagedApplicationRemoteDataSource _remoteDataSource;
   final ManagedApplicationStore _store;
@@ -466,27 +478,35 @@ class ManagedApplicationSyncService with InfraLogger {
       final checkedAt = _now().toUtc();
       final current = await _store.readActive();
       final previousCheck = DateTime.tryParse(_preferences.getString(lastSuccessfulCheckKey) ?? '')?.toUtc();
-      final identityMatches = current != null && _preferences.getInt(activeVersionKey) == current.version;
+      final currentChecksum = current == null ? null : await current.contentChecksum();
+      final identityMatches =
+          current != null &&
+          _preferences.getInt(activeVersionKey) == current.version &&
+          _preferences.getString(activeChecksumKey) == currentChecksum;
       if (!force && identityMatches && previousCheck != null && checkedAt.isBefore(previousCheck.add(ttl))) {
         return ManagedApplicationSyncResult.skipped;
       }
       final previousETag = identityMatches ? _normalizeETag(_preferences.getString(eTagKey)) : null;
       final fetched = await _remoteDataSource.fetch(eTag: previousETag);
       if (fetched.notModified) {
-        if (current == null) {
+        if (!identityMatches || current == null || previousETag == null) {
           await _preferences.remove(eTagKey);
-          throw const ManagedApplicationValidationException('304 without active managed application config');
+          throw const ManagedApplicationValidationException('304 without matching managed application cache identity');
         }
-        await _record(checkedAt, current.version, fetched.eTag ?? previousETag);
+        await _record(checkedAt, current, fetched.eTag ?? previousETag);
         return ManagedApplicationSyncResult.notModified;
       }
       final candidate = fetched.config;
       if (candidate == null) {
         throw const ManagedApplicationValidationException('missing managed application config');
       }
+      final candidateChecksum = await candidate.contentChecksum();
+      if (_managedApplicationETagChecksum(fetched.eTag, candidate.version) != candidateChecksum) {
+        throw const ManagedApplicationValidationException('managed application response checksum mismatch');
+      }
       final changed = current == null || current.version != candidate.version;
       final installed = await _store.install(candidate);
-      await _record(checkedAt, installed.version, fetched.eTag);
+      await _record(checkedAt, installed, fetched.eTag);
       if (changed) onChanged?.call();
       loggy.info('managed application config accepted [reason=$reason version=${installed.version} changed=$changed]');
       return changed ? ManagedApplicationSyncResult.updated : ManagedApplicationSyncResult.notModified;
@@ -496,9 +516,10 @@ class ManagedApplicationSyncService with InfraLogger {
     }
   }
 
-  Future<void> _record(DateTime checkedAt, int version, String? eTag) async {
+  Future<void> _record(DateTime checkedAt, ManagedApplicationConfig config, String? eTag) async {
     await _preferences.setString(lastSuccessfulCheckKey, checkedAt.toIso8601String());
-    await _preferences.setInt(activeVersionKey, version);
+    await _preferences.setInt(activeVersionKey, config.version);
+    await _preferences.setString(activeChecksumKey, await config.contentChecksum());
     final normalizedETag = _normalizeETag(eTag);
     if (normalizedETag == null) {
       await _preferences.remove(eTagKey);
@@ -612,6 +633,20 @@ ManagedApplicationRoute _parseRoute(String value) {
 String? _normalizeETag(String? value) {
   final normalized = value?.trim();
   return normalized == null || normalized.isEmpty ? null : normalized;
+}
+
+String? _managedApplicationETagChecksum(String? value, int version) {
+  final normalized = _normalizeETag(value);
+  if (normalized == null) return null;
+  return RegExp(
+    '^"managed-apps-$version-([a-f0-9]{64})"\$',
+    caseSensitive: false,
+  ).firstMatch(normalized)?.group(1)?.toLowerCase();
+}
+
+Future<String> _sha256Hex(List<int> bytes) async {
+  final digest = await Sha256().hash(bytes);
+  return digest.bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
 }
 
 String? _responseETag(Response<dynamic> response) {
