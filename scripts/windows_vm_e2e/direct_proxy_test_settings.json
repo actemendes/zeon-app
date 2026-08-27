@@ -1,0 +1,7 @@
+{
+  "enable-clash-api": false,
+  "enable-full-config": true,
+  "enable-tun": false,
+  "set-system-proxy": true,
+  "mixed-port": 55432
+}

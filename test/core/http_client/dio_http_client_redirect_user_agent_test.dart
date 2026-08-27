@@ -36,9 +36,7 @@ void main() {
           return;
         }
         request.response.statusCode = HttpStatus.ok;
-        request.response.write(
-          request.headers.value(HttpHeaders.userAgentHeader) ?? '(none)',
-        );
+        request.response.write(request.headers.value(HttpHeaders.userAgentHeader) ?? '(none)');
         await request.response.close();
       });
     });
@@ -52,15 +50,14 @@ void main() {
         timeout: const Duration(seconds: 10),
         userAgent: userAgent,
         debug: false,
+        // This characterizes the legacy Dart HttpClient redirect path. The
+        // Windows system-network path is covered by WinHTTP-specific tests.
+        isWindows: false,
       );
       final tempDir = await Directory.systemTemp.createTemp('zeon_ua_test');
       final target = '${tempDir.path}${Platform.pathSeparator}payload.txt';
       try {
-        await client.download(
-          'http://${server.address.host}:${server.port}/open',
-          target,
-          directOnly: true,
-        );
+        await client.download('http://${server.address.host}:${server.port}/open', target, directOnly: true);
         return File(target).readAsStringSync();
       } finally {
         await tempDir.delete(recursive: true);
@@ -77,7 +74,8 @@ void main() {
       expect(
         body,
         zeonUserAgent,
-        reason: 'the canonical subscription hop must still identify as ZEON, '
+        reason:
+            'the canonical subscription hop must still identify as ZEON, '
             'otherwise the endpoint serves a format without tls.certificate',
       );
       expect(seenUserAgents, hasLength(2));

@@ -1,0 +1,16 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "outbounds": [
+    {
+      "type": "socks",
+      "tag": "unused-local-test-outbound",
+      "server": "127.0.0.1",
+      "server_port": 65000
+    }
+  ],
+  "route": {
+    "final": "direct §hide§"
+  }
+}

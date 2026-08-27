@@ -218,6 +218,7 @@ class ProfileParser {
       proxyOnly: proxyOnly,
       directOnly: directOnly,
       disableRetry: disableRetry,
+      operation: 'profile_download',
     );
 
     late final Response rs;

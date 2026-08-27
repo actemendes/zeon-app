@@ -474,6 +474,9 @@ Name: "{userstartup}\${displayName}"; Filename: "{app}\${exeName}"; WorkingDir: 
 
 [Run]
 Filename: "{app}\${exeName}"; Description: "{cm:LaunchProgram,${displayName}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{app}\${exeName}"; Parameters: "--recover-system-proxy"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "ZEONSystemProxyRecovery"
 "@
 
     Set-Content -LiteralPath $issPath -Value $iss -NoNewline

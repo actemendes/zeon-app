@@ -1,11 +1,15 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
+import 'package:zeon/core/http_client/windows_system_http_transport.dart';
+import 'package:zeon/core/model/failures.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/mobile/data/mobile_sensitive_storage.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
@@ -58,6 +62,8 @@ class MobileConnLinkImportService with InfraLogger {
   final ProfileDataSource _profileDataSource;
   final SharedPreferences _preferences;
   final MobileSensitiveStorage _sensitiveStorage;
+  bool _sawTransportFailure = false;
+  bool _sawNonTransportFailure = false;
 
   MobileConnLinkInput normalizeConnectionLink(String rawInput) {
     final input = rawInput.trim();
@@ -123,6 +129,8 @@ class MobileConnLinkImportService with InfraLogger {
     bool clearUserIdWhenMissing = true,
     MobileConnLinkImportMode mode = MobileConnLinkImportMode.standard,
   }) async {
+    _sawTransportFailure = false;
+    _sawNonTransportFailure = false;
     final normalized = normalizeConnectionLink(rawInput);
     if (normalized.primaryConnLink.isEmpty || Uri.tryParse(normalized.primaryConnLink) == null) {
       throw const MobileConnLinkImportException("validation_error");
@@ -157,7 +165,10 @@ class MobileConnLinkImportService with InfraLogger {
 
     if (importedUrl == null) {
       loggy.warning("mobile conn_link import: all candidates failed [link=${_maskLink(normalized.primaryConnLink)}]");
-      throw const MobileConnLinkImportException("import_failed");
+      throw MobileConnLinkImportException(
+        "import_failed",
+        transportFailure: _sawTransportFailure && !_sawNonTransportFailure,
+      );
     }
 
     await _replaceManagedProfileWithActive();
@@ -421,13 +432,40 @@ class MobileConnLinkImportService with InfraLogger {
         loggy.info("mobile conn_link import success: upsertRemote($label)");
         return true;
       }
+      result.match(_recordImportFailure, (_) {});
       loggy.warning("mobile conn_link import fail: upsertRemote($label) ${_eitherError(result)}");
       return false;
     } catch (e, st) {
+      _recordImportFailure(e);
       loggy.warning("mobile conn_link import threw: upsertRemote($label)", e, st);
       return false;
     }
   }
+
+  void _recordImportFailure(Object failure) {
+    if (_isTransportFailure(failure)) {
+      _sawTransportFailure = true;
+    } else {
+      _sawNonTransportFailure = true;
+    }
+  }
+
+  bool _isTransportFailure(Object error) => switch (error) {
+    UnexpectedFailure(error: final Object nested) => _isTransportFailure(nested),
+    DioException(:final response) when response != null => false,
+    DioException(:final error?) => _isTransportFailure(error),
+    DioException(:final type) => switch (type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.connectionError ||
+      DioExceptionType.unknown => true,
+      _ => false,
+    },
+    WindowsSystemNetworkException() || SocketException() || HandshakeException() => true,
+    VpnProxyUnavailableException() => true,
+    _ => false,
+  };
 
   Future<void> _replaceManagedProfileWithActive() async {
     try {
@@ -814,9 +852,10 @@ class MobileConnLinkImportResult {
 }
 
 class MobileConnLinkImportException implements Exception {
-  const MobileConnLinkImportException(this.code);
+  const MobileConnLinkImportException(this.code, {this.transportFailure = false});
 
   final String code;
+  final bool transportFailure;
 
   @override
   String toString() => code;

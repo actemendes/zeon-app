@@ -67,6 +67,10 @@ class _ConnectionWrapperState extends ConsumerState<ConnectionWrapper> with AppL
       if (connection.asData?.value is Connected) {
         unawaited(ref.read(managedRuleSetSyncServiceProvider).syncWhenVpnAvailable());
       }
+      if (PlatformUtils.isWindows) {
+        unawaited(ref.read(mobileBootstrapImportServiceProvider).retryWindowsAfterUiIfNeeded());
+        return;
+      }
       if (!PlatformUtils.isMobile) return;
       // A bootstrap request can fail before a Navigator exists. Retry once the
       // UI is ready so adaptive HTTP may offer VPN recovery to the user.

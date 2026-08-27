@@ -26,7 +26,9 @@ import 'package:zeon/singbox/model/warp_account.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/utils/windows_privilege_utils.dart';
+import 'package:zeon/utils/windows_tun_diagnostics.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface.dart';
+import 'package:zeon/zeoncore/core_start_signal_tracker.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface_wrapper_stub.dart'
     if (dart.library.io) 'package:zeon/zeoncore/core_interface/core_interface_wrapper.dart';
 import 'package:zeon/zeoncore/generated/v2/config/route_rule.pb.dart' as route_rule;
@@ -217,6 +219,7 @@ class ZeonCoreService with InfraLogger {
   static const _listenerBackoffMaxMs = 6000;
   static const _grpcControlTimeout = Duration(seconds: 6);
   static const _grpcLifecycleTimeout = Duration(seconds: 15);
+  static const _grpcLateStartConfirmationTimeout = Duration(seconds: 30);
 
   bool get _useMockCore => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
 
@@ -242,6 +245,7 @@ class ZeonCoreService with InfraLogger {
     },
   );
   final SerialLifecycleQueue _lifecycleQueue = SerialLifecycleQueue();
+  final CoreStartSignalTracker _coreStartSignals = CoreStartSignalTracker();
   late final StreamSubscription<VpnSessionSnapshot> _platformSnapshotSubscription;
   Future<void> _platformSnapshotTail = Future<void>.value();
   VpnSessionSnapshot? _latestPlatformSnapshot;
@@ -905,6 +909,7 @@ class ZeonCoreService with InfraLogger {
     if (!_sessionGeneration.isCurrent(generation, source: "coreInfoListener[$key]")) {
       return currentState;
     }
+    _coreStartSignals.observe(generation, next);
     var gatedNext = _gateTerminalStatus(next, generation, "coreInfoListener[$key]");
     // The core may emit STOPPED/ALREADY_STOPPED while an explicit local stop
     // is already in progress. That is a successful terminal acknowledgement,
@@ -1500,6 +1505,16 @@ class ZeonCoreService with InfraLogger {
         CloseFrontBackgroundState.active;
   }
 
+  Future<bool> _waitForConfirmedCoreStart(int generation) async {
+    final deadline = DateTime.now().add(_grpcLateStartConfirmationTimeout);
+    while (_sessionGeneration.isCurrent(generation, source: "late_core_start_confirmation") &&
+        DateTime.now().isBefore(deadline)) {
+      if (_coreStartSignals.confirmsStarted(generation)) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    return _coreStartSignals.confirmsStarted(generation);
+  }
+
   Future<CloseFrontBackgroundState> _probeBackgroundCoreState({
     int attempts = 1,
     Duration retryDelay = const Duration(milliseconds: 250),
@@ -1864,7 +1879,9 @@ class ZeonCoreService with InfraLogger {
         }
 
         if (_isMissingWindowsTunPrivilege()) {
-          loggy.warning("VPN mode on Windows requires administrator privileges");
+          loggy.warning(
+            jsonEncode(windowsTunFailureDiagnostic(stage: 'elevation_preflight', elevated: isWindowsProcessElevated())),
+          );
           return left(const ConnectionFailure.missingPrivilege());
         }
 
@@ -1874,6 +1891,7 @@ class ZeonCoreService with InfraLogger {
         }
 
         _clearRuntimeOutboundSnapshot("start requested");
+        _coreStartSignals.reset(generation);
         _transitionLifecycle(_CoreLifecycleState.starting, reason: "start requested");
         statusController.add(currentState = const CoreStatus.starting());
         loggy.debug("starting");
@@ -1999,6 +2017,17 @@ class ZeonCoreService with InfraLogger {
             return left(const ConnectionFailure.unexpected("core is already started by another session"));
           }
           if (res.messageType != MessageType.EMPTY && !macOSPacketTunnelAlreadyStarted) {
+            if (PlatformUtils.isWindows && ref.read(ConfigOptions.serviceMode) == ServiceMode.tun) {
+              loggy.warning(
+                jsonEncode(
+                  windowsTunFailureDiagnostic(
+                    stage: 'core_start_response',
+                    elevated: isWindowsProcessElevated(),
+                    error: res.message,
+                  ),
+                ),
+              );
+            }
             final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_start_response");
             final disposition = _classifyStartupFailure(
               generation: generation,
@@ -2067,9 +2096,17 @@ class ZeonCoreService with InfraLogger {
             return left(ConnectionFailure.missingVpnPermission(message));
           }
           final transientTransportClose = _isTransientGrpcTransportClose(e);
-          if (transientTransportClose &&
+          final startDeadlineExceeded = e.code == StatusCode.deadlineExceeded;
+          if ((transientTransportClose || startDeadlineExceeded) &&
               _sessionGeneration.isCurrent(generation, source: "core_start_transport_close")) {
-            final backgroundCoreActive = await _isBackgroundCoreReachable(attempts: 3);
+            // The desktop management endpoint exists before the data plane has
+            // finished starting, so an open loopback port cannot prove that a
+            // timed-out Start committed.  Require the current listener to have
+            // observed STARTING -> STARTED.  Existing transport-close recovery
+            // keeps its platform/background probe for non-deadline failures.
+            final listenerConfirmedStart = startDeadlineExceeded && await _waitForConfirmedCoreStart(generation);
+            final backgroundCoreActive =
+                listenerConfirmedStart || (!startDeadlineExceeded && await _isBackgroundCoreReachable(attempts: 3));
             if (backgroundCoreActive) {
               try {
                 await core.markCoreStarted(generation);
