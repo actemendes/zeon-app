@@ -56,7 +56,7 @@ class ProfileParser {
   @visibleForTesting
   static String? publicFallbackUrl(String url) {
     final uri = Uri.tryParse(url.trim());
-    if (uri == null || uri.host != "130.49.151.173") return null;
+    if (uri == null || !_controlPlaneProfileHosts.contains(uri.host.toLowerCase())) return null;
     final segments = uri.pathSegments;
     if (segments.length == 2 && segments.first == "open" && segments.last.isNotEmpty) {
       return Uri(
@@ -78,6 +78,10 @@ class ProfileParser {
     }
     return null;
   }
+
+  // The IP remains accepted only for profiles persisted by pre-domain clients.
+  // New control-plane requests use the publicly trusted domain.
+  static const _controlPlaneProfileHosts = <String>{"api.zeon-vps.online", "130.49.151.173"};
 
   final Ref _ref;
   final DioHttpClient _httpClient;

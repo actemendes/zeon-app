@@ -32,7 +32,7 @@ void main() {
             enabled: true,
             name: 'duplicate control-plane rule',
             outbound: route_rule.Outbound.proxy,
-            ipCidrs: const <String>['130.49.151.173/32'],
+            domainSuffixes: const <String>['api.zeon-vps.online'],
           ),
           route_rule.Rule(
             listOrder: 10,
@@ -70,7 +70,7 @@ void main() {
     final profileRules = (payload['profile-rules'] as List).cast<Map<String, dynamic>>();
 
     expect(rules, hasLength(3));
-    expect(rules.first['ip_cidrs'], const <String>['130.49.151.173/32']);
+    expect(rules.first['domain_suffixes'], const <String>['api.zeon-vps.online']);
     expect(rules.first['outbound'], RuleOutbound.proxy.toCoreValue());
     expect(rules[1]['name'], 'first explicit rule');
     expect(rules[2]['name'], 'second explicit rule');
@@ -80,8 +80,8 @@ void main() {
     expect(profileRules.single['list_order'], 0);
     expect(
       rules.where((rule) {
-        final values = rule['ip_cidrs'];
-        return values is List && values.contains('130.49.151.173/32');
+        final values = rule['domain_suffixes'];
+        return values is List && values.contains('api.zeon-vps.online');
       }),
       hasLength(1),
     );

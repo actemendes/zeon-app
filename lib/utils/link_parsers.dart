@@ -8,7 +8,7 @@ typedef ProfileLink = ({String url, String name});
 abstract class LinkParser {
   static const _mobileApiBaseUrl = String.fromEnvironment(
     "mobile_api_base_url",
-    defaultValue: "https://130.49.151.173",
+    defaultValue: "https://api.zeon-vps.online",
   );
   static const _mobilePublicOpenBaseUrl = "https://zeon-vps.link";
 

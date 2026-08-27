@@ -9,16 +9,25 @@ void main() {
   const validSupportUrl = "https://example.com/support";
 
   group("publicFallbackUrl", () {
-    test("maps canonical open links to the public TUN-accessible endpoint", () {
+    test("maps domain open links to the public TUN-accessible endpoint", () {
+      expect(
+        ProfileParser.publicFallbackUrl("https://api.zeon-vps.online/open/8288649125"),
+        "https://zeon-vps.link/open/8288649125",
+      );
+    });
+
+    test("keeps legacy IP open links compatible", () {
       expect(
         ProfileParser.publicFallbackUrl("https://130.49.151.173/open/8288649125"),
         "https://zeon-vps.link/open/8288649125",
       );
     });
 
-    test("maps canonical subscription links to the public Netlify endpoint", () {
+    test("maps domain subscription links to the public Netlify endpoint", () {
       expect(
-        ProfileParser.publicFallbackUrl("https://130.49.151.173/subscription/3435bc25-d3db-4d2b-a6ed-84703bc97880"),
+        ProfileParser.publicFallbackUrl(
+          "https://api.zeon-vps.online/subscription/3435bc25-d3db-4d2b-a6ed-84703bc97880",
+        ),
         "https://ok24-server.com/.netlify/functions/subscription/3435bc25-d3db-4d2b-a6ed-84703bc97880",
       );
     });

@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover - optional dependency in runtime
 
 
 DEFAULT_API_KEY = "mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7"
-PRIMARY_BASE = "https://130.49.151.173"
+PRIMARY_BASE = "https://api.zeon-vps.online"
 FALLBACK_BASE = "https://zeon-vps.link"
 WRITE_FMT = (
     "%{http_code}\t%{time_namelookup}\t%{time_connect}\t%{time_appconnect}\t"

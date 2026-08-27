@@ -6,6 +6,13 @@ import 'package:zeon/singbox/model/singbox_rule.dart';
 
 void main() {
   group('MobileApiProxyRoute', () {
+    test('production control-plane defaults to the domain origin', () {
+      expect(MobileApiProxyRoute.apiBaseUrl, 'https://api.zeon-vps.online');
+      final rule = MobileApiProxyRoute.ruleFor(MobileApiProxyRoute.apiBaseUrl);
+      expect(rule?.domains, const <String>['api.zeon-vps.online']);
+      expect(rule?.ip, isNull);
+    });
+
     test('builds a forced proxy rule for an IPv4 API host', () {
       final rule = MobileApiProxyRoute.ruleFor('https://130.49.151.173/api/v1');
 

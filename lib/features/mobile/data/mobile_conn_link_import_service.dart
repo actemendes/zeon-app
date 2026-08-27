@@ -45,7 +45,7 @@ class MobileConnLinkImportService with InfraLogger {
        _preferences = preferences,
        _sensitiveStorage = sensitiveStorage ?? MobileSensitiveStorage(preferences: preferences);
 
-  static const apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://130.49.151.173");
+  static const apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://api.zeon-vps.online");
   static const publicOpenBaseUrl = "https://zeon-vps.link";
   static const enablePublicOpenFallback = bool.fromEnvironment("mobile_enable_public_open_fallback");
   static const _blockedRedirectHosts = <String>{"ok24-server.com", "www.ok24-server.com"};

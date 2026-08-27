@@ -12,8 +12,8 @@
 - Managed-профиль: профиль, который приложение получило через мобильную цепочку `bootstrap`, ручной импорт `conn_link` или bind confirm и дальше считает управляемым. Приложение может заменить этот профиль новым импортом, удалить старый managed-профиль, удалить лишние профили и сохранить id текущего managed-профиля в `mobile_managed_profile_id`.
 - Embedded bootstrap-профиль: временный active remote-профиль из зашитого в приложение anonymus subscription. Используется только когда сетевой bootstrap не смог создать/импортировать профиль до входа в UI. Не выставляет `mobile_auto_import_done`, помечается через `mobile_embedded_bootstrap_profile_id`, хранится как текущий `mobile_managed_profile_id` и должен быть заменен реальным managed-профилем при следующем успешном API/import.
 - `api_link`: базовый адрес мобильного API из `mobile_api_base_url`. Используется и для backend API (`/api/v1/...`, `/bind/...`), и как host основного импортируемого `conn_link`.
-- `conn_link`: основной импортируемый URL профиля в формате `api_link/open/$openId`. Пример: `https://130.49.151.173/open/649669380`. В API рядом могут встречаться поля `connection_link`, `raw_url`, `conn_link` или технический `subscriptionUrl`; входные `/open/$openId` и публичные ссылки нормализуются к основному `conn_link`.
-- Публичная open-ссылка: `https://zeon-vps.link/open/$openId`. Это публичный alias для ввода; в open-сценарии сервис канонизирует его в primary `https://130.49.151.173/open/$openId` до сетевого импорта.
+- `conn_link`: основной импортируемый URL профиля в формате `api_link/open/$openId`. Пример: `https://api.zeon-vps.online/open/649669380`. В API рядом могут встречаться поля `connection_link`, `raw_url`, `conn_link` или технический `subscriptionUrl`; входные `/open/$openId` и публичные ссылки нормализуются к основному `conn_link`.
+- Публичная open-ссылка: `https://zeon-vps.link/open/$openId`. Это публичный alias для ввода; в open-сценарии сервис канонизирует его в primary `https://api.zeon-vps.online/open/$openId` до сетевого импорта.
 - Режимы импорта `conn_link`:
   - `fast`: короткий путь без long-tail ретраев/резолвов; используется при ручном импорте в Intro.
   - `standard`: расширенный путь с resolve/no-validate fallback; используется в фоновых повторах и при явном вызове.
@@ -115,8 +115,8 @@ flowchart TD
 2. Для `/open/$openId` строить primary `conn_link = api_link/open/$openId`.
 3. Для того же `$openId` добавлять fallback `https://zeon-vps.link/open/$openId` только при `mobile_enable_public_open_fallback=true`.
 4. Переписывать входные публичные/blocked host на primary:
-   - `zeon-vps.link/*` -> `130.49.151.173/*`
-   - `ok24-server.com/*`, `www.ok24-server.com/*` -> `130.49.151.173/*`
+   - `zeon-vps.link/*` -> `api.zeon-vps.online/*`
+   - `ok24-server.com/*`, `www.ok24-server.com/*` -> `api.zeon-vps.online/*`
 5. Импортировать через `ProfileRepository.upsertRemote(...)`.
 6. В `fast`-режиме:
    - candidates: только primary;
@@ -292,7 +292,7 @@ Intro открывается, когда `Preferences.introCompleted == false`.
 Пример `https://zeon-vps.link/open/649669380`:
 
 1. Dialog распознает `/open/649669380`.
-2. `MobileConnLinkImportService` строит primary `https://130.49.151.173/open/649669380`.
+2. `MobileConnLinkImportService` строит primary `https://api.zeon-vps.online/open/649669380`.
 3. В `fast`-режиме пытается импортировать только primary (короткий набор попыток).
 4. Если импорт успешен, профиль становится активным и сохраняется как managed-профиль.
 5. Для open-ссылок прямой сетевой вызов `zeon-vps.link` в текущей реализации обычно не происходит: URL канонизируется в primary до импорта.
