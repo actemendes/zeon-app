@@ -3,7 +3,7 @@
 Date: 2026-08-27
 App branch: `bd-debug`
 App HEAD before final Android fix: `32a20945d6a1a4b0c7156318e02e60e1fae31611`
-App implementation HEAD: `00ef5a19b9b792a185050f6d9c2ff816be39dc28`
+App implementation HEAD: `bf5043da874bd6dac1677b97c54ba288efc0634a`
 
 This report supersedes the earlier Windows/domain checkpoint. It records the
 subsequent production RULESETS audit, production managed-routing deployment,
@@ -136,8 +136,13 @@ Health and pricing remained HTTP 200. The legacy listener was retained.
 
 ## G. ok24/admin production
 
-Production deployment ID: `6a9024775ac75eba8d0cc00e`. Previous deploy for
-rollback: `6a7f45c291786e00085edec4`.
+The original controlled deployment ID was `6a9024775ac75eba8d0cc00e`.
+Canonical GitHub PR #11 was subsequently merged, followed by navigation fix
+PR #12. Netlify Git integration then published production deployment
+`6a9089560c84b90008f6a3fb` from canonical `main` commit
+`fadd3ce40d4429c5cbe5d6333aeb061a8941eabb`. No second CLI/API production
+upload was used. Previous deploy `6a7f45c291786e00085edec4` remains recorded
+as an older rollback point.
 
 Authenticated production checks covered load, version, platform, identifier,
 display name, DIRECT/VPN/BLOCK route, enable/disable, order, create, edit,
@@ -241,12 +246,18 @@ zeon-app:
 
 - branch: `bd-debug`;
 - original base: `ca2472315c9ea88e7f1b5ef3993796e65bc6d038`;
-- implementation HEAD: `00ef5a19b9b792a185050f6d9c2ff816be39dc28`;
+- implementation HEAD: `bf5043da874bd6dac1677b97c54ba288efc0634a`;
 - final Android commit: `00ef5a19 fix(android): prevent recursive native core log feedback`;
+- managed VPN UI/core fix:
+  `bf5043da fix(android): show managed VPN selections in app routing`;
 - complete-history bundle:
   `B:\ZEON_SAFE_BACKUPS\20260827_133126\zeon-app-final-00ef5a19.bundle`;
 - bundle SHA-256:
   `9A69D7F4F28C2EDA96123C1EA941DAA4312B4258A5E82E0DA47E6FDDDF86A0ED`.
+- incremental bundle from `00ef5a19` through `bf5043da`:
+  `B:\ZEON_SAFE_BACKUPS\20260827_133126\zeon-app-bf5043da-increment.bundle`;
+  SHA-256
+  `5AA8299F7E84434966254E590DAA8C64A9A0CE4867697BE2E6E13144A81FF6F9`.
 
 zeon-server:
 
@@ -258,8 +269,17 @@ ok24-server:
 
 - local branch/HEAD: `main`, `b02265daeabd4a3017858bff64052768aea9d68e`;
 - local tree: clean;
-- production source integration: `abd1a16c`;
-- Netlify deploy and rollback IDs recorded above.
+- canonical GitHub `main`:
+  `fadd3ce40d4429c5cbe5d6333aeb061a8941eabb`;
+- merged feature head: `abd1a16c53cb0f1693b4716645bbda648e648443`;
+- final Git-triggered Netlify deploy and rollback IDs are recorded above.
+
+Local `b02265d` is an unpushed alternative implementation commit based on old
+parent `3d1db78`. It targets the superseded `admin-tabler` entry points and is
+not an ancestor of GitHub `main`. The shared managed modules were carried into
+`abd1a16c`, while the integration commit adapted navigation and tests to the
+current `admin/index.html` / `assets/js/admin.js` layout. The local branch was
+left untouched as recovery evidence; it is not canonical and was not deployed.
 
 Pre-existing dirty app and zeon-server files remain unstaged because their
 hunks are unrelated or user-owned. Production changes are represented in
@@ -267,7 +287,7 @@ source commits/integration bundles and do not exist only on a server.
 
 ## L. Tests after the final client change
 
-- full Flutter suite: 492 PASS, 0 FAIL, 24 SKIP;
+- full Flutter suite after `bf5043da`: 493 PASS, 0 FAIL, 24 SKIP;
 - targeted Android/core lifecycle: 38 PASS;
 - targeted analyze: 0 issues;
 - `git diff --check`: PASS, with only existing PowerShell LF/CRLF notices;
@@ -310,3 +330,111 @@ Broad domain rollout remains gated by an unsigned Windows release, Windows 11
 coverage, replica proof, and production soak. Managed-routing broad rollout is
 gated by a longer controlled-client soak and telemetry review. The legacy IP
 listener must remain until a separate compatibility-removal task is completed.
+
+## N. Git-triggered admin deploy and visual managed-app E2E finalization
+
+### N.1 Canonical ok24 production
+
+PR #11 (`integrate/production-managed-routing-20260827`) was rechecked as
+mergeable with only the expected eight managed-routing files. Its 11 targeted
+tests and production build passed; the full suite passed 213 tests with one
+unchanged external Trojan live-TLS timeout. The Deploy Preview passed and the
+Netlify secret scan reported no matches. PR #11 merged as `e64ae82c`; PR #12
+fixed the discovered production navigation omission and merged into the final
+canonical `main` SHA `fadd3ce4`.
+
+Netlify automatically created deployment `6a9089560c84b90008f6a3fb` after the
+GitHub merge. Its recorded provenance is:
+
+- branch/context: `main` / `production`;
+- commit ref: `fadd3ce40d4429c5cbe5d6333aeb061a8941eabb`;
+- commit URL:
+  `https://github.com/actemendes/ok24-server/commit/fadd3ce40d4429c5cbe5d6333aeb061a8941eabb`;
+- build ID: `6a9089560c84b90008f6a3f9`;
+- state: `ready`;
+- URL: `https://ok24-server.com`;
+- `manual_deploy=false`.
+
+Netlify's API still labels `deploy_source` as `api` for this Git-connected
+build, so that field alone is not used as provenance. Unlike the prior manual
+upload, this deploy has the exact Git `main` branch, commit ref, commit URL and
+build ID, appeared automatically after the merge, and is explicitly not a
+manual deploy. No `netlify deploy --prod` or other CLI/API production upload
+was executed during this finalization.
+
+### N.2 Physical Android UI-to-core proof
+
+The real installed test application was Microsoft Edge:
+`com.microsoft.emmx`, display name `Edge`. It was not in the managed 49 and had
+no user override before the test. ZEON resolved its installed application icon
+on the physical OnePlus GM1901.
+
+All mutations below were made by clicking the production ok24 UI, not by SQL or
+direct mutation API:
+
+| Step | Server version | Admin value | Physical ZEON UI | Generated core |
+| --- | ---: | --- | --- | --- |
+| Before add | 19 | absent | Edge not managed | no Edge managed rule |
+| Create | 20 | DIRECT, enabled | Edge name/icon/package; checked in `В обход` | `package_name=com.microsoft.emmx`, outbound `direct` |
+| Route change | 21 | VPN, enabled | checked in `Через VPN` | Edge rule outbound `select` (current VPN selector) |
+| Disable | 22 | VPN, disabled | checkbox cleared | Edge managed rule absent |
+| Re-enable | 23 | DIRECT, enabled | checked in `В обход` | DIRECT effect restored |
+| Override/server updates | 24-25 | VPN, then DIRECT | manual effective VPN survived | conflicting managed Edge rule omitted |
+| Delete | 26 | absent | Edge no longer managed; checkbox cleared | no orphaned Edge rule |
+
+The exact visible state control is the application-row checkbox under the
+selected route mode. The captures show the real Edge icon, name and package;
+in `Через VPN` the route selector is visible at the top and the Edge checkbox
+is green/checked. Disable and final delete show the same checkbox unchecked.
+
+Device evidence includes active managed versions matching server versions,
+and raw private generated configurations captured while the validation VPN was
+actually connected. Version 21 contained the Edge `select` rule; version 22
+contained zero Edge rules. After the final delete, device active version 26 had
+49 applications and no Edge, final raw core had zero Edge rules, `tun0` was
+then stopped, and the user's production package remained untouched.
+
+The separate override scenario started with managed DIRECT. The user unchecked
+Edge under `В обход`, producing client row
+`exclude|com.microsoft.emmx|2` (forced deselection/effective VPN). Server
+updates DIRECT -> VPN -> DIRECT advanced versions 23 -> 24 -> 25 without
+removing that row or changing effective VPN. The compiler emitted no
+conflicting Edge rule. The override was then cleared through the ZEON UI before
+the production test row was deleted.
+
+### N.3 Final requested matrix
+
+| Check | Result |
+| --- | --- |
+| PR #11 merged into main | **YES**, merge `e64ae82c` |
+| New GitHub main SHA | `fadd3ce40d4429c5cbe5d6333aeb061a8941eabb` |
+| Netlify deploy triggered by Git integration | **YES** |
+| Netlify production deploy ID | `6a9089560c84b90008f6a3fb` |
+| Deploy `commit_ref` | `fadd3ce40d4429c5cbe5d6333aeb061a8941eabb` |
+| Deploy `commit_url` | GitHub canonical-main commit URL above |
+| Deploy `build_id` | `6a9089560c84b90008f6a3f9` |
+| CLI production deploy used | **NO** |
+| Test package | `com.microsoft.emmx` (`Edge`) |
+| Version before / after add | 19 / 20 |
+| Public API entry | **PASS**; version/checksum/ETag changed, conditional 304 |
+| Android received new version | **PASS** |
+| App appears in ZEON UI | **PASS** |
+| Correct app name / icon | **PASS / PASS** |
+| Managed route visibly active | **PASS** |
+| Exact visible control | checked application-row checkbox under selected `В обход` or `Через VPN` mode |
+| Generated `package_names` rule | **PASS** |
+| Effective core route | **PASS**, DIRECT=`direct`; VPN=`select` selector |
+| Admin route change reflected in UI/core | **PASS / PASS** |
+| Disable reflected in UI/core | **PASS / PASS** |
+| User override survives managed updates | **PASS** |
+| Test app removed after test | **PASS**, delete version 26 |
+| Final production baseline = 49 DIRECT | **PASS**, 49 total/enabled/DIRECT, zero VPN/BLOCK/test rows |
+| Historical package-list SHA-256 | **PASS**, `a03f95ed90fcd1ab34692d8841a2e03c4d104b5c91d6c562d97ae6e0932184bb` |
+| Existing RULESETS unchanged | **PASS**, generation 6, count 2, checksum unchanged, HTTP 304 |
+
+Final managed endpoint state is version 26 with ETag
+`"managed-apps-26-357283401f36dc363bf9d1984525cb66780ae5571d7becab3f52165915640215"`
+and conditional HTTP 304. Production DB audit records the Edge operations at
+versions 20-26 and contains no remaining Edge/test row. TickTick task
+`[МП] маршрутизация приложений` was updated with these factual results; broad
+rollout remains gated by the planned production soak.
