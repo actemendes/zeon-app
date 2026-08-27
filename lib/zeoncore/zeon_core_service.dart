@@ -32,9 +32,9 @@ import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/utils/windows_privilege_utils.dart';
 import 'package:zeon/utils/windows_tun_diagnostics.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface.dart';
-import 'package:zeon/zeoncore/core_start_signal_tracker.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface_wrapper_stub.dart'
     if (dart.library.io) 'package:zeon/zeoncore/core_interface/core_interface_wrapper.dart';
+import 'package:zeon/zeoncore/core_start_signal_tracker.dart';
 import 'package:zeon/zeoncore/generated/v2/config/route_rule.pb.dart' as route_rule;
 import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
@@ -120,6 +120,19 @@ enum CloseFrontPublicationDecision {
 }
 
 enum LocalControlStatusDecision { publishStarted, publishStopped, preserve }
+
+@visibleForTesting
+bool coreLogStreamingEnabledForPlatform({required bool isAndroid}) => !isAndroid;
+
+@visibleForTesting
+bool coreSetupDebugEnabledForPlatform({
+  required bool isAndroid,
+  required bool userDebugEnabled,
+  required bool isDebugBuild,
+}) {
+  if (isAndroid) return false;
+  return userDebugEnabled || isDebugBuild;
+}
 
 LocalControlStatusDecision classifyLocalControlStatus({
   required CloseFrontBackgroundState backgroundState,
@@ -1286,11 +1299,17 @@ class ZeonCoreService with InfraLogger {
       try {
         await _deleteCoreCurrentConfigSnapshot();
         final directories = ref.read(appDirectoriesProvider).requireValue;
-        // In Flutter debug builds we need the core platform log bridge enabled
-        // even when the user-facing debug setting is off. The hcore bridge still
-        // exposes only warning+ logs by default, with selected Smart Active
-        // diagnostics promoted explicitly on the Go side.
-        final debug = ref.read(debugModeNotifierProvider) || kDebugMode;
+        // hcore's Android debug bridge re-emits sing-box records through the
+        // same logger that writes data/box.log. A single Smart Active record can
+        // therefore feed itself back indefinitely, grow the file by gigabytes,
+        // and starve Mobile.start before the TUN callback. Android retains
+        // bounded lifecycle/logcat diagnostics, but the affected native bridge
+        // must stay disabled until hcore separates its source and sink.
+        final debug = coreSetupDebugEnabledForPlatform(
+          isAndroid: Platform.isAndroid,
+          userDebugEnabled: ref.read(debugModeNotifierProvider),
+          isDebugBuild: kDebugMode,
+        );
         final setupResponse = await core.setup(directories, debug, 3);
 
         if (setupResponse.isNotEmpty) return left(setupResponse);
@@ -3414,6 +3433,16 @@ class ZeonCoreService with InfraLogger {
   }
 
   Future<void> startListeningLogs(String key, CoreClient cc) async {
+    // hcore's Android log-listener transport currently feeds its own
+    // `H SERVICE` messages back into data/box.log. The feedback loop can grow
+    // the file by gigabytes during Mobile.start and prevent the TUN callback
+    // from running. Android lifecycle snapshots, app diagnostics and the
+    // bounded runtime indicators remain authoritative; keep the affected
+    // streaming RPC disabled until hcore can consume it without recursion.
+    if (!coreLogStreamingEnabledForPlatform(isAndroid: Platform.isAndroid)) {
+      loggy.debug("core log streaming disabled on Android to avoid hcore log feedback");
+      return;
+    }
     final listenerGeneration = _sessionGeneration.current;
     final coreLogLevel = getCoreLogLevel(config_log_level.LogLevel.warn);
     final listenKey = "${key}LogListener";
