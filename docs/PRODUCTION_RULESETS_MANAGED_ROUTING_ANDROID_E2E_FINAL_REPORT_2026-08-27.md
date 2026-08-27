@@ -16,7 +16,7 @@ listener remains active and VPN traffic nodes were not modified.
 - RULESETS reach generated sing-box core rules: **VERIFIED**;
 - managed applications aligned with the established routing conventions;
 - production DB migration, zeon-server endpoint, and ok24/admin: **DEPLOYED**;
-- managed endpoint: **HTTP 200**, version 19, exact 49-app baseline;
+- managed endpoint: **HTTP 200**, final version 26, exact 49-app baseline;
 - physical Android fresh-install and upgrade E2E: **PASS**;
 - admin -> DB -> API -> Android -> LKG/UI/core: **PASS**;
 - per-app manual user override preservation: **PASS**;
@@ -31,8 +31,8 @@ listener remains active and VPN traffic nodes were not modified.
 | --- | --- | --- | --- | --- |
 | `cv6924457.novalocal`, `130.49.151.173`, `api.zeon-vps.online` | Public edge | nginx/TLS | Existing parallel domain vhost retained | Public HTTPS/WSS and routing API proxy |
 | Same host, `/opt/zeon-server` | Control-plane backend | systemd zeon-server, local Node on `127.0.0.1:3000` | integration SHA `eb9c789559cae4c748000892e1b1f69772172d29` | RULESETS and managed-applications public handlers |
-| Same host | Canonical storage | Docker PostgreSQL/PostgREST, local ports `55432`/`3001` | migration 191 deployed; managed state v19 | Releases, active state, CAS/RPC and audit |
-| `ok24-server.com` | Admin/BFF | Netlify production | source integration `abd1a16c`; deploy `6a9024775ac75eba8d0cc00e` | Authenticated CRUD and version publish |
+| Same host | Canonical storage | Docker PostgreSQL/PostgREST, local ports `55432`/`3001` | migration 191 deployed; managed state v26 | Releases, active state, CAS/RPC and audit |
+| `ok24-server.com` | Admin/BFF | Netlify production | canonical `main` `fadd3ce4`; Git deploy `6a9089560c84b90008f6a3fb` | Authenticated CRUD and version publish |
 | VPN traffic nodes | Data plane | VPN protocols | Not inspected or changed | No discovered RULESETS responsibility |
 
 No additional zeon-server, RULESETS, or database production replicas were
@@ -54,7 +54,7 @@ Current public state:
 - format: 1;
 - rule-set count: 2;
 - checksum: `6e87e6bfdbf2ed449f432e5ece4c9a357e611b78f53809f2fde6e828cb429ae0`;
-- ETag: `W/"routing-6-6e87e6bfdbf2ed449f432e5ece4c9a357e611b78f53809f2fde6e828cb429ae0"`;
+- ETag: `"routing-6-6e87e6bfdbf2ed449f432e5ece4c9a357e611b78f53809f2fde6e828cb429ae0"`;
 - conditional request: HTTP 304;
 - cache policy: `public, max-age=300, must-revalidate`.
 
@@ -103,11 +103,11 @@ ordering, audit, expected-version CAS, and RPC were verified.
 
 Final state:
 
-- version: 19;
+- version: 26;
 - total/enabled applications: 49/49;
 - route distribution: 49 DIRECT, 0 VPN/BLOCK;
 - no test/canary package remains;
-- audit contains initial seed and reversible CRUD actions;
+- audit contains the initial seed and reversible CRUD actions through version 26;
 - existing RULESETS generation remained 6.
 
 Historical package baseline is the exact list from
@@ -123,12 +123,12 @@ Production integration SHA:
 `GET https://api.zeon-vps.online/routing/v1/applications/current`:
 
 - HTTP 200;
-- version 19;
+- version 26;
 - 49 deterministic entries;
 - body/header checksum:
-  `b7cca4962a492b1beaa0f3da14eb7b870d6ca0ace18903cfa125f757f6227b3d`;
+  `357283401f36dc363bf9d1984525cb66780ae5571d7becab3f52165915640215`;
 - ETag:
-  `W/"managed-apps-19-b7cca4962a492b1beaa0f3da14eb7b870d6ca0ace18903cfa125f757f6227b3d"`;
+  `"managed-apps-26-357283401f36dc363bf9d1984525cb66780ae5571d7becab3f52165915640215"`;
 - conditional request: HTTP 304;
 - disabled entries are omitted from client effect.
 
@@ -147,7 +147,8 @@ as an older rollback point.
 Authenticated production checks covered load, version, platform, identifier,
 display name, DIRECT/VPN/BLOCK route, enable/disable, order, create, edit,
 delete, and stale-version conflict. Reversible mutations incremented the public
-version and were returned to the exact 49-entry DIRECT baseline at version 19.
+version and were returned to the exact 49-entry DIRECT baseline at final
+version 26.
 
 ## H. Physical Android E2E
 
@@ -162,7 +163,8 @@ Fresh-install results:
 - routing UI non-empty: PASS;
 - installed-app matching, names, and icons: PASS;
 - DIRECT defaults: PASS;
-- production sync to version 19: PASS;
+- initial production sync to version 19: PASS; subsequent visual UI/core
+  finalization advanced the clean production state to version 26;
 - generated `package_names` rules: PASS;
 - generated effective core configuration: PASS.
 
@@ -230,7 +232,7 @@ Android fix:
 
 - health: HTTP 200;
 - pricing: HTTP 200;
-- managed applications: HTTP 200/304, version 19, count 49;
+- managed applications: HTTP 200/304, final version 26, count 49;
 - managed baseline checksum: exact historical hash;
 - RULESETS: HTTP 200/304, generation 6, count 2;
 - RULESETS checksum and ETag unchanged;
