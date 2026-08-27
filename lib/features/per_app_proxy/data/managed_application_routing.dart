@@ -639,7 +639,7 @@ String? _managedApplicationETagChecksum(String? value, int version) {
   final normalized = _normalizeETag(value);
   if (normalized == null) return null;
   return RegExp(
-    '^"managed-apps-$version-([a-f0-9]{64})"\$',
+    '^(?:W/)?"managed-apps-$version-([a-f0-9]{64})"\$',
     caseSensitive: false,
   ).firstMatch(normalized)?.group(1)?.toLowerCase();
 }
