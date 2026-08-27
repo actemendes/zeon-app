@@ -1,7 +1,12 @@
 enum PkgFlag {
   userSelection(1 << 0),
   forceDeselection(1 << 1),
-  autoSelection(1 << 2);
+  autoSelection(1 << 2),
+  // Presentation-only provenance for the server-managed baseline. This flag
+  // is merged into watched rows and is never persisted to AppProxyEntries, so
+  // managed DIRECT traffic still reaches sing-box instead of being removed
+  // from Android's VPNService at the OS boundary.
+  managedSelection(1 << 3);
 
   final int value;
   const PkgFlag(this.value);
@@ -24,6 +29,7 @@ enum PkgFlag {
 
   static bool? checkboxValue(int flag) => switch (flag) {
     _ when forceDeselection.check(flag) => false,
+    _ when managedSelection.check(flag) => true,
     _ when autoSelection.check(flag) && !userSelection.check(flag) => null,
     _ when userSelection.check(flag) => true,
     _ => null,

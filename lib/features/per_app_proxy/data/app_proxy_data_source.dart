@@ -9,6 +9,7 @@ part 'app_proxy_data_source.g.dart';
 
 abstract interface class AppProxyDataSource {
   Future<void> updatePkg({required String pkg, required AppProxyMode mode});
+  Future<void> toggleManagedPkgOverride({required String pkg, required AppProxyMode mode});
   Future<int> clearUserSelectionFromPkgs({required Iterable<String> pkgs, required AppProxyMode mode});
   Future<bool> hasAnyPkgs({required AppProxyMode mode});
   Stream<List<AppProxyEntry>> watchAll({required AppProxyMode mode});
@@ -95,6 +96,33 @@ class AppProxyDao extends DatabaseAccessor<Db> with _$AppProxyDaoMixin, InfraLog
       await (update(appProxyEntries)..where((tbl) => tbl.mode.equalsValue(mode) & tbl.pkgName.equals(pkg))).write(
         AppProxyEntriesCompanion(flags: Value(newFlag)),
       );
+    });
+  }
+
+  @override
+  Future<void> toggleManagedPkgOverride({required String pkg, required AppProxyMode mode}) {
+    return transaction(() async {
+      final entry = await (select(
+        appProxyEntries,
+      )..where((tbl) => tbl.mode.equalsValue(mode) & tbl.pkgName.equals(pkg))).getSingleOrNull();
+
+      if (entry == null) {
+        await into(appProxyEntries).insert(
+          AppProxyEntriesCompanion.insert(mode: mode, pkgName: pkg, flags: Value(PkgFlag.forceDeselection.add(0))),
+        );
+        return;
+      }
+
+      final updatedFlags = PkgFlag.forceDeselection.check(entry.flags)
+          ? PkgFlag.forceDeselection.remove(entry.flags)
+          : PkgFlag.forceDeselection.add(entry.flags);
+      if (updatedFlags == 0) {
+        await (delete(appProxyEntries)..where((tbl) => tbl.mode.equalsValue(mode) & tbl.pkgName.equals(pkg))).go();
+      } else {
+        await (update(appProxyEntries)..where((tbl) => tbl.mode.equalsValue(mode) & tbl.pkgName.equals(pkg))).write(
+          AppProxyEntriesCompanion(flags: Value(updatedFlags)),
+        );
+      }
     });
   }
 
