@@ -1836,11 +1836,11 @@ class ZeonCoreService with InfraLogger {
     if (!PlatformUtils.isAndroid) return const <Map<String, dynamic>>[];
     try {
       final config = await ref.read(managedApplicationStoreProvider).readEffective();
-      final disabledIdentifiers =
-          (await ref
-                  .read(appProxyDataSourceProvider)
-                  .getPkgsByFlag(flag: PkgFlag.forceDeselection, mode: AppProxyMode.exclude))
-              .toSet();
+      final dataSource = ref.read(appProxyDataSourceProvider);
+      final disabledIdentifiers = <String>{
+        ...await dataSource.getPkgsByFlag(flag: PkgFlag.forceDeselection, mode: AppProxyMode.include),
+        ...await dataSource.getPkgsByFlag(flag: PkgFlag.forceDeselection, mode: AppProxyMode.exclude),
+      };
       return const ManagedApplicationRuleCompiler().compile(
         config,
         platform: ManagedApplicationPlatform.android,
