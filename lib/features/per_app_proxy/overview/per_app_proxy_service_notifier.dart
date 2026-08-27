@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
 import 'package:zeon/features/per_app_proxy/data/selected_data_provider.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/features/per_app_proxy/overview/per_app_proxy_notifier.dart';
@@ -38,6 +39,7 @@ class PerAppProxyService extends _$PerAppProxyService {
   }
 
   Future<void> _autoSelectionUpdate() async {
+    await ref.read(managedApplicationSyncServiceProvider).sync(reason: 'per_app_service');
     final autoRegion = ref.read(Preferences.autoAppsSelectionRegion);
     if (autoRegion == null) return;
     final mode = ref.read(Preferences.perAppProxyMode).toAppProxy();

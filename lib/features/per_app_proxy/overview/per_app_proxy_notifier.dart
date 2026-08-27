@@ -12,6 +12,7 @@ import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/features/per_app_proxy/data/auto_selection_repository.dart';
 import 'package:zeon/features/per_app_proxy/data/auto_selection_repository_provider.dart';
+import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
 import 'package:zeon/features/per_app_proxy/data/selected_data_provider.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_backup.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
@@ -26,24 +27,48 @@ part 'per_app_proxy_notifier.g.dart';
 @riverpod
 class PerAppProxy extends _$PerAppProxy with AppLogger {
   late final AppProxyMode? _mode;
+  Set<String> _managedDirectPackages = const <String>{};
 
   @override
   Stream<Map<String, int>> build(AppProxyMode? mode) {
     _mode = mode;
     if (_mode == null) return Stream.value({});
-    final appsInfo = InstalledApps.getInstalledApps(false);
-    return Stream.fromFuture(appsInfo).asyncExpand((appsInfo) {
+    final managedConfig = ref.watch(managedApplicationConfigProvider.future);
+    return Stream.fromFuture(() async {
+      final appsInfo = await InstalledApps.getInstalledApps(false);
+      final config = await managedConfig;
+      _managedDirectPackages = mode == AppProxyMode.exclude
+          ? config.applications
+                .where(
+                  (application) =>
+                      application.enabled &&
+                      application.platform == ManagedApplicationPlatform.android &&
+                      application.route == ManagedApplicationRoute.direct,
+                )
+                .map((application) => application.stableIdentifier)
+                .toSet()
+          : const <String>{};
+      return appsInfo;
+    }()).asyncExpand((appsInfo) {
       final phonePkgs = appsInfo.map((e) => e.packageName).toSet();
       return ref.watch(appProxyDataSourceProvider).watchFilterForDisplay(phonePkgs: phonePkgs, mode: _mode).map((
         entryList,
       ) {
-        return {for (final entry in entryList) entry.pkgName: entry.flags};
+        final result = <String, int>{for (final entry in entryList) entry.pkgName: entry.flags};
+        for (final pkg in _managedDirectPackages.intersection(phonePkgs)) {
+          result[pkg] = PkgFlag.managedSelection.add(result[pkg] ?? 0);
+        }
+        return result;
       });
     });
   }
 
   Future<void> updatePkg(String pkg) async {
     loggy.info('Updationg $pkg status');
+    if (_mode == AppProxyMode.exclude && _managedDirectPackages.contains(pkg)) {
+      await ref.read(appProxyDataSourceProvider).toggleManagedPkgOverride(pkg: pkg, mode: _mode!);
+      return;
+    }
     await ref.read(appProxyDataSourceProvider).updatePkg(pkg: pkg, mode: _mode!);
   }
 

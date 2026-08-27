@@ -18,6 +18,10 @@ import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/log/model/log_level.dart' as config_log_level;
+import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
+import 'package:zeon/features/per_app_proxy/data/selected_data_provider.dart';
+import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
+import 'package:zeon/features/per_app_proxy/model/pkg_flag.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
@@ -1736,11 +1740,16 @@ class ZeonCoreService with InfraLogger {
     map["network-interface-mtu"] = runtime.$2;
 
     final userRules = await _loadUserRouteRulesFromProto();
+    final managedApplicationRules = await _loadManagedApplicationRules();
     final configuredRules = (map["rules"] as List? ?? const <dynamic>[])
         .whereType<Map>()
         .map((rule) => Map<String, dynamic>.from(rule))
         .toList();
-    final rulePlan = MobileApiProxyRoute.planCoreRules(configuredRules: configuredRules, userRules: userRules);
+    final rulePlan = MobileApiProxyRoute.planCoreRules(
+      configuredRules: configuredRules,
+      userRules: userRules,
+      managedApplicationRules: managedApplicationRules,
+    );
     map["rules"] = rulePlan.priorityRules;
     map["profile-rules"] = rulePlan.profileRules;
 
@@ -1801,6 +1810,29 @@ class ZeonCoreService with InfraLogger {
     } catch (e, st) {
       loggy.warning("failed reading route_rule.proto; keep existing options.rules", e, st);
       return const [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadManagedApplicationRules() async {
+    if (!PlatformUtils.isAndroid) return const <Map<String, dynamic>>[];
+    try {
+      final config = await ref.read(managedApplicationStoreProvider).readEffective();
+      final disabledIdentifiers =
+          (await ref
+                  .read(appProxyDataSourceProvider)
+                  .getPkgsByFlag(flag: PkgFlag.forceDeselection, mode: AppProxyMode.exclude))
+              .toSet();
+      return const ManagedApplicationRuleCompiler().compile(
+        config,
+        platform: ManagedApplicationPlatform.android,
+        disabledIdentifiers: disabledIdentifiers,
+      );
+    } on Object catch (error, stackTrace) {
+      // The embedded baseline makes this path normally infallible. If local
+      // storage is unavailable, keep the existing user/profile rules rather
+      // than failing VPN startup.
+      loggy.warning('failed reading managed application routing; keeping existing rules', error, stackTrace);
+      return const <Map<String, dynamic>>[];
     }
   }
 

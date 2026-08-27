@@ -25,6 +25,7 @@ import 'package:zeon/features/log/data/log_data_providers.dart';
 import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/per_app_proxy/data/legacy_seeded_routing_cleanup.dart';
+import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
 import 'package:zeon/features/per_app_proxy/data/selected_data_provider.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/features/profile/data/debug_profile_bootstrap_service.dart';
@@ -87,7 +88,7 @@ class _BootstrapHostState extends State<_BootstrapHost> {
 
   Future<ProviderContainer> _bootstrapAfterFirstFrame() async {
     await WidgetsBinding.instance.endOfFrame;
-    return _bootstrapContainer(widget.environment);
+    return _bootstrapContainer(widget.environment, isFirstLaunch: widget.shouldRemoveNativeSplash);
   }
 
   Future<void> _loadInitialThemeMode() async {
@@ -168,7 +169,7 @@ class _BootstrapFailureApp extends StatelessWidget {
   }
 }
 
-Future<ProviderContainer> _bootstrapContainer(Environment env) async {
+Future<ProviderContainer> _bootstrapContainer(Environment env, {required bool isFirstLaunch}) async {
   final stopWatch = Stopwatch()..start();
 
   final container = ProviderContainer(overrides: [environmentProvider.overrideWithValue(env)]);
@@ -192,6 +193,11 @@ Future<ProviderContainer> _bootstrapContainer(Environment env) async {
 
   final debug = container.read(debugModeNotifierProvider) || kDebugMode;
   await _safeInit("per-app proxy migration", () => _cleanupLegacyPerAppProxyDefaults(container), timeout: 5000);
+  await _safeInit(
+    "managed application routing",
+    () => _initializeManagedApplicationRouting(container, isFirstLaunch: isFirstLaunch),
+    timeout: 5000,
+  );
 
   if (PlatformUtils.isDesktop) {
     await _init("window controller", () => container.read(windowNotifierProvider.future));
@@ -302,6 +308,9 @@ Future<bool> _shouldShowNativeSplashOnThisRun() async {
   final prefs = await SharedPreferences.getInstance();
   final done = prefs.getBool(key) ?? false;
   if (done) return false;
+  if (PlatformUtils.isAndroid) {
+    await ManagedApplicationFreshDefaults.markPending(prefs);
+  }
   await prefs.setBool(key, true);
   return true;
 }
@@ -316,6 +325,32 @@ Future<void> _cleanupLegacyPerAppProxyDefaults(ProviderContainer container) asyn
 
   if (result.shouldDisableExcludeMode && container.read(Preferences.perAppProxyMode) == PerAppProxyMode.exclude) {
     await container.read(Preferences.perAppProxyMode.notifier).update(PerAppProxyMode.off);
+  }
+}
+
+Future<void> _initializeManagedApplicationRouting(ProviderContainer container, {required bool isFirstLaunch}) async {
+  if (!PlatformUtils.isAndroid) return;
+
+  final preferences = container.read(sharedPreferencesProvider).requireValue;
+  final shouldApplyFreshDefaults = ManagedApplicationFreshDefaults.shouldApply(preferences, firstLaunch: isFirstLaunch);
+  // Only a proven first launch may enable bypass mode automatically. Upgrade
+  // installs with an intentionally disabled per-app mode remain untouched. A
+  // dedicated pending marker survives a crash between splash setup and this
+  // idempotent initialization.
+  if (shouldApplyFreshDefaults && container.read(Preferences.perAppProxyMode) == PerAppProxyMode.off) {
+    final dataSource = container.read(appProxyDataSourceProvider);
+    final hasInclude = await dataSource.hasAnyPkgs(mode: AppProxyMode.include);
+    final hasExclude = await dataSource.hasAnyPkgs(mode: AppProxyMode.exclude);
+    if (!hasInclude && !hasExclude) {
+      await container.read(Preferences.perAppProxyMode.notifier).update(PerAppProxyMode.exclude);
+    }
+  }
+
+  // A failed first fetch is safe: readEffective() keeps the atomic LKG or the
+  // exact embedded v1 baseline. Startup never clears a working configuration.
+  await container.read(managedApplicationSyncServiceProvider).sync(force: true, reason: 'startup');
+  if (shouldApplyFreshDefaults) {
+    await ManagedApplicationFreshDefaults.complete(preferences);
   }
 }
 
