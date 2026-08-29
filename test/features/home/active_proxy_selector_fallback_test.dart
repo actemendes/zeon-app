@@ -42,6 +42,62 @@ void main() {
     expect(result.tag, 'server-stable-id');
     expect(result.tagDisplay, 'Test Server');
   });
+
+  test('refresh replaces, removes, and temporarily loses a selection without hiding Home', () async {
+    final repository = _RefreshingProxyRepository();
+    final container = ProviderContainer(
+      overrides: [
+        proxyRepositoryProvider.overrideWithValue(repository),
+        statsRepositoryProvider.overrideWithValue(const _SilentStatsRepository()),
+        serviceRunningProvider.overrideWith((ref) => Future.value(true)),
+        activeProfileProvider.overrideWith(() => _NoActiveProfile()),
+        vpnSessionSnapshotSourceProvider.overrideWithValue(const _SnapshotSource()),
+      ],
+    );
+    addTearDown(container.dispose);
+    addTearDown(repository.dispose);
+
+    final observed = <String>[];
+    final subscription = container.listen(activeProxyNotifierProvider, (previous, next) {
+      final tag = next.valueOrNull?.tag;
+      if (tag != null) observed.add(tag);
+    }, fireImmediately: true);
+    addTearDown(subscription.close);
+
+    repository.publish(_selectorGroup(selected: 'server-a', servers: const ['server-a', 'server-b']));
+    await _waitFor(() => observed.isNotEmpty && observed.last == 'server-a');
+
+    repository.publish(_selectorGroup(selected: 'server-b', servers: const ['server-a', 'server-b']));
+    await _waitFor(() => observed.isNotEmpty && observed.last == 'server-b');
+
+    // A removed persisted selection falls back deterministically to a valid
+    // visible leaf instead of leaving the picker unresolved.
+    repository.publish(_selectorGroup(selected: 'deleted-server', servers: const ['server-b']));
+    await _waitFor(() => observed.isNotEmpty && observed.last == 'server-b');
+
+    // A temporary refresh error/null snapshot keeps the in-memory LKG.
+    repository.publishFailure();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(container.read(activeProxyNotifierProvider).valueOrNull?.tag, 'server-b');
+  });
+}
+
+OutboundGroup _selectorGroup({required String selected, required List<String> servers}) => OutboundGroup(
+  tag: 'select',
+  type: 'selector',
+  selected: selected,
+  items: [
+    for (final server in servers)
+      OutboundInfo(tag: server, tagDisplay: server, type: 'proxy', isSelected: server == selected, isVisible: true),
+  ],
+);
+
+Future<void> _waitFor(bool Function() predicate) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 2));
+  while (!predicate()) {
+    if (DateTime.now().isAfter(deadline)) throw TimeoutException('server-picker provider did not publish');
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
 }
 
 class _SelectorFirstProxyRepository implements ProxyRepository {
@@ -73,6 +129,32 @@ class _SelectorFirstProxyRepository implements ProxyRepository {
       ),
     ),
   );
+
+  @override
+  TaskEither<ProxyFailure, oldipinfo.IpInfo> getCurrentIpInfo(CancelToken cancelToken) =>
+      TaskEither.left(const ProxyUnexpectedFailure('unused', StackTrace.empty));
+
+  @override
+  TaskEither<ProxyFailure, Unit> selectProxy(String groupTag, String outboundTag) => TaskEither.right(unit);
+
+  @override
+  TaskEither<ProxyFailure, Unit> urlTest(String groupTag) => TaskEither.right(unit);
+}
+
+class _RefreshingProxyRepository implements ProxyRepository {
+  final _selector = StreamController<Either<ProxyFailure, OutboundGroup?>>();
+
+  void publish(OutboundGroup group) => _selector.add(right(group));
+
+  void publishFailure() => _selector.add(left(const ProxyUnexpectedFailure('refresh failed')));
+
+  Future<void> dispose() => _selector.close();
+
+  @override
+  Stream<Either<ProxyFailure, List<OutboundGroup>>> watchActiveProxies() => const Stream.empty();
+
+  @override
+  Stream<Either<ProxyFailure, OutboundGroup?>> watchProxies() => _selector.stream;
 
   @override
   TaskEither<ProxyFailure, oldipinfo.IpInfo> getCurrentIpInfo(CancelToken cancelToken) =>

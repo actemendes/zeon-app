@@ -68,7 +68,7 @@ if ($device -ne "device") { throw "No ready Android validation device was found.
 $outputDirectory = Split-Path -Parent $OutputPath
 if ($outputDirectory) { New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null }
 New-Item -ItemType Directory -Path $FailureCaptureDirectory -Force | Out-Null
-Set-Content -LiteralPath $OutputPath -Value "" -Encoding UTF8
+[IO.File]::WriteAllText($OutputPath, "", [Text.UTF8Encoding]::new($false))
 
 for ($cycle = 1; $cycle -le $Cycles; $cycle++) {
     Invoke-Adb -Arguments @("shell", "am", "force-stop", $PackageId) | Out-Null
