@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("Background", "Network", "Refresh", "Connection")]
+    [ValidateSet("Background", "Network", "Refresh", "Connection", "RefreshConnection")]
     [string]$Scenario,
     [ValidateRange(1, 1000)][int]$Cycles = 20,
     [string]$PackageId = "com.zeon.hiddify.validation",
@@ -57,6 +57,19 @@ function Invoke-UiLabel {
     $y = ([int]$match.Groups["y1"].Value + [int]$match.Groups["y2"].Value) / 2
     Invoke-Adb -Arguments @("shell", "input", "tap", ([int]$x).ToString(), ([int]$y).ToString()) | Out-Null
     return $true
+}
+
+function Invoke-UiLabelWhenAvailable {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [ValidateRange(1, 60)][int]$Attempts = 15
+    )
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        if (Invoke-UiLabel -UiXml (Get-UiXml) -Label $Label) { return $true }
+        Start-Sleep -Seconds 1
+    }
+    return $false
 }
 
 function Start-ValidationApp {
@@ -120,6 +133,26 @@ try {
                 Start-Sleep -Seconds 4
                 $ui = Get-UiXml
                 $operationPassed = $operationPassed -and (Invoke-UiLabel -UiXml $ui -Label $connectLabel)
+                Start-Sleep -Seconds $SettleSeconds
+            }
+            "RefreshConnection" {
+                Invoke-Adb -Arguments @("shell", "am", "force-stop", $PackageId) | Out-Null
+                Start-ValidationApp
+                $operationPassed = Invoke-UiLabelWhenAvailable -Label $refreshLabel
+                Start-Sleep -Seconds 1
+                $ui = Get-UiXml
+                if ($ui.Contains($disconnectLabel)) {
+                    $operationPassed = $operationPassed -and (Invoke-UiLabel -UiXml $ui -Label $disconnectLabel)
+                    Start-Sleep -Seconds 3
+                }
+                $connectControl = Invoke-UiLabelWhenAvailable -Label $connectLabel
+                $operationPassed = $operationPassed -and $connectControl
+                Start-Sleep -Seconds $SettleSeconds
+                $disconnectControl = Invoke-UiLabelWhenAvailable -Label $disconnectLabel
+                $operationPassed = $operationPassed -and $disconnectControl
+                Start-Sleep -Seconds 3
+                $reconnectControl = Invoke-UiLabelWhenAvailable -Label $connectLabel
+                $operationPassed = $operationPassed -and $reconnectControl
                 Start-Sleep -Seconds $SettleSeconds
             }
         }
