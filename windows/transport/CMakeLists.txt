@@ -10,6 +10,13 @@ add_library(zeon_windows_transport SHARED
 )
 
 target_compile_features(zeon_windows_transport PUBLIC cxx_std_17)
+if(MSVC)
+  # The transport is loaded before Flutter can report a missing redistributable.
+  # Keep this small boundary self-contained so a clean Windows installation is
+  # not coupled to the exact MSVC runtime version present on the build host.
+  set_property(TARGET zeon_windows_transport PROPERTY
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 target_compile_definitions(zeon_windows_transport PRIVATE
   UNICODE
   _UNICODE
