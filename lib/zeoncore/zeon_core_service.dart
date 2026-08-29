@@ -125,6 +125,17 @@ enum LocalControlStatusDecision { publishStarted, publishStopped, preserve }
 bool coreLogStreamingEnabledForPlatform({required bool isAndroid}) => !isAndroid;
 
 @visibleForTesting
+bool coreSessionListenersRequired({required bool singleChannel, required bool requiresAuthoritativeStopConfirmation}) {
+  // Desktop uses one process-owned gRPC channel for foreground and background
+  // work. Stop deliberately cancels that channel's listeners before waiting
+  // for terminal evidence. After the endpoint is re-armed, the next Start must
+  // attach a current-generation listener even though the channel is "single";
+  // otherwise a completed native Start can be mistaken for a transport
+  // timeout and leave Home falsely disconnected while the core is live.
+  return !singleChannel || requiresAuthoritativeStopConfirmation;
+}
+
+@visibleForTesting
 bool coreSetupDebugEnabledForPlatform({
   required bool isAndroid,
   required bool userDebugEnabled,
@@ -2013,7 +2024,10 @@ class ZeonCoreService with InfraLogger {
           );
         }
 
-        if (!core.isSingleChannel()) {
+        if (coreSessionListenersRequired(
+          singleChannel: core.isSingleChannel(),
+          requiresAuthoritativeStopConfirmation: core.requiresAuthoritativeStopConfirmation,
+        )) {
           await startListeningLogs("bg", core.bgClient);
           await startListeningStatus("bg", core.bgClient, generation: generation);
         }

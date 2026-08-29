@@ -14,6 +14,20 @@ import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 import 'package:zeon/zeoncore/zeon_core_service.dart';
 
 void main() {
+  group('desktop session listener ownership', () {
+    test('single-channel desktop reattaches listeners after authoritative stop', () {
+      expect(coreSessionListenersRequired(singleChannel: true, requiresAuthoritativeStopConfirmation: true), isTrue);
+    });
+
+    test('ordinary single-channel setup keeps its existing listener policy', () {
+      expect(coreSessionListenersRequired(singleChannel: true, requiresAuthoritativeStopConfirmation: false), isFalse);
+    });
+
+    test('split foreground and background channels always attach session listeners', () {
+      expect(coreSessionListenersRequired(singleChannel: false, requiresAuthoritativeStopConfirmation: false), isTrue);
+    });
+  });
+
   group('closeFront tri-state decision semantics', () {
     test('connected background probe preserves Started without a duplicate publication', () {
       expect(_decision(outcome: PortProbeOutcome.connected), CloseFrontPublicationDecision.preserveStarted);
