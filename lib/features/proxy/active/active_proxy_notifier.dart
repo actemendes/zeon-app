@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:protobuf/protobuf.dart';
@@ -9,6 +11,8 @@ import 'package:zeon/core/haptic/haptic_service.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/utils/throttler.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
+import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/proxy/data/proxy_data_providers.dart';
 import 'package:zeon/features/proxy/model/ip_info_entity.dart' as oldipinfo;
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
@@ -95,15 +99,33 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
     // physical START/STOP transition.
     final proxyProvider = ref.watch(proxyRepositoryProvider);
     final statsProvider = ref.watch(statsRepositoryProvider);
+    final activeProfile = ref.watch(activeProfileProvider).valueOrNull;
+    final snapshotSource = ref.read(vpnSessionSnapshotSourceProvider);
+    final buildGeneration = ++_buildGeneration;
     final serviceRunning = await ref.watch(serviceRunningProvider.future);
     if (!serviceRunning) {
-      loggy.debug("service is not running, skipping active proxy stream");
+      _logPickerTransition(
+        buildGeneration: buildGeneration,
+        profileId: activeProfile?.id,
+        profileRevision: activeProfile?.lastUpdate,
+        connectionGeneration: snapshotSource.current?.generation,
+        serverCount: 0,
+        selectedTag: null,
+        selectedSource: 'none',
+        modelStatus: 'unavailable',
+        visibilityReason: 'service_not_running',
+      );
       return;
     }
     final activeProxyStream = proxyProvider
         .watchActiveProxies()
         .map((event) => event.getOrElse((l) => List<OutboundGroup>.empty()))
-        .map(_activeProxyFromGroups);
+        .map(_activeProxyFromGroups)
+        // mainOutboundsInfo is a live stream and does not guarantee an
+        // immediate replay after profile/core replacement. The selector
+        // stream below has an explicit initial snapshot, so let it resolve a
+        // valid selected leaf instead of latching Home in AsyncLoading.
+        .startWith(OutboundInfo());
     final selectorStream = proxyProvider.watchProxies().map((event) => event.getOrElse((l) => null)).startWith(null);
     final statsStream = statsProvider
         .watchStats()
@@ -119,7 +141,30 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
         final displayProxy = _isAutoBalancerSelected(selector)
             ? _asAutoBalancer(resolvedProxy, selector, stats)
             : resolvedProxy;
-        if (_hasUsableDisplayProxy(displayProxy)) {
+        final usable = _hasUsableDisplayProxy(displayProxy);
+        final selectedSource = !_isEmptyOutbound(activeProxy)
+            ? 'active'
+            : selector != null
+            ? (_isAutoBalancerSelected(selector) ? 'auto' : 'selector')
+            : _lastDisplayProxy != null
+            ? 'memory_lkg'
+            : 'none';
+        _logPickerTransition(
+          buildGeneration: buildGeneration,
+          profileId: activeProfile?.id,
+          profileRevision: activeProfile?.lastUpdate,
+          connectionGeneration: snapshotSource.current?.generation,
+          serverCount: selector?.items.where(_isDisplayableLeaf).length ?? 0,
+          selectedTag: usable ? displayProxy.tag : _lastDisplayProxy?.tag,
+          selectedSource: selectedSource,
+          modelStatus: usable || _lastDisplayProxy != null ? 'ready' : 'loading',
+          visibilityReason: usable
+              ? 'resolved'
+              : _lastDisplayProxy != null
+              ? 'memory_lkg'
+              : 'awaiting_selector_snapshot',
+        );
+        if (usable) {
           return _lastDisplayProxy = displayProxy;
         }
         return _lastDisplayProxy;
@@ -128,7 +173,53 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
   }
 
   final _urlTestThrottler = Throttler(const Duration(seconds: 1));
+  int _buildGeneration = 0;
   OutboundInfo? _lastDisplayProxy;
+  String? _pickerDiagnosticSignature;
+
+  void _logPickerTransition({
+    required int buildGeneration,
+    required String? profileId,
+    required DateTime? profileRevision,
+    required int? connectionGeneration,
+    required int serverCount,
+    required String? selectedTag,
+    required String selectedSource,
+    required String modelStatus,
+    required String visibilityReason,
+  }) {
+    final event = <String, Object?>{
+      'event': 'server_picker_model',
+      'timestamp_utc': DateTime.now().toUtc().toIso8601String(),
+      'refresh_generation': buildGeneration,
+      'profile_safe_id': _safeIdentifier(profileId),
+      'profile_revision_utc': profileRevision?.toUtc().toIso8601String(),
+      'connection_generation': connectionGeneration,
+      'server_count': serverCount,
+      'selected_server_safe_id': _safeIdentifier(selectedTag),
+      'selected_source': selectedSource,
+      'model_status': modelStatus,
+      'visibility_reason': visibilityReason,
+    };
+    final signature = [
+      buildGeneration,
+      connectionGeneration,
+      serverCount,
+      event['selected_server_safe_id'],
+      selectedSource,
+      modelStatus,
+      visibilityReason,
+    ].join('|');
+    if (_pickerDiagnosticSignature == signature) return;
+    _pickerDiagnosticSignature = signature;
+    loggy.info(jsonEncode(event));
+  }
+
+  String? _safeIdentifier(String? value) {
+    final normalized = value?.trim();
+    if (normalized == null || normalized.isEmpty) return null;
+    return sha256.convert(utf8.encode(normalized)).toString().substring(0, 12);
+  }
 
   Future<void> urlTest(String? groupTag_) async {
     final groupTag = groupTag_ ?? "";
