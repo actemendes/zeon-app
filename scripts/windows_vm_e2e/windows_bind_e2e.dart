@@ -44,6 +44,11 @@ Future<void> main(List<String> arguments) async {
   const http = WinHttpWindowsSystemTransport();
   final webSocket = createWindowsSystemWebSocketTransport();
   if (webSocket == null) {
+    try {
+      WinHttpWindowsSystemWebSocketTransport(transportDll);
+    } catch (error) {
+      stderr.writeln('transport_load_error=${_safeTransportLoadError(error)}');
+    }
     stderr.writeln('result=native_transport_unavailable');
     exitCode = 2;
     return;
@@ -179,6 +184,13 @@ Future<void> main(List<String> arguments) async {
       }
     }
   }
+}
+
+String _safeTransportLoadError(Object error) {
+  final value = error.toString().replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+  // This diagnostic is intentionally bounded. The native loader error can
+  // contain a local filesystem path but never request headers or credentials.
+  return value.length <= 500 ? value : value.substring(0, 500);
 }
 
 Future<_DeviceAuth> _createDevice(WindowsSystemHttpTransport http, Uri baseUri, String apiKey) async {

@@ -5,6 +5,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Script,
     [ValidateSet("Admin", "Test")][string]$CredentialName = "Test",
     [string]$UserName = "zeontest",
+    [ValidateSet("basic", "ntlm")][string]$Transport = "basic",
+    [switch]$UseRunPs,
     [ValidateRange(1, 65535)][int]$Port = 55985,
     [ValidateRange(1, 300)][int]$OperationTimeoutSeconds = 30,
     [ValidateRange(2, 330)][int]$ReadTimeoutSeconds = 35
@@ -33,6 +35,8 @@ $encodedScript = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Sc
 $env:ZEON_VM_WINRM_PASSWORD = $password
 $env:ZEON_VM_WINRM_SCRIPT = $encodedScript
 $env:ZEON_VM_WINRM_USER = $UserName
+$env:ZEON_VM_WINRM_TRANSPORT = $Transport
+$env:ZEON_VM_WINRM_USE_RUN_PS = if ($UseRunPs) { "1" } else { "0" }
 $env:ZEON_VM_WINRM_PORT = $Port.ToString([Globalization.CultureInfo]::InvariantCulture)
 $env:ZEON_VM_WINRM_OPERATION_TIMEOUT = $OperationTimeoutSeconds.ToString([Globalization.CultureInfo]::InvariantCulture)
 $env:ZEON_VM_WINRM_READ_TIMEOUT = $ReadTimeoutSeconds.ToString([Globalization.CultureInfo]::InvariantCulture)
@@ -52,14 +56,18 @@ try:
     session = winrm.Session(
         "http://127.0.0.1:%s/wsman" % os.environ["ZEON_VM_WINRM_PORT"],
         auth=(os.environ["ZEON_VM_WINRM_USER"], os.environ["ZEON_VM_WINRM_PASSWORD"]),
-        transport="basic",
+        transport=os.environ["ZEON_VM_WINRM_TRANSPORT"],
         operation_timeout_sec=int(os.environ["ZEON_VM_WINRM_OPERATION_TIMEOUT"]),
         read_timeout_sec=int(os.environ["ZEON_VM_WINRM_READ_TIMEOUT"]),
     )
-    result = session.run_cmd(
-        "powershell.exe",
-        ["-NoProfile", "-NonInteractive", "-EncodedCommand", os.environ["ZEON_VM_WINRM_SCRIPT"]],
-    )
+    if os.environ["ZEON_VM_WINRM_USE_RUN_PS"] == "1":
+        script = base64.b64decode(os.environ["ZEON_VM_WINRM_SCRIPT"]).decode("utf-16-le")
+        result = session.run_ps(script)
+    else:
+        result = session.run_cmd(
+            "powershell.exe",
+            ["-NoProfile", "-NonInteractive", "-EncodedCommand", os.environ["ZEON_VM_WINRM_SCRIPT"]],
+        )
     payload = {
         "status_code": result.status_code,
         "stdout_base64": base64.b64encode(result.std_out).decode("ascii"),
@@ -95,6 +103,8 @@ finally {
     Remove-Item Env:ZEON_VM_WINRM_PASSWORD -ErrorAction SilentlyContinue
     Remove-Item Env:ZEON_VM_WINRM_SCRIPT -ErrorAction SilentlyContinue
     Remove-Item Env:ZEON_VM_WINRM_USER -ErrorAction SilentlyContinue
+    Remove-Item Env:ZEON_VM_WINRM_TRANSPORT -ErrorAction SilentlyContinue
+    Remove-Item Env:ZEON_VM_WINRM_USE_RUN_PS -ErrorAction SilentlyContinue
     Remove-Item Env:ZEON_VM_WINRM_PORT -ErrorAction SilentlyContinue
     Remove-Item Env:ZEON_VM_WINRM_OPERATION_TIMEOUT -ErrorAction SilentlyContinue
     Remove-Item Env:ZEON_VM_WINRM_READ_TIMEOUT -ErrorAction SilentlyContinue
