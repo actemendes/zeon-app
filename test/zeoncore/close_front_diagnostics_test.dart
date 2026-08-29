@@ -241,10 +241,7 @@ void main() {
     });
 
     test('desktop bookkeeping cannot publish Stopped without authoritative terminal evidence', () async {
-      final fixture = _CloseFrontFixture(
-        PortProbeOutcome.connected,
-        requiresAuthoritativeStopConfirmation: true,
-      );
+      final fixture = _CloseFrontFixture(PortProbeOutcome.connected, requiresAuthoritativeStopConfirmation: true);
       addTearDown(fixture.close);
       fixture.publishStarted();
       fixture.events.clear();
@@ -271,7 +268,24 @@ void main() {
 
       expect(result.isRight(), isTrue);
       expect(fixture.core.nativeStopCalls, 1);
+      expect(fixture.core.nextSessionPreparationCalls, 1);
       expect(fixture.events.whereType<CoreStopped>(), hasLength(1));
+      expect(fixture.service.currentState, isA<CoreStopped>());
+    });
+
+    test('desktop prepares a fresh control owner only after terminal stop evidence', () async {
+      final fixture = _CloseFrontFixture(
+        PortProbeOutcome.connected,
+        requiresAuthoritativeStopConfirmation: true,
+        authoritativeStopConfirmed: true,
+      );
+      addTearDown(fixture.close);
+      fixture.publishStarted();
+
+      final result = await fixture.service.stop().run();
+
+      expect(result.isRight(), isTrue);
+      expect(fixture.core.lifecycleCalls, <String>['bookkeeping-stop', 'prepare-next-session']);
       expect(fixture.service.currentState, isA<CoreStopped>());
     });
   });
@@ -411,6 +425,8 @@ class _CloseFrontCoreInterface extends CoreInterface {
   late final _TrackingCoreClient initialForegroundClient;
   late final _TrackingCoreClient initialBackgroundClient;
   int nativeStopCalls = 0;
+  int nextSessionPreparationCalls = 0;
+  final List<String> lifecycleCalls = [];
 
   @override
   VpnSessionSnapshot? get authoritativeSessionSnapshot => nativeSnapshot;
@@ -426,6 +442,14 @@ class _CloseFrontCoreInterface extends CoreInterface {
   @override
   Future<bool> stop({int generation = 0}) async {
     nativeStopCalls++;
+    lifecycleCalls.add('bookkeeping-stop');
+    return true;
+  }
+
+  @override
+  Future<bool> prepareNextSessionAfterStop() async {
+    nextSessionPreparationCalls++;
+    lifecycleCalls.add('prepare-next-session');
     return true;
   }
 

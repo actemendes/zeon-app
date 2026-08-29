@@ -2606,6 +2606,14 @@ class ZeonCoreService with InfraLogger {
         nativeStopped = await core
             .stop(generation: operationGeneration)
             .timeout(const Duration(seconds: 2), onTimeout: () => false);
+        if (nativeStopped) {
+          final nextSessionReady = await core.prepareNextSessionAfterStop();
+          if (!nextSessionReady) {
+            loggy.warning(
+              vpnDiagnosticEvent("desktop_control_rearm", operationGeneration, details: "outcome=deferred_retry"),
+            );
+          }
+        }
       }
       if (_isStaleOperation(operationGeneration, "stop_native_result")) return right(unit);
       if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_terminal_publication")) {

@@ -86,6 +86,12 @@ class CoreInterface {
   /// cannot be missed.
   Future<bool> waitForAuthoritativeStop({required Duration timeout}) async => false;
 
+  /// Re-arms any process-owned control plane after the active data plane has
+  /// reached an authoritative terminal state. Mobile keeps its platform
+  /// service alive and needs no extra work; desktop may replace a completed
+  /// in-process gRPC runtime before the next explicit Start.
+  Future<bool> prepareNextSessionAfterStop() async => true;
+
   /// Closes the previous platform owner without making the replacement
   /// generation terminal. Android Start/restart calls this before installing
   /// the new owner for the same generation.
