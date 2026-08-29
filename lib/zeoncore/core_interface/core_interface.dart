@@ -75,6 +75,17 @@ class CoreInterface {
     return false;
   }
 
+  /// Whether a successful [stop] result is only local bookkeeping and the
+  /// shared lifecycle must first observe an authoritative terminal core
+  /// status. Desktop keeps its process-owned management endpoint alive, so an
+  /// open port or a local boolean cannot prove that the data plane stopped.
+  bool get requiresAuthoritativeStopConfirmation => false;
+
+  /// Starts a bounded terminal-status observation. Callers intentionally
+  /// create this future before sending Stop so a fast STOPPED transition
+  /// cannot be missed.
+  Future<bool> waitForAuthoritativeStop({required Duration timeout}) async => false;
+
   /// Closes the previous platform owner without making the replacement
   /// generation terminal. Android Start/restart calls this before installing
   /// the new owner for the same generation.

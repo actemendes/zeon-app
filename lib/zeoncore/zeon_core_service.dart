@@ -1166,6 +1166,7 @@ class ZeonCoreService with InfraLogger {
     }
 
     loggy.warning("$reason: background or native session is still active, forcing started", error);
+    _connectedGeneration = _sessionGeneration.current;
     _transitionLifecycle(_CoreLifecycleState.started, reason: reason);
     statusController.add(currentState = const CoreStatus.started());
     if (listenerKey != null && core.isInitialized()) {
@@ -2531,6 +2532,10 @@ class ZeonCoreService with InfraLogger {
 
       var errMsg = "";
       GrpcError? grpcStopError;
+      var grpcStopConfirmed = false;
+      final authoritativeStopEvidence = core.requiresAuthoritativeStopConfirmation && !platformStopped
+          ? core.waitForAuthoritativeStop(timeout: const Duration(seconds: 14))
+          : null;
       try {
         await _withinExpectedTransportTeardown(TransportCloseIntent.stop, () async {
           if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_listener_cleanup")) return;
@@ -2543,7 +2548,11 @@ class ZeonCoreService with InfraLogger {
           platformStopped = _platformConfirmsStopped(operationGeneration);
           if (!platformStopped && !preemptiveStopAccepted) {
             if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_grpc_stop")) return;
-            await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
+            final response = await core.bgClient.stop(
+              Empty(),
+              options: CallOptions(timeout: const Duration(seconds: 3)),
+            );
+            grpcStopConfirmed = CoreStatus.fromCoreInfo(response) is CoreStopped;
           }
         });
       } on GrpcError catch (e) {
@@ -2573,9 +2582,12 @@ class ZeonCoreService with InfraLogger {
       if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "after_transport_cleanup")) {
         return right(unit);
       }
-      var nativeStopped = platformStopped || _platformConfirmsStopped(operationGeneration);
+      var nativeStopped = platformStopped || _platformConfirmsStopped(operationGeneration) || grpcStopConfirmed;
       try {
-        if (!nativeStopped) {
+        if (!nativeStopped && core.requiresAuthoritativeStopConfirmation) {
+          nativeStopped = await authoritativeStopEvidence!;
+        }
+        if (!nativeStopped && !core.requiresAuthoritativeStopConfirmation) {
           if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_native_stop")) {
             return right(unit);
           }
@@ -2589,10 +2601,11 @@ class ZeonCoreService with InfraLogger {
           errMsg = "native VPN service stop failed (${error.runtimeType})";
         }
         loggy.error("native VPN service stop failed", error, stackTrace);
-      } finally {
-        if (!_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_config_cleanup")) {
-          await _deleteCoreCurrentConfigSnapshot();
-        }
+      }
+      if (nativeStopped && core.requiresAuthoritativeStopConfirmation) {
+        nativeStopped = await core
+            .stop(generation: operationGeneration)
+            .timeout(const Duration(seconds: 2), onTimeout: () => false);
       }
       if (_isStaleOperation(operationGeneration, "stop_native_result")) return right(unit);
       if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_terminal_publication")) {
@@ -2602,10 +2615,20 @@ class ZeonCoreService with InfraLogger {
         errMsg = grpcStopError.message ?? "failed to stop background core";
       }
       if (!nativeStopped) {
-        loggy.warning("native core stop timed out; forcing local stopped state");
         if (errMsg.isEmpty) {
           errMsg = "native VPN service did not confirm stop";
         }
+        if (core.requiresAuthoritativeStopConfirmation) {
+          loggy.warning(
+            "native core stop did not produce authoritative terminal evidence; preserving the live session",
+          );
+          await _recoverStuckStoppingStatus("stop terminal confirmation", grpcStopError);
+          return left(errMsg);
+        }
+        loggy.warning("native core stop timed out; forcing local stopped state");
+      }
+      if (!_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_config_cleanup")) {
+        await _deleteCoreCurrentConfigSnapshot();
       }
 
       _transitionLifecycle(_CoreLifecycleState.stopped, reason: "stop complete");

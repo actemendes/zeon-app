@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
@@ -11,6 +12,7 @@ import 'package:zeon/gen/zeon_core_generated_bindings.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface.dart';
+import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/generated/v2/hello/hello.pb.dart';
@@ -212,6 +214,43 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     // management endpoint is process-owned and remains ready for a later
     // explicit user start.
     return true;
+  }
+
+  @override
+  bool get requiresAuthoritativeStopConfirmation => true;
+
+  @override
+  Future<bool> waitForAuthoritativeStop({required Duration timeout}) async {
+    if (!isInitialized()) return false;
+    final terminal = Completer<bool>();
+    StreamSubscription<CoreInfoResponse>? subscription;
+    try {
+      subscription = bgClient
+          .coreInfoListener(Empty(), options: CallOptions(timeout: timeout + const Duration(seconds: 1)))
+          .listen(
+            (event) {
+              if (CoreStatus.fromCoreInfo(event) is CoreStopped && !terminal.isCompleted) {
+                terminal.complete(true);
+              }
+            },
+            onError: (_) {
+              if (!terminal.isCompleted) terminal.complete(false);
+            },
+            onDone: () {
+              if (!terminal.isCompleted) terminal.complete(false);
+            },
+          );
+      return await terminal.future.timeout(timeout, onTimeout: () => false);
+    } catch (error, stackTrace) {
+      loggy.warning('desktop authoritative stop observation failed', error, stackTrace);
+      return false;
+    } finally {
+      try {
+        await subscription?.cancel();
+      } catch (_) {
+        // A closing gRPC channel is expected during terminal teardown.
+      }
+    }
   }
 
   @override
