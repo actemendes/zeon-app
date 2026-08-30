@@ -8,21 +8,25 @@ import 'package:zeon/features/proxy/active/active_proxy_card.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 void main() {
-  testWidgets('connected Home keeps a visible picker while the server resolves', (tester) async {
+  testWidgets('connected Home does not invent a server card before resolution', (tester) async {
     await _pumpFooter(tester, status: const Connected(), activeProxy: const AsyncLoading());
 
-    expect(find.byKey(const ValueKey('home_server_picker')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home_server_picker_loading')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home_server_picker')), findsNothing);
   });
 
-  testWidgets('disconnected Home keeps a meaningful picker placeholder', (tester) async {
-    await _pumpFooter(tester, status: const Disconnected(), activeProxy: const AsyncLoading());
+  testWidgets('disconnected Home never renders the active server card', (tester) async {
+    await _pumpFooter(
+      tester,
+      status: const Disconnected(),
+      activeProxy: AsyncData(
+        OutboundInfo(tag: 'server-stable-id', tagDisplay: 'Test Server', type: 'proxy', isVisible: true),
+      ),
+    );
 
-    expect(find.byKey(const ValueKey('home_server_picker')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home_server_picker_unavailable')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home_server_picker')), findsNothing);
   });
 
-  testWidgets('resolved server replaces the placeholder without removing the picker', (tester) async {
+  testWidgets('connected Home renders the existing active server button once resolved', (tester) async {
     await _pumpFooter(
       tester,
       status: const Connected(),
@@ -39,7 +43,6 @@ void main() {
 
     expect(find.byKey(const ValueKey('home_server_picker')), findsOneWidget);
     expect(find.text('Test Server'), findsOneWidget);
-    expect(find.byKey(const ValueKey('home_server_picker_loading')), findsNothing);
   });
 }
 
