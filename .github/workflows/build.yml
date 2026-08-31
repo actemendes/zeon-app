@@ -474,7 +474,7 @@ jobs:
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: service_account.json
-          packageName: app.zeonvpn.com
+          packageName: com.zeon.hiddify
           releaseName: ${{ env.TAG_NAME }}
           releaseFiles: ./zeon-android-market.aab
           track: 'beta'
