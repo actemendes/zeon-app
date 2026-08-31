@@ -13,13 +13,20 @@ open class ExtensionProvider: NEPacketTunnelProvider {
     private var platformInterface: ExtensionPlatformInterface!
     private var config: String!
     private var sessionGeneration: Int64 = 0
+    private var serviceStarted = false
 
     override open func startTunnel(options: [String: NSObject]?) async throws {
-        // Clear previous logs
-        try? FileManager.default.removeItem(at: ExtensionProvider.errorFile)
+        // Preserve the previous provider session. A crash/jetsam cannot upload
+        // its own tail, so the host app must be able to collect it afterwards.
+        let previousErrorFile = FilePath.workingDirectory.appendingPathComponent("network_extension_error.previous.log")
+        try? FileManager.default.removeItem(at: previousErrorFile)
+        if FileManager.default.fileExists(atPath: ExtensionProvider.errorFile.path) {
+            try? FileManager.default.moveItem(at: ExtensionProvider.errorFile, to: previousErrorFile)
+        }
         try? FileManager.default.removeItem(at: FilePath.workingDirectory.appendingPathComponent("TestLog"))
         
         do {
+            serviceStarted = false
             writeMessage("(packet-tunnel) starting")
             
             let providerConfiguration = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration ?? [:]
@@ -115,6 +122,7 @@ open class ExtensionProvider: NEPacketTunnelProvider {
                 throw error
             }
             writeMessage("(packet-tunnel) service started successfully")
+            serviceStarted = true
         } catch {
             writeFatalError("(packet-tunnel) error: start service: \(error.localizedDescription)")
             throw error
@@ -219,6 +227,7 @@ open class ExtensionProvider: NEPacketTunnelProvider {
 //        logger.debug("Stopping tunnel with reason: \(reason)")
         writeMessage("(packet-tunnel) stopping, reason: \(reason)")
         stopService()
+        serviceStarted = false
         sessionGeneration = 0
         
 //        // Allow time for cleanup
@@ -259,6 +268,31 @@ open class ExtensionProvider: NEPacketTunnelProvider {
     override open func handleAppMessage(_ messageData: Data) async -> Data? {
         logger.debug("Handling app message")
         return messageData
+    }
+
+    func sessionStatusData() -> Data? {
+        try? JSONSerialization.data(withJSONObject: [
+            "generation": sessionGeneration,
+            "coreStarted": serviceStarted,
+        ])
+    }
+
+    func markCoreStartedData(generation: Int64) -> Data? {
+        let accepted = generation > 0 && generation == sessionGeneration
+        if accepted {
+            serviceStarted = true
+            writeMessage("(packet-tunnel) app core readiness acknowledged generation=\(generation)")
+        } else {
+            writeMessage(
+                "(packet-tunnel) rejected app core readiness generation=\(generation) current=\(sessionGeneration)"
+            )
+        }
+        return try? JSONSerialization.data(withJSONObject: [
+            "ack": "mark_core_started",
+            "accepted": accepted,
+            "generation": sessionGeneration,
+            "coreStarted": serviceStarted,
+        ])
     }
     
     override open func sleep() async {

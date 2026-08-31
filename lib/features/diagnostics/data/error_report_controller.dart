@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:loggy/loggy.dart' as loggy;
@@ -43,6 +44,7 @@ class ErrorReportController {
     required ActiveProfileReader activeProfileReader,
     required ConfigOptionsSnapshotReader configOptionsSnapshotReader,
     required String locale,
+    ErrorReportDeduplicator? deduplicator,
   }) : _appInfo = appInfo,
        _preferences = preferences,
        _stableDeviceId = stableDeviceId,
@@ -52,11 +54,13 @@ class ErrorReportController {
        _coreService = coreService,
        _activeProfileReader = activeProfileReader,
        _configOptionsSnapshotReader = configOptionsSnapshotReader,
-       _locale = locale;
+       _locale = locale,
+       _deduplicator = deduplicator ?? ErrorReportDeduplicator();
 
   static const _enabled = bool.fromEnvironment('client_error_reporting_enabled', defaultValue: true);
   static const _platformChannel = MethodChannel('com.zeon.app/platform');
   static const _startupStoppedReportKey = 'diagnostics_last_vpn_not_running_report_at';
+  static const _maxReportsPerFlush = 10;
 
   final AppInfoEntity _appInfo;
   final SharedPreferences _preferences;
@@ -67,32 +71,66 @@ class ErrorReportController {
   final ZeonCoreService _coreService;
   final ActiveProfileReader _activeProfileReader;
   final ConfigOptionsSnapshotReader _configOptionsSnapshotReader;
-  final String _locale;
+  final ErrorReportDeduplicator _deduplicator;
+  String _locale;
   final ErrorReportRedactor _redactor = const ErrorReportRedactor();
 
   DiagnosticsLogPrinter? _logPrinter;
   Timer? _flushTimer;
   bool _initialized = false;
   bool _flushing = false;
+  bool _disposed = false;
+  int _generation = 0;
+
+  Future<void> _reportSilentError(String trigger, Object error, StackTrace? stackTrace, String? message) {
+    return captureError(trigger: trigger, error: error, stackTrace: stackTrace, message: message);
+  }
 
   Future<void> init() async {
-    if (!_enabled || kIsWeb || _initialized) return;
+    if (!_enabled || kIsWeb || _initialized || _disposed) return;
     _initialized = true;
-    Logger.setSilentErrorReporter((trigger, error, stackTrace, message) {
-      return captureError(trigger: trigger, error: error, stackTrace: stackTrace, message: message);
-    });
+    final generation = ++_generation;
+    Logger.setSilentErrorReporter(_reportSilentError, owner: this);
     _logPrinter = DiagnosticsLogPrinter(onErrorRecord: captureLogRecord);
     LoggerController.instance.addPrinter('diagnostics', _logPrinter!);
-    _flushTimer = Timer.periodic(const Duration(minutes: 1), (_) => unawaited(flush()));
-    await flush();
-    await _captureVpnNotRunningOnStartupIfNeeded();
+    _flushTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (_isGenerationActive(generation)) {
+        unawaited(_flush(generation));
+      }
+    });
+    // Do not hold application bootstrap while queued network requests retry.
+    // Hooks above are active synchronously; maintenance is best-effort.
+    unawaited(_runInitialMaintenance(generation));
+  }
+
+  String get locale => _locale;
+  set locale(String value) {
+    if (!_disposed) _locale = value;
+  }
+
+  bool _isGenerationActive(int generation) => !_disposed && generation == _generation;
+
+  Future<void> _runInitialMaintenance(int generation) async {
+    try {
+      await _flush(generation);
+      if (!_isGenerationActive(generation)) return;
+      await _captureVpnNotRunningOnStartupIfNeeded(generation);
+    } catch (_) {
+      // The periodic timer and the next captured event will retry the queue.
+    }
   }
 
   void dispose() {
-    Logger.clearSilentErrorReporter();
+    if (_disposed) return;
+    _disposed = true;
+    _generation++;
+    Logger.clearSilentErrorReporter(this);
     _flushTimer?.cancel();
-    if (_logPrinter != null) {
-      LoggerController.instance.removePrinter('diagnostics');
+    _flushTimer = null;
+    final logPrinter = _logPrinter;
+    _logPrinter = null;
+    if (logPrinter != null) {
+      LoggerController.instance.removePrinter('diagnostics', owner: logPrinter);
     }
   }
 
@@ -104,7 +142,8 @@ class ErrorReportController {
     Map<String, dynamic>? context,
     String severity = 'error',
   }) async {
-    if (!_enabled || kIsWeb) return;
+    if (!_enabled || kIsWeb || _disposed) return;
+    final generation = _generation;
     final report = await _buildReport(
       trigger: trigger,
       severity: severity,
@@ -113,8 +152,12 @@ class ErrorReportController {
       message: message,
       context: context,
     );
+    if (!_isGenerationActive(generation)) return;
+    final fingerprint = report['fingerprint']?.toString();
+    if (fingerprint != null && !_deduplicator.shouldCapture(fingerprint, DateTime.now().toUtc())) return;
     await _queue.enqueue(report);
-    await flush();
+    if (!_isGenerationActive(generation)) return;
+    await _flush(generation);
   }
 
   Future<void> captureLogRecord(loggy.LogRecord record) {
@@ -164,25 +207,31 @@ class ErrorReportController {
     );
   }
 
-  Future<void> flush() async {
-    if (!_enabled || kIsWeb || _flushing) return;
+  Future<void> flush() => _flush(_generation);
+
+  Future<void> _flush(int generation) async {
+    if (!_enabled || kIsWeb || !_isGenerationActive(generation) || _flushing) return;
     _flushing = true;
     try {
-      final due = _queue.dueReports(DateTime.now().toUtc());
+      final due = _queue.dueReports(DateTime.now().toUtc()).take(_maxReportsPerFlush);
       for (final entry in due) {
+        if (!_isGenerationActive(generation)) return;
         try {
           await _sender.send(entry.report);
+          if (!_isGenerationActive(generation)) return;
           await _queue.remove(entry.eventId);
         } catch (_) {
+          if (!_isGenerationActive(generation)) return;
           await _queue.markFailed(entry.eventId);
         }
       }
     } finally {
-      _flushing = false;
+      if (_generation == generation) _flushing = false;
     }
   }
 
-  Future<void> _captureVpnNotRunningOnStartupIfNeeded() async {
+  Future<void> _captureVpnNotRunningOnStartupIfNeeded(int generation) async {
+    if (!_isGenerationActive(generation)) return;
     VpnSessionSnapshot? nativeSnapshot;
     try {
       nativeSnapshot = await _coreService.readAuthoritativeSessionSnapshot();
@@ -198,7 +247,9 @@ class ErrorReportController {
       return;
     }
 
+    if (!_isGenerationActive(generation)) return;
     await _preferences.setString(_startupStoppedReportKey, now.toIso8601String());
+    if (!_isGenerationActive(generation)) return;
     await captureError(
       trigger: 'vpn_not_running_on_startup',
       error: StateError('Authoritative VPN session reports a failed start on app startup'),
@@ -230,16 +281,16 @@ class ErrorReportController {
     final activeProfile = await _tryReadActiveProfile();
     final runtimeNetwork = await _readRuntimeNetworkInfo();
     final userId = _readUserId();
-    final login = _resolveLogin(activeProfile);
     final configOptions = _safeConfigSnapshot();
     final safeMessage = _redactor.redactText(message ?? error.toString());
     final safeStack = stackTrace == null ? null : _redactor.redactText(stackTrace.toString(), maxLength: 20000);
     final fingerprint = _fingerprint([
       trigger,
       error.runtimeType.toString(),
-      _normalizeFingerprintText(safeMessage),
-      _normalizeFingerprintText(_firstStackLine(safeStack)),
+      normalizeErrorFingerprintText(safeMessage),
+      normalizeErrorFingerprintText(_firstStackLine(safeStack)),
     ]);
+    final safeDeviceId = await pseudonymousDeviceId(await _stableDeviceId.getOrCreate());
 
     final report = <String, dynamic>{
       'schema_version': 1,
@@ -256,12 +307,11 @@ class ErrorReportController {
         'release': _appInfo.release.name,
       },
       'device': {
-        'device_id': await _stableDeviceId.getOrCreate(),
+        'device_id': safeDeviceId,
         'platform': _platformName(),
         'os_version': PlatformUtils.operatingSystemVersion,
         'locale': _locale,
         if (userId != null) 'user_id': userId,
-        if (login != null && login.isNotEmpty) 'login': _redactor.redactText(login, maxLength: 300),
       },
       'vpn': {
         'core_status': _formatCoreStatus(_coreService.currentState),
@@ -280,10 +330,10 @@ class ErrorReportController {
       'logs': await _logs(),
       if (context != null && context.isNotEmpty) 'context': _redactor.redactJson(context),
     };
-    return _preserveAppMetadata(_redactor.redactMap(report));
+    return _preserveReportMetadata(_redactor.redactMap(report), deviceId: safeDeviceId);
   }
 
-  Map<String, dynamic> _preserveAppMetadata(Map<String, dynamic> report) {
+  Map<String, dynamic> _preserveReportMetadata(Map<String, dynamic> report, {required String deviceId}) {
     final app = Map<String, dynamic>.from((report['app'] as Map?) ?? const <String, dynamic>{});
     app['name'] = _appInfo.name;
     app['version'] = _appInfo.version;
@@ -291,6 +341,9 @@ class ErrorReportController {
     app['environment'] = _appInfo.environment.name;
     app['release'] = _appInfo.release.name;
     report['app'] = app;
+    final device = Map<String, dynamic>.from((report['device'] as Map?) ?? const <String, dynamic>{});
+    device['device_id'] = deviceId;
+    report['device'] = device;
     return report;
   }
 
@@ -309,22 +362,13 @@ class ErrorReportController {
     return legacy != null && legacy > 0 ? legacy : null;
   }
 
-  String? _resolveLogin(ProfileEntity? profile) {
-    final name = profile?.name.trim();
-    if (name == null || name.isEmpty) return null;
-    return name;
-  }
-
   Map<String, dynamic> _profileSummary(ProfileEntity profile) {
     return switch (profile) {
-      RemoteProfileEntity(:final id, :final name, :final url, :final subInfo) => {
-        'id': id,
+      RemoteProfileEntity(:final subInfo) => {
         'type': 'remote',
-        'name': name,
-        'url_host': Uri.tryParse(url)?.host,
         if (subInfo != null) 'expires_at': subInfo.expire.toUtc().toIso8601String(),
       },
-      LocalProfileEntity(:final id, :final name) => {'id': id, 'type': 'local', 'name': name},
+      LocalProfileEntity() => {'type': 'local'},
     };
   }
 
@@ -376,8 +420,13 @@ class ErrorReportController {
       'app_tail': _logPrinter?.snapshot() ?? const <String>[],
       'core_tail': _coreService.logBuffer.takeLast(120).map(_formatCoreLog).toList(growable: false),
       'app_file_tail': await _readFileTail(_logPathResolver.appFile(), maxLines: 80),
-      'core_file_tail': await _readFileTail(_logPathResolver.coreFile(), maxLines: 80),
-      'stderr_tail': await _readFileTail(File(p.join(_logPathResolver.directory.path, 'stderr.log')), maxLines: 80),
+      'core_file_tail': await _readFileTail(_logPathResolver.coreRuntimeFile(), maxLines: 80),
+      'stderr_tail': await _readFileTails(_logPathResolver.coreStderrFiles(), maxLines: 80),
+      'network_extension_tail': await _readFileTail(_logPathResolver.networkExtensionErrorFile(), maxLines: 80),
+      'network_extension_previous_tail': await _readFileTail(
+        _logPathResolver.previousNetworkExtensionErrorFile(),
+        maxLines: 80,
+      ),
       'truncated': true,
     };
   }
@@ -409,6 +458,25 @@ class ErrorReportController {
     }
   }
 
+  Future<List<String>> _readFileTails(Iterable<File> files, {required int maxLines, int maxLinesPerFile = 30}) async {
+    if (maxLines <= 0 || maxLinesPerFile <= 0) return const [];
+
+    var remaining = maxLines;
+    final sections = <List<String>>[];
+    for (final file in files.toList(growable: false).reversed) {
+      if (remaining <= 1) break;
+      final lines = await _readFileTail(file, maxLines: maxLinesPerFile);
+      if (lines.isEmpty) continue;
+
+      final availableLines = remaining - 1;
+      final selected = lines.length > availableLines ? lines.sublist(lines.length - availableLines) : lines;
+      final relativePath = p.relative(file.path, from: _logPathResolver.directory.path);
+      sections.add(['[$relativePath]', ...selected]);
+      remaining -= selected.length + 1;
+    }
+    return sections.reversed.expand((section) => section).toList(growable: false);
+  }
+
   String _platformName() {
     if (PlatformUtils.isAndroid) return 'android';
     if (PlatformUtils.isIOS) return 'ios';
@@ -423,18 +491,6 @@ class ErrorReportController {
     return stackTrace.split('\n').firstOrNull;
   }
 
-  String? _normalizeFingerprintText(String? value) {
-    if (value == null || value.isEmpty) return value;
-    var normalized = value;
-    normalized = normalized.replaceAll(
-      RegExp(r'address = <redacted>, port = \d+'),
-      'address = <redacted>, port = <port>',
-    );
-    normalized = normalized.replaceAll(RegExp(r'address = [^,\)]+, port = \d+'), 'address = <address>, port = <port>');
-    normalized = normalized.replaceAll(RegExp(r'port = \d+'), 'port = <port>');
-    return normalized;
-  }
-
   String _fingerprint(List<Object?> parts) {
     final input = parts.whereType<Object>().join('|');
     var hash = 0xcbf29ce484222325;
@@ -443,6 +499,56 @@ class ErrorReportController {
       hash = (hash * 0x100000001b3) & 0x1fffffffffffff;
     }
     return hash.toRadixString(16);
+  }
+}
+
+@visibleForTesting
+String? normalizeErrorFingerprintText(String? value) {
+  if (value == null || value.isEmpty) return value;
+  var normalized = value.toLowerCase();
+  normalized = normalized.replaceAll(
+    RegExp(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b'),
+    '<uuid>',
+  );
+  normalized = normalized.replaceAll(RegExp(r'\b0x[0-9a-f]+\b'), '<hex>');
+  normalized = normalized.replaceAllMapped(RegExp(r'\b(?:pid|generation|monotonic_ms|sequence_number)=\d+\b'), (match) {
+    final key = match.group(0)!.split('=').first;
+    return '$key=<number>';
+  });
+  normalized = normalized.replaceAll(
+    RegExp(r'address = <redacted>, port = \d+'),
+    'address = <redacted>, port = <port>',
+  );
+  normalized = normalized.replaceAll(RegExp(r'address = [^,\)]+, port = \d+'), 'address = <address>, port = <port>');
+  normalized = normalized.replaceAll(RegExp(r'\bport = \d+\b'), 'port = <port>');
+  normalized = normalized.replaceAll(RegExp(r'\b\d{4}-\d{2}-\d{2}t\d{2}:\d{2}:\d{2}(?:\.\d+)?z\b'), '<timestamp>');
+  return normalized.trim();
+}
+
+@visibleForTesting
+Future<String> pseudonymousDeviceId(String rawDeviceId) async {
+  final digest = await Sha256().hash(utf8.encode(rawDeviceId.trim()));
+  return 'sha256:${digest.bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join()}';
+}
+
+@visibleForTesting
+class ErrorReportDeduplicator {
+  ErrorReportDeduplicator({this.window = const Duration(minutes: 10), this.maxFingerprints = 256});
+
+  final Duration window;
+  final int maxFingerprints;
+  final Map<String, DateTime> _lastCapturedAt = {};
+
+  bool shouldCapture(String fingerprint, DateTime now) {
+    final cutoff = now.toUtc().subtract(window);
+    _lastCapturedAt.removeWhere((_, capturedAt) => capturedAt.isBefore(cutoff));
+    final previous = _lastCapturedAt[fingerprint];
+    if (previous != null && now.toUtc().difference(previous) < window) return false;
+    _lastCapturedAt[fingerprint] = now.toUtc();
+    while (_lastCapturedAt.length > maxFingerprints) {
+      _lastCapturedAt.remove(_lastCapturedAt.keys.first);
+    }
+    return true;
   }
 }
 

@@ -9,6 +9,7 @@ import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
+import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/route_rules/data/managed_rule_set_sync.dart';
 import 'package:zeon/features/settings/notifier/config_option/config_option_notifier.dart';
@@ -33,6 +34,9 @@ class _ConnectionWrapperState extends ConsumerState<ConnectionWrapper> with AppL
       final isConnected = next.asData?.value is Connected;
       if (isConnected && !wasConnected) {
         unawaited(ref.read(managedRuleSetSyncServiceProvider).syncWhenVpnAvailable());
+        if (PlatformUtils.isAndroid) {
+          unawaited(ref.read(managedApplicationSyncServiceProvider).sync(force: true, reason: 'vpn_connected'));
+        }
       }
     });
 
@@ -66,6 +70,15 @@ class _ConnectionWrapperState extends ConsumerState<ConnectionWrapper> with AppL
       _syncHttpVpnState(connection);
       if (connection.asData?.value is Connected) {
         unawaited(ref.read(managedRuleSetSyncServiceProvider).syncWhenVpnAvailable());
+        if (PlatformUtils.isAndroid) {
+          unawaited(
+            ref.read(managedApplicationSyncServiceProvider).sync(force: true, reason: 'vpn_connected_ui_ready'),
+          );
+        }
+      }
+      if (PlatformUtils.isWindows) {
+        unawaited(ref.read(mobileBootstrapImportServiceProvider).retryWindowsAfterUiIfNeeded());
+        return;
       }
       if (!PlatformUtils.isMobile) return;
       // A bootstrap request can fail before a Navigator exists. Retry once the

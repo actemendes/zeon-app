@@ -28,7 +28,8 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
     if (flag == null) return 4;
     if (PkgFlag.userSelection.check(flag)) {
       return 1;
-    } else if (PkgFlag.autoSelection.check(flag) && !PkgFlag.forceDeselection.check(flag)) {
+    } else if ((PkgFlag.autoSelection.check(flag) || PkgFlag.managedSelection.check(flag)) &&
+        !PkgFlag.forceDeselection.check(flag)) {
       return 2;
     } else {
       return 3;

@@ -1,17 +1,25 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/features/connection/model/connection_status.dart';
+import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:zeon/utils/custom_loggers.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
-  const ActiveProxyDelayIndicator({super.key});
+  const ActiveProxyDelayIndicator({required this.activeProxy, super.key});
+
+  final AsyncValue<OutboundInfo> activeProxy;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final activeProxy = ref.watch(activeProxyNotifierProvider);
+    final connectionState = ref.watch(connectionNotifierProvider.select((value) => value.valueOrNull));
+    if (connectionState is! Connected) {
+      return const SizedBox();
+    }
     final theme = Theme.of(context);
 
     if (activeProxy is! AsyncData) {

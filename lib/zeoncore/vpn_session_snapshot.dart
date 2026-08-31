@@ -37,6 +37,7 @@ enum VpnSessionPhase {
 enum VpnStopSource {
   none,
   flutter,
+  system,
   notification,
   tile,
   shortcut,
@@ -51,6 +52,7 @@ enum VpnStopSource {
     return switch (normalized) {
       '' => none,
       'flutter' => flutter,
+      'system' => system,
       'notification' => notification,
       'tile' => tile,
       'shortcut' => shortcut,
@@ -63,7 +65,7 @@ enum VpnStopSource {
   }
 
   bool get isExternalIntentional => switch (this) {
-    notification || tile || shortcut || revoke => true,
+    system || notification || tile || shortcut || revoke => true,
     _ => false,
   };
 }
@@ -152,6 +154,25 @@ class VpnSessionSnapshot {
   bool get isTerminalStop => phase == VpnSessionPhase.disconnected && requestedAction == 'stop';
 
   bool get isExternalIntentionalStop => isTerminalStop && stopSource.isExternalIntentional;
+
+  /// A platform teardown that belongs to a still-active Connect operation.
+  ///
+  /// Android and iOS may have to release an older packet-tunnel owner before
+  /// starting the new owner for the same generation. That transient
+  /// DISCONNECTED snapshot is authoritative transport state, but it is not a
+  /// terminal user intent and must not make the main button look idle.
+  bool get isReplacementTransition =>
+      stopSource == VpnStopSource.replacement &&
+      (phase == VpnSessionPhase.stopRequested ||
+          phase == VpnSessionPhase.stopping ||
+          phase == VpnSessionPhase.disconnected);
+
+  /// The native owner has accepted Connect but the packet tunnel is still
+  /// inactive (for example while preferences or permission are prepared).
+  bool get isPendingConnectWhileInactive =>
+      generation > 0 &&
+      requestedAction == 'connect' &&
+      (phase == VpnSessionPhase.idle || phase == VpnSessionPhase.disconnected);
 
   bool get provesConnected =>
       generation > 0 &&

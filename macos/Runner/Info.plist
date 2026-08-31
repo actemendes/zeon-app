@@ -53,6 +53,8 @@
 	<string>NSApplication</string>
 	<key>SERVICE_IDENTIFIER</key>
 	<string>$(SERVICE_IDENTIFIER)</string>
+	<key>ZEON_FLUTTER_ENVIRONMENT</key>
+	<string>$(ZEON_FLUTTER_ENVIRONMENT)</string>
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>ar</string>

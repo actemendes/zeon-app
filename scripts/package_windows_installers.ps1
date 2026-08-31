@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("exe", "msix", "all")]
+    [ValidateSet("exe", "msix", "zip", "all")]
     [string]$Target = "all",
 
     [string]$BuildTarget = "lib/main_prod.dart",
@@ -82,6 +82,9 @@ function Invoke-AuthenticodeSigning {
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "Signing target was not found: $Path"
     }
+    if ([string]::IsNullOrWhiteSpace($TimestampUrl)) {
+        throw "RFC 3161 timestamp URL is required for every signed Windows release artifact."
+    }
 
     $args = @("sign", "/fd", "SHA256")
     if ($CertificateThumbprint) {
@@ -96,17 +99,15 @@ function Invoke-AuthenticodeSigning {
             $args += @("/p", $CertificatePassword)
         }
     }
-    if ($TimestampUrl) {
-        $args += @("/tr", $TimestampUrl, "/td", "SHA256")
-    }
+    $args += @("/tr", $TimestampUrl, "/td", "SHA256")
     $args += $Path
 
     Write-Host "Authenticode signing: $Path"
-    & $SignToolPath @args
+    & $SignToolPath @args | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "Authenticode signing failed: $Path"
     }
-    & $SignToolPath verify /pa /q $Path
+    & $SignToolPath verify /pa /q $Path | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "Authenticode verification failed: $Path"
     }
@@ -124,14 +125,19 @@ function Protect-WindowsReleasePayload {
 
     $binaries = Get-ChildItem -LiteralPath $ReleaseDir -Recurse -File |
         Where-Object { $_.Extension -in @(".exe", ".dll") }
+    foreach ($requiredBinary in @('ZEON.exe', 'ZEONCli.exe')) {
+        if (-not ($binaries | Where-Object { $_.Name -eq $requiredBinary })) {
+            throw "Required release payload binary is missing: $requiredBinary"
+        }
+    }
+    $releaseSignerThumbprint = $null
     foreach ($binary in $binaries) {
         $signature = Get-AuthenticodeSignature -LiteralPath $binary.FullName
-        if ($signature.Status -eq "Valid") {
-            continue
-        }
-        if ($signature.Status -ne "NotSigned") {
+        if ($signature.Status -notin @("Valid", "NotSigned")) {
             throw "Refusing to package binary with invalid signature ($($signature.Status)): $($binary.FullName)"
         }
+        # Re-sign even valid vendor payloads so every distributed executable
+        # has the same stable ZEON Authenticode identity at the outer signature.
         Invoke-AuthenticodeSigning `
             -Path $binary.FullName `
             -SignToolPath $SignToolPath `
@@ -139,7 +145,135 @@ function Protect-WindowsReleasePayload {
             -CertificatePassword $CertificatePassword `
             -CertificateThumbprint $CertificateThumbprint `
             -TimestampUrl $TimestampUrl
+        $verified = Assert-WindowsArtifactSignature -Path $binary.FullName
+        $thumbprint = $verified.SignerCertificate.Thumbprint
+        if (-not $releaseSignerThumbprint) { $releaseSignerThumbprint = $thumbprint }
+        elseif ($releaseSignerThumbprint -ne $thumbprint) {
+            throw "Release payload has inconsistent Authenticode identities: $($binary.FullName)"
+        }
     }
+    if (-not $releaseSignerThumbprint) {
+        throw "Release payload did not contain signable EXE/DLL files."
+    }
+    return $releaseSignerThumbprint
+}
+
+function Assert-WindowsArtifactSignature {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [string]$ExpectedThumbprint = ""
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Release signature target was not found: $Path"
+    }
+    $signature = Get-AuthenticodeSignature -LiteralPath $Path
+    if ($signature.Status -ne "Valid" -or -not $signature.SignerCertificate) {
+        throw "Release signature validation failed ($($signature.Status)): $Path"
+    }
+    if (-not $signature.TimeStamperCertificate) {
+        throw "Release signature has no trusted RFC 3161 timestamp: $Path"
+    }
+    if ($ExpectedThumbprint -and $signature.SignerCertificate.Thumbprint -ne $ExpectedThumbprint) {
+        throw "Release signer thumbprint mismatch: $Path"
+    }
+    return $signature
+}
+
+function Assert-WindowsArchivePayloadSignatures {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedThumbprint
+    )
+
+    $inspectionDir = Join-Path $env:TEMP ("zeon_msix_verify_" + [guid]::NewGuid().ToString("N"))
+    [System.IO.Directory]::CreateDirectory($inspectionDir) | Out-Null
+    try {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($Path, $inspectionDir)
+        $binaries = Get-ChildItem -LiteralPath $inspectionDir -Recurse -File |
+            Where-Object { $_.Extension -in @('.exe', '.dll') }
+        if (-not $binaries) {
+            throw "Windows archive payload contains no executable files to verify: $Path"
+        }
+        foreach ($binary in $binaries) {
+            Assert-WindowsArtifactSignature `
+                -Path $binary.FullName `
+                -ExpectedThumbprint $ExpectedThumbprint | Out-Null
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $inspectionDir) {
+            [System.IO.Directory]::Delete($inspectionDir, $true)
+        }
+    }
+}
+
+function Get-ReleaseRelativePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$ReleaseDir,
+        [Parameter(Mandatory = $true)][string]$FilePath
+    )
+
+    $root = [System.IO.Path]::GetFullPath($ReleaseDir).TrimEnd('\', '/')
+    $file = [System.IO.Path]::GetFullPath($FilePath)
+    $prefix = $root + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $file.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Manifest file is outside the release directory: $file"
+    }
+    return $file.Substring($prefix.Length).Replace('\', '/')
+}
+
+function New-WindowsReleaseManifest {
+    param(
+        [Parameter(Mandatory = $true)][string]$ReleaseDir,
+        [Parameter(Mandatory = $true)][string]$OutputPath,
+        [datetime]$NotOlderThan = [datetime]::MinValue,
+        [switch]$AllowUnsigned,
+        [string]$ExpectedThumbprint = ""
+    )
+
+    $outputFullPath = [System.IO.Path]::GetFullPath($OutputPath)
+    $items = foreach ($file in Get-ChildItem -LiteralPath $ReleaseDir -Recurse -File |
+        Where-Object {
+            $_.LastWriteTime -ge $NotOlderThan -and
+            -not [StringComparer]::OrdinalIgnoreCase.Equals($_.FullName, $outputFullPath)
+        } | Sort-Object FullName) {
+        $relativePath = Get-ReleaseRelativePath -ReleaseDir $ReleaseDir -FilePath $file.FullName
+        $signature = if ($file.Extension -in @('.exe', '.dll', '.msix')) {
+            Get-AuthenticodeSignature -LiteralPath $file.FullName
+        } else { $null }
+        if (-not $AllowUnsigned -and $signature -and $signature.Status -ne 'Valid') {
+            throw "Release contains a non-valid signed payload ($($signature.Status)): $relativePath"
+        }
+        if (-not $AllowUnsigned -and $signature -and -not $signature.TimeStamperCertificate) {
+            throw "Release contains a signed payload without a trusted timestamp: $relativePath"
+        }
+        if (-not $AllowUnsigned -and $signature -and $ExpectedThumbprint -and
+            $signature.SignerCertificate.Thumbprint -ne $ExpectedThumbprint) {
+            throw "Release manifest signer mismatch: $relativePath"
+        }
+        [ordered]@{
+            path = $relativePath
+            size = $file.Length
+            sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            signature_status = if ($signature) { $signature.Status.ToString() } else { 'NotApplicable' }
+            signer_thumbprint = if ($signature -and $signature.SignerCertificate) {
+                $signature.SignerCertificate.Thumbprint
+            } else { $null }
+            signer_subject = if ($signature -and $signature.SignerCertificate) {
+                $signature.SignerCertificate.Subject
+            } else { $null }
+            timestamp_present = [bool]($signature -and $signature.TimeStamperCertificate)
+        }
+    }
+    $manifest = [ordered]@{
+        schema = 1
+        generated_at_utc = [DateTime]::UtcNow.ToString('o')
+        unsigned_development_build = [bool]$AllowUnsigned
+        files = @($items)
+    }
+    $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
 }
 
 function Test-PathHasFlutterBlockedCharacters {
@@ -474,6 +608,9 @@ Name: "{userstartup}\${displayName}"; Filename: "{app}\${exeName}"; WorkingDir: 
 
 [Run]
 Filename: "{app}\${exeName}"; Description: "{cm:LaunchProgram,${displayName}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{app}\${exeName}"; Parameters: "--recover-system-proxy"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "ZEONSystemProxyRecovery"
 "@
 
     Set-Content -LiteralPath $issPath -Value $iss -NoNewline
@@ -506,18 +643,50 @@ function New-IsolatedWorkspace {
         "windows\flutter\ephemeral"
     )
 
-    $excludeArgs = @()
-    foreach ($dir in $excludeDirs) {
-        $excludeArgs += '/XD "{0}"' -f (Join-Path $RepoRoot $dir)
+    $excludedPaths = foreach ($dir in $excludeDirs) {
+        Join-Path $RepoRoot $dir
     }
 
-    $command = 'robocopy "{0}" "{1}" /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NP {2}' -f $RepoRoot, $workspace, ($excludeArgs -join " ")
-    cmd /c $command | Out-Null
-    if ($LASTEXITCODE -gt 7) {
-        throw "Failed to create isolated workspace via robocopy. Exit code: $LASTEXITCODE"
+    $robocopyArgs = @(
+        $RepoRoot,
+        $workspace,
+        "/MIR",
+        "/R:1",
+        "/W:1",
+        "/NFL",
+        "/NDL",
+        "/NJH",
+        "/NJS",
+        "/NP",
+        "/XD"
+    ) + $excludedPaths
+
+    $robocopyOutput = & robocopy @robocopyArgs 2>&1
+    $robocopyExitCode = $LASTEXITCODE
+    if ($robocopyExitCode -gt 7) {
+        if (Test-Path -LiteralPath $workspace) {
+            Remove-Item -LiteralPath $workspace -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        $details = ($robocopyOutput | Select-Object -Last 20) -join [Environment]::NewLine
+        throw "Failed to create isolated workspace via robocopy. Exit code: $robocopyExitCode`n$details"
     }
 
     return $workspace
+}
+
+function Remove-IsolatedWorkspace {
+    param([Parameter(Mandatory = $true)][string]$Workspace)
+
+    $workspaceRoot = [System.IO.Path]::GetFullPath("C:\wz").TrimEnd("\") + "\"
+    $workspacePath = [System.IO.Path]::GetFullPath($Workspace).TrimEnd("\")
+    if (-not $workspacePath.StartsWith($workspaceRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove a path outside the isolated workspace root: $workspacePath"
+    }
+
+    if (Test-Path -LiteralPath $workspacePath) {
+        Remove-Item -LiteralPath $workspacePath -Recurse -Force
+    }
 }
 
 function Set-YamlScalar {
@@ -935,6 +1104,7 @@ $workingRoot = $repoRoot
 $junctionPath = $null
 $isolatedWorkspace = $null
 $signToolPath = $null
+$expectedReleaseSignerThumbprint = $null
 $msixConfigWithPassword = $null
 $startedAt = Get-Date
 
@@ -954,15 +1124,24 @@ try {
         Write-Host "Repo path has characters blocked by Flutter. Using junction: $junctionPath"
     }
 
-    $targets = if ($Target -eq "all") { @("exe", "msix") } else { @($Target) }
-    if ($targets -contains "exe") {
+    $targets = if ($Target -eq "all") { @("exe", "msix", "zip") } else { @($Target) }
+    if ($AllowDevelopmentMsixCertificate -and ($env:CI -or $BuildTarget -notmatch 'main_dev\.dart$')) {
+        throw "A development MSIX certificate is allowed only for an explicit local main_dev.dart build outside CI."
+    }
+    if ($targets | Where-Object { $_ -in @('exe', 'msix', 'zip') }) {
         if ($CodeSigningCertificatePath -and $CodeSigningCertificateThumbprint) {
             throw "Specify either a code-signing PFX path or a certificate thumbprint, not both."
         }
         if (-not $AllowUnsignedExe -and -not $CodeSigningCertificatePath -and -not $CodeSigningCertificateThumbprint) {
             throw "Release EXE packaging requires Authenticode signing. Set ZEON_WINDOWS_SIGNING_PFX (and ZEON_WINDOWS_SIGNING_PASSWORD) or ZEON_WINDOWS_SIGNING_THUMBPRINT. Use -AllowUnsignedExe only for local testing."
         }
+        if ($AllowUnsignedExe -and ($env:CI -or $BuildTarget -notmatch 'main_dev\.dart$')) {
+            throw "Unsigned Windows payloads are allowed only for an explicit local main_dev.dart build outside CI."
+        }
         if (-not $AllowUnsignedExe) {
+            if ([string]::IsNullOrWhiteSpace($CodeSigningTimestampUrl)) {
+                throw "Release signing requires a non-empty RFC 3161 timestamp URL."
+            }
             if ($CodeSigningCertificatePath -and -not [System.IO.Path]::IsPathRooted($CodeSigningCertificatePath)) {
                 $CodeSigningCertificatePath = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $CodeSigningCertificatePath))
             }
@@ -1025,13 +1204,17 @@ try {
                     Write-Warning "Building an unsigned EXE payload. Do not distribute this local-test artifact."
                 }
                 else {
-                    Protect-WindowsReleasePayload `
+                    $expectedReleaseSignerThumbprint = Protect-WindowsReleasePayload `
                         -ReleaseDir $releaseDir `
                         -SignToolPath $signToolPath `
                         -CertificatePath $CodeSigningCertificatePath `
                         -CertificatePassword $CodeSigningCertificatePassword `
                         -CertificateThumbprint $CodeSigningCertificateThumbprint `
                         -TimestampUrl $CodeSigningTimestampUrl
+                    New-WindowsReleaseManifest `
+                        -ReleaseDir $releaseDir `
+                        -OutputPath (Join-Path $releaseDir 'ZEON-Windows-Payload-Manifest.json') `
+                        -ExpectedThumbprint $expectedReleaseSignerThumbprint
                 }
                 Build-ExeInstaller -WorkingRoot $workingRoot -IsccPath $isccPath
 
@@ -1048,7 +1231,62 @@ try {
                         -CertificateThumbprint $CodeSigningCertificateThumbprint `
                         -TimestampUrl $CodeSigningTimestampUrl
                 }
+                if (-not $AllowUnsignedExe) {
+                    Assert-WindowsArtifactSignature `
+                        -Path $checkExe.FullName `
+                        -ExpectedThumbprint $expectedReleaseSignerThumbprint | Out-Null
+                }
                 continue
+            }
+
+            if ($t -eq "zip") {
+                $releaseDir = Join-Path $workingRoot "build\windows\x64\runner\Release"
+                if (-not (Test-Path -LiteralPath $releaseDir)) {
+                    Build-WindowsRelease -BuildTarget $BuildTarget -SentryDsn $SentryDsn
+                }
+                if (-not $AllowUnsignedExe) {
+                    $expectedReleaseSignerThumbprint = Protect-WindowsReleasePayload `
+                        -ReleaseDir $releaseDir `
+                        -SignToolPath $signToolPath `
+                        -CertificatePath $CodeSigningCertificatePath `
+                        -CertificatePassword $CodeSigningCertificatePassword `
+                        -CertificateThumbprint $CodeSigningCertificateThumbprint `
+                        -TimestampUrl $CodeSigningTimestampUrl
+                    New-WindowsReleaseManifest `
+                        -ReleaseDir $releaseDir `
+                        -OutputPath (Join-Path $releaseDir 'ZEON-Windows-Payload-Manifest.json') `
+                        -ExpectedThumbprint $expectedReleaseSignerThumbprint
+                }
+                $distDir = Join-Path $workingRoot 'dist'
+                New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+                $portableZip = Join-Path $distDir 'ZEON-Windows-Portable-x64.zip'
+                if (Test-Path -LiteralPath $portableZip) {
+                    Remove-Item -LiteralPath $portableZip -Force
+                }
+                Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath $portableZip -CompressionLevel Optimal
+                if (-not $AllowUnsignedExe) {
+                    Assert-WindowsArchivePayloadSignatures `
+                        -Path $portableZip `
+                        -ExpectedThumbprint $expectedReleaseSignerThumbprint
+                }
+                continue
+            }
+
+
+            if ($t -eq "msix" -and -not $AllowDevelopmentMsixCertificate -and -not $expectedReleaseSignerThumbprint) {
+                Build-WindowsRelease -BuildTarget $BuildTarget -SentryDsn $SentryDsn
+                $releaseDir = Join-Path $workingRoot "build\windows\x64\runner\Release"
+                $expectedReleaseSignerThumbprint = Protect-WindowsReleasePayload `
+                    -ReleaseDir $releaseDir `
+                    -SignToolPath $signToolPath `
+                    -CertificatePath $CodeSigningCertificatePath `
+                    -CertificatePassword $CodeSigningCertificatePassword `
+                    -CertificateThumbprint $CodeSigningCertificateThumbprint `
+                    -TimestampUrl $CodeSigningTimestampUrl
+                New-WindowsReleaseManifest `
+                    -ReleaseDir $releaseDir `
+                    -OutputPath (Join-Path $releaseDir 'ZEON-Windows-Payload-Manifest.json') `
+                    -ExpectedThumbprint $expectedReleaseSignerThumbprint
             }
 
             $args = @(
@@ -1072,6 +1310,21 @@ try {
                 $checkMsix = Resolve-LatestArtifact -RootDir (Join-Path $workingRoot "dist") -Extension "msix" -NotOlderThan $targetStartedAt
                 if (-not $checkMsix) {
                     throw "fastforge finished without producing .msix for target '$t'."
+                }
+                if (-not $AllowDevelopmentMsixCertificate) {
+                    Invoke-AuthenticodeSigning `
+                        -Path $checkMsix.FullName `
+                        -SignToolPath $signToolPath `
+                        -CertificatePath $CodeSigningCertificatePath `
+                        -CertificatePassword $CodeSigningCertificatePassword `
+                        -CertificateThumbprint $CodeSigningCertificateThumbprint `
+                        -TimestampUrl $CodeSigningTimestampUrl
+                    Assert-WindowsArtifactSignature `
+                        -Path $checkMsix.FullName `
+                        -ExpectedThumbprint $expectedReleaseSignerThumbprint | Out-Null
+                    Assert-WindowsArchivePayloadSignatures `
+                        -Path $checkMsix.FullName `
+                        -ExpectedThumbprint $expectedReleaseSignerThumbprint
                 }
             }
         }
@@ -1106,6 +1359,27 @@ try {
                 Copy-Item -LiteralPath $dstMsix -Destination $repoDstMsix -Force
             }
         }
+
+        if ($targets -contains "zip") {
+            $zip = Resolve-LatestArtifact -RootDir (Join-Path $workingRoot "dist") -Extension "zip" -NotOlderThan $startedAt -NamePattern "ZEON-Windows-Portable-x64|portable|windows"
+            if (-not $zip) {
+                throw "Could not find built portable .zip in dist."
+            }
+            $dstZip = Join-Path $workingOutDir "ZEON-Windows-Portable-x64.zip"
+            $repoDstZip = Join-Path $repoOutDir "ZEON-Windows-Portable-x64.zip"
+            Copy-Item -LiteralPath $zip.FullName -Destination $dstZip -Force
+            if (-not [StringComparer]::OrdinalIgnoreCase.Equals([System.IO.Path]::GetFullPath($dstZip), [System.IO.Path]::GetFullPath($repoDstZip))) {
+                Copy-Item -LiteralPath $dstZip -Destination $repoDstZip -Force
+            }
+        }
+
+        $manifestPath = Join-Path $repoOutDir "ZEON-Windows-Release-Manifest.json"
+        New-WindowsReleaseManifest `
+            -ReleaseDir $repoOutDir `
+            -OutputPath $manifestPath `
+            -NotOlderThan $startedAt `
+            -AllowUnsigned:$AllowUnsignedExe `
+            -ExpectedThumbprint $expectedReleaseSignerThumbprint
     }
     finally {
         if ($msixConfigWithPassword -and (Test-Path -LiteralPath $msixConfigWithPassword)) {
@@ -1123,10 +1397,19 @@ try {
     if (Test-Path -LiteralPath (Join-Path $finalOut "ZEON-Windows-Setup-x64.msix")) {
         Write-Host ("MSIX: " + (Join-Path $finalOut "ZEON-Windows-Setup-x64.msix"))
     }
-    if ($isolatedWorkspace) {
-        Write-Host ("Workspace: " + $isolatedWorkspace)
+    if (Test-Path -LiteralPath (Join-Path $finalOut "ZEON-Windows-Portable-x64.zip")) {
+        Write-Host ("ZIP:  " + (Join-Path $finalOut "ZEON-Windows-Portable-x64.zip"))
     }
 }
 finally {
     Pop-Location
+    if ($isolatedWorkspace) {
+        try {
+            Remove-IsolatedWorkspace -Workspace $isolatedWorkspace
+            Write-Host ("Removed isolated workspace: " + $isolatedWorkspace)
+        }
+        catch {
+            Write-Warning ("Failed to remove isolated workspace '{0}': {1}" -f $isolatedWorkspace, $_.Exception.Message)
+        }
+    }
 }

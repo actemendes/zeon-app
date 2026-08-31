@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -6,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
+import 'package:zeon/core/http_client/windows_system_http_transport.dart';
+import 'package:zeon/core/model/failures.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_embedded_bootstrap_profile_service.dart';
@@ -61,16 +64,41 @@ class MobileBootstrapImportService with InfraLogger {
   final MobileSensitiveStorage _sensitiveStorage;
   Future<bool>? _runInFlight;
   Future<bool>? _postConnectionRunInFlight;
+  final WindowsBootstrapUiRetryPolicy _windowsUiRetryPolicy = WindowsBootstrapUiRetryPolicy();
 
   Future<bool> run({
     bool skipIfAlreadyDone = true,
     MobileConnLinkImportMode mode = MobileConnLinkImportMode.postConnection,
   }) async {
     try {
-      return await runOrThrow(skipIfAlreadyDone: skipIfAlreadyDone, mode: mode);
-    } catch (_) {
+      final result = await runOrThrow(skipIfAlreadyDone: skipIfAlreadyDone, mode: mode);
+      if (PlatformUtils.isWindows && mode == MobileConnLinkImportMode.standard) {
+        _windowsUiRetryPolicy.recordSuccess();
+      }
+      return result;
+    } catch (error) {
+      if (PlatformUtils.isWindows && mode == MobileConnLinkImportMode.standard) {
+        _windowsUiRetryPolicy.recordFailure(error);
+      }
       return false;
     }
+  }
+
+  /// Performs at most one Windows-only retry after the Navigator and normal UI
+  /// lifecycle exist. Valid HTTP/server failures are deliberately not retried.
+  Future<bool> retryWindowsAfterUiIfNeeded() async {
+    if (!PlatformUtils.isWindows || _windowsUiRetryPolicy.consumed) return false;
+    final startupRun = _runInFlight;
+    if (startupRun != null) {
+      try {
+        await startupRun;
+      } catch (_) {
+        // [run] records the transport classification.
+      }
+    }
+    if (!_windowsUiRetryPolicy.takeRetry()) return false;
+    loggy.info('Windows bootstrap: retrying once after UI became ready');
+    return run(skipIfAlreadyDone: false, mode: MobileConnLinkImportMode.standard);
   }
 
   Future<bool> runOrThrow({
@@ -149,14 +177,21 @@ class MobileBootstrapImportService with InfraLogger {
 
       if (savedConnLink.isNotEmpty && Uri.tryParse(savedConnLink) != null) {
         loggy.info("mobile auto import: trying saved conn_link");
-        await _connLinkImportService.importConnectionLink(
-          savedConnLink,
-          userId: effectiveUserId,
-          clearUserIdWhenMissing: effectiveUserId == null,
-          mode: mode,
-        );
-        loggy.info("mobile auto import succeeded from saved conn_link");
-        return true;
+        try {
+          await _connLinkImportService.importConnectionLink(
+            savedConnLink,
+            userId: effectiveUserId,
+            clearUserIdWhenMissing: effectiveUserId == null,
+            mode: mode,
+          );
+          loggy.info("mobile auto import succeeded from saved conn_link");
+          return true;
+        } catch (error) {
+          if (!shouldContinueAfterSavedConnLinkFailure(isWindows: PlatformUtils.isWindows, error: error)) rethrow;
+          // A stale/unreachable saved link must not permanently block the
+          // already-supported lookup/create fallback on Windows.
+          loggy.warning('Windows bootstrap: saved conn_link transport failed; continuing safe API fallback');
+        }
       }
 
       var connLink = "";
@@ -230,6 +265,7 @@ class MobileBootstrapImportService with InfraLogger {
         proxyOnly: mode == MobileConnLinkImportMode.postConnection,
         directOnly: mode != MobileConnLinkImportMode.postConnection,
         disableRetry: true,
+        operation: 'bootstrap_backend_probe',
       );
       return (response.statusCode ?? 0) > 0;
     } on DioException catch (e) {
@@ -285,6 +321,7 @@ class MobileBootstrapImportService with InfraLogger {
         proxyOnly: mode == MobileConnLinkImportMode.postConnection,
         directOnly: mode != MobileConnLinkImportMode.postConnection,
         disableRetry: disableRetry,
+        operation: 'bootstrap_subscription_lookup',
       );
       if ((response.statusCode ?? 0) != 200) return null;
       final body = response.data;
@@ -325,6 +362,7 @@ class MobileBootstrapImportService with InfraLogger {
       proxyOnly: mode == MobileConnLinkImportMode.postConnection,
       directOnly: mode != MobileConnLinkImportMode.postConnection,
       disableRetry: disableRetry,
+      operation: 'bootstrap_user_create',
     );
     final statusCode = response.statusCode ?? 0;
     if (statusCode != 200 && statusCode != 201) {
@@ -390,6 +428,44 @@ class MobileBootstrapImportService with InfraLogger {
     if (asInt == null) return null;
     final ms = asInt >= 1_000_000_000_000 ? asInt : asInt * 1000;
     return DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
+  }
+}
+
+bool isWindowsBootstrapTransportFailure(Object error) => switch (error) {
+  MobileConnLinkImportException(:final transportFailure) => transportFailure,
+  UnexpectedFailure(error: final Object nested) => isWindowsBootstrapTransportFailure(nested),
+  DioException(:final response) when response != null => false,
+  DioException(:final error?) => isWindowsBootstrapTransportFailure(error),
+  DioException(:final type) => switch (type) {
+    DioExceptionType.connectionTimeout ||
+    DioExceptionType.sendTimeout ||
+    DioExceptionType.receiveTimeout ||
+    DioExceptionType.connectionError ||
+    DioExceptionType.unknown => true,
+    _ => false,
+  },
+  WindowsSystemNetworkException() || SocketException() || HandshakeException() => true,
+  VpnProxyUnavailableException() => true,
+  _ => false,
+};
+
+bool shouldContinueAfterSavedConnLinkFailure({required bool isWindows, required Object error}) =>
+    isWindows && isWindowsBootstrapTransportFailure(error);
+
+class WindowsBootstrapUiRetryPolicy {
+  bool _transportFailure = false;
+  bool _consumed = false;
+
+  bool get consumed => _consumed;
+
+  void recordSuccess() => _transportFailure = false;
+
+  void recordFailure(Object error) => _transportFailure = isWindowsBootstrapTransportFailure(error);
+
+  bool takeRetry() {
+    if (_consumed || !_transportFailure) return false;
+    _consumed = true;
+    return true;
   }
 }
 

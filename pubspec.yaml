@@ -1,7 +1,7 @@
 name: zeon
 description: ZEON cross-platform VPN client.
 publish_to: "none"
-version: 1.4.2+1040302
+version: 1.5.0+1050000
 
 environment:
   sdk: ^3.10.4
@@ -36,6 +36,7 @@ dependencies:
   shared_preferences: ^2.5.2
   flutter_secure_storage: ^9.2.4
   cryptography: ^2.7.0
+  crypto: ^3.0.6
   # shared_preferences_android: ^2.4.8
   dio: ^5.4.1
   ffi: ^2.1.2

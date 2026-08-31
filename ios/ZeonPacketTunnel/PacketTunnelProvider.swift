@@ -5,6 +5,7 @@
 //  Created by GFWFighter on 7/24/1402 AP.
 //
 
+import Foundation
 import NetworkExtension
 
 class PacketTunnelProvider: ExtensionProvider {
@@ -35,8 +36,19 @@ class PacketTunnelProvider: ExtensionProvider {
         switch message {
         case "stats":
             return "\(upload),\(download)".data(using: .utf8)!
+        case "session_status":
+            return sessionStatusData()
         default:
+            break
+        }
+
+        guard
+            let object = try? JSONSerialization.jsonObject(with: messageData) as? [String: Any],
+            object["command"] as? String == "mark_core_started",
+            let generation = (object["generation"] as? NSNumber)?.int64Value
+        else {
             return nil
         }
+        return markCoreStartedData(generation: generation)
     }
 }

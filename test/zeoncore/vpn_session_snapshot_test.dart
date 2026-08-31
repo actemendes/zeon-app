@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:zeon/features/connection/data/connection_repository.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
@@ -29,6 +30,51 @@ VpnSessionSnapshot snapshot({
 );
 
 void main() {
+  group('iOS system VPN preparation guard', () {
+    test('fails closed for unknown state and allows preparation after an explicit stop', () {
+      expect(
+        shouldPrepareSystemVpnForSnapshot(null),
+        isFalse,
+        reason: 'unknown bootstrap state may belong to a live tunnel from the previous host process',
+      );
+      expect(shouldPrepareSystemVpnForSnapshot(snapshot(generation: 0, phase: VpnSessionPhase.disconnected)), isTrue);
+      expect(
+        shouldPrepareSystemVpnForSnapshot(
+          snapshot(generation: 10, phase: VpnSessionPhase.disconnected, requestedAction: 'prepare'),
+        ),
+        isTrue,
+      );
+      expect(
+        shouldPrepareSystemVpnForSnapshot(
+          snapshot(generation: 10, phase: VpnSessionPhase.disconnected, requestedAction: 'stop'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('cannot supersede an active or already prepared connection generation', () {
+      for (final phase in [VpnSessionPhase.startingPlatform, VpnSessionPhase.verifying, VpnSessionPhase.connected]) {
+        expect(
+          shouldPrepareSystemVpnForSnapshot(snapshot(generation: 11, phase: phase, requestedAction: 'connect')),
+          isFalse,
+        );
+      }
+      expect(
+        shouldPrepareSystemVpnForSnapshot(
+          snapshot(generation: 11, phase: VpnSessionPhase.disconnected, requestedAction: 'connect'),
+        ),
+        isFalse,
+      );
+      for (final phase in [VpnSessionPhase.startingPlatform, VpnSessionPhase.verifying, VpnSessionPhase.connected]) {
+        expect(
+          shouldPrepareSystemVpnForSnapshot(snapshot(generation: 0, phase: phase, requestedAction: 'connect')),
+          isFalse,
+          reason: 'cold-host adoption must win even before its provider generation is known',
+        );
+      }
+    });
+  });
+
   group('VpnSessionSnapshotGate', () {
     test('rejects stale and duplicate events', () {
       final gate = VpnSessionSnapshotGate();
@@ -193,6 +239,18 @@ void main() {
       expect(parsed.stopSource, VpnStopSource.notification);
       expect(parsed.isTerminalStop, isTrue);
       expect(parsed.isExternalIntentionalStop, isTrue);
+
+      final systemStop = VpnSessionSnapshot.fromEvent(const {
+        'generation': 12,
+        'runtimeEpoch': 'ios-host-process',
+        'sequenceNumber': 13,
+        'snapshotVersion': 13,
+        'phase': 'disconnected',
+        'requestedAction': 'stop',
+        'stopSource': 'system',
+      });
+      expect(systemStop.stopSource, VpnStopSource.system);
+      expect(systemStop.isExternalIntentionalStop, isTrue);
       expect(
         snapshot(
           phase: VpnSessionPhase.disconnected,

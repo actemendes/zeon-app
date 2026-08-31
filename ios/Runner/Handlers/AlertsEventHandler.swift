@@ -20,9 +20,17 @@ public class AlertsEventHandler: NSObject, FlutterPlugin, FlutterStreamHandler {
         instance.channel = FlutterEventChannel(name: Self.name, binaryMessenger: registrar.messenger(), codec: FlutterJSONMethodCodec())
         instance.channel?.setStreamHandler(instance)
     }
+
+    static func shouldEmitAlert(_ alert: VPNManagerAlert) -> Bool {
+        if alert.alert != nil {
+            return true
+        }
+        return !(alert.message?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
     
     public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
         cancellable = VPNManager.shared.$alert.sink { [events] alert in
+            guard Self.shouldEmitAlert(alert) else { return }
             var data = [
                 "status": "Stopped",
                 "alert": alert.alert?.rawValue,

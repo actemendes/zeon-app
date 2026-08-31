@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/env.sh"
+source "${SCRIPT_DIR}/core_xcframework.sh"
 cd "${PROJECT_ROOT}"
 
 FLUTTER_VERSION="3.38.5"
@@ -115,6 +116,7 @@ if [[ ! -d ios/Frameworks/HiddifyCore.xcframework ]]; then
     "https://github.com/hiddify/hiddify-next-core/releases/download/v4.1.0/hiddify-lib-ios.tar.gz" |
     tar xz -C ios/Frameworks
 fi
+apple_ensure_macos_core_xcframework
 
 install_cocoapods
 

@@ -1,4 +1,5 @@
 // Copy this file to AppleSigning.xcconfig. The copied file is ignored by git.
 APPLE_DEVELOPMENT_TEAM = YOUR_TEAM_ID
 BASE_BUNDLE_IDENTIFIER = com.yourcompany.zeon
-SERVICE_IDENTIFIER = com.yourcompany.zeon
+
+// SERVICE_IDENTIFIER is fixed in Base.xcconfig and is not a signing setting.

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
+import 'package:zeon/core/http_client/adaptive_websocket.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
@@ -33,7 +34,7 @@ class MobileBindService with InfraLogger {
        _preferences = preferences,
        _sensitiveStorage = sensitiveStorage ?? MobileSensitiveStorage(preferences: preferences);
 
-  static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://130.49.151.173");
+  static const _apiBaseUrl = String.fromEnvironment("mobile_api_base_url", defaultValue: "https://api.zeon-vps.online");
   static const _mobileApiKey = String.fromEnvironment(
     "mobile_api_key",
     defaultValue: "mob_a7f3c9e1b2d4f6a8e0c5b7d9f1a3e5c7",
@@ -226,20 +227,11 @@ class MobileBindService with InfraLogger {
       path: "/ws/bind",
       queryParameters: {"bind_session_id": bindSessionId},
     );
-    Future<({WebSocket socket, HttpClient client})> openSocket(String token, {bool allowVpnRecovery = true}) async {
-      final route = await _httpClient.createAdaptiveHttpClient(wsUri.toString());
-      final client = route.client;
+    Future<AdaptiveWebSocketRoute> openSocket(String token, {bool allowVpnRecovery = true}) async {
       try {
-        final socket = await WebSocket.connect(
-          wsUri.toString(),
-          headers: {"Authorization": "Bearer $token"},
-          customClient: client,
-        );
-        return (socket: socket, client: client);
+        return await _httpClient.openWebSocket(wsUri.toString(), headers: {"Authorization": "Bearer $token"});
       } catch (error, stackTrace) {
-        client.close(force: true);
         if (allowVpnRecovery &&
-            !route.usesProxy &&
             await _httpClient.recoverWithVpnAfterFailure(wsUri.toString(), error) &&
             await _httpClient.waitForProxyAvailable()) {
           return openSocket(token, allowVpnRecovery: false);
@@ -248,21 +240,20 @@ class MobileBindService with InfraLogger {
       }
     }
 
-    ({WebSocket socket, HttpClient client}) connection;
+    AdaptiveWebSocketRoute route;
     try {
-      connection = await openSocket(jwt);
+      route = await openSocket(jwt);
     } catch (e, st) {
       loggy.warning("bind ws connect failed, trying token refresh", e, st);
       final refreshedJwt = await _bindJwt(forceRefresh: true);
       if (refreshedJwt.isEmpty) rethrow;
-      connection = await openSocket(refreshedJwt);
+      route = await openSocket(refreshedJwt);
     }
-    final socket = connection.socket;
-    final socketClient = connection.client;
-    socket.pingInterval = const Duration(seconds: 20);
+    final socket = route.connection;
+    socket.setPingInterval(const Duration(seconds: 20));
 
     final controller = StreamController<BindWsEvent>.broadcast();
-    socket.listen(
+    socket.messages.listen(
       (dynamic raw) {
         try {
           final text = raw?.toString() ?? "";
@@ -288,7 +279,6 @@ class MobileBindService with InfraLogger {
       },
       onError: controller.addError,
       onDone: () async {
-        socketClient.close(force: true);
         if (!controller.isClosed) {
           await controller.close();
         }
@@ -302,7 +292,6 @@ class MobileBindService with InfraLogger {
       } catch (_) {
         // ignore close race
       }
-      socketClient.close(force: true);
       if (!controller.isClosed) {
         await controller.close();
       }

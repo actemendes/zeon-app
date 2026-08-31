@@ -67,6 +67,8 @@ APP_VERSION_DEFINES=--dart-define app_version=$(PUBSPEC_APP_VERSION) --dart-defi
 DISTRIBUTOR_APP_VERSION_DEFINES=--build-dart-define app_version=$(PUBSPEC_APP_VERSION) --build-dart-define app_build_number=$(PUBSPEC_APP_BUILD_NUMBER)
 BUILD_ARGS=--dart-define sentry_dsn=$(SENTRY_DSN) $(APP_VERSION_DEFINES)
 DISTRIBUTOR_ARGS=--skip-clean --build-target $(TARGET) --build-dart-define sentry_dsn=$(SENTRY_DSN) $(DISTRIBUTOR_APP_VERSION_DEFINES)
+APPLE_PRODUCTION_TARGET=lib/main_prod.dart
+APPLE_DISTRIBUTOR_ARGS=--skip-clean --build-target $(APPLE_PRODUCTION_TARGET) --build-dart-define sentry_dsn=$(SENTRY_DSN) $(DISTRIBUTOR_APP_VERSION_DEFINES)
 
 
 
@@ -95,7 +97,7 @@ windows-prepare: common-prepare windows-libs
 ios-prepare: common-prepare ios-libs 
 	cd ios; pod repo update; pod install;echo "done ios prepare"
 	
-macos-prepare: common-prepare macos-libs
+macos-prepare: common-prepare macos-libs macos-core-xcframework
 linux-prepare: common-prepare linux-amd64-libs
 
 
@@ -301,29 +303,21 @@ android-aab-release:
 	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) \
 	  --build-dart-define=release=google-play
 
-windows-release: windows-zip-release windows-exe-release windows-msix-release
+windows-release:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package_windows_installers.ps1 \
+	  -Target all \
+	  -NoIsolatedWorkspace \
+	  -SkipClean \
+	  -BuildTarget $(TARGET) \
+	  -SentryDsn "$(SENTRY_DSN)"
 
 windows-zip-release:
-	fastforge package \
-	  --platform windows \
-	  --targets zip \
-	  --skip-clean \
-	  --build-target=$(TARGET) \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) \
-	  --build-dart-define=portable=true
-	@FULL_PATH=$$(ls dist/*/*.zip | head -n 1); \
-	ZIP_DIR=$$(dirname "$$FULL_PATH"); \
-	ZIP_FILE=$$(basename "$$FULL_PATH"); \
-	FILE_NAME=$${ZIP_FILE%.*}; \
-	$(YELLOW)Post-processing Windows portable$(DONE); \
-	cd "$$ZIP_DIR"; \
-	$(BLUE)Extracting and Repacking...$(DONE); \
-	mkdir -p ZEON; \
-	unzip -q "$$ZIP_FILE" -d ZEON/; \
-	rm "$$ZIP_FILE"; \
-	tar -a -cf "$$FILE_NAME.zip" ZEON; \
-	rm -rf ZEON; \
-	$(GREEN)Successful$(DONE)
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package_windows_installers.ps1 \
+	  -Target zip \
+	  -NoIsolatedWorkspace \
+	  -SkipClean \
+	  -BuildTarget $(TARGET) \
+	  -SentryDsn "$(SENTRY_DSN)"
 
 windows-exe-release:
 	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package_windows_installers.ps1 \
@@ -334,12 +328,12 @@ windows-exe-release:
 	  -SentryDsn "$(SENTRY_DSN)"
 
 windows-msix-release: sync-msix-version
-	fastforge package \
-	  --platform windows \
-	  --targets msix \
-	  --skip-clean \
-	  --build-target=$(TARGET) \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN)
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package_windows_installers.ps1 \
+	  -Target msix \
+	  -NoIsolatedWorkspace \
+	  -SkipClean \
+	  -BuildTarget $(TARGET) \
+	  -SentryDsn "$(SENTRY_DSN)"
 
 linux-release: linux-deb-release linux-appimage-release
 
@@ -478,16 +472,24 @@ linux-docker-release:
 
 	@$(GREEN)Successful. Output is in 'dist_docker' folder.$(DONE)
 
-macos-release:
-	fastforge package --platform macos --targets dmg,pkg $(DISTRIBUTOR_ARGS)
+macos-release: apple-config-check macos-core-xcframework
+	fastforge package --platform macos --targets dmg,pkg $(APPLE_DISTRIBUTOR_ARGS)
 
-ios-release: #not tested
-	fastforge package --platform ios --targets ipa --build-export-options-plist  ios/exportOptions.plist $(DISTRIBUTOR_ARGS) --build-dart-define=release=app-store
+ios-release: apple-config-check #not tested
+	fastforge package --platform ios --targets ipa --build-export-options-plist ios/exportOptions.plist $(APPLE_DISTRIBUTOR_ARGS) --build-dart-define=release=app-store
+
+.PHONY: apple-config-check
+apple-config-check:
+	./scripts/apple/test_build_config.sh
+
+.PHONY: macos-core-xcframework
+macos-core-xcframework:
+	bash -c 'source scripts/apple/env.sh && source scripts/apple/core_xcframework.sh && apple_ensure_macos_core_xcframework'
 
 apple-setup:
 	./scripts/apple/bootstrap.sh
 
-apple-doctor:
+apple-doctor: apple-config-check
 	./scripts/apple/build.sh doctor
 
 apple-upload:

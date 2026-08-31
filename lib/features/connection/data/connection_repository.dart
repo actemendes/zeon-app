@@ -16,6 +16,7 @@ import 'package:zeon/features/settings/notifier/warp_option/warp_option_notifier
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/singbox/model/singbox_config_option.dart';
 import 'package:zeon/utils/utils.dart';
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 import 'package:zeon/zeoncore/zeon_core_service.dart';
 
 abstract interface class ConnectionRepository {
@@ -26,12 +27,25 @@ abstract interface class ConnectionRepository {
   Stream<ConnectionStatus> watchConnectionStatus();
   Future<ConnectionStatus?> resyncConnectionStatus(String source);
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit);
-  TaskEither<ConnectionFailure, Unit> disconnect();
+  TaskEither<ConnectionFailure, Unit> disconnect({bool force = false});
   TaskEither<ConnectionFailure, Unit> reconnect(
     ProfileEntity activeProfile,
     bool disableMemoryLimit, {
     String source = "reconnect",
   });
+}
+
+@visibleForTesting
+bool shouldPrepareSystemVpnForSnapshot(VpnSessionSnapshot? snapshot) {
+  // Bootstrap preparation is optional. Unknown native state may belong to a
+  // tunnel that survived a cold Runner relaunch, so it must fail closed.
+  if (snapshot == null) return false;
+  return switch (snapshot.phase) {
+    VpnSessionPhase.idle => true,
+    VpnSessionPhase.disconnected when snapshot.requestedAction != 'connect' => true,
+    VpnSessionPhase.failed => true,
+    _ => false,
+  };
 }
 
 class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements ConnectionRepository {
@@ -55,6 +69,7 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   final ConfigOptionRepository configOptionRepository;
   final ProfileConfigStore profileConfigStore;
   final Map<String, Future<File>> _runtimeConfigRepairByProfile = {};
+  Future<Either<ConnectionFailure, Unit>>? _systemVpnPreparationInFlight;
   DateTime? _lastTunRecoveryAttemptAt;
 
   SingboxConfigOption? _configOptionsSnapshot;
@@ -105,20 +120,71 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   }
 
   @override
-  TaskEither<ConnectionFailure, Unit> prepareSystemVpn(ProfileEntity activeProfile, bool disableMemoryLimit) =>
-      TaskEither.tryCatch(() async {
-        final runtimeFile = await _createRuntimeConfigFile(activeProfile);
-        final generation = singbox.beginVpnOperation("prepare_system_vpn");
-        return (await singbox
-                .prepareVpnConfiguration(
-                  runtimeFile.path,
-                  activeProfile.name,
-                  disableMemoryLimit,
-                  generation: generation,
-                )
-                .run())
-            .match((failure) => throw _vpnPreparationFailure(failure), (_) => unit);
-      }, (err, st) => err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st));
+  TaskEither<ConnectionFailure, Unit> prepareSystemVpn(ProfileEntity activeProfile, bool disableMemoryLimit) {
+    return TaskEither(() {
+      final existing = _systemVpnPreparationInFlight;
+      if (existing != null) return existing;
+
+      final operation = _prepareSystemVpn(activeProfile, disableMemoryLimit);
+      _systemVpnPreparationInFlight = operation;
+      return operation.whenComplete(() {
+        if (identical(_systemVpnPreparationInFlight, operation)) {
+          _systemVpnPreparationInFlight = null;
+        }
+      });
+    });
+  }
+
+  Future<Either<ConnectionFailure, Unit>> _prepareSystemVpn(
+    ProfileEntity activeProfile,
+    bool disableMemoryLimit,
+  ) async {
+    try {
+      if (!await _systemVpnPreparationAllowed("before_config")) return right(unit);
+      final runtimeFile = await _createRuntimeConfigFile(activeProfile);
+      // Creating/repairing the runtime config can take long enough for a user
+      // start (or a system start) to win the race. Check again immediately
+      // before reserving a generation; preparation must never supersede a
+      // running tunnel.
+      final expectedGeneration = singbox.currentVpnGeneration;
+      if (!await _systemVpnPreparationAllowed("before_generation")) return right(unit);
+      final generation = singbox.tryBeginVpnPreparation("prepare_system_vpn", expectedGeneration: expectedGeneration);
+      if (generation == null) return right(unit);
+      return (await singbox
+              .prepareVpnConfiguration(
+                runtimeFile.path,
+                activeProfile.name,
+                disableMemoryLimit,
+                generation: generation,
+                bootstrapOnly: true,
+              )
+              .run())
+          .mapLeft(_vpnPreparationFailure);
+    } catch (err, st) {
+      return left(err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st));
+    }
+  }
+
+  Future<bool> _systemVpnPreparationAllowed(String stage) async {
+    VpnSessionSnapshot? snapshot;
+    try {
+      snapshot = await singbox.resyncSessionSnapshot("prepare_system_vpn_$stage");
+    } catch (error, stackTrace) {
+      // This is best-effort bootstrap work. Unknown native state must not
+      // supersede a live tunnel owned by a previous Runner process.
+      loggy.warning("could not guard iOS system VPN preparation [$stage]", error, stackTrace);
+      return false;
+    }
+    final allowed = shouldPrepareSystemVpnForSnapshot(snapshot);
+    if (!allowed) {
+      loggy.info(
+        "event=system_vpn_prepare_skipped stage=$stage "
+        "generation=${snapshot?.generation ?? 0} phase=${snapshot?.phase.name ?? "none"} "
+        "requested_action=${snapshot?.requestedAction ?? ""}",
+      );
+    }
+    return allowed;
+  }
 
   @override
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit) =>
@@ -153,7 +219,8 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
       });
 
   @override
-  TaskEither<ConnectionFailure, Unit> disconnect() => singbox.stop().mapLeft(UnexpectedConnectionFailure.new);
+  TaskEither<ConnectionFailure, Unit> disconnect({bool force = false}) =>
+      singbox.stop(force: force).mapLeft(UnexpectedConnectionFailure.new);
 
   @override
   TaskEither<ConnectionFailure, Unit> reconnect(

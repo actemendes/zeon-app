@@ -124,10 +124,19 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
 
   void setupStateListener(WidgetRef ref) {
     final appLifecycleState = useAppLifecycleState();
+    final hasObservedInitialState = useRef(false);
 
     useEffect(() {
       loggy.info("current app state");
       loggy.info(appLifecycleState);
+      // Bootstrap has already initialized the foreground core before the App
+      // widget is mounted. Treat the hook's first value as initial state, not
+      // as a resume transition; otherwise startup immediately runs init() a
+      // second time and force-closes the first gRPC transport.
+      if (!hasObservedInitialState.value) {
+        hasObservedInitialState.value = true;
+        return null;
+      }
       if (appLifecycleState == AppLifecycleState.paused) {
         onPause(ref);
       } else if (appLifecycleState == AppLifecycleState.inactive) {

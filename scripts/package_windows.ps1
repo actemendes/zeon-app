@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("exe", "msix", "all")]
+    [ValidateSet("exe", "msix", "zip", "all")]
     [string]$Target = "all",
 
     [string]$BuildTarget = "lib/main_prod.dart",
@@ -47,7 +47,7 @@ $installerOut = Join-Path $repoRoot "out\installers\win"
 $legacyOut = Join-Path $repoRoot "out"
 New-Item -ItemType Directory -Force -Path $legacyOut | Out-Null
 
-foreach ($artifact in @("ZEON-Windows-Setup-x64.exe", "ZEON-Windows-Setup-x64.msix")) {
+foreach ($artifact in @("ZEON-Windows-Setup-x64.exe", "ZEON-Windows-Setup-x64.msix", "ZEON-Windows-Portable-x64.zip")) {
     $source = Join-Path $installerOut $artifact
     if (Test-Path -LiteralPath $source) {
         Copy-Item -LiteralPath $source -Destination (Join-Path $legacyOut $artifact) -Force

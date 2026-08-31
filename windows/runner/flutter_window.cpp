@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "system_proxy_recovery.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -41,6 +42,11 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  // Core shutdown normally restores its recorded baseline. This synchronous
+  // runner fallback covers forced window teardown while the current process
+  // still owns the exact ZEON loopback proxy.
+  RecoverZeonSystemProxy(true);
+
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -52,6 +58,12 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_ENDSESSION && wparam) {
+    // Windows grants only a bounded shutdown window. Restore synchronously;
+    // the ownership check prevents changes to user/corporate proxy state.
+    RecoverZeonSystemProxy(true);
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

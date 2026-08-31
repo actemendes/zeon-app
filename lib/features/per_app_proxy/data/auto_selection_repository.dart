@@ -47,14 +47,16 @@ class AutoSelectionRepositoryImpl with AppLogger implements AutoSelectionReposit
       if (rs.statusCode == 200) {
         return (_parseToListOfString(rs.data), AutoSelectionResult.success);
       }
-      loggy.error("Auto selection failed. status code : ${rs.statusCode}");
+      // The remote list is optional. HTTP failures are an operational state
+      // presented by the UI, not an application crash worth auto-reporting.
+      loggy.warning("Auto selection failed. status code : ${rs.statusCode}");
       return (null, AutoSelectionResult.failure);
     } on DioException catch (e, st) {
       if (e.response?.statusCode == 404) {
-        loggy.error("Auto selection region not found. region : ${region?.name ?? _getRegion().name}", e, st);
+        loggy.warning("Auto selection region not found. region : ${region?.name ?? _getRegion().name}", e, st);
         return (null, AutoSelectionResult.notFound);
       } else {
-        loggy.error("Failed to fetch auto selection", e, st);
+        loggy.warning("Failed to fetch auto selection", e, st);
         return (null, AutoSelectionResult.failure);
       }
     } catch (e, st) {

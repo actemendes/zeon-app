@@ -4,7 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/connection/model/connection_status.dart';
+import 'package:zeon/features/home/model/main_vpn_button_state.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface_mobile.dart';
@@ -81,6 +84,29 @@ void main() {
       expect(gate.advanceTo(900), 900);
       expect(gate.advanceTo(800), 900);
       expect(gate.next(), 901);
+    });
+
+    test('cold host adopts the surviving provider before allocating a newer local intent', () {
+      final gate = SessionGenerationGate();
+      final providerGeneration = DateTime.now().microsecondsSinceEpoch - 1000;
+
+      expect(gate.current, 0);
+      expect(gate.advanceTo(providerGeneration), providerGeneration);
+      expect(gate.isCurrent(providerGeneration, source: 'cold_provider'), isTrue);
+
+      final localGeneration = gate.next();
+      expect(localGeneration, greaterThan(providerGeneration));
+      expect(gate.isCurrent(providerGeneration, source: 'late_provider'), isFalse);
+      expect(gate.isCurrent(localGeneration, source: 'local_start'), isTrue);
+    });
+
+    test('released provisional generation is never reused after adopting an older owner', () {
+      final gate = SessionGenerationGate(seed: 100);
+      final provisional = gate.next();
+
+      expect(gate.replaceCurrentIf(provisional, 40), isTrue);
+      expect(gate.current, 40);
+      expect(gate.next(), greaterThan(provisional));
     });
   });
 
@@ -216,6 +242,49 @@ void main() {
     expect(calls[0].method, 'stop');
     expect(calls[0].arguments, {'generation': 9001, 'preemptive': false, 'replacement': true});
     expect(calls[1].arguments, {'generation': 9002, 'preemptive': true, 'replacement': false});
+  });
+
+  test('legacy iOS Boolean stop acknowledgement preserves the requested generation', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      CoreInterfaceMobile.methodChannel,
+      (call) async => true,
+    );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        CoreInterfaceMobile.methodChannel,
+        null,
+      ),
+    );
+
+    final core = CoreInterfaceMobile();
+
+    expect(await core.stopMethodChannel(generation: 9010, replacement: true), 9010);
+  });
+
+  test('iOS authoritative snapshot is available for startup failure diagnostics', () async {
+    const generation = 9011;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      CoreInterfaceMobile.methodChannel,
+      (call) async => _androidSnapshotEvent(
+        generation: generation,
+        sequenceNumber: 1,
+        phase: VpnSessionPhase.verifying,
+        stopSource: VpnStopSource.none,
+      ),
+    );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        CoreInterfaceMobile.methodChannel,
+        null,
+      ),
+    );
+
+    final core = CoreInterfaceMobile(androidOverride: false);
+
+    final status = await core.resyncSessionStatus();
+    expect(status, isA<CoreStarting>());
+    expect(core.authoritativeSessionSnapshot?.generation, generation);
+    expect(core.authoritativeSessionSnapshot?.phase, VpnSessionPhase.verifying);
   });
 
   test('Android VPN preparation denial is propagated instead of starting the core', () async {
@@ -449,6 +518,117 @@ void main() {
     expect(service.currentState, isA<CoreStarting>());
   });
 
+  test('background VPN preparation reserves generation without publishing Starting', () {
+    final core = _StoppedCoreInterface();
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final service = container.read(provider);
+
+    final generation = service.beginVpnPreparation('bootstrap_prepare');
+
+    expect(generation, greaterThan(0));
+    expect(service.currentState, isA<CoreStopped>());
+    expect(service.statusController.hasValue, isFalse);
+  });
+
+  test('background preparation cannot supersede a local Start that won during resync', () {
+    final core = _StoppedCoreInterface();
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final service = container.read(provider);
+    final preparationBase = service.currentVpnGeneration;
+
+    final startGeneration = service.beginVpnOperation('user_start_during_prepare_resync');
+    final preparationGeneration = service.tryBeginVpnPreparation(
+      'late_bootstrap_prepare',
+      expectedGeneration: preparationBase,
+    );
+
+    expect(preparationGeneration, isNull);
+    expect(service.currentVpnGeneration, startGeneration);
+    expect(service.currentState, isA<CoreStarting>());
+  });
+
+  test('native-deferred bootstrap releases Dart generation and adopts the cold provider', () async {
+    final core = _DeferredBootstrapCoreInterface();
+    final provider = Provider<ZeonCoreService>(
+      (ref) => ZeonCoreService(ref, coreInterface: core, mobilePlatformOverride: true),
+    );
+    final container = ProviderContainer();
+    addTearDown(() async {
+      container.dispose();
+      await core.close();
+    });
+    final service = container.read(provider);
+    final events = <CoreStatus>[];
+    final subscription = service.statusController.listen(events.add);
+    addTearDown(subscription.cancel);
+
+    final provisional = service.beginVpnPreparation('bootstrap_toctou');
+    final prepared = await service
+        .prepareVpnConfiguration('', '', false, generation: provisional, bootstrapOnly: true)
+        .run();
+
+    expect(prepared.isRight(), isTrue);
+    expect(service.currentVpnGeneration, 0);
+    expect(events.whereType<CoreStopped>(), isEmpty, reason: 'deferred bootstrap must not publish false Stop');
+
+    final providerGeneration = provisional - 10;
+    final connected = service.statusController.stream.firstWhere((status) => status is CoreStarted);
+    core.emit(
+      _platformSnapshot(
+        generation: providerGeneration,
+        phase: VpnSessionPhase.connected,
+        requestedAction: 'connect',
+        ready: true,
+      ),
+    );
+    await connected.timeout(const Duration(seconds: 2));
+
+    expect(service.currentVpnGeneration, providerGeneration);
+    expect(service.currentState, isA<CoreStarted>());
+    expect(service.beginVpnOperation('after_cold_adoption'), greaterThan(provisional));
+  });
+
+  test('accepted inactive bootstrap maps proven old-provider readiness onto its monotonic generation', () async {
+    final core = _AcceptedBootstrapThenMappedProviderCoreInterface();
+    final provider = Provider<ZeonCoreService>(
+      (ref) => ZeonCoreService(ref, coreInterface: core, mobilePlatformOverride: true),
+    );
+    final container = ProviderContainer();
+    addTearDown(() async {
+      container.dispose();
+      await core.close();
+    });
+    final service = container.read(provider);
+    final provisional = service.beginVpnPreparation('bootstrap_pre_status_window');
+
+    final prepared = await service
+        .prepareVpnConfiguration('', '', false, generation: provisional, bootstrapOnly: true)
+        .run();
+    expect(prepared.isRight(), isTrue);
+    expect(service.currentVpnGeneration, provisional);
+
+    final connected = service.statusController.stream.firstWhere((status) => status is CoreStarted);
+    core.emit(
+      _platformSnapshot(
+        // Native verified the already-launched provider's older internal
+        // generation, then projects readiness on the monotonic host owner.
+        generation: provisional,
+        phase: VpnSessionPhase.connected,
+        requestedAction: 'connect',
+        ready: true,
+      ),
+    );
+    await connected.timeout(const Duration(seconds: 2));
+
+    expect(service.currentVpnGeneration, provisional);
+    expect(service.currentState, isA<CoreStarted>());
+    expect(service.beginVpnOperation('after_pre_status_adoption'), greaterThan(provisional));
+  });
+
   test('resync-only external stop preserves snapshot generation and running intent', () async {
     SharedPreferences.setMockInitialValues({'started_by_user': true});
     final preferences = await SharedPreferences.getInstance();
@@ -519,6 +699,75 @@ void main() {
     await Future.wait([blockedRestart, firstStop, newerConnect, secondStop]).timeout(const Duration(seconds: 2));
   });
 
+  test('forced Stop retry bypasses an older Stop waiting in the lifecycle queue', () async {
+    final core = _PreemptiveStopCoreInterface();
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final service = container.read(provider);
+
+    final blockedGeneration = service.beginVpnOperation('blocked_start_before_stop_retry');
+    final blocked = service.restart('', '', false, generation: blockedGeneration).run();
+    await core.firstSetGenerationEntered.future.timeout(const Duration(seconds: 2));
+
+    final firstStop = service.stop().run();
+    final firstGeneration = await core.firstPlatformStopRequested.future.timeout(const Duration(seconds: 2));
+    final retryStop = service.stop(force: true).run();
+    final retryGeneration = await core.secondPlatformStopRequested.future.timeout(const Duration(seconds: 2));
+
+    expect(retryGeneration, greaterThan(firstGeneration));
+    expect(core.releaseFirstSetGeneration.isCompleted, isFalse);
+
+    core.releaseFirstSetGeneration.complete();
+    await Future.wait([blocked, firstStop, retryStop]).timeout(const Duration(seconds: 2));
+  });
+
+  test('proven same-generation Settings Start supersedes queued Stop cleanup', () async {
+    SharedPreferences.setMockInitialValues({'started_by_user': true});
+    final preferences = await SharedPreferences.getInstance();
+    final core = _SameGenerationExternalStartCoreInterface(connectDuringPreemptiveRequest: true);
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final container = ProviderContainer(overrides: [sharedPreferencesProvider.overrideWith((ref) => preferences)]);
+    addTearDown(() async {
+      container.dispose();
+      await core.close();
+    });
+    await container.read(sharedPreferencesProvider.future);
+    final service = container.read(provider);
+
+    final result = await service.stop().run().timeout(const Duration(seconds: 2));
+
+    expect(result.isRight(), isTrue);
+    expect(service.currentState, isA<CoreStarted>());
+    expect(core.nativeStopCalls, 0);
+  });
+
+  test('Settings Start arriving during old Stop await prevents every destructive continuation', () async {
+    SharedPreferences.setMockInitialValues({'started_by_user': true});
+    final preferences = await SharedPreferences.getInstance();
+    final core = _SameGenerationExternalStartCoreInterface(blockGenerationSync: true);
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final container = ProviderContainer(overrides: [sharedPreferencesProvider.overrideWith((ref) => preferences)]);
+    addTearDown(() async {
+      container.dispose();
+      await core.close();
+    });
+    await container.read(sharedPreferencesProvider.future);
+    final service = container.read(provider);
+
+    final stop = service.stop().run();
+    await core.generationSyncEntered.future.timeout(const Duration(seconds: 2));
+    core.emitExternalConnect();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    core.releaseGenerationSync.complete();
+    final result = await stop.timeout(const Duration(seconds: 2));
+
+    expect(result.isRight(), isTrue);
+    expect(service.currentState, isA<CoreStarted>());
+    expect(core.nativeStopCalls, 0);
+  });
+
   test('preemptive Stop adopts a native generation that was ahead of Dart', () async {
     final core = _RebasedPreemptiveStopCoreInterface();
     final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
@@ -556,6 +805,84 @@ void main() {
     expect(core.stopCalls, 0);
   });
 
+  test('resync-only preemptive terminal snapshot heals the authoritative button stream', () async {
+    final core = _ResyncOnlyTerminalPreemptiveCoreInterface();
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final service = container.read(provider);
+    final terminalSnapshot = service.watchAuthoritativeSessionSnapshots().firstWhere(
+      (snapshot) => snapshot.phase == VpnSessionPhase.disconnected,
+    );
+
+    final result = await service.stop().run().timeout(const Duration(seconds: 2));
+    final snapshot = await terminalSnapshot.timeout(const Duration(seconds: 2));
+    final button = MainVpnButtonState.fromSources(
+      snapshot: snapshot,
+      localStatus: const Disconnected(),
+      localDesiredRunning: false,
+    );
+
+    expect(result.isRight(), isTrue);
+    expect(snapshot.isTerminalStop, isTrue);
+    expect(button.action, MainVpnButtonAction.start);
+    expect(button.enabled, isTrue);
+  });
+
+  test('observational resync advances the snapshot stream before it can replay cached state', () async {
+    final core = _MutableSnapshotCoreInterface();
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final container = ProviderContainer();
+    addTearDown(() async {
+      container.dispose();
+      await core.close();
+    });
+    final service = container.read(provider);
+    core.add(
+      _platformSnapshot(
+        generation: 700,
+        sequenceNumber: 1,
+        phase: VpnSessionPhase.disconnected,
+        requestedAction: 'prepare',
+      ),
+    );
+    await service
+        .watchAuthoritativeSessionSnapshots()
+        .firstWhere((snapshot) => snapshot.sequenceNumber == 1)
+        .timeout(const Duration(seconds: 2));
+
+    core.current = _platformSnapshot(
+      generation: 700,
+      sequenceNumber: 2,
+      phase: VpnSessionPhase.connected,
+      requestedAction: 'connect',
+      ready: true,
+    );
+    final direct = await service.readAuthoritativeSessionSnapshot();
+    final replay = await service.watchAuthoritativeSessionSnapshots().first;
+
+    expect(direct?.sequenceNumber, 2);
+    expect(replay.sequenceNumber, 2);
+    expect(replay.provesConnected, isTrue);
+  });
+
+  test('poll-only Settings Start synchronously adopts running intent before CoreStarted', () async {
+    SharedPreferences.setMockInitialValues({'started_by_user': false});
+    final preferences = await SharedPreferences.getInstance();
+    final core = _ResyncOnlyExternalStartPreemptiveCoreInterface();
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final container = ProviderContainer(overrides: [sharedPreferencesProvider.overrideWith((ref) => preferences)]);
+    addTearDown(container.dispose);
+    await container.read(sharedPreferencesProvider.future);
+    final service = container.read(provider);
+
+    final result = await service.stop().run().timeout(const Duration(seconds: 2));
+
+    expect(result.isRight(), isTrue);
+    expect(container.read(Preferences.startedByUser), isTrue);
+    expect(service.currentState, isA<CoreStarted>());
+  });
+
   test('Android snapshots drive UI status and advance the next operation generation', () async {
     SharedPreferences.setMockInitialValues({'started_by_user': true});
     final preferences = await SharedPreferences.getInstance();
@@ -589,6 +916,43 @@ void main() {
     expect(service.beginVpnOperation('test_after_external_stop'), greaterThan(connectedGeneration + 1));
   });
 
+  test('cold host adopts an active tunnel from the previous process then fences it after a local intent', () async {
+    SharedPreferences.setMockInitialValues({'started_by_user': true});
+    final preferences = await SharedPreferences.getInstance();
+    final core = _SnapshotCoreInterface();
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final container = ProviderContainer(overrides: [sharedPreferencesProvider.overrideWith((ref) => preferences)]);
+    addTearDown(() async {
+      container.dispose();
+      await core.close();
+    });
+    await container.read(sharedPreferencesProvider.future);
+    final service = container.read(provider);
+    final providerGeneration = DateTime.now().microsecondsSinceEpoch - 1000;
+
+    final connected = service.statusController.stream.firstWhere((status) => status is CoreStarted);
+    core.add(_platformSnapshot(generation: providerGeneration, phase: VpnSessionPhase.connected, ready: true));
+    await connected.timeout(const Duration(seconds: 2));
+
+    expect(service.currentState, isA<CoreStarted>());
+    final localGeneration = service.beginVpnOperation('start_after_cold_adoption');
+    expect(localGeneration, greaterThan(providerGeneration));
+
+    core.add(
+      _platformSnapshot(
+        generation: providerGeneration,
+        phase: VpnSessionPhase.disconnected,
+        requestedAction: 'stop',
+        stopSource: VpnStopSource.system,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(service.currentState, isA<CoreStarting>());
+    expect(service.isVpnOperationCurrent(localGeneration, source: 'cold_adoption_test'), isTrue);
+  });
+
   test('older Android snapshot cannot overwrite a newer locally reserved operation', () async {
     final core = _SnapshotCoreInterface();
     final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
@@ -613,6 +977,148 @@ void main() {
 
     expect(service.currentState, isA<CoreStarting>());
     expect(service.isVpnOperationCurrent(localGeneration, source: 'test_assertion'), isTrue);
+  });
+
+  test('snapshot blocked on intent sync cannot publish or persist after a newer local generation', () async {
+    SharedPreferences.setMockInitialValues({'started_by_user': true});
+    final preferences = await SharedPreferences.getInstance();
+    final core = _SnapshotCoreInterface();
+    final intentSyncEntered = Completer<void>();
+    final releaseIntentSync = Completer<void>();
+    final provider = Provider<ZeonCoreService>(
+      (ref) => ZeonCoreService(
+        ref,
+        coreInterface: core,
+        platformIntentSyncBarrierForTesting: (snapshot) async {
+          if (!intentSyncEntered.isCompleted) intentSyncEntered.complete();
+          await releaseIntentSync.future;
+        },
+      ),
+    );
+    final container = ProviderContainer(overrides: [sharedPreferencesProvider.overrideWith((ref) => preferences)]);
+    addTearDown(() async {
+      container.dispose();
+      await core.close();
+    });
+    await container.read(sharedPreferencesProvider.future);
+    final service = container.read(provider);
+    final events = <CoreStatus>[];
+    final subscription = service.statusController.listen(events.add);
+    addTearDown(subscription.cancel);
+    const oldGeneration = 1 << 60;
+
+    core.add(
+      _platformSnapshot(
+        generation: oldGeneration,
+        phase: VpnSessionPhase.disconnected,
+        requestedAction: 'stop',
+        stopSource: VpnStopSource.system,
+      ),
+    );
+    await intentSyncEntered.future.timeout(const Duration(seconds: 2));
+    final newGeneration = service.beginVpnOperation('start_while_old_snapshot_syncs');
+    releaseIntentSync.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(newGeneration, greaterThan(oldGeneration));
+    expect(events.whereType<CoreStopped>(), isEmpty);
+    expect(service.currentState, isA<CoreStarting>());
+    expect(preferences.getBool('started_by_user'), isTrue);
+  });
+
+  test('blocked same-generation snapshot cannot overwrite a fresher resync sequence', () async {
+    SharedPreferences.setMockInitialValues({'started_by_user': false});
+    final preferences = await SharedPreferences.getInstance();
+    final core = _MutableSnapshotCoreInterface();
+    final intentSyncEntered = Completer<void>();
+    final releaseIntentSync = Completer<void>();
+    final provider = Provider<ZeonCoreService>(
+      (ref) => ZeonCoreService(
+        ref,
+        coreInterface: core,
+        platformIntentSyncBarrierForTesting: (snapshot) async {
+          if (snapshot.sequenceNumber != 1) return;
+          if (!intentSyncEntered.isCompleted) intentSyncEntered.complete();
+          await releaseIntentSync.future;
+        },
+      ),
+    );
+    final container = ProviderContainer(overrides: [sharedPreferencesProvider.overrideWith((ref) => preferences)]);
+    addTearDown(() async {
+      container.dispose();
+      await core.close();
+    });
+    await container.read(sharedPreferencesProvider.future);
+    final service = container.read(provider);
+    const generation = 1 << 60;
+    final events = <CoreStatus>[];
+    final subscription = service.statusController.listen(events.add);
+    addTearDown(subscription.cancel);
+
+    core.add(
+      _platformSnapshot(generation: generation, sequenceNumber: 1, phase: VpnSessionPhase.connected, ready: true),
+    );
+    await intentSyncEntered.future.timeout(const Duration(seconds: 2));
+
+    core.current = _platformSnapshot(
+      generation: generation,
+      sequenceNumber: 2,
+      phase: VpnSessionPhase.stopping,
+      requestedAction: 'stop',
+      stopSource: VpnStopSource.system,
+    );
+    final resynced = await service.resyncFromPlatform('same_generation_newer_sequence', publish: true);
+    expect(resynced, isA<CoreStopping>());
+
+    releaseIntentSync.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(service.currentState, isA<CoreStopping>());
+    expect(events.whereType<CoreStarted>(), isEmpty);
+    expect(service.authoritativeSessionSnapshot?.sequenceNumber, 2);
+    expect(preferences.getBool('started_by_user'), isFalse);
+  });
+
+  test('snapshot from a restarted native runtime supersedes the cached old epoch', () async {
+    SharedPreferences.setMockInitialValues({'started_by_user': false});
+    final preferences = await SharedPreferences.getInstance();
+    final core = _MutableSnapshotCoreInterface();
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final container = ProviderContainer(overrides: [sharedPreferencesProvider.overrideWith((ref) => preferences)]);
+    addTearDown(() async {
+      container.dispose();
+      await core.close();
+    });
+    await container.read(sharedPreferencesProvider.future);
+    final service = container.read(provider);
+    const generation = 1 << 60;
+
+    core.current = _platformSnapshot(
+      generation: generation,
+      sequenceNumber: 50,
+      phase: VpnSessionPhase.disconnected,
+      requestedAction: 'stop',
+      stopSource: VpnStopSource.system,
+      runtimeEpoch: 'old-runtime',
+    );
+    expect(await service.resyncFromPlatform('cache_old_runtime', publish: true), isA<CoreStopped>());
+
+    final connected = service.statusController.stream.firstWhere((status) => status is CoreStarted);
+    core.add(
+      _platformSnapshot(
+        generation: generation,
+        sequenceNumber: 1,
+        phase: VpnSessionPhase.connected,
+        ready: true,
+        runtimeEpoch: 'new-runtime',
+      ),
+    );
+    await connected.timeout(const Duration(seconds: 2));
+
+    expect(service.currentState, isA<CoreStarted>());
+    expect(service.authoritativeSessionSnapshot?.runtimeEpoch, 'new-runtime');
   });
 
   test('unexpected Android destroy preserves expected-running preference', () async {
@@ -718,6 +1224,59 @@ class _StoppedCoreInterface extends CoreInterface {
   }
 }
 
+class _DeferredBootstrapCoreInterface extends CoreInterface {
+  final StreamController<VpnSessionSnapshot> _snapshots = StreamController<VpnSessionSnapshot>.broadcast();
+  VpnSessionSnapshot? _current;
+
+  void emit(VpnSessionSnapshot snapshot) {
+    _current = snapshot;
+    _snapshots.add(snapshot);
+  }
+
+  @override
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _current;
+
+  @override
+  int get authoritativeSessionGeneration => _current?.generation ?? 0;
+
+  @override
+  Stream<VpnSessionSnapshot> watchSessionSnapshots() => _snapshots.stream;
+
+  @override
+  Future<void> setPreparationGeneration(int generation) {
+    return Future<void>.error(SessionGenerationRejectedException(requested: generation, accepted: 0));
+  }
+
+  Future<void> close() => _snapshots.close();
+}
+
+class _AcceptedBootstrapThenMappedProviderCoreInterface extends CoreInterface {
+  final StreamController<VpnSessionSnapshot> _snapshots = StreamController<VpnSessionSnapshot>.broadcast();
+  VpnSessionSnapshot? _current;
+
+  void emit(VpnSessionSnapshot snapshot) {
+    _current = snapshot;
+    _snapshots.add(snapshot);
+  }
+
+  @override
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _current;
+
+  @override
+  int get authoritativeSessionGeneration => _current?.generation ?? 0;
+
+  @override
+  Stream<VpnSessionSnapshot> watchSessionSnapshots() => _snapshots.stream;
+
+  @override
+  Future<void> setPreparationGeneration(int generation) async {}
+
+  @override
+  Future<bool> prepareVpn(String path, String name, bool disableMemoryLimit, {int generation = 0}) async => true;
+
+  Future<void> close() => _snapshots.close();
+}
+
 class _DelayedStoppedCoreInterface extends _StoppedCoreInterface {
   final resyncBarrier = Completer<CoreStatus?>();
 
@@ -786,15 +1345,53 @@ class _SnapshotCoreInterface extends CoreInterface {
   Stream<VpnSessionSnapshot> watchSessionSnapshots() => _snapshots.stream;
 }
 
+class _MutableSnapshotCoreInterface extends CoreInterface {
+  final StreamController<VpnSessionSnapshot> _snapshots = StreamController<VpnSessionSnapshot>.broadcast();
+  VpnSessionSnapshot? _current;
+
+  void add(VpnSessionSnapshot snapshot) {
+    _current = snapshot;
+    _snapshots.add(snapshot);
+  }
+
+  VpnSessionSnapshot? get current => _current;
+
+  set current(VpnSessionSnapshot snapshot) => _current = snapshot;
+
+  Future<void> close() => _snapshots.close();
+
+  @override
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _current;
+
+  @override
+  int get authoritativeSessionGeneration => _current?.generation ?? 0;
+
+  @override
+  Future<CoreStatus?> resyncSessionStatus() async => _current?.toCoreStatus();
+
+  @override
+  Stream<VpnSessionSnapshot> watchSessionSnapshots() => _snapshots.stream;
+}
+
 class _PreemptiveStopCoreInterface extends CoreInterface {
   final Completer<void> firstSetGenerationEntered = Completer<void>();
   final Completer<void> releaseFirstSetGeneration = Completer<void>();
   final Completer<int> firstPlatformStopRequested = Completer<int>();
   final Completer<int> secondPlatformStopRequested = Completer<int>();
   var _setGenerationCalls = 0;
+  VpnSessionSnapshot? _current;
 
   @override
   bool get supportsPreemptivePlatformStop => true;
+
+  @override
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _current;
+
+  @override
+  int get authoritativeSessionGeneration => _current?.generation ?? 0;
+
+  @override
+  Future<CoreStatus?> resyncSessionStatus() async => _current?.toCoreStatus();
 
   @override
   Future<void> setSessionGeneration(int generation) async {
@@ -811,6 +1408,12 @@ class _PreemptiveStopCoreInterface extends CoreInterface {
     } else if (!secondPlatformStopRequested.isCompleted) {
       secondPlatformStopRequested.complete(generation);
     }
+    _current = _platformSnapshot(
+      generation: generation,
+      phase: VpnSessionPhase.disconnected,
+      requestedAction: 'stop',
+      stopSource: VpnStopSource.flutter,
+    );
     return generation;
   }
 
@@ -851,18 +1454,186 @@ class _TerminalPreemptiveCoreInterface extends CoreInterface {
   Future<void> close() => _snapshots.close();
 }
 
-class _RebasedPreemptiveStopCoreInterface extends CoreInterface {
-  int requestedStopGeneration = 0;
-  int acceptedStopGeneration = 0;
-  int lastSetGeneration = 0;
+class _ResyncOnlyTerminalPreemptiveCoreInterface extends CoreInterface {
+  VpnSessionSnapshot? _current;
 
   @override
   bool get supportsPreemptivePlatformStop => true;
 
   @override
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _current;
+
+  @override
+  int get authoritativeSessionGeneration => _current?.generation ?? 0;
+
+  @override
+  Future<int> requestPlatformStop({required int generation}) async {
+    _current = _platformSnapshot(
+      generation: generation,
+      phase: VpnSessionPhase.stopping,
+      requestedAction: 'stop',
+      stopSource: VpnStopSource.flutter,
+    );
+    return generation;
+  }
+
+  @override
+  Future<CoreStatus?> resyncSessionStatus() async {
+    final generation = _current!.generation;
+    _current = _platformSnapshot(
+      generation: generation,
+      phase: VpnSessionPhase.disconnected,
+      requestedAction: 'stop',
+      stopSource: VpnStopSource.flutter,
+    );
+    return _current!.toCoreStatus();
+  }
+
+  @override
+  Future<bool> stop({int generation = 0}) async => true;
+}
+
+class _ResyncOnlyExternalStartPreemptiveCoreInterface extends CoreInterface {
+  VpnSessionSnapshot? _current;
+
+  @override
+  bool get supportsPreemptivePlatformStop => true;
+
+  @override
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _current;
+
+  @override
+  int get authoritativeSessionGeneration => _current?.generation ?? 0;
+
+  @override
+  Future<int> requestPlatformStop({required int generation}) async {
+    _current = _platformSnapshot(
+      generation: generation,
+      phase: VpnSessionPhase.stopping,
+      requestedAction: 'stop',
+      stopSource: VpnStopSource.flutter,
+    );
+    return generation;
+  }
+
+  @override
+  Future<CoreStatus?> resyncSessionStatus() async {
+    final generation = _current!.generation;
+    _current = _platformSnapshot(
+      generation: generation,
+      phase: VpnSessionPhase.connected,
+      requestedAction: 'connect',
+      ready: true,
+    );
+    return _current!.toCoreStatus();
+  }
+
+  @override
+  Future<bool> stop({int generation = 0}) async => true;
+}
+
+class _SameGenerationExternalStartCoreInterface extends CoreInterface {
+  _SameGenerationExternalStartCoreInterface({
+    this.connectDuringPreemptiveRequest = false,
+    this.blockGenerationSync = false,
+  });
+
+  final bool connectDuringPreemptiveRequest;
+  final bool blockGenerationSync;
+  final StreamController<VpnSessionSnapshot> _snapshots = StreamController<VpnSessionSnapshot>.broadcast();
+  final Completer<void> generationSyncEntered = Completer<void>();
+  final Completer<void> releaseGenerationSync = Completer<void>();
+  VpnSessionSnapshot? _current;
+  int _stopGeneration = 0;
+  int nativeStopCalls = 0;
+
+  @override
+  bool get supportsPreemptivePlatformStop => true;
+
+  @override
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _current;
+
+  @override
+  int get authoritativeSessionGeneration => _current?.generation ?? 0;
+
+  @override
+  Stream<VpnSessionSnapshot> watchSessionSnapshots() => _snapshots.stream;
+
+  @override
+  Future<CoreStatus?> resyncSessionStatus() async => _current?.toCoreStatus();
+
+  @override
+  Future<int> requestPlatformStop({required int generation}) async {
+    _stopGeneration = generation;
+    if (connectDuringPreemptiveRequest) {
+      emitExternalConnect();
+    } else {
+      _current = _platformSnapshot(
+        generation: generation,
+        phase: VpnSessionPhase.disconnected,
+        requestedAction: 'stop',
+        stopSource: VpnStopSource.flutter,
+      );
+      _snapshots.add(_current!);
+    }
+    return generation;
+  }
+
+  void emitExternalConnect() {
+    _current = _platformSnapshot(
+      generation: _stopGeneration,
+      phase: VpnSessionPhase.connected,
+      requestedAction: 'connect',
+      ready: true,
+    );
+    _snapshots.add(_current!);
+  }
+
+  @override
+  Future<void> setSessionGeneration(int generation) async {
+    if (!blockGenerationSync) return;
+    if (!generationSyncEntered.isCompleted) generationSyncEntered.complete();
+    await releaseGenerationSync.future;
+  }
+
+  @override
+  Future<bool> stop({int generation = 0}) async {
+    nativeStopCalls++;
+    return true;
+  }
+
+  Future<void> close() => _snapshots.close();
+}
+
+class _RebasedPreemptiveStopCoreInterface extends CoreInterface {
+  int requestedStopGeneration = 0;
+  int acceptedStopGeneration = 0;
+  int lastSetGeneration = 0;
+  VpnSessionSnapshot? _current;
+
+  @override
+  bool get supportsPreemptivePlatformStop => true;
+
+  @override
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _current;
+
+  @override
+  int get authoritativeSessionGeneration => _current?.generation ?? 0;
+
+  @override
+  Future<CoreStatus?> resyncSessionStatus() async => _current?.toCoreStatus();
+
+  @override
   Future<int> requestPlatformStop({required int generation}) {
     requestedStopGeneration = generation;
-    return Future<int>.value(acceptedStopGeneration = generation + 100);
+    acceptedStopGeneration = generation + 100;
+    _current = _platformSnapshot(
+      generation: acceptedStopGeneration,
+      phase: VpnSessionPhase.disconnected,
+      requestedAction: 'stop',
+      stopSource: VpnStopSource.flutter,
+    );
+    return Future<int>.value(acceptedStopGeneration);
   }
 
   @override
@@ -881,9 +1652,10 @@ VpnSessionSnapshot _platformSnapshot({
   bool ready = false,
   String requestedAction = '',
   VpnStopSource stopSource = VpnStopSource.none,
+  String runtimeEpoch = 'android-process',
 }) => VpnSessionSnapshot(
   generation: generation,
-  runtimeEpoch: 'android-process',
+  runtimeEpoch: runtimeEpoch,
   sequenceNumber: sequenceNumber ?? generation,
   snapshotVersion: sequenceNumber ?? generation,
   phase: phase,

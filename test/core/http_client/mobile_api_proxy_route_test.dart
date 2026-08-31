@@ -6,6 +6,13 @@ import 'package:zeon/singbox/model/singbox_rule.dart';
 
 void main() {
   group('MobileApiProxyRoute', () {
+    test('production control-plane defaults to the domain origin', () {
+      expect(MobileApiProxyRoute.apiBaseUrl, 'https://api.zeon-vps.online');
+      final rule = MobileApiProxyRoute.ruleFor(MobileApiProxyRoute.apiBaseUrl);
+      expect(rule?.domains, const <String>['api.zeon-vps.online']);
+      expect(rule?.ip, isNull);
+    });
+
     test('builds a forced proxy rule for an IPv4 API host', () {
       final rule = MobileApiProxyRoute.ruleFor('https://130.49.151.173/api/v1');
 
@@ -84,6 +91,7 @@ void main() {
         timeout: const Duration(milliseconds: 100),
         userAgent: 'test',
         debug: false,
+        isWindows: false,
         // Even a stale listener must not override the explicit disconnected
         // state supplied by the app.
         proxyProbe: (_, _) async => true,
@@ -102,6 +110,7 @@ void main() {
         timeout: const Duration(milliseconds: 100),
         userAgent: 'test',
         debug: false,
+        isWindows: false,
         proxyProbe: (_, _) async => true,
       );
       client.setProxyPort(12334);
@@ -118,6 +127,7 @@ void main() {
         timeout: const Duration(milliseconds: 100),
         userAgent: 'test',
         debug: false,
+        isWindows: false,
         proxyProbe: (_, _) async => false,
       );
       client.setProxyPort(12334);
@@ -160,6 +170,97 @@ void main() {
         isFalse,
       );
       expect(recoveryCalls, 1);
+    });
+
+    group('Windows route matrix', () {
+      const controlPlaneUrl = 'https://api.example.com/control';
+      const ordinaryUrl = 'https://example.org/data';
+
+      DioHttpClient client({required bool proxyReady, bool? vpnActive}) {
+        final result = DioHttpClient(
+          timeout: const Duration(milliseconds: 100),
+          userAgent: 'test',
+          debug: false,
+          isWindows: true,
+          controlPlaneMatcher: (url) => url == controlPlaneUrl,
+          proxyProbe: (host, port) async {
+            expect(host, DioHttpClient.localZeonProxyHost);
+            expect(port, 12334);
+            return proxyReady;
+          },
+        );
+        result.setProxyPort(12334);
+        if (vpnActive != null) result.setVpnActive(vpnActive);
+        return result;
+      }
+
+      for (final vpnState in <bool?>[false, true, null]) {
+        final label = vpnState == null
+            ? 'unknown'
+            : vpnState
+            ? 'connected'
+            : 'disconnected';
+
+        test('proxyOnly wins for control-plane and ordinary URLs when VPN is $label', () async {
+          final http = client(proxyReady: true, vpnActive: vpnState);
+          for (final url in <String>[controlPlaneUrl, ordinaryUrl]) {
+            expect(await http.resolveRouteForTesting(url: url, proxyOnly: true), HttpRouteMode.localZeonProxy);
+          }
+        });
+
+        test('directOnly excludes the ZEON proxy when VPN is $label', () async {
+          final http = client(proxyReady: true, vpnActive: vpnState);
+          for (final url in <String>[controlPlaneUrl, ordinaryUrl]) {
+            expect(await http.resolveRouteForTesting(url: url, directOnly: true), HttpRouteMode.systemNetwork);
+          }
+        });
+      }
+
+      test('proxyOnly never falls back when ZEON proxy is unavailable', () async {
+        final http = client(proxyReady: false, vpnActive: false);
+        await expectLater(
+          http.resolveRouteForTesting(url: controlPlaneUrl, proxyOnly: true),
+          throwsA(isA<VpnProxyUnavailableException>()),
+        );
+      });
+
+      test('conflicting explicit routes are rejected', () async {
+        final http = client(proxyReady: true, vpnActive: true);
+        await expectLater(
+          http.resolveRouteForTesting(url: controlPlaneUrl, directOnly: true, proxyOnly: true),
+          throwsArgumentError,
+        );
+      });
+
+      test('control-plane and adaptive traffic use system network while disconnected', () async {
+        final http = client(proxyReady: true, vpnActive: false);
+        expect(await http.resolveRouteForTesting(url: controlPlaneUrl), HttpRouteMode.systemNetwork);
+        expect(await http.resolveRouteForTesting(url: ordinaryUrl), HttpRouteMode.systemNetwork);
+      });
+
+      test('control-plane and adaptive traffic use ZEON proxy only while connected and ready', () async {
+        final http = client(proxyReady: true, vpnActive: true);
+        expect(await http.resolveRouteForTesting(url: controlPlaneUrl), HttpRouteMode.localZeonProxy);
+        expect(await http.resolveRouteForTesting(url: ordinaryUrl), HttpRouteMode.localZeonProxy);
+      });
+
+      test('unknown startup state does not probe or use a loopback listener on Windows', () async {
+        var probes = 0;
+        final http = DioHttpClient(
+          timeout: const Duration(milliseconds: 100),
+          userAgent: 'test',
+          debug: false,
+          isWindows: true,
+          controlPlaneMatcher: (_) => true,
+          proxyProbe: (_, _) async {
+            probes++;
+            return true;
+          },
+        )..setProxyPort(12334);
+
+        expect(await http.resolveRouteForTesting(url: controlPlaneUrl), HttpRouteMode.systemNetwork);
+        expect(probes, 0);
+      });
     });
   });
 }

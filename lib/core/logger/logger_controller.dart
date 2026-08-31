@@ -38,12 +38,13 @@ class LoggerController extends LoggyPrinter with InfraLogger {
 
   void addPrinter(String name, LoggyPrinter printer) {
     loggy.debug("adding [$name] printer");
-    otherPrinters.putIfAbsent(name, () => printer);
+    otherPrinters[name] = printer;
   }
 
-  void removePrinter(String name) {
+  void removePrinter(String name, {LoggyPrinter? owner}) {
     loggy.debug("removing [$name] printer");
     final printer = otherPrinters[name];
+    if (owner != null && !identical(printer, owner)) return;
     if (printer case FileLogPrinter()) {
       unawaited(printer.dispose());
     }

@@ -11,25 +11,34 @@ import 'package:zeon/core/widget/animated_text.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
 import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
-import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/gen/assets.gen.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/utils/platform_utils.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 class ConnectionButton extends ConsumerWidget {
-  const ConnectionButton({super.key});
+  const ConnectionButton({required this.activeProxy, super.key});
+
+  final AsyncValue<OutboundInfo> activeProxy;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final connectionStatus = ref.watch(connectionNotifierProvider);
-    final snapshotButtonState = ref.watch(mainVpnButtonStateProvider);
-    final buttonState = PlatformUtils.isAndroid
-        ? snapshotButtonState.valueOrNull ?? const MainVpnButtonState.loading()
+    final snapshot = ref.watch(mainVpnSessionSnapshotProvider);
+    final connectionNotifier = ref.read(connectionNotifierProvider.notifier);
+    final buttonState = PlatformUtils.isMobile
+        ? MainVpnButtonState.fromSources(
+            snapshot: snapshot.valueOrNull,
+            localStatus: connectionStatus.valueOrNull,
+            localDesiredRunning: connectionNotifier.desiredRunning,
+            localStopRetry: connectionNotifier.hasRetryableStopError,
+            localLoading: connectionStatus.isLoading || snapshot.isLoading,
+            localHasError: connectionStatus.hasError,
+          )
         : MainVpnButtonState.fromLegacyConnectionStatus(connectionStatus.valueOrNull);
-    final activeProxy = ref.watch(activeProxyNotifierProvider);
-    final delay = activeProxy.valueOrNull?.urlTestDelay ?? 0;
+    final delay = buttonState.isConnected ? activeProxy.valueOrNull?.urlTestDelay ?? 0 : 0;
     final hasValidDelay = delay > 0 && delay < 65000;
 
     final today = DateTime.now();
@@ -157,7 +166,7 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
   @override
   void initState() {
     super.initState();
-    _rotationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1320))..repeat();
+    _rotationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1320));
     _loadingController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 220),
@@ -188,6 +197,14 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
   void _applyVisualState(MainVpnButtonVisualState state, {required bool animate}) {
     final loadingTarget = state == MainVpnButtonVisualState.loading ? 1.0 : 0.0;
     final connectedTarget = state == MainVpnButtonVisualState.connected ? 1.0 : 0.0;
+
+    if (loadingTarget > 0) {
+      if (!_rotationController.isAnimating) _rotationController.repeat();
+    } else {
+      _rotationController
+        ..stop()
+        ..value = 0;
+    }
 
     if (animate) {
       if (loadingTarget > _loadingController.value) {

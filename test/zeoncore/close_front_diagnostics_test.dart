@@ -14,6 +14,20 @@ import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 import 'package:zeon/zeoncore/zeon_core_service.dart';
 
 void main() {
+  group('desktop session listener ownership', () {
+    test('single-channel desktop reattaches listeners after authoritative stop', () {
+      expect(coreSessionListenersRequired(singleChannel: true, requiresAuthoritativeStopConfirmation: true), isTrue);
+    });
+
+    test('ordinary single-channel setup keeps its existing listener policy', () {
+      expect(coreSessionListenersRequired(singleChannel: true, requiresAuthoritativeStopConfirmation: false), isFalse);
+    });
+
+    test('split foreground and background channels always attach session listeners', () {
+      expect(coreSessionListenersRequired(singleChannel: false, requiresAuthoritativeStopConfirmation: false), isTrue);
+    });
+  });
+
   group('closeFront tri-state decision semantics', () {
     test('connected background probe preserves Started without a duplicate publication', () {
       expect(_decision(outcome: PortProbeOutcome.connected), CloseFrontPublicationDecision.preserveStarted);
@@ -239,6 +253,55 @@ void main() {
       expect(fixture.core.nativeStopCalls, 1);
       expect(fixture.service.currentState, isA<CoreStopped>());
     });
+
+    test('desktop bookkeeping cannot publish Stopped without authoritative terminal evidence', () async {
+      final fixture = _CloseFrontFixture(PortProbeOutcome.connected, requiresAuthoritativeStopConfirmation: true);
+      addTearDown(fixture.close);
+      fixture.publishStarted();
+      fixture.events.clear();
+
+      final result = await fixture.service.stop().run();
+
+      expect(result.isLeft(), isTrue);
+      expect(fixture.core.nativeStopCalls, 0);
+      expect(fixture.events.whereType<CoreStopped>(), isEmpty);
+      expect(fixture.service.currentState, isA<CoreStarted>());
+    });
+
+    test('desktop terminal witness permits bookkeeping and one Stopped publication', () async {
+      final fixture = _CloseFrontFixture(
+        PortProbeOutcome.connected,
+        requiresAuthoritativeStopConfirmation: true,
+        authoritativeStopConfirmed: true,
+      );
+      addTearDown(fixture.close);
+      fixture.publishStarted();
+      fixture.events.clear();
+
+      final result = await fixture.service.stop().run();
+
+      expect(result.isRight(), isTrue);
+      expect(fixture.core.nativeStopCalls, 1);
+      expect(fixture.core.nextSessionPreparationCalls, 1);
+      expect(fixture.events.whereType<CoreStopped>(), hasLength(1));
+      expect(fixture.service.currentState, isA<CoreStopped>());
+    });
+
+    test('desktop prepares a fresh control owner only after terminal stop evidence', () async {
+      final fixture = _CloseFrontFixture(
+        PortProbeOutcome.connected,
+        requiresAuthoritativeStopConfirmation: true,
+        authoritativeStopConfirmed: true,
+      );
+      addTearDown(fixture.close);
+      fixture.publishStarted();
+
+      final result = await fixture.service.stop().run();
+
+      expect(result.isRight(), isTrue);
+      expect(fixture.core.lifecycleCalls, <String>['bookkeeping-stop', 'prepare-next-session']);
+      expect(fixture.service.currentState, isA<CoreStopped>());
+    });
   });
 
   group('mobile background port probe diagnostics', () {
@@ -313,11 +376,15 @@ class _CloseFrontFixture {
     VpnSessionSnapshot? nativeSnapshot,
     Completer<void>? probeBarrier,
     Completer<void>? onProbeEntered,
+    bool requiresAuthoritativeStopConfirmation = false,
+    bool authoritativeStopConfirmed = false,
   }) : core = _CloseFrontCoreInterface(
          outcome,
          nativeSnapshot: nativeSnapshot,
          probeBarrier: probeBarrier,
          onProbeEntered: onProbeEntered,
+         requiresAuthoritativeStopConfirmation: requiresAuthoritativeStopConfirmation,
+         authoritativeStopConfirmed: authoritativeStopConfirmed,
        ),
        container = ProviderContainer() {
     final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
@@ -350,7 +417,14 @@ class _CloseFrontFixture {
 }
 
 class _CloseFrontCoreInterface extends CoreInterface {
-  _CloseFrontCoreInterface(this.outcome, {this.nativeSnapshot, this.probeBarrier, this.onProbeEntered}) {
+  _CloseFrontCoreInterface(
+    this.outcome, {
+    this.nativeSnapshot,
+    this.probeBarrier,
+    this.onProbeEntered,
+    this.requiresAuthoritativeStopConfirmation = false,
+    this.authoritativeStopConfirmed = false,
+  }) {
     fgClient = initialForegroundClient = _TrackingCoreClient();
     bgClient = initialBackgroundClient = _TrackingCoreClient();
   }
@@ -359,9 +433,14 @@ class _CloseFrontCoreInterface extends CoreInterface {
   VpnSessionSnapshot? nativeSnapshot;
   final Completer<void>? probeBarrier;
   final Completer<void>? onProbeEntered;
+  @override
+  final bool requiresAuthoritativeStopConfirmation;
+  final bool authoritativeStopConfirmed;
   late final _TrackingCoreClient initialForegroundClient;
   late final _TrackingCoreClient initialBackgroundClient;
   int nativeStopCalls = 0;
+  int nextSessionPreparationCalls = 0;
+  final List<String> lifecycleCalls = [];
 
   @override
   VpnSessionSnapshot? get authoritativeSessionSnapshot => nativeSnapshot;
@@ -377,8 +456,19 @@ class _CloseFrontCoreInterface extends CoreInterface {
   @override
   Future<bool> stop({int generation = 0}) async {
     nativeStopCalls++;
+    lifecycleCalls.add('bookkeeping-stop');
     return true;
   }
+
+  @override
+  Future<bool> prepareNextSessionAfterStop() async {
+    nextSessionPreparationCalls++;
+    lifecycleCalls.add('prepare-next-session');
+    return true;
+  }
+
+  @override
+  Future<bool> waitForAuthoritativeStop({required Duration timeout}) async => authoritativeStopConfirmed;
 
   Future<void> close() async {
     await initialForegroundClient.shutdown();

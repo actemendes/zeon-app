@@ -122,8 +122,8 @@ Apple-сборки должны передавать dart-define:
 - `CFBundleVersion`: `$(FLUTTER_BUILD_NUMBER)`;
 - `ios/exportOptions.plist`: `method=app-store`.
 
-Для iOS App Store export path описан через `flutter build ipa` и
-`ios/exportOptions.plist`.
+Для iOS App Store export path описан через `scripts/apple/build.sh ios-ipa`
+(production entrypoint `lib/main_prod.dart`) и `ios/exportOptions.plist`.
 
 Для macOS Mac App Store path описан через:
 
@@ -135,7 +135,9 @@ Apple-сборки должны передавать dart-define:
 
 Обычный helper `scripts/apple/build.sh macos-artifacts` сохраняет прежнюю роль:
 он производит DMG/PKG для вне-магазинной дистрибуции и не является Mac App Store
-артефактом.
+артефактом. Поэтому `macos-app`, `macos-artifacts` и локальный macOS rebuild по
+умолчанию передают `release=general`; только App Store helpers передают
+`release=app-store`.
 
 ## 9) Appcast-файлы
 
@@ -169,8 +171,8 @@ Apple-сборки должны передавать dart-define:
 - Google Play:
   - `flutter build appbundle --dart-define=release=google-play`
 - Apple Store/TestFlight:
-  - `flutter build ipa --dart-define=release=app-store`
-  - `flutter build macos --release --dart-define=release=app-store`
+  - `make ios-ipa`
+  - `make ios-upload`
   - `make macos-app-store`
   - `MACOS_EXPORT_DESTINATION=upload make macos-app-store`
 

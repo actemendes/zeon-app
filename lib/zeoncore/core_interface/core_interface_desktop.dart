@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
@@ -11,6 +12,7 @@ import 'package:zeon/gen/zeon_core_generated_bindings.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface.dart';
+import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/generated/v2/hello/hello.pb.dart';
@@ -21,6 +23,7 @@ typedef StopFunc = Pointer<Utf8> Function();
 typedef StopFuncDart = Pointer<Utf8> Function();
 
 class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
+  static const managementHost = "127.0.0.1";
   static const _startupValidationGuard = bool.fromEnvironment("zeon_windows_startup_validation");
   static final ZeonCoreNativeLibrary _box = _gen();
 
@@ -57,6 +60,10 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
 
   int? _port;
   Future<String>? _setupOperation;
+  Directories? _setupDirectories;
+  bool _setupDebug = false;
+  int _setupMode = SetupMode.GRPC_NORMAL_INSECURE.value;
+  bool _initialized = false;
   int _sessionGeneration = 0;
   bool _coreStarted = false;
   static String generateRandomPassword(int length) {
@@ -89,7 +96,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     const channelOption = ChannelCredentials.insecure();
     final helloClient = HelloClient(
       ClientChannel(
-        '127.0.0.1',
+        managementHost,
         port: port,
         options: const ChannelOptions(credentials: channelOption),
       ),
@@ -101,7 +108,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
         directories.workingDir.path.toNativeUtf8(allocator: arena).cast(),
         directories.tempDir.path.toNativeUtf8(allocator: arena).cast(),
         SetupMode.GRPC_NORMAL_INSECURE.value,
-        "127.0.0.1:$port".toNativeUtf8(allocator: arena).cast(),
+        "$managementHost:$port".toNativeUtf8(allocator: arena).cast(),
         secret.toNativeUtf8(allocator: arena).cast(),
         0,
         debug ? 1 : 0,
@@ -121,7 +128,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
 
     bgClient = fgClient = CoreClient(
       ClientChannel(
-        'localhost',
+        managementHost,
         port: port,
         options: const ChannelOptions(
           credentials: ChannelCredentials.insecure(),
@@ -132,6 +139,11 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
         ),
       ),
     );
+
+    _setupDirectories = directories;
+    _setupDebug = debug;
+    _setupMode = mode;
+    _initialized = true;
 
     return "";
   }
@@ -172,7 +184,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
         status: const CoreStatus.stopped(message: "VPN disabled by startup validation artifact"),
       );
     }
-    if (!isInitialized() || _port == null) {
+    if ((!isInitialized() || _port == null) && !await _restoreManagementEndpoint()) {
       return BackgroundSetupResult(
         generation: generation,
         status: const CoreStatus.stopped(message: "desktop core management endpoint is unavailable"),
@@ -214,13 +226,104 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   }
 
   @override
+  bool get requiresAuthoritativeStopConfirmation => true;
+
+  @override
+  Future<bool> waitForAuthoritativeStop({required Duration timeout}) async {
+    if (!isInitialized()) return false;
+    final terminal = Completer<bool>();
+    StreamSubscription<CoreInfoResponse>? subscription;
+    try {
+      subscription = bgClient
+          .coreInfoListener(Empty(), options: CallOptions(timeout: timeout + const Duration(seconds: 1)))
+          .listen(
+            (event) {
+              if (CoreStatus.fromCoreInfo(event) is CoreStopped && !terminal.isCompleted) {
+                terminal.complete(true);
+              }
+            },
+            onError: (_) {
+              if (!terminal.isCompleted) terminal.complete(false);
+            },
+            onDone: () {
+              if (!terminal.isCompleted) terminal.complete(false);
+            },
+          );
+      return await terminal.future.timeout(timeout, onTimeout: () => false);
+    } catch (error, stackTrace) {
+      loggy.warning('desktop authoritative stop observation failed', error, stackTrace);
+      return false;
+    } finally {
+      try {
+        await subscription?.cancel();
+      } catch (_) {
+        // A closing gRPC channel is expected during terminal teardown.
+      }
+    }
+  }
+
+  @override
+  Future<bool> prepareNextSessionAfterStop() async {
+    final directories = _setupDirectories;
+    final previousPort = _port;
+    if (directories == null || previousPort == null || !_initialized) return false;
+
+    // A CoreStopped response proves that the data plane reached terminal
+    // state, but the long-lived in-process gRPC runtime can retain completed
+    // service resources that make the next Start wait forever. Close that
+    // runtime out-of-band through FFI, then create a fresh process-owned
+    // loopback endpoint. This is deterministic lifecycle ownership, not a
+    // larger Start timeout.
+    try {
+      _box.closeGrpc(_setupMode);
+    } catch (error, stackTrace) {
+      loggy.warning('desktop core management reset failed', error, stackTrace);
+      return false;
+    } finally {
+      _initialized = false;
+      _port = null;
+      _setupOperation = null;
+      _coreStarted = false;
+    }
+
+    await _waitForPortClosed(previousPort);
+    return _restoreManagementEndpoint();
+  }
+
+  Future<bool> _restoreManagementEndpoint() async {
+    final directories = _setupDirectories;
+    if (directories == null) return false;
+    try {
+      final result = await setup(directories, _setupDebug, _setupMode).timeout(const Duration(seconds: 20));
+      return result.isEmpty && isInitialized();
+    } catch (error, stackTrace) {
+      _initialized = false;
+      _port = null;
+      _setupOperation = null;
+      loggy.warning('desktop core management endpoint restore failed', error, stackTrace);
+      return false;
+    }
+  }
+
+  Future<void> _waitForPortClosed(int port) async {
+    for (var attempt = 0; attempt < 40; attempt++) {
+      if (!await isPortOpen(managementHost, port)) return;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    loggy.warning('desktop core management endpoint did not close within the bounded reset window');
+  }
+
+  @override
   Future<CoreStatus?> resyncSessionStatus() async =>
       _coreStarted ? const CoreStatus.started() : const CoreStatus.stopped();
 
   @override
+  bool isInitialized() => _initialized;
+
+  @override
   Future<bool> isActiveFg() async {
     final port = _port;
-    return port != null && await isPortOpen("127.0.0.1", port);
+    return port != null && await isPortOpen(managementHost, port);
   }
 
   @override

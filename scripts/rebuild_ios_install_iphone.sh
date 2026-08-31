@@ -3,10 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/apple/env.sh"
+source "${SCRIPT_DIR}/apple/build_config.sh"
 cd "${PROJECT_ROOT}"
 
 IOS_MODE="${IOS_MODE:-profile}"
-TARGET="${FLUTTER_TARGET:-lib/main.dart}"
 BUNDLE_ID="${BUNDLE_ID:-app.zeon.ios}"
 APPLE_RELEASE="${APPLE_RELEASE:-app-store}"
 PUBSPEC_VERSION="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d " '\"")"
@@ -23,6 +23,11 @@ case "${IOS_MODE}" in
     exit 2
     ;;
 esac
+
+TARGET="$(apple_target_for_mode "${IOS_MODE}")"
+BUILD_ENVIRONMENT="$(apple_environment_for_mode "${IOS_MODE}")"
+apple_validate_build_config
+apple_validate_flutter_target "${IOS_MODE}" "${TARGET}" "iOS device build"
 
 ensure_generated_sources() {
   if [[ ! -f lib/features/log/overview/logs_overview_notifier.g.dart ||
@@ -75,6 +80,7 @@ if [[ ! -d "${app_path}" ]]; then
   echo "Build completed, but iOS app was not found at: ${app_path}" >&2
   exit 1
 fi
+apple_validate_built_info_plist "${app_path}/Info.plist" "iOS device app" "${BUILD_ENVIRONMENT}"
 
 echo "Installing on iPhone: ${DEVICE_ID}"
 xcrun devicectl device install app --device "${DEVICE_ID}" "${app_path}"

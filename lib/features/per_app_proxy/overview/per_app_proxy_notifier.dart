@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:dartx/dartx_io.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:installed_apps/index.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/region.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
@@ -12,38 +14,67 @@ import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/features/per_app_proxy/data/auto_selection_repository.dart';
 import 'package:zeon/features/per_app_proxy/data/auto_selection_repository_provider.dart';
+import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
 import 'package:zeon/features/per_app_proxy/data/selected_data_provider.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_backup.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/features/per_app_proxy/model/pkg_flag.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:installed_apps/index.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'per_app_proxy_notifier.g.dart';
+
+Set<String> managedApplicationPackagesForMode(ManagedApplicationConfig config, AppProxyMode mode) {
+  final route = switch (mode) {
+    AppProxyMode.include => ManagedApplicationRoute.vpn,
+    AppProxyMode.exclude => ManagedApplicationRoute.direct,
+  };
+  return config.applications
+      .where(
+        (application) =>
+            application.enabled &&
+            application.platform == ManagedApplicationPlatform.android &&
+            application.route == route,
+      )
+      .map((application) => application.stableIdentifier)
+      .toSet();
+}
 
 @riverpod
 class PerAppProxy extends _$PerAppProxy with AppLogger {
   late final AppProxyMode? _mode;
+  Set<String> _managedPackages = const <String>{};
 
   @override
   Stream<Map<String, int>> build(AppProxyMode? mode) {
     _mode = mode;
     if (_mode == null) return Stream.value({});
-    final appsInfo = InstalledApps.getInstalledApps(false);
-    return Stream.fromFuture(appsInfo).asyncExpand((appsInfo) {
+    final managedConfig = ref.watch(managedApplicationConfigProvider.future);
+    return Stream.fromFuture(() async {
+      final appsInfo = await InstalledApps.getInstalledApps(false);
+      final config = await managedConfig;
+      _managedPackages = managedApplicationPackagesForMode(config, mode!);
+      return appsInfo;
+    }()).asyncExpand((appsInfo) {
       final phonePkgs = appsInfo.map((e) => e.packageName).toSet();
       return ref.watch(appProxyDataSourceProvider).watchFilterForDisplay(phonePkgs: phonePkgs, mode: _mode).map((
         entryList,
       ) {
-        return {for (final entry in entryList) entry.pkgName: entry.flags};
+        final result = <String, int>{for (final entry in entryList) entry.pkgName: entry.flags};
+        for (final pkg in _managedPackages.intersection(phonePkgs)) {
+          result[pkg] = PkgFlag.managedSelection.add(result[pkg] ?? 0);
+        }
+        return result;
       });
     });
   }
 
   Future<void> updatePkg(String pkg) async {
     loggy.info('Updationg $pkg status');
+    if (_managedPackages.contains(pkg)) {
+      await ref.read(appProxyDataSourceProvider).toggleManagedPkgOverride(pkg: pkg, mode: _mode!);
+      return;
+    }
     await ref.read(appProxyDataSourceProvider).updatePkg(pkg: pkg, mode: _mode!);
   }
 

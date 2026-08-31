@@ -53,21 +53,23 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
             
             var ipv4Address: [String] = []
             var ipv4Mask: [String] = []
-            let ipv4AddressIterator = options.getInet4Address()!
-            while ipv4AddressIterator.hasNext() {
-                let ipv4Prefix = ipv4AddressIterator.next()!
-                ipv4Address.append(ipv4Prefix.address())
-                ipv4Mask.append(ipv4Prefix.mask())
+            let ipv4AddressIterator = options.getInet4Address()
+            while ipv4AddressIterator?.hasNext() == true {
+                if let ipv4Prefix = ipv4AddressIterator?.next() {
+                    ipv4Address.append(ipv4Prefix.address())
+                    ipv4Mask.append(ipv4Prefix.mask())
+                }
             }
             let ipv4Settings = NEIPv4Settings(addresses: ipv4Address, subnetMasks: ipv4Mask)
             var ipv4Routes: [NEIPv4Route] = []
             var ipv4ExcludeRoutes: [NEIPv4Route] = []
 
-            let inet4RouteAddressIterator = options.getInet4RouteAddress()!
-            if inet4RouteAddressIterator.hasNext() {
-                while inet4RouteAddressIterator.hasNext() {
-                    let ipv4RoutePrefix = inet4RouteAddressIterator.next()!
-                    ipv4Routes.append(NEIPv4Route(destinationAddress: ipv4RoutePrefix.address(), subnetMask: ipv4RoutePrefix.mask()))
+            let inet4RouteAddressIterator = options.getInet4RouteAddress()
+            if inet4RouteAddressIterator?.hasNext() == true {
+                while inet4RouteAddressIterator?.hasNext() == true {
+                    if let ipv4RoutePrefix = inet4RouteAddressIterator?.next() {
+                        ipv4Routes.append(NEIPv4Route(destinationAddress: ipv4RoutePrefix.address(), subnetMask: ipv4RoutePrefix.mask()))
+                    }
                 }
             } else if autoRouteUseSubRangesByDefault {
                 ipv4Routes.append(NEIPv4Route(destinationAddress: "1.0.0.0", subnetMask: "255.0.0.0"))
@@ -83,10 +85,11 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
                 ipv4Routes.append(NEIPv4Route.default())
             }
 
-            let inet4RouteExcludeAddressIterator = options.getInet4RouteExcludeAddress()!
-            while inet4RouteExcludeAddressIterator.hasNext() {
-                let ipv4RoutePrefix = inet4RouteExcludeAddressIterator.next()!
-                ipv4ExcludeRoutes.append(NEIPv4Route(destinationAddress: ipv4RoutePrefix.address(), subnetMask: ipv4RoutePrefix.mask()))
+            let inet4RouteExcludeAddressIterator = options.getInet4RouteExcludeAddress()
+            while inet4RouteExcludeAddressIterator?.hasNext() == true {
+                if let ipv4RoutePrefix = inet4RouteExcludeAddressIterator?.next() {
+                    ipv4ExcludeRoutes.append(NEIPv4Route(destinationAddress: ipv4RoutePrefix.address(), subnetMask: ipv4RoutePrefix.mask()))
+                }
             }
             if excludeDefaultRoute, !ipv4Routes.isEmpty {
                 if !ipv4ExcludeRoutes.contains(where: { it in
@@ -108,21 +111,23 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
 
             var ipv6Address: [String] = []
             var ipv6Prefixes: [NSNumber] = []
-            let ipv6AddressIterator = options.getInet6Address()!
-            while ipv6AddressIterator.hasNext() {
-                let ipv6Prefix = ipv6AddressIterator.next()!
-                ipv6Address.append(ipv6Prefix.address())
-                ipv6Prefixes.append(NSNumber(value: ipv6Prefix.prefix()))
+            let ipv6AddressIterator = options.getInet6Address()
+            while ipv6AddressIterator?.hasNext() == true {
+                if let ipv6Prefix = ipv6AddressIterator?.next() {
+                    ipv6Address.append(ipv6Prefix.address())
+                    ipv6Prefixes.append(NSNumber(value: ipv6Prefix.prefix()))
+                }
             }
             let ipv6Settings = NEIPv6Settings(addresses: ipv6Address, networkPrefixLengths: ipv6Prefixes)
             var ipv6Routes: [NEIPv6Route] = []
             var ipv6ExcludeRoutes: [NEIPv6Route] = []
 
-            let inet6RouteAddressIterator = options.getInet6RouteAddress()!
-            if inet6RouteAddressIterator.hasNext() {
-                while inet6RouteAddressIterator.hasNext() {
-                    let ipv6RoutePrefix = inet6RouteAddressIterator.next()!
-                    ipv6Routes.append(NEIPv6Route(destinationAddress: ipv6RoutePrefix.address(), networkPrefixLength: NSNumber(value: ipv6RoutePrefix.prefix())))
+            let inet6RouteAddressIterator = options.getInet6RouteAddress()
+            if inet6RouteAddressIterator?.hasNext() == true {
+                while inet6RouteAddressIterator?.hasNext() == true {
+                    if let ipv6RoutePrefix = inet6RouteAddressIterator?.next() {
+                        ipv6Routes.append(NEIPv6Route(destinationAddress: ipv6RoutePrefix.address(), networkPrefixLength: NSNumber(value: ipv6RoutePrefix.prefix())))
+                    }
                 }
             } else if autoRouteUseSubRangesByDefault {
                 ipv6Routes.append(NEIPv6Route(destinationAddress: "100::", networkPrefixLength: 8))
@@ -138,10 +143,11 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
                 ipv6Routes.append(NEIPv6Route.default())
             }
 
-            let inet6RouteExcludeAddressIterator = options.getInet6RouteExcludeAddress()!
-            while inet6RouteExcludeAddressIterator.hasNext() {
-                let ipv6RoutePrefix = inet6RouteExcludeAddressIterator.next()!
-                ipv6ExcludeRoutes.append(NEIPv6Route(destinationAddress: ipv6RoutePrefix.address(), networkPrefixLength: NSNumber(value: ipv6RoutePrefix.prefix())))
+            let inet6RouteExcludeAddressIterator = options.getInet6RouteExcludeAddress()
+            while inet6RouteExcludeAddressIterator?.hasNext() == true {
+                if let ipv6RoutePrefix = inet6RouteExcludeAddressIterator?.next() {
+                    ipv6ExcludeRoutes.append(NEIPv6Route(destinationAddress: ipv6RoutePrefix.address(), networkPrefixLength: NSNumber(value: ipv6RoutePrefix.prefix())))
+                }
             }
             if excludeDefaultRoute, !ipv6Routes.isEmpty {
                 if !ipv6ExcludeRoutes.contains(where: { it in
@@ -166,9 +172,10 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
             }
 
             var bypassDomains: [String] = []
-            let bypassDomainIterator = options.getHTTPProxyBypassDomain()!
-            while bypassDomainIterator.hasNext() {
-                bypassDomains.append(bypassDomainIterator.next())
+            if let bypassDomainIterator = options.getHTTPProxyBypassDomain() {
+                while bypassDomainIterator.hasNext() {
+                    bypassDomains.append(bypassDomainIterator.next())
+                }
             }
 
             if excludeAPNs {
@@ -185,10 +192,10 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
 
             var matchDomains: [String] = []
 
-            let matchDomainIterator = options.getHTTPProxyMatchDomain()!
-
-            while matchDomainIterator.hasNext() {
-                matchDomains.append(matchDomainIterator.next())
+            if let matchDomainIterator = options.getHTTPProxyMatchDomain() {
+                while matchDomainIterator.hasNext() {
+                    matchDomains.append(matchDomainIterator.next())
+                }
             }
 
             if !matchDomains.isEmpty {

@@ -3,12 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/apple/env.sh"
+source "${SCRIPT_DIR}/apple/build_config.sh"
+source "${SCRIPT_DIR}/apple/core_xcframework.sh"
 cd "${PROJECT_ROOT}"
 
 BUILD_MODE="${BUILD_MODE:-debug}"
-TARGET="${FLUTTER_TARGET:-lib/main.dart}"
 APP_NAME="${APP_NAME:-ZEON.app}"
-APPLE_RELEASE="${APPLE_RELEASE:-app-store}"
+APPLE_RELEASE="${APPLE_RELEASE:-${APPLE_GENERAL_RELEASE}}"
 
 case "${BUILD_MODE}" in
   debug|profile|release) ;;
@@ -17,6 +18,11 @@ case "${BUILD_MODE}" in
     exit 2
     ;;
 esac
+
+TARGET="$(apple_target_for_mode "${BUILD_MODE}")"
+BUILD_ENVIRONMENT="$(apple_environment_for_mode "${BUILD_MODE}")"
+apple_validate_build_config
+apple_validate_flutter_target "${BUILD_MODE}" "${TARGET}" "macOS local build"
 
 ensure_generated_sources() {
   if [[ ! -f lib/features/log/overview/logs_overview_notifier.g.dart ||
@@ -36,6 +42,7 @@ if [[ -n "${SENTRY_DSN:-}" ]]; then
 fi
 
 echo "Building macOS ${BUILD_MODE} app..."
+apple_ensure_macos_core_xcframework
 ensure_generated_sources
 flutter build macos "${build_args[@]}"
 
@@ -46,6 +53,10 @@ if [[ ! -d "${app_path}" ]]; then
   echo "Build completed, but app was not found at: ${app_path}" >&2
   exit 1
 fi
+apple_validate_built_info_plist \
+  "${app_path}/Contents/Info.plist" \
+  "macOS local app" \
+  "${BUILD_ENVIRONMENT}"
 
 echo "macOS app built:"
 echo "${app_path}"

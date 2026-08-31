@@ -104,3 +104,10 @@ out/installers/
 /hiddify-core/tmp_*
 *.bak*
 pubspec.lock
+
+# Local Netlify folder
+.netlify
+
+# Local Codex deployment worktree and native compiler outputs
+/.codex-deploy-subscription/
+/*.obj
