@@ -707,10 +707,7 @@ class MobileConnLinkImportService with InfraLogger {
     if (direct != null) return direct.group(0);
     final parsed = Uri.tryParse(normalized);
     if (parsed != null) {
-      final segments = parsed.pathSegments
-          .map((segment) => Uri.decodeComponent(segment).trim())
-          .where((segment) => segment.isNotEmpty)
-          .toList();
+      final segments = normalizedUriPathSegments(parsed);
       final openIndex = segments.lastIndexWhere((segment) => segment.toLowerCase() == "open");
       if (openIndex != -1 && openIndex + 1 < segments.length) {
         final candidate = segments[openIndex + 1];

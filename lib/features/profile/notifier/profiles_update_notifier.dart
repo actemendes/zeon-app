@@ -101,7 +101,11 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
           .watchAll()
           .map(
             (event) => event.getOrElse((f) {
-              loggy.error("error getting profiles");
+              final stackTrace = switch (f) {
+                UnexpectedFailure(:final stackTrace) => stackTrace,
+                _ => null,
+              };
+              loggy.error("error getting profiles", f, stackTrace);
               throw f;
             }).whereType<RemoteProfileEntity>(),
           )

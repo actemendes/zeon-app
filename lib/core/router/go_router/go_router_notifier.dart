@@ -21,7 +21,9 @@ class GoRouterNotifer extends _$GoRouterNotifer {
       routingConfig: rConfig,
       refreshListenable: RefreshListenable(ref),
       errorBuilder: (context, state) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => context.goNamed('home'));
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) context.go('/home');
+        });
         return const Material();
       },
     );

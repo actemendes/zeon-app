@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:loggy/loggy.dart' as loggy;
@@ -43,6 +44,7 @@ class ErrorReportController {
     required ActiveProfileReader activeProfileReader,
     required ConfigOptionsSnapshotReader configOptionsSnapshotReader,
     required String locale,
+    ErrorReportDeduplicator? deduplicator,
   }) : _appInfo = appInfo,
        _preferences = preferences,
        _stableDeviceId = stableDeviceId,
@@ -52,7 +54,8 @@ class ErrorReportController {
        _coreService = coreService,
        _activeProfileReader = activeProfileReader,
        _configOptionsSnapshotReader = configOptionsSnapshotReader,
-       _locale = locale;
+       _locale = locale,
+       _deduplicator = deduplicator ?? ErrorReportDeduplicator();
 
   static const _enabled = bool.fromEnvironment('client_error_reporting_enabled', defaultValue: true);
   static const _platformChannel = MethodChannel('com.zeon.app/platform');
@@ -68,6 +71,7 @@ class ErrorReportController {
   final ZeonCoreService _coreService;
   final ActiveProfileReader _activeProfileReader;
   final ConfigOptionsSnapshotReader _configOptionsSnapshotReader;
+  final ErrorReportDeduplicator _deduplicator;
   String _locale;
   final ErrorReportRedactor _redactor = const ErrorReportRedactor();
 
@@ -149,6 +153,8 @@ class ErrorReportController {
       context: context,
     );
     if (!_isGenerationActive(generation)) return;
+    final fingerprint = report['fingerprint']?.toString();
+    if (fingerprint != null && !_deduplicator.shouldCapture(fingerprint, DateTime.now().toUtc())) return;
     await _queue.enqueue(report);
     if (!_isGenerationActive(generation)) return;
     await _flush(generation);
@@ -275,16 +281,16 @@ class ErrorReportController {
     final activeProfile = await _tryReadActiveProfile();
     final runtimeNetwork = await _readRuntimeNetworkInfo();
     final userId = _readUserId();
-    final login = _resolveLogin(activeProfile);
     final configOptions = _safeConfigSnapshot();
     final safeMessage = _redactor.redactText(message ?? error.toString());
     final safeStack = stackTrace == null ? null : _redactor.redactText(stackTrace.toString(), maxLength: 20000);
     final fingerprint = _fingerprint([
       trigger,
       error.runtimeType.toString(),
-      _normalizeFingerprintText(safeMessage),
-      _normalizeFingerprintText(_firstStackLine(safeStack)),
+      normalizeErrorFingerprintText(safeMessage),
+      normalizeErrorFingerprintText(_firstStackLine(safeStack)),
     ]);
+    final safeDeviceId = await pseudonymousDeviceId(await _stableDeviceId.getOrCreate());
 
     final report = <String, dynamic>{
       'schema_version': 1,
@@ -301,12 +307,11 @@ class ErrorReportController {
         'release': _appInfo.release.name,
       },
       'device': {
-        'device_id': await _stableDeviceId.getOrCreate(),
+        'device_id': safeDeviceId,
         'platform': _platformName(),
         'os_version': PlatformUtils.operatingSystemVersion,
         'locale': _locale,
         if (userId != null) 'user_id': userId,
-        if (login != null && login.isNotEmpty) 'login': _redactor.redactText(login, maxLength: 300),
       },
       'vpn': {
         'core_status': _formatCoreStatus(_coreService.currentState),
@@ -325,10 +330,10 @@ class ErrorReportController {
       'logs': await _logs(),
       if (context != null && context.isNotEmpty) 'context': _redactor.redactJson(context),
     };
-    return _preserveAppMetadata(_redactor.redactMap(report));
+    return _preserveReportMetadata(_redactor.redactMap(report), deviceId: safeDeviceId);
   }
 
-  Map<String, dynamic> _preserveAppMetadata(Map<String, dynamic> report) {
+  Map<String, dynamic> _preserveReportMetadata(Map<String, dynamic> report, {required String deviceId}) {
     final app = Map<String, dynamic>.from((report['app'] as Map?) ?? const <String, dynamic>{});
     app['name'] = _appInfo.name;
     app['version'] = _appInfo.version;
@@ -336,6 +341,9 @@ class ErrorReportController {
     app['environment'] = _appInfo.environment.name;
     app['release'] = _appInfo.release.name;
     report['app'] = app;
+    final device = Map<String, dynamic>.from((report['device'] as Map?) ?? const <String, dynamic>{});
+    device['device_id'] = deviceId;
+    report['device'] = device;
     return report;
   }
 
@@ -354,22 +362,13 @@ class ErrorReportController {
     return legacy != null && legacy > 0 ? legacy : null;
   }
 
-  String? _resolveLogin(ProfileEntity? profile) {
-    final name = profile?.name.trim();
-    if (name == null || name.isEmpty) return null;
-    return name;
-  }
-
   Map<String, dynamic> _profileSummary(ProfileEntity profile) {
     return switch (profile) {
-      RemoteProfileEntity(:final id, :final name, :final url, :final subInfo) => {
-        'id': id,
+      RemoteProfileEntity(:final subInfo) => {
         'type': 'remote',
-        'name': name,
-        'url_host': Uri.tryParse(url)?.host,
         if (subInfo != null) 'expires_at': subInfo.expire.toUtc().toIso8601String(),
       },
-      LocalProfileEntity(:final id, :final name) => {'id': id, 'type': 'local', 'name': name},
+      LocalProfileEntity() => {'type': 'local'},
     };
   }
 
@@ -492,18 +491,6 @@ class ErrorReportController {
     return stackTrace.split('\n').firstOrNull;
   }
 
-  String? _normalizeFingerprintText(String? value) {
-    if (value == null || value.isEmpty) return value;
-    var normalized = value;
-    normalized = normalized.replaceAll(
-      RegExp(r'address = <redacted>, port = \d+'),
-      'address = <redacted>, port = <port>',
-    );
-    normalized = normalized.replaceAll(RegExp(r'address = [^,\)]+, port = \d+'), 'address = <address>, port = <port>');
-    normalized = normalized.replaceAll(RegExp(r'port = \d+'), 'port = <port>');
-    return normalized;
-  }
-
   String _fingerprint(List<Object?> parts) {
     final input = parts.whereType<Object>().join('|');
     var hash = 0xcbf29ce484222325;
@@ -512,6 +499,56 @@ class ErrorReportController {
       hash = (hash * 0x100000001b3) & 0x1fffffffffffff;
     }
     return hash.toRadixString(16);
+  }
+}
+
+@visibleForTesting
+String? normalizeErrorFingerprintText(String? value) {
+  if (value == null || value.isEmpty) return value;
+  var normalized = value.toLowerCase();
+  normalized = normalized.replaceAll(
+    RegExp(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b'),
+    '<uuid>',
+  );
+  normalized = normalized.replaceAll(RegExp(r'\b0x[0-9a-f]+\b'), '<hex>');
+  normalized = normalized.replaceAllMapped(RegExp(r'\b(?:pid|generation|monotonic_ms|sequence_number)=\d+\b'), (match) {
+    final key = match.group(0)!.split('=').first;
+    return '$key=<number>';
+  });
+  normalized = normalized.replaceAll(
+    RegExp(r'address = <redacted>, port = \d+'),
+    'address = <redacted>, port = <port>',
+  );
+  normalized = normalized.replaceAll(RegExp(r'address = [^,\)]+, port = \d+'), 'address = <address>, port = <port>');
+  normalized = normalized.replaceAll(RegExp(r'\bport = \d+\b'), 'port = <port>');
+  normalized = normalized.replaceAll(RegExp(r'\b\d{4}-\d{2}-\d{2}t\d{2}:\d{2}:\d{2}(?:\.\d+)?z\b'), '<timestamp>');
+  return normalized.trim();
+}
+
+@visibleForTesting
+Future<String> pseudonymousDeviceId(String rawDeviceId) async {
+  final digest = await Sha256().hash(utf8.encode(rawDeviceId.trim()));
+  return 'sha256:${digest.bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join()}';
+}
+
+@visibleForTesting
+class ErrorReportDeduplicator {
+  ErrorReportDeduplicator({this.window = const Duration(minutes: 10), this.maxFingerprints = 256});
+
+  final Duration window;
+  final int maxFingerprints;
+  final Map<String, DateTime> _lastCapturedAt = {};
+
+  bool shouldCapture(String fingerprint, DateTime now) {
+    final cutoff = now.toUtc().subtract(window);
+    _lastCapturedAt.removeWhere((_, capturedAt) => capturedAt.isBefore(cutoff));
+    final previous = _lastCapturedAt[fingerprint];
+    if (previous != null && now.toUtc().difference(previous) < window) return false;
+    _lastCapturedAt[fingerprint] = now.toUtc();
+    while (_lastCapturedAt.length > maxFingerprints) {
+      _lastCapturedAt.remove(_lastCapturedAt.keys.first);
+    }
+    return true;
   }
 }
 

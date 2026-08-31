@@ -7,6 +7,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/haptic/haptic_service.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/failures.dart';
@@ -17,6 +18,7 @@ import 'package:zeon/features/connection/data/connection_repository.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/diagnostics/data/diagnostics_providers.dart';
+import 'package:zeon/features/diagnostics/data/error_report_controller.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
 import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
 import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
@@ -77,13 +79,25 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
   @override
   Stream<ConnectionStatus> build() async* {
+    // Keep stable handles before the first asynchronous gap. Reading `ref`
+    // from the status loop can race a Riverpod dependency invalidation and
+    // trigger "Cannot use ref functions after the dependency changed".
+    final connectionRepo = ref.read(connectionRepositoryProvider);
+    final startedByUserNotifier = ref.read(Preferences.startedByUser.notifier);
+    final snapshotSource = ref.read(vpnSessionSnapshotSourceProvider);
+    // Diagnostics depend on bootstrap metadata that may still be loading.
+    // VPN ownership must never fail merely because reporting is not ready.
+    final ErrorReportController? errorReportController = ref.read(appInfoProvider).hasValue
+        ? ref.read(errorReportControllerProvider)
+        : null;
+
     _appLifecycleListener ??= AppLifecycleListener(onResume: () => unawaited(_resyncFromPlatform("app_resume")));
     ref.onDispose(() {
       _appLifecycleListener?.dispose();
       _appLifecycleListener = null;
     });
     if (!kIsWeb && Platform.isIOS) {
-      await _connectionRepo.setup().mapLeft((l) {
+      await connectionRepo.setup().mapLeft((l) {
         loggy.error("error setting up connection repository", l);
       }).run();
       unawaited(_prepareSystemVpnForActiveProfile());
@@ -128,8 +142,10 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       yield const Disconnected();
       return;
     }
-    await for (final event in _connectionRepo.watchConnectionStatus()) {
-      if (!_acceptPlatformStatus(event)) {
+    await for (final event in connectionRepo.watchConnectionStatus()) {
+      final startedByUser = startedByUserNotifier.latestRequestedValue;
+      final nativeSnapshot = snapshotSource.current;
+      if (!_acceptPlatformStatus(event, nativeSnapshot: nativeSnapshot, startedByUser: startedByUser)) {
         loggy.info(
           "event=stale_ui_status_ignored status=${event.runtimeType} "
           "intent=$_connectionIntentEpoch desired_running=$_desiredRunning",
@@ -152,7 +168,6 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
       final previousStatus = _lastObservedConnectionStatus;
       final wasUpBefore = _connectionWasUp;
-      final startedByUser = ref.read(Preferences.startedByUser);
 
       if (event case Connected()) {
         _connectionWasUp = true;
@@ -160,24 +175,22 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         // A platform-owned notification/tile Stop clears the shared intent
         // before publishing DISCONNECTED, so it is not an unexpected outage.
         final expectedRunning = startedByUser;
-        final nativeSnapshot = ref.read(vpnSessionSnapshotSourceProvider).current;
-        if (_shouldCaptureUnexpectedDisconnect(
-          event,
-          wasUpBefore: wasUpBefore,
-          expectedRunning: expectedRunning,
-          nativeSnapshot: nativeSnapshot,
-        )) {
+        if (errorReportController != null &&
+            _shouldCaptureUnexpectedDisconnect(
+              event,
+              wasUpBefore: wasUpBefore,
+              expectedRunning: expectedRunning,
+              nativeSnapshot: nativeSnapshot,
+            )) {
           try {
             unawaited(
-              ref
-                  .read(errorReportControllerProvider)
-                  .captureUnexpectedVpnDisconnect(
-                    previousStatus: previousStatus,
-                    disconnected: event,
-                    lastUserAction: _lastUserAction,
-                    lastUserActionAt: _lastUserActionAt,
-                    startedByUser: expectedRunning,
-                  ),
+              errorReportController.captureUnexpectedVpnDisconnect(
+                previousStatus: previousStatus,
+                disconnected: event,
+                lastUserAction: _lastUserAction,
+                lastUserActionAt: _lastUserActionAt,
+                startedByUser: expectedRunning,
+              ),
             );
           } catch (error, stackTrace) {
             loggy.warning("failed to capture unexpected VPN disconnect", error, stackTrace);
@@ -196,14 +209,14 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       }
 
       if (event case Disconnected(connectionFailure: final _?) when PlatformUtils.isDesktop) {
-        ref.read(Preferences.startedByUser.notifier).update(false);
+        startedByUserNotifier.update(false);
       }
       if (PlatformUtils.isIOS) {
         switch (event) {
           case Connected():
-            ref.read(Preferences.startedByUser.notifier).update(true);
+            startedByUserNotifier.update(true);
           case Disconnected():
-            ref.read(Preferences.startedByUser.notifier).update(false);
+            startedByUserNotifier.update(false);
           default:
             break;
         }
@@ -217,7 +230,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }
   }
 
-  bool _acceptPlatformStatus(ConnectionStatus status) {
+  bool _acceptPlatformStatus(
+    ConnectionStatus status, {
+    required VpnSessionSnapshot? nativeSnapshot,
+    required bool startedByUser,
+  }) {
     // Once Stop is the newest intent, callbacks from an older connect/restart
     // must not revive the UI. Core generations perform the primary filtering;
     // this is the final UI-side guard for already queued stream callbacks.
@@ -227,7 +244,6 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     if (status is Disconnecting && _timedOutDisconnectingIntentEpoch == _connectionIntentEpoch) {
       return false;
     }
-    final nativeSnapshot = ref.read(vpnSessionSnapshotSourceProvider).current;
     if (shouldIgnoreTransientStopDuringStart(
       desiredRunning: _desiredRunning,
       status: status,
@@ -238,7 +254,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     if (_desiredRunning == false && (status is Connecting || status is Connected)) {
       // A platform-owned tile/shortcut start is authoritative and updates the
       // shared Riverpod intent before publishing its proven Connected snapshot.
-      if (status is Connected && ref.read(Preferences.startedByUser)) {
+      if (status is Connected && startedByUser) {
         _beginConnectionIntent(running: true);
         return true;
       }
@@ -254,6 +270,8 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   }) async {
     if (_useMockConnectionFlow) return null;
     final requestedAtIntent = intentEpoch ?? _connectionIntentEpoch;
+    final startedByUserNotifier = ref.read(Preferences.startedByUser.notifier);
+    final snapshotSource = ref.read(vpnSessionSnapshotSourceProvider);
     try {
       final authoritative = await _connectionRepo
           .resyncConnectionStatus(source)
@@ -267,7 +285,13 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         return authoritative;
       }
       if (shouldApply != null && !shouldApply(authoritative)) return authoritative;
-      if (!_acceptPlatformStatus(authoritative)) return authoritative;
+      if (!_acceptPlatformStatus(
+        authoritative,
+        nativeSnapshot: snapshotSource.current,
+        startedByUser: startedByUserNotifier.latestRequestedValue,
+      )) {
+        return authoritative;
+      }
       final current = state.asData?.value;
       if (current != authoritative) {
         loggy.info("event=vpn_ui_resync source=$source from=${current?.runtimeType} to=${authoritative.runtimeType}");

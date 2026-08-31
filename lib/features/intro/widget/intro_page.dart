@@ -407,10 +407,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
           return codeParam;
         }
 
-        final segments = parsed.pathSegments
-            .map((segment) => Uri.decodeComponent(segment).trim())
-            .where((segment) => segment.isNotEmpty)
-            .toList();
+        final segments = normalizedUriPathSegments(parsed);
         if (segments.isNotEmpty) {
           final openIndex = segments.lastIndexWhere((segment) => segment.toLowerCase() == 'open');
           if (openIndex != -1 && openIndex + 1 < segments.length) {

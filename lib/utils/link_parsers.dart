@@ -4,6 +4,17 @@ import 'package:zeon/utils/validators.dart';
 
 typedef ProfileLink = ({String url, String name});
 
+/// [Uri.pathSegments] are already percent-decoded by Dart. Decoding them a
+/// second time breaks valid values such as `%25` and can throw for malformed
+/// user input. This helper also keeps malformed links out of widget builds.
+List<String> normalizedUriPathSegments(Uri uri) {
+  try {
+    return uri.pathSegments.map((segment) => segment.trim()).where((segment) => segment.isNotEmpty).toList();
+  } on FormatException {
+    return const [];
+  }
+}
+
 // TODO: test and improve
 abstract class LinkParser {
   static const _mobileApiBaseUrl = String.fromEnvironment(

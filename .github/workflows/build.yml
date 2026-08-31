@@ -230,6 +230,9 @@ jobs:
         run: |
             [IO.File]::WriteAllBytes("windows\sign.pfx", [Convert]::FromBase64String("${{ secrets.WINDOWS_SIGNING_KEY }}"))
             (Get-Content "windows\packaging\msix\make_config.yaml") -replace '^certificate_password:.*$', 'certificate_password: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}' | Set-Content "windows\packaging\msix\make_config.yaml"
+            "ZEON_WINDOWS_SIGNING_PFX=$((Resolve-Path 'windows\sign.pfx').Path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "ZEON_WINDOWS_SIGNING_PASSWORD=${{ secrets.WINDOWS_SIGNING_PASSWORD }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "ZEON_MSIX_CERTIFICATE_PASSWORD=${{ secrets.WINDOWS_SIGNING_PASSWORD }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         
       # - name: Temporary disable Permission Handler for windows due to its issue in permission
       #   if: ${{ startsWith(matrix.platform,'windows') }}
@@ -252,18 +255,6 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           make ${{ matrix.platform }}-release
-
-      - name: Code Sign
-        if: ${{ inputs.upload-artifact && startsWith(matrix.platform,'windows') }}
-        uses: zeon/signtool-code-sign-sha256@main
-        with:
-          certificate: '${{ secrets.WINDOWS_SIGNING_KEY }}'
-          cert-password: '${{ secrets.WINDOWS_SIGNING_PASSWORD }}'
-          cert-sha1: '${{ secrets.WINDOWS_SIGNING_SHA1 }}'
-          folder: 'dist'
-          timestamp-server: 'http://timestamp.digicert.com'
-          recursive: true
-          description: 'ZEON'
 
       - name: Copy to out Windows
         if: matrix.platform == 'windows'

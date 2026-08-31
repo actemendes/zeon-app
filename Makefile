@@ -303,29 +303,21 @@ android-aab-release:
 	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) \
 	  --build-dart-define=release=google-play
 
-windows-release: windows-zip-release windows-exe-release windows-msix-release
+windows-release:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package_windows_installers.ps1 \
+	  -Target all \
+	  -NoIsolatedWorkspace \
+	  -SkipClean \
+	  -BuildTarget $(TARGET) \
+	  -SentryDsn "$(SENTRY_DSN)"
 
 windows-zip-release:
-	fastforge package \
-	  --platform windows \
-	  --targets zip \
-	  --skip-clean \
-	  --build-target=$(TARGET) \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) \
-	  --build-dart-define=portable=true
-	@FULL_PATH=$$(ls dist/*/*.zip | head -n 1); \
-	ZIP_DIR=$$(dirname "$$FULL_PATH"); \
-	ZIP_FILE=$$(basename "$$FULL_PATH"); \
-	FILE_NAME=$${ZIP_FILE%.*}; \
-	$(YELLOW)Post-processing Windows portable$(DONE); \
-	cd "$$ZIP_DIR"; \
-	$(BLUE)Extracting and Repacking...$(DONE); \
-	mkdir -p ZEON; \
-	unzip -q "$$ZIP_FILE" -d ZEON/; \
-	rm "$$ZIP_FILE"; \
-	tar -a -cf "$$FILE_NAME.zip" ZEON; \
-	rm -rf ZEON; \
-	$(GREEN)Successful$(DONE)
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package_windows_installers.ps1 \
+	  -Target zip \
+	  -NoIsolatedWorkspace \
+	  -SkipClean \
+	  -BuildTarget $(TARGET) \
+	  -SentryDsn "$(SENTRY_DSN)"
 
 windows-exe-release:
 	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package_windows_installers.ps1 \
@@ -336,12 +328,12 @@ windows-exe-release:
 	  -SentryDsn "$(SENTRY_DSN)"
 
 windows-msix-release: sync-msix-version
-	fastforge package \
-	  --platform windows \
-	  --targets msix \
-	  --skip-clean \
-	  --build-target=$(TARGET) \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN)
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package_windows_installers.ps1 \
+	  -Target msix \
+	  -NoIsolatedWorkspace \
+	  -SkipClean \
+	  -BuildTarget $(TARGET) \
+	  -SentryDsn "$(SENTRY_DSN)"
 
 linux-release: linux-deb-release linux-appimage-release
 
