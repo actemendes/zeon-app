@@ -194,6 +194,7 @@ class _SnapshotSource implements VpnSessionSnapshotSource {
     commandEndpointReady: true,
     tunnelReady: true,
     protectSucceeded: true,
+    dataPlaneReady: true,
     platformVpnValidated: true,
     selectedOutboundId: 'server-stable-id',
   );

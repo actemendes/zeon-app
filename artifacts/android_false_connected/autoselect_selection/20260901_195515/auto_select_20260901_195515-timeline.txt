@@ -1,0 +1,172 @@
+﻿09-01 19:55:18.622 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504315840 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:18.691 15342 15612 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504315909 pid=15342 generation=1788281662514415 runtime_epoch=15342-8e457c76fb0da sequence=316 version=316 phase=CONNECTED
+09-01 19:55:18.691 15342 15612 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504315909 pid=15342 generation=1788281662514415 runtime_epoch=15342-8e457c76fb0da sequence=317 version=317 phase=VERIFYING
+09-01 19:55:18.691 15342 15612 W A/VpnSession: event=data_plane_invalidated monotonic_ms=2504315909 pid=15342 generation=1788281662514415 source=selected_outbound_changed revision=3
+09-01 19:55:18.691 15342 15612 I A/VpnSession: event=vpn_status monotonic_ms=2504315909 pid=15342 generation=1788281662514415 status=Starting source=selected_outbound_changed
+09-01 19:55:18.693 15342 15342 I flutter : 19:55:18.693309 [INFO]     [ConnectionNotifier] connection status: CONNECTED
+09-01 19:55:18.695 15342 15342 I flutter : 19:55:18.695895 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:55:18.709 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504315927 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:18.710 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504315928 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:18.785 17775 22860 I ZEON_VERIFY: run=auto_select_20260901_195515 target=matrix event=start monotonic_ms=2504316003 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:18.788 17775 22862 I ZEON_VERIFY: run=auto_select_20260901_195515 target=gstatic_204 event=dns_pass monotonic_ms=2504316007 ipv4=1 ipv6=0 latency_ms=3 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:18.789 17775 22861 I ZEON_VERIFY: run=auto_select_20260901_195515 target=zeon_204 event=dns_pass monotonic_ms=2504316007 ipv4=1 ipv6=0 latency_ms=3 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:18.794 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504316012 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:18.796 17775 22862 I ZEON_VERIFY: run=auto_select_20260901_195515 target=gstatic_204 event=tcp_pass monotonic_ms=2504316015 family=ipv4 latency_ms=8 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:18.800 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504316019 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:18.808 17775 22861 I ZEON_VERIFY: run=auto_select_20260901_195515 target=zeon_204 event=tcp_pass monotonic_ms=2504316026 family=ipv4 latency_ms=19 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:18.809 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504316028 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:18.813 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504316031 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:18.815 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504316034 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:18.822 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504316040 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.012 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504316230 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.060 17775 22862 I ZEON_VERIFY: run=auto_select_20260901_195515 target=gstatic_204 event=tls_pass monotonic_ms=2504316279 family=ipv4 protocol=TLSv1.3 latency_ms=264 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:19.063 17775 22862 I ZEON_VERIFY: run=auto_select_20260901_195515 target=gstatic_204 event=tcp_skip monotonic_ms=2504316281 family=ipv6 reason=no_address network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:19.081 15342 15416 I A/VpnSession: event=protect_result monotonic_ms=2504316300 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.132 17775 22864 I ZEON_VERIFY: run=auto_select_20260901_195515 target=apple_captive event=real_http_pass monotonic_ms=2504316350 status=200 latency_ms=345 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:19.245 17775 22861 I ZEON_VERIFY: run=auto_select_20260901_195515 target=zeon_204 event=tls_pass monotonic_ms=2504316463 family=ipv4 protocol=TLSv1.3 latency_ms=436 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:19.246 17775 22861 I ZEON_VERIFY: run=auto_select_20260901_195515 target=zeon_204 event=tcp_skip monotonic_ms=2504316464 family=ipv6 reason=no_address network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:19.256 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504316475 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.274 15342 19876 I A/VpnSession: event=data_plane_revalidation_completed monotonic_ms=2504316492 pid=15342 generation=1788281662514415 ready=true targets=zeon_204:ready,gstatic_204:ready same_network=true revision=3
+09-01 19:55:19.275 15342 19876 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504316494 pid=15342 generation=1788281662514415 runtime_epoch=15342-8e457c76fb0da sequence=318 version=318 phase=CONNECTED
+09-01 19:55:19.275 15342 19876 I A/VpnSession: event=vpn_status monotonic_ms=2504316494 pid=15342 generation=1788281662514415 status=Started source=data_plane_revalidated
+09-01 19:55:19.278 15342 15342 I flutter : 19:55:19.278654 [INFO]     [ConnectionNotifier] connection status: CONNECTED
+09-01 19:55:19.306 15342 15342 I flutter : 19:55:19.306433 [INFO]     [ConnectionNotifier] connection status: CONNECTED
+09-01 19:55:19.376 17775 22862 I ZEON_VERIFY: run=auto_select_20260901_195515 target=gstatic_204 event=http_pass monotonic_ms=2504316595 status=204 latency_ms=314 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:19.397 15342 15603 I A/VpnSession: event=protect_result monotonic_ms=2504316615 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.397 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504316616 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.398 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504316616 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.398 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504316617 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.399 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504316617 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.399 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504316617 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.399 15342 15362 I A/VpnSession: event=protect_result monotonic_ms=2504316618 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.399 15342 15603 I A/VpnSession: event=protect_result monotonic_ms=2504316618 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.416 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504316634 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.435 17775 22863 I ZEON_VERIFY: run=auto_select_20260901_195515 target=cloudflare_speed event=real_http_pass monotonic_ms=2504316653 status=200 latency_ms=648 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:19.528 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504316746 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.665 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504316883 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.687 15342 19876 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504316905 pid=15342 generation=1788281662514415 runtime_epoch=15342-8e457c76fb0da sequence=319 version=319 phase=CONNECTED
+09-01 19:55:19.687 15342 19876 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504316905 pid=15342 generation=1788281662514415 runtime_epoch=15342-8e457c76fb0da sequence=320 version=320 phase=VERIFYING
+09-01 19:55:19.687 15342 19876 W A/VpnSession: event=data_plane_invalidated monotonic_ms=2504316906 pid=15342 generation=1788281662514415 source=selected_outbound_changed revision=3
+09-01 19:55:19.687 15342 19876 I A/VpnSession: event=vpn_status monotonic_ms=2504316906 pid=15342 generation=1788281662514415 status=Starting source=selected_outbound_changed
+09-01 19:55:19.689 15342 15342 I flutter : 19:55:19.689169 [INFO]     [ConnectionNotifier] connection status: CONNECTED
+09-01 19:55:19.691 15342 15342 I flutter : 19:55:19.691250 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:55:19.704 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504316922 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.711 15342 15416 I A/VpnSession: event=protect_result monotonic_ms=2504316929 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:19.826 17775 22861 I ZEON_VERIFY: run=auto_select_20260901_195515 target=zeon_204 event=http_pass monotonic_ms=2504317045 status=204 latency_ms=580 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:19.827 17775 22860 I ZEON_VERIFY: run=auto_select_20260901_195515 target=matrix event=complete monotonic_ms=2504317045 network_handle=2279738363917 active_handle=2279738363917 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:55:20.322 15342 15611 I A/VpnSession: event=data_plane_revalidation_completed monotonic_ms=2504317540 pid=15342 generation=1788281662514415 ready=true targets=zeon_204:ready,gstatic_204:ready same_network=true revision=3
+09-01 19:55:20.324 15342 15611 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504317542 pid=15342 generation=1788281662514415 runtime_epoch=15342-8e457c76fb0da sequence=321 version=321 phase=CONNECTED
+09-01 19:55:20.324 15342 15611 I A/VpnSession: event=vpn_status monotonic_ms=2504317542 pid=15342 generation=1788281662514415 status=Started source=data_plane_revalidated
+09-01 19:55:20.327 15342 15342 I flutter : 19:55:20.327783 [INFO]     [ConnectionNotifier] connection status: CONNECTED
+09-01 19:55:20.350 15342 15342 I flutter : 19:55:20.350567 [INFO]     [ConnectionNotifier] connection status: CONNECTED
+09-01 19:55:20.677 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504317896 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:20.699 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504317917 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:20.701 15342 15416 I A/VpnSession: event=protect_result monotonic_ms=2504317920 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:20.718 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504317936 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:20.979 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504318198 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:21.479 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504318697 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:21.627 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504318846 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.088 15342 15416 I A/VpnSession: event=protect_result monotonic_ms=2504319306 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.092 15342 15603 I A/VpnSession: event=protect_result monotonic_ms=2504319310 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.099 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504319318 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.100 15342 15667 I A/VpnSession: event=protect_result monotonic_ms=2504319318 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.101 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504319319 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.102 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504319320 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.218 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504319436 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.672 15342 15666 I A/VpnSession: event=protect_result monotonic_ms=2504319890 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.672 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504319891 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.674 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504319892 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.677 15342 15603 I A/VpnSession: event=protect_result monotonic_ms=2504319895 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.680 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504319899 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.680 15342 15603 I A/VpnSession: event=protect_result monotonic_ms=2504319899 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:22.682 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504319900 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:25.033 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504322251 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:26.994 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504324212 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:27.570 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504324788 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:27.570 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504324788 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:27.572 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504324790 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:27.578 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504324796 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:27.579 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504324797 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:27.712 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504324931 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:28.201 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504325419 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:28.203 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504325421 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:29.112 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504326330 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:29.113 15342 15667 I A/VpnSession: event=protect_result monotonic_ms=2504326332 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:29.124 15342 15603 I A/VpnSession: event=protect_result monotonic_ms=2504326342 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:29.126 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504326344 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:29.417 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504326635 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:29.824 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504327043 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:30.260 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504327479 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:30.279 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504327498 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:30.281 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504327499 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:30.283 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504327501 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:35.247 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504332465 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:35.277 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504332496 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:35.278 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504332497 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:35.505 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504332724 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:35.518 15342 15603 I A/VpnSession: event=protect_result monotonic_ms=2504332736 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:36.543 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504333761 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:37.173 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504334391 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:37.226 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504334444 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:39.417 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504336635 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:40.279 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504337498 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:40.283 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504337501 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:40.285 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504337504 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:40.863 15342 15667 I A/VpnSession: event=protect_result monotonic_ms=2504338081 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:41.585 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504338804 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:42.048 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504339266 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:44.976 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504342194 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.324 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504342543 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.324 15342 15667 I A/VpnSession: event=protect_result monotonic_ms=2504342543 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.325 15342 15666 I A/VpnSession: event=protect_result monotonic_ms=2504342543 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.325 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504342543 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.325 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504342543 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.325 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504342544 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.325 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504342544 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.326 15342 15666 I A/VpnSession: event=protect_result monotonic_ms=2504342544 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.713 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504342932 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.714 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504342932 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.718 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504342936 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.719 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504342938 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.720 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504342939 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.721 15342 15667 I A/VpnSession: event=protect_result monotonic_ms=2504342939 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.725 15342 15667 I A/VpnSession: event=protect_result monotonic_ms=2504342944 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:45.725 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504342944 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:46.891 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504344109 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.021 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504346239 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.025 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504346244 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.029 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504346247 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.031 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504346250 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.032 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504346251 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.033 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504346252 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.034 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504346252 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.418 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504346636 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.498 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504346716 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.499 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504346717 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.500 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504346718 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.503 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504346721 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.504 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504346723 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.519 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504346738 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.520 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504346738 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:49.531 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504346749 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:50.092 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504347310 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:50.092 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504347310 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:50.092 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504347311 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:50.093 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504347311 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:50.093 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504347311 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:50.094 15342 15416 I A/VpnSession: event=protect_result monotonic_ms=2504347312 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:50.138 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504347356 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:51.490 15342 15416 I A/VpnSession: event=protect_result monotonic_ms=2504348709 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:51.494 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504348713 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:51.495 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504348714 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:51.496 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504348715 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:51.497 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504348715 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:51.930 15342 15667 I A/VpnSession: event=protect_result monotonic_ms=2504349148 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:53.001 15342 15667 I A/VpnSession: event=protect_result monotonic_ms=2504350220 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:53.257 15342 15666 I A/VpnSession: event=protect_result monotonic_ms=2504350475 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:53.259 15342 15416 I A/VpnSession: event=protect_result monotonic_ms=2504350478 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:53.261 15342 15416 I A/VpnSession: event=protect_result monotonic_ms=2504350479 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:54.282 15342 15666 I A/VpnSession: event=protect_result monotonic_ms=2504351500 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:54.282 15342 15416 I A/VpnSession: event=protect_result monotonic_ms=2504351500 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:54.284 15342 15666 I A/VpnSession: event=protect_result monotonic_ms=2504351502 pid=15342 generation=1788281662514415 source=core_socket success=true
+09-01 19:55:54.284 15342 15416 I A/VpnSession: event=protect_result monotonic_ms=2504351502 pid=15342 generation=1788281662514415 source=core_socket success=true

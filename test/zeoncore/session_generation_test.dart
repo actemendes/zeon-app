@@ -1666,6 +1666,7 @@ VpnSessionSnapshot _platformSnapshot({
   commandEndpointReady: ready,
   tunnelReady: ready,
   protectSucceeded: ready,
+  dataPlaneReady: ready,
   platformVpnValidated: ready,
   selectedOutboundId: ready ? 'opaque-outbound' : '',
 );

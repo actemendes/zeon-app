@@ -1,0 +1,31 @@
+﻿lo               UNKNOWN        127.0.0.1/8 ::1/128 
+bond0            DOWN           
+dummy0           UNKNOWN        fe80::f874:beff:fec5:b1ff/64 
+ip_vti0@NONE     DOWN           
+ip6_vti0@NONE    DOWN           
+sit0@NONE        DOWN           
+ip6tnl0@NONE     DOWN           
+rmnet_ipa0       UNKNOWN        
+rmnet_data0@rmnet_ipa0 UNKNOWN        fe80::974c:5186:e596:5ffd/64 
+rmnet_data1@rmnet_ipa0 DOWN           
+rmnet_data2@rmnet_ipa0 DOWN           
+rmnet_data3@rmnet_ipa0 DOWN           
+rmnet_data4@rmnet_ipa0 DOWN           
+rmnet_data5@rmnet_ipa0 DOWN           
+rmnet_data6@rmnet_ipa0 DOWN           
+rmnet_data7@rmnet_ipa0 DOWN           
+rmnet_data8@rmnet_ipa0 DOWN           
+rmnet_data9@rmnet_ipa0 DOWN           
+rmnet_data10@rmnet_ipa0 DOWN           
+r_rmnet_data0@rmnet_ipa0 UNKNOWN        fe80::d052:477a:62e2:903/64 
+r_rmnet_data1@rmnet_ipa0 DOWN           
+r_rmnet_data2@rmnet_ipa0 DOWN           
+r_rmnet_data3@rmnet_ipa0 DOWN           
+r_rmnet_data4@rmnet_ipa0 DOWN           
+r_rmnet_data5@rmnet_ipa0 DOWN           
+r_rmnet_data6@rmnet_ipa0 DOWN           
+r_rmnet_data7@rmnet_ipa0 DOWN           
+r_rmnet_data8@rmnet_ipa0 DOWN           
+wlan0            UP             192.168.3.139/24 fe80::1c12:dff:fe31:21b6/64 
+p2p0             DOWN           
+tun0             UNKNOWN        172.19.0.1/28 fe80::f713:7b54:6c1c:c536/64 

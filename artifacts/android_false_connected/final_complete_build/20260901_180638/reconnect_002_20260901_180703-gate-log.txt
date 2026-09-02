@@ -1,0 +1,9 @@
+﻿09-01 18:07:08.374 12273 12273 I flutter : 18:07:08.374801 [INFO]     [CoreInterfaceMobile] event=vpn_snapshot_resync generation=1788275208107599 sequence=13 phase=disconnected
+09-01 18:07:08.556 12273 12273 I A/VpnSession: event=vpn_snapshot monotonic_ms=2497825774 pid=12273 generation=1788275228386027 runtime_epoch=12273-8dfbcca6e56d3 sequence=14 version=14 phase=DISCONNECTED
+09-01 18:07:08.570 12273 12273 I flutter : 18:07:08.570832 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24020 pid=12273 generation=1788275228386027 phase=disconnected requested_action=stop stop_source=replacement
+09-01 18:07:08.572 12273 12273 I flutter : 18:07:08.572770 [INFO]     [CoreInterfaceMobile] event=vpn_snapshot_resync generation=1788275228386027 sequence=14 phase=disconnected
+09-01 18:07:20.145 12273 12594 E A/VpnSession: event=data_plane_probe_completed monotonic_ms=2497837363 pid=12273 generation=1788275228386027 ready=false targets=zeon_204:dns,gstatic_204:dns selected_stable=false
+09-01 18:07:20.145 12273 12594 E A/VpnSession: event=start_gate_rejected monotonic_ms=2497837363 pid=12273 generation=1788275228386027 current_generation=1788275228386027 session_state=Stopping source=data_plane_probe reason=tun+data_plane+session_closing
+09-01 18:07:20.147 12273 12273 I A/VpnSession: event=vpn_snapshot monotonic_ms=2497837365 pid=12273 generation=1788275228386027 runtime_epoch=12273-8dfbcca6e56d3 sequence=26 version=26 phase=DISCONNECTED
+09-01 18:07:20.154 12273 12273 I flutter : 18:07:20.154522 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=35604 pid=12273 generation=1788275228386027 phase=disconnected requested_action=stop stop_source=flutter
+09-01 18:07:20.290 12273 12273 I flutter : 18:07:20.290498 [INFO]     [CoreInterfaceMobile] event=vpn_snapshot_resync generation=1788275228386027 sequence=26 phase=disconnected

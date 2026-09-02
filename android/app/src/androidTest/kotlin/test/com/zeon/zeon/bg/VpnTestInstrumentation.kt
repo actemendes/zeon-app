@@ -185,11 +185,32 @@ class VpnTestInstrumentation : Instrumentation() {
             TestCase(activeSessionTests.javaClass.name, "teardownOrderIsStableAndCloseIsIdempotent") {
                 activeSessionTests.teardownOrderIsStableAndCloseIsIdempotent()
             },
+            TestCase(activeSessionTests.javaClass.name, "dataPlaneRevalidationIsRevisionedAndSingleFlight") {
+                activeSessionTests.dataPlaneRevalidationIsRevisionedAndSingleFlight()
+            },
+            TestCase(activeSessionTests.javaClass.name, "selectedOutboundRevalidationStartsWithoutPublishedInvalidation") {
+                activeSessionTests.selectedOutboundRevalidationStartsWithoutPublishedInvalidation()
+            },
             TestCase(snapshotTests.javaClass.name, "connectedRequiresLocalStartupEvidence") {
                 snapshotTests.connectedRequiresLocalStartupEvidence()
             },
             TestCase(snapshotTests.javaClass.name, "nonConnectedPhaseCannotPassTheGate") {
                 snapshotTests.nonConnectedPhaseCannotPassTheGate()
+            },
+            TestCase(snapshotTests.javaClass.name, "selectedOutboundChangeInvalidatesConnectedProof") {
+                snapshotTests.selectedOutboundChangeInvalidatesConnectedProof()
+            },
+            TestCase(snapshotTests.javaClass.name, "healthySelectedOutboundChangeKeepsConnectedProof") {
+                snapshotTests.healthySelectedOutboundChangeKeepsConnectedProof()
+            },
+            TestCase(snapshotTests.javaClass.name, "failedSelectedOutboundProbeInvalidatesConnectedProof") {
+                snapshotTests.failedSelectedOutboundProbeInvalidatesConnectedProof()
+            },
+            TestCase(snapshotTests.javaClass.name, "supersededSelectedOutboundProbeRetriesNewestLeaf") {
+                snapshotTests.supersededSelectedOutboundProbeRetriesNewestLeaf()
+            },
+            TestCase(snapshotTests.javaClass.name, "returnedToSameLeafStillRetriesNewestSelectorRevision") {
+                snapshotTests.returnedToSameLeafStillRetriesNewestSelectorRevision()
             },
             TestCase(snapshotTests.javaClass.name, "commandEndpointReadinessCannotRegressAnOpenedTun") {
                 snapshotTests.commandEndpointReadinessCannotRegressAnOpenedTun()
@@ -261,6 +282,9 @@ class VpnTestInstrumentation : Instrumentation() {
             "commandEndpointWithoutTunCannotPublishStarted" to permissionTests::commandEndpointWithoutTunCannotPublishStarted,
             "tunWithoutMobileStartCannotPublishStarted" to permissionTests::tunWithoutMobileStartCannotPublishStarted,
             "oldGenerationCoreSuccessCannotPublishStarted" to permissionTests::oldGenerationCoreSuccessCannotPublishStarted,
+            "missingDataPlaneProofCannotPublishStarted" to permissionTests::missingDataPlaneProofCannotPublishStarted,
+            "oneRealHttpsTargetProvesDataPlane" to permissionTests::oneRealHttpsTargetProvesDataPlane,
+            "noRealHttpsTargetCannotProveDataPlane" to permissionTests::noRealHttpsTargetCannotProveDataPlane,
             "reconnectAfterPermissionFailureNeedsNoProcessRestart" to permissionTests::reconnectAfterPermissionFailureNeedsNoProcessRestart,
         ).forEach { (name, body) ->
             tests += TestCase(permissionTests.javaClass.name, name) { body() }

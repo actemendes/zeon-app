@@ -1,0 +1,11 @@
+﻿09-01 18:02:30.037  7596  7596 I flutter : 18:02:30.037831 [INFO]     [CoreInterfaceMobile] event=vpn_snapshot_resync generation=1788274929790114 sequence=251 phase=disconnected
+09-01 18:02:30.193  7596  7596 I A/VpnSession: event=vpn_snapshot monotonic_ms=2497547412 pid=7596 generation=1788274950053137 runtime_epoch=7596-8defd1ca86b6c sequence=252 version=252 phase=DISCONNECTED
+09-01 18:02:30.199  7596  7596 I flutter : 18:02:30.199190 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=528897 pid=7596 generation=1788274950053137 phase=disconnected requested_action=stop stop_source=replacement
+09-01 18:02:30.206  7596  7596 I flutter : 18:02:30.206399 [INFO]     [CoreInterfaceMobile] event=vpn_snapshot_resync generation=1788274950053137 sequence=252 phase=disconnected
+09-01 18:02:41.792  7596  9480 E A/VpnSession: event=data_plane_probe_completed monotonic_ms=2497559011 pid=7596 generation=1788274950053137 ready=false targets=zeon_204:dns,gstatic_204:dns selected_stable=false
+09-01 18:02:41.792  7596  9480 E A/VpnSession: event=start_gate_rejected monotonic_ms=2497559011 pid=7596 generation=1788274950053137 current_generation=1788274950053137 session_state=Stopping source=data_plane_probe reason=data_plane+session_closing
+09-01 18:02:41.793  7596  9480 I A/VpnSession: event=vpn_snapshot monotonic_ms=2497559011 pid=7596 generation=1788274950053137 runtime_epoch=7596-8defd1ca86b6c sequence=264 version=264 phase=FAILED
+09-01 18:02:41.797  7596  7596 I flutter : 18:02:41.797316 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=540495 pid=7596 generation=1788274950053137 phase=failed requested_action=stop stop_source=flutter
+09-01 18:02:41.800  7596  7596 I A/VpnSession: event=vpn_snapshot monotonic_ms=2497559018 pid=7596 generation=1788274950053137 runtime_epoch=7596-8defd1ca86b6c sequence=265 version=265 phase=DISCONNECTED
+09-01 18:02:41.809  7596  7596 I flutter : 18:02:41.809212 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=540507 pid=7596 generation=1788274950053137 phase=disconnected requested_action=stop stop_source=flutter
+09-01 18:02:41.952  7596  7596 I flutter : 18:02:41.951895 [INFO]     [CoreInterfaceMobile] event=vpn_snapshot_resync generation=1788274950053137 sequence=265 phase=disconnected

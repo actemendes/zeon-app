@@ -85,6 +85,10 @@ class VpnSessionSnapshot {
     this.commandEndpointReady = false,
     this.tunnelReady = false,
     this.protectSucceeded = false,
+    // Non-Android providers do not yet emit this Android-specific proof.
+    // Android always sends the field; true preserves the existing contract
+    // for other platform snapshot producers.
+    this.dataPlaneReady = true,
     this.platformVpnValidated = false,
     this.selectedOutboundId = '',
     this.selectedOutboundLabel = '',
@@ -121,6 +125,7 @@ class VpnSessionSnapshot {
       commandEndpointReady: boolean('commandEndpointReady'),
       tunnelReady: boolean('tunnelReady'),
       protectSucceeded: boolean('protectSucceeded'),
+      dataPlaneReady: map.containsKey('dataPlaneReady') ? boolean('dataPlaneReady') : true,
       platformVpnValidated: boolean('platformVpnValidated'),
       selectedOutboundId: text('selectedOutboundId'),
       selectedOutboundLabel: text('selectedOutboundLabel'),
@@ -143,6 +148,7 @@ class VpnSessionSnapshot {
   final bool commandEndpointReady;
   final bool tunnelReady;
   final bool protectSucceeded;
+  final bool dataPlaneReady;
   final bool platformVpnValidated;
   final String selectedOutboundId;
   final String selectedOutboundLabel;
@@ -182,6 +188,7 @@ class VpnSessionSnapshot {
       commandEndpointReady &&
       tunnelReady &&
       protectSucceeded &&
+      dataPlaneReady &&
       selectedOutboundId.isNotEmpty;
 
   CoreStatus toCoreStatus() => switch (phase) {
@@ -221,10 +228,17 @@ class VpnSessionSnapshotGate {
         _phaseRank(next.phase) >= _phaseRank(VpnSessionPhase.startRequested) &&
         _phaseRank(next.phase) <= _phaseRank(VpnSessionPhase.connected) &&
         next.requestedAction == 'connect';
+    final sameGenerationDataPlaneRevalidation =
+        next.generation == _generation &&
+        _current?.phase == VpnSessionPhase.connected &&
+        _current?.dataPlaneReady == true &&
+        next.phase == VpnSessionPhase.verifying &&
+        !next.dataPlaneReady;
     if (next.generation == _generation &&
         _current != null &&
         _phaseRank(next.phase) < _phaseRank(_current!.phase) &&
-        !sameGenerationConnectAfterPreparationStop) {
+        !sameGenerationConnectAfterPreparationStop &&
+        !sameGenerationDataPlaneRevalidation) {
       return VpnSnapshotDisposition.stale;
     }
     if (next.sequenceNumber == _sequence && next.snapshotVersion == _snapshotVersion) {

@@ -1,0 +1,106 @@
+﻿09-01 19:52:23.191 15342 15342 I flutter : 19:52:23.191095 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:52:23.314 15342 15342 I A/VpnSession: event=vpn_session_generation monotonic_ms=2504140532 pid=15342 generation=1788281543190415 reason=flutter_generation_update
+09-01 19:52:23.315 15342 15342 I A/VpnSession: event=vpn_session_generation monotonic_ms=2504140534 pid=15342 generation=1788281543190415 reason=prepare_vpn
+09-01 19:52:23.317 15342 15342 I A/VpnSession: event=permission_result_received monotonic_ms=2504140535 pid=15342 generation=1788281543190415 current_generation=1788281543190415 session_state=permission source=all reason=already_granted
+09-01 19:52:23.321 15342 15342 I flutter : 19:52:23.321816 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:52:23.323 15342 15342 I A/VpnSession: event=vpn_session_generation monotonic_ms=2504140541 pid=15342 generation=1788281543190415 reason=stop_service
+09-01 19:52:23.324 15342 15342 I A/VpnSession: event=vpn_status monotonic_ms=2504140542 pid=15342 generation=1788281543190415 status=Stopped source=stop_already_complete/replacement
+09-01 19:52:23.324 15342 15342 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504140542 pid=15342 generation=1788281543190415 runtime_epoch=15342-8e457c76fb0da sequence=247 version=247 phase=DISCONNECTED
+09-01 19:52:23.329 15342 15342 I flutter : 19:52:23.329344 [INFO]     [ConnectionNotifier] event=stale_ui_status_ignored status=_$DisconnectedImpl intent=37 desired_running=true
+09-01 19:52:23.331 15342 15342 I A/VpnSession: event=vpn_session_generation monotonic_ms=2504140549 pid=15342 generation=1788281543190415 reason=main_activity_start
+09-01 19:52:23.332 15342 15342 I A/VpnSession: event=permission_result_received monotonic_ms=2504140550 pid=15342 generation=1788281543190415 current_generation=1788281543190415 session_state=permission source=all reason=already_granted
+09-01 19:52:23.332 15342 15342 I A/VpnSession: event=vpn_session_generation monotonic_ms=2504140550 pid=15342 generation=1788281543190415 reason=main_activity_start_service
+09-01 19:52:23.342 15342 15342 I A/VpnSession: event=vpn_session_generation monotonic_ms=2504140560 pid=15342 generation=1788281543190415 reason=service_start_command
+09-01 19:52:23.345 15342 15342 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504140563 pid=15342 generation=1788281543190415 runtime_epoch=15342-8e457c76fb0da sequence=248 version=248 phase=START_REQUESTED
+09-01 19:52:23.345 15342 15342 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504140563 pid=15342 generation=1788281543190415 runtime_epoch=15342-8e457c76fb0da sequence=249 version=249 phase=STARTING_PLATFORM
+09-01 19:52:23.345 15342 15342 I A/VpnSession: event=vpn_session_start monotonic_ms=2504140563 pid=15342 generation=1788281543190415 owner=android
+09-01 19:52:23.346 15342 19876 I A/VpnSession: event=vpn_status monotonic_ms=2504140564 pid=15342 generation=1788281543190415 status=Starting source=start_service
+09-01 19:52:23.346 15342 19876 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504140564 pid=15342 generation=1788281543190415 runtime_epoch=15342-8e457c76fb0da sequence=250 version=250 phase=STARTING_CORE
+09-01 19:52:23.354 15342 15342 I flutter : 19:52:23.354371 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:52:23.359 15342 19876 I A/VpnSession: event=core_start_requested monotonic_ms=2504140577 pid=15342 generation=1788281543190415 owner=android starts_core=false
+09-01 19:52:23.428 15342 19876 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504140646 pid=15342 generation=1788281543190415 runtime_epoch=15342-8e457c76fb0da sequence=251 version=251 phase=WAITING_TUN
+09-01 19:52:23.428 15342 19876 I A/VpnSession: event=command_endpoint_ready monotonic_ms=2504140646 pid=15342 generation=1788281543190415
+09-01 19:52:23.428 15342 19876 I A/VpnSession: event=start_gate_waiting monotonic_ms=2504140646 pid=15342 generation=1788281543190415 current_generation=1788281543190415 session_state=starting source=command_endpoint reason=awaiting_mobile_start_tun_protect
+09-01 19:52:23.428 15342 19876 I A/VpnSession: event=vpn_status monotonic_ms=2504140647 pid=15342 generation=1788281543190415 status=CoreReady source=command_endpoint_ready
+09-01 19:52:23.430 15342 15342 I flutter : 19:52:23.430110 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:52:23.577 15342 15342 I flutter : 19:52:23.577073 [INFO]     [ConnectionNotifier] event=stale_ui_status_ignored status=_$DisconnectedImpl intent=37 desired_running=true
+09-01 19:52:23.598 15342 15342 I flutter : 19:52:23.598034 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:52:24.769 15342 15417 I A/VpnSession: event=tun_open_requested monotonic_ms=2504141987 pid=15342 generation=1788281543190415
+09-01 19:52:24.779 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504141998 pid=15342 generation=1788281543190415 source=post_tun_probe success=true
+09-01 19:52:24.779 15342 15417 I A/VpnSession: event=tun_open_success monotonic_ms=2504141998 pid=15342 generation=1788281543190415 identity=tun-21
+09-01 19:52:24.779 15342 15417 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504141998 pid=15342 generation=1788281543190415 runtime_epoch=15342-8e457c76fb0da sequence=252 version=252 phase=VERIFYING
+09-01 19:52:24.785 15342 15342 I flutter : 19:52:24.784995 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:52:24.794 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504142012 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.794 15342 15666 I A/VpnSession: event=protect_result monotonic_ms=2504142013 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.795 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504142014 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.796 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504142014 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.798 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504142016 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.798 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504142016 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.798 15342 15362 I A/VpnSession: event=protect_result monotonic_ms=2504142016 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.798 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504142016 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.798 15342 15606 I A/VpnSession: event=protect_result monotonic_ms=2504142017 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.799 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504142017 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.809 15342 15342 I flutter : 19:52:24.809272 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:52:24.827 17775 21572 I ZEON_VERIFY: run=manual_06_20260901_195217 target=matrix event=start monotonic_ms=2504142045 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:24.832 15342 19876 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504142051 pid=15342 generation=1788281543190415 runtime_epoch=15342-8e457c76fb0da sequence=253 version=253 phase=VERIFYING
+09-01 19:52:24.833 15342 19876 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504142051 pid=15342 generation=1788281543190415 runtime_epoch=15342-8e457c76fb0da sequence=254 version=254 phase=VERIFYING
+09-01 19:52:24.834 15342 15342 I flutter : 19:52:24.834503 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:52:24.836 15342 15342 I flutter : 19:52:24.836892 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:52:24.878 15342 15368 I A/VpnSession: event=protect_result monotonic_ms=2504142097 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.894 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504142112 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.934 15342 15362 I A/VpnSession: event=protect_result monotonic_ms=2504142152 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:24.976 17775 21610 I ZEON_VERIFY: run=manual_06_20260901_195217 target=zeon_204 event=dns_pass monotonic_ms=2504142195 ipv4=1 ipv6=0 latency_ms=139 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:24.981 17775 21610 I ZEON_VERIFY: run=manual_06_20260901_195217 target=zeon_204 event=tcp_pass monotonic_ms=2504142200 family=ipv4 latency_ms=5 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:25.079 17775 21611 I ZEON_VERIFY: run=manual_06_20260901_195217 target=gstatic_204 event=dns_pass monotonic_ms=2504142297 ipv4=1 ipv6=0 latency_ms=245 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:25.082 17775 21611 I ZEON_VERIFY: run=manual_06_20260901_195217 target=gstatic_204 event=tcp_pass monotonic_ms=2504142300 family=ipv4 latency_ms=3 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:25.133 17775 21614 I ZEON_VERIFY: run=manual_06_20260901_195217 target=apple_captive event=real_http_pass monotonic_ms=2504142351 status=200 latency_ms=303 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:25.161 17775 21611 I ZEON_VERIFY: run=manual_06_20260901_195217 target=gstatic_204 event=tls_pass monotonic_ms=2504142380 family=ipv4 protocol=TLSv1.3 latency_ms=79 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:25.162 17775 21611 I ZEON_VERIFY: run=manual_06_20260901_195217 target=gstatic_204 event=tcp_skip monotonic_ms=2504142381 family=ipv6 reason=no_address network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:25.174 17775 21613 I ZEON_VERIFY: run=manual_06_20260901_195217 target=cloudflare_speed event=real_http_pass monotonic_ms=2504142392 status=200 latency_ms=344 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:25.287 17775 21610 I ZEON_VERIFY: run=manual_06_20260901_195217 target=zeon_204 event=tls_pass monotonic_ms=2504142505 family=ipv4 protocol=TLSv1.3 latency_ms=305 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:25.288 17775 21610 I ZEON_VERIFY: run=manual_06_20260901_195217 target=zeon_204 event=tcp_skip monotonic_ms=2504142506 family=ipv6 reason=no_address network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:25.302 17775 21611 I ZEON_VERIFY: run=manual_06_20260901_195217 target=gstatic_204 event=http_pass monotonic_ms=2504142520 status=204 latency_ms=139 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:25.389 15342 19875 I A/VpnSession: event=data_plane_probe_completed monotonic_ms=2504142607 pid=15342 generation=1788281543190415 ready=true targets=zeon_204:ready,gstatic_204:ready selected_stable=true
+09-01 19:52:25.389 15342 19875 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504142608 pid=15342 generation=1788281543190415 runtime_epoch=15342-8e457c76fb0da sequence=255 version=255 phase=VERIFYING
+09-01 19:52:25.390 15342 19875 I A/VpnSession: event=platform_vpn_observed monotonic_ms=2504142609 pid=15342 generation=1788281543190415 present=true validated=true
+09-01 19:52:25.390 15342 19875 I A/VpnSession: event=vpn_snapshot monotonic_ms=2504142609 pid=15342 generation=1788281543190415 runtime_epoch=15342-8e457c76fb0da sequence=256 version=256 phase=CONNECTED
+09-01 19:52:25.390 15342 19875 I A/VpnSession: event=start_gate_completed monotonic_ms=2504142609 pid=15342 generation=1788281543190415 current_generation=1788281543190415 session_state=started source=mark_core_started reason=all_required_evidence
+09-01 19:52:25.390 15342 19875 I A/VpnSession: event=core_start_success monotonic_ms=2504142609 pid=15342 generation=1788281543190415
+09-01 19:52:25.391 15342 19875 I A/VpnSession: event=vpn_status monotonic_ms=2504142609 pid=15342 generation=1788281543190415 status=Started source=all_start_gates_confirmed
+09-01 19:52:25.391 15342 15342 I flutter : 19:52:25.391619 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 19:52:25.393 15342 15342 I flutter : 19:52:25.393899 [INFO]     [ConnectionNotifier] connection status: CONNECTED
+09-01 19:52:25.401 15342 15342 I flutter : 19:52:25.401571 [INFO]     [ConnectionNotifier] connection status: CONNECTED
+09-01 19:52:25.635 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504142854 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:25.635 15342 15416 I A/VpnSession: event=protect_result monotonic_ms=2504142854 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:25.637 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504142855 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:25.638 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504142856 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:25.640 15342 15362 I A/VpnSession: event=protect_result monotonic_ms=2504142859 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:25.642 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504142860 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:25.643 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504142862 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:25.644 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504142862 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:25.644 15342 15342 I flutter : 19:52:25.644465 [INFO]     [ConnectionNotifier] connection status: CONNECTED
+09-01 19:52:25.716 17775 21610 I ZEON_VERIFY: run=manual_06_20260901_195217 target=zeon_204 event=http_pass monotonic_ms=2504142935 status=204 latency_ms=429 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:25.717 17775 21572 I ZEON_VERIFY: run=manual_06_20260901_195217 target=matrix event=complete monotonic_ms=2504142935 network_handle=2258263527437 active_handle=2047810129933 active_is_vpn=false vpn=true validated=false interface=tun0 dns_servers=1
+09-01 19:52:26.829 17775 21682 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=matrix event=start monotonic_ms=2504144047 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:26.830 17775 21683 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=zeon_204 event=dns_pass monotonic_ms=2504144048 ipv4=1 ipv6=0 latency_ms=0 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:26.830 17775 21684 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=gstatic_204 event=dns_pass monotonic_ms=2504144048 ipv4=1 ipv6=0 latency_ms=0 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:26.834 17775 21684 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=gstatic_204 event=tcp_pass monotonic_ms=2504144052 family=ipv4 latency_ms=4 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:26.840 17775 21683 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=zeon_204 event=tcp_pass monotonic_ms=2504144058 family=ipv4 latency_ms=10 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:26.917 17775 21684 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=gstatic_204 event=tls_pass monotonic_ms=2504144135 family=ipv4 protocol=TLSv1.3 latency_ms=83 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:26.920 17775 21684 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=gstatic_204 event=tcp_skip monotonic_ms=2504144138 family=ipv6 reason=no_address network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:27.026 17775 21686 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=apple_captive event=real_http_pass monotonic_ms=2504144244 status=200 latency_ms=196 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:27.058 17775 21684 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=gstatic_204 event=http_pass monotonic_ms=2504144276 status=204 latency_ms=138 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:27.064 17775 21683 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=zeon_204 event=tls_pass monotonic_ms=2504144282 family=ipv4 protocol=TLSv1.3 latency_ms=223 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:27.067 17775 21683 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=zeon_204 event=tcp_skip monotonic_ms=2504144285 family=ipv6 reason=no_address network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:27.082 17775 21685 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=cloudflare_speed event=real_http_pass monotonic_ms=2504144300 status=200 latency_ms=252 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:27.319 15342 15658 I A/VpnSession: event=protect_result monotonic_ms=2504144538 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:27.322 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504144541 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:27.326 15342 15415 I A/VpnSession: event=protect_result monotonic_ms=2504144544 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:27.329 15342 15366 I A/VpnSession: event=protect_result monotonic_ms=2504144547 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:27.332 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504144550 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:27.337 15342 15668 I A/VpnSession: event=protect_result monotonic_ms=2504144555 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:27.338 15342 15417 I A/VpnSession: event=protect_result monotonic_ms=2504144556 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:27.341 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504144559 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:27.442 15342 15364 I A/VpnSession: event=protect_result monotonic_ms=2504144660 pid=15342 generation=1788281543190415 source=core_socket success=true
+09-01 19:52:27.465 17775 21683 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=zeon_204 event=http_pass monotonic_ms=2504144684 status=204 latency_ms=399 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1
+09-01 19:52:27.466 17775 21682 I ZEON_VERIFY: run=manual_06_20260901_195217_post target=matrix event=complete monotonic_ms=2504144684 network_handle=2258263527437 active_handle=2258263527437 active_is_vpn=true vpn=true validated=true interface=tun0 dns_servers=1

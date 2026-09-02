@@ -1,0 +1,2 @@
+﻿"cycle","run","verification_seen","probe_process_started","probe_start_unix_ms","native_probe_pass","native_probe_fail","real_http_passes","real_http_failures","real_traffic_pass","classification","vpn_active","vpn_validated","tun_interface","tun_rx_delta","tun_tx_delta","final_ui","connected_to_verifying","outbound_invalidations"
+"1","manual_01_20260901_194127","True","True","1788280892965","True","False","0","0","False","D","True","True","tun0","456","380","OTHER","0","0"

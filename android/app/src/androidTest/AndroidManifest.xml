@@ -2,7 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <application>
+        <service
+            android:name="test.com.zeon.zeon.bg.VerificationTrafficService"
+            android:exported="true"
+            android:foregroundServiceType="dataSync" />
         <activity
             android:name="test.com.zeon.zeon.bg.RussianServicesValidationActivity"
             android:exported="true" />
@@ -11,6 +17,9 @@
             android:exported="true" />
         <activity
             android:name="test.com.zeon.zeon.bg.DataPlaneValidationActivity"
+            android:exported="true" />
+        <activity
+            android:name="test.com.zeon.zeon.bg.GlobalDataPlaneMatrixActivity"
             android:exported="true" />
     </application>
 </manifest>

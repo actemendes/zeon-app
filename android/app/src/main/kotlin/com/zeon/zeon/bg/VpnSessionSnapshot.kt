@@ -64,6 +64,7 @@ data class VpnSessionSnapshot(
     val commandEndpointReady: Boolean = false,
     val tunnelReady: Boolean = false,
     val protectSucceeded: Boolean = false,
+    val dataPlaneReady: Boolean = false,
     val platformVpnValidated: Boolean = false,
     val selectedOutboundId: String = "",
     val selectedOutboundLabel: String = "",
@@ -80,6 +81,7 @@ data class VpnSessionSnapshot(
             commandEndpointReady &&
             tunnelReady &&
             protectSucceeded &&
+            dataPlaneReady &&
             selectedOutboundId.isNotBlank()
 
     fun toEvent(): Map<String, Any> = mapOf(
@@ -95,6 +97,7 @@ data class VpnSessionSnapshot(
         "commandEndpointReady" to commandEndpointReady,
         "tunnelReady" to tunnelReady,
         "protectSucceeded" to protectSucceeded,
+        "dataPlaneReady" to dataPlaneReady,
         "platformVpnValidated" to platformVpnValidated,
         "selectedOutboundId" to selectedOutboundId,
         "selectedOutboundLabel" to selectedOutboundLabel,
@@ -205,6 +208,7 @@ object VpnSessionSnapshotCoordinator {
             commandEndpointReady = false,
             tunnelReady = false,
             protectSucceeded = false,
+            dataPlaneReady = false,
             platformVpnValidated = false,
             selectedOutboundId = "",
             selectedOutboundLabel = "",

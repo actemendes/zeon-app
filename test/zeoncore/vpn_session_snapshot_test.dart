@@ -25,6 +25,7 @@ VpnSessionSnapshot snapshot({
   commandEndpointReady: ready,
   tunnelReady: ready,
   protectSucceeded: ready,
+  dataPlaneReady: ready,
   platformVpnValidated: ready,
   selectedOutboundId: ready ? 'opaque-outbound' : '',
 );
@@ -115,6 +116,30 @@ void main() {
       expect(gate.classify(snapshot(sequence: 6, version: 6)), VpnSnapshotDisposition.stale);
     });
 
+    test('Connected may enter explicit data-plane revalidation', () {
+      final gate = VpnSessionSnapshotGate()
+        ..accept(snapshot(phase: VpnSessionPhase.connected, ready: true, sequence: 5, version: 5));
+      final verifying = snapshot(phase: VpnSessionPhase.verifying, ready: true, sequence: 6, version: 6);
+      final withoutProof = VpnSessionSnapshot(
+        generation: verifying.generation,
+        runtimeEpoch: verifying.runtimeEpoch,
+        sequenceNumber: verifying.sequenceNumber,
+        snapshotVersion: verifying.snapshotVersion,
+        phase: verifying.phase,
+        requestedAction: verifying.requestedAction,
+        coreReady: verifying.coreReady,
+        coreStarted: verifying.coreStarted,
+        commandEndpointReady: verifying.commandEndpointReady,
+        tunnelReady: verifying.tunnelReady,
+        protectSucceeded: verifying.protectSucceeded,
+        dataPlaneReady: false,
+        selectedOutboundId: verifying.selectedOutboundId,
+      );
+
+      expect(gate.accept(withoutProof), isTrue);
+      expect(gate.current?.toCoreStatus(), isA<CoreStarting>());
+    });
+
     test('stop progression after Connected is accepted', () {
       final gate = VpnSessionSnapshotGate()
         ..accept(snapshot(phase: VpnSessionPhase.connected, ready: true, sequence: 5, version: 5));
@@ -181,6 +206,7 @@ void main() {
       'commandEndpointReady': () => completeSnapshot(commandEndpointReady: false),
       'tunnelReady': () => completeSnapshot(tunnelReady: false),
       'protectSucceeded': () => completeSnapshot(protectSucceeded: false),
+      'dataPlaneReady': () => completeSnapshot(dataPlaneReady: false),
       'selectedOutbound': () => completeSnapshot(selectedOutboundId: ''),
     }.entries) {
       test('Connected is blocked without ${missingGate.key}', () {
@@ -298,6 +324,7 @@ VpnSessionSnapshot completeSnapshot({
   bool commandEndpointReady = true,
   bool tunnelReady = true,
   bool protectSucceeded = true,
+  bool dataPlaneReady = true,
   bool platformVpnValidated = true,
   String selectedOutboundId = 'opaque-outbound',
 }) => VpnSessionSnapshot(
@@ -311,6 +338,7 @@ VpnSessionSnapshot completeSnapshot({
   commandEndpointReady: commandEndpointReady,
   tunnelReady: tunnelReady,
   protectSucceeded: protectSucceeded,
+  dataPlaneReady: dataPlaneReady,
   platformVpnValidated: platformVpnValidated,
   selectedOutboundId: selectedOutboundId,
 );

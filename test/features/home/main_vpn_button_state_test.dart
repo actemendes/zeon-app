@@ -416,6 +416,7 @@ VpnSessionSnapshot snapshot(
     commandEndpointReady: provesConnected,
     tunnelReady: provesConnected,
     protectSucceeded: provesConnected,
+    dataPlaneReady: provesConnected,
     platformVpnValidated: provesConnected,
     selectedOutboundId: provesConnected ? 'proxy-1' : '',
     failureCode: failureCode,

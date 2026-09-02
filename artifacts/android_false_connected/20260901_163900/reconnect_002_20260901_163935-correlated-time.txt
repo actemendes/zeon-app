@@ -1,0 +1,801 @@
+﻿09-01 16:39:00.214  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492537432 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:00.259  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492537477 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:00.263  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492537481 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:00.300  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492537518 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:00.488  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492537706 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:00.507  4465  4465 I flutter : 16:39:00.506723 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:00.528  4465  4465 I flutter : 16:39:00.528015 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:00.722  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492537940 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:00.797  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492538015 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:00.838  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492538056 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:00.961  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492538179 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:01.082  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492538301 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:01.200  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492538418 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:01.200  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492538419 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:01.260  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492538478 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:01.426  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492538644 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:01.659  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492538878 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:01.772  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492538990 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:01.976  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492539195 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:02.081  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492539299 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:02.312  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492539530 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:02.417  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492539635 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:02.525  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492539743 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:02.668  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492539886 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:02.752  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492539970 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:02.868  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492540087 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:02.940  4465  4465 I flutter : 16:39:02.940054 [INFO]     [ZeonCoreService] event=vpn_snapshot_resync monotonic_ms=24354491 pid=4465 generation=1788269892163834 source=app_resume status=_$CoreStartedImpl published=false
+09-01 16:39:03.000  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492540218 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:03.330  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492540548 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:03.540  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492540758 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:03.568  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492540787 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:03.654  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492540872 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:03.864  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492541082 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:03.884  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492541103 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.106  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492541324 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.235  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492541453 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.394  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492541612 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.497  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492541716 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.512  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492541730 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.512  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492541731 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.512  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492541731 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.515  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492541733 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.516  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492541734 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.518  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492541736 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.518  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492541736 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.518  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492541737 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.519  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492541738 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.597  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492541815 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.706  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492541924 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:04.814  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492542032 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:05.140  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492542358 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:05.409  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492542627 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:05.522  4465  4465 I flutter : 16:39:05.521967 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:05.524  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492542742 pid=4465 generation=1788269892163834 source=core_socket success=true
+09-01 16:39:05.534  4465  4465 I flutter : 16:39:05.534607 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:05.563  4465  4465 I flutter : 16:39:05.563006 [INFO]     [ZeonCoreService] lifecycle: started -> stopping (preemptive mobile stop requested)
+09-01 16:39:05.564  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492542782 pid=4465 generation=1788269945562984 reason=box_service_stop/flutter
+09-01 16:39:05.564  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492542783 pid=4465 generation=1788269945562984 reason=direct_owner/flutter
+09-01 16:39:05.564  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492542783 pid=4465 generation=1788269945562984 reason=stop_service
+09-01 16:39:05.564  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492542783 pid=4465 generation=1788269945562984 runtime_epoch=4465-87ff16e55d0c1 sequence=557 version=557 phase=STOP_REQUESTED
+09-01 16:39:05.564  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492542783 pid=4465 generation=1788269945562984 runtime_epoch=4465-87ff16e55d0c1 sequence=558 version=558 phase=STOPPING
+09-01 16:39:05.565  4465 19167 I A/VpnSession: event=session_close_requested monotonic_ms=2492542784 pid=4465 generation=1788269892163834 reason=stop
+09-01 16:39:05.568  4465  4465 I flutter : 16:39:05.568702 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:05.568561Z","refresh_generation":221,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":null,"server_count":0,"selected_server_safe_id":null,"selected_source":"none","model_status":"unavailable","visibility_reason":"service_not_running"}
+09-01 16:39:05.569  4465  4465 I flutter : 16:39:05.569337 [DEBUG]    [ZeonCoreService] lifecycle queue: enqueue stop (state=stopping)
+09-01 16:39:05.569  4465  4465 I flutter : 16:39:05.569538 [DEBUG]    [ZeonCoreService] lifecycle queue: begin stop (state=stopping)
+09-01 16:39:05.598  4465  4465 I flutter : 16:39:05.598092 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:05.598  4465  4465 I flutter : 16:39:05.598364 [WARNING]  [ZeonCoreService] event=stale_callback_ignored monotonic_ms=24357149 pid=4465 generation=1788269892163834 current_generation=1788269945562984 source=coreInfoListener[bg]
+09-01 16:39:05.608  4465  4465 I flutter : 16:39:05.608750 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:05.609  4465  4465 I flutter : 16:39:05.609489 [WARNING]  [ZeonCoreService] event=stale_callback_ignored monotonic_ms=24357160 pid=4465 generation=1788269892163834 current_generation=1788269945562984 source=coreInfoListener[bg]
+09-01 16:39:05.609  4465  4465 I A/VpnSession: event=stop_terminal_deferred monotonic_ms=2492542828 pid=4465 generation=1788269945562984 source=flutter remaining_owners=1 tun_owned=true core_owned=false
+09-01 16:39:05.610  4465  4465 I flutter : 16:39:05.610527 [DEBUG]    [ZeonCoreService] status listener canceled [bg]
+09-01 16:39:05.610  4465  4465 I flutter : 16:39:05.610776 [WARNING]  [ZeonCoreService] event=grpc_disconnect monotonic_ms=24357161 pid=4465 generation=1788269892163834 source=bg_status outcome=error
+09-01 16:39:05.610  4465  4465 I flutter : 16:39:05.610930 [WARNING]  [ZeonCoreService] event=stale_callback_ignored monotonic_ms=24357162 pid=4465 generation=1788269892163834 current_generation=1788269945562984 source=bgStatusListener_teardown_close
+09-01 16:39:05.611  4465  4465 I flutter : 16:39:05.611040 [WARNING]  [ZeonCoreService] event=grpc_transport_outcome monotonic_ms=24357162 pid=4465 generation=1788269892163834 source=bgStatusListener_listener outcome=expectedTeardown error_type=GrpcError native_phase=stopping
+09-01 16:39:05.611  4465  4465 I flutter : 16:39:05.611177 [DEBUG]    [ZeonCoreService] listener reconnect skipped [bgStatusListener]: lifecycle=stopping
+09-01 16:39:05.653  4465 23826 I A/VpnSession: event=tun_close monotonic_ms=2492542871 pid=4465 generation=1788269892163834 identity=tun-38 reason=stop
+09-01 16:39:05.653  4465  4465 I A/VpnSession: event=stop_terminal_deferred monotonic_ms=2492542872 pid=4465 generation=1788269945562984 source=flutter remaining_owners=1 tun_owned=false core_owned=false
+09-01 16:39:05.655  4465 25609 I A/VpnSession: event=session_close_completed monotonic_ms=2492542873 pid=4465 generation=1788269892163834 reason=stop
+09-01 16:39:05.659  4465  4465 I A/VpnSession: event=vpn_status monotonic_ms=2492542878 pid=4465 generation=1788269945562984 status=Stopped source=stop_complete/flutter
+09-01 16:39:05.659  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492542878 pid=4465 generation=1788269945562984 runtime_epoch=4465-87ff16e55d0c1 sequence=559 version=559 phase=DISCONNECTED
+09-01 16:39:05.661  4465  4465 I flutter : 16:39:05.661670 [INFO]     [ZeonCoreService] lifecycle: stopping -> stopped (Platform snapshot/disconnected/flutter)
+09-01 16:39:05.662  4465  4465 I flutter : 16:39:05.661977 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24357213 pid=4465 generation=1788269945562984 phase=disconnected requested_action=stop stop_source=flutter
+09-01 16:39:05.761  4465  4465 I flutter : 16:39:05.761251 [DEBUG]    [ZeonCoreService] stopping
+09-01 16:39:05.761  4465  4465 I flutter : 16:39:05.761666 [DEBUG]    [ZeonCoreService] event=session_close_requested monotonic_ms=24357312 pid=4465 generation=1788269945562984 owner=flutter_listeners
+09-01 16:39:05.761  4465  4465 I flutter : 16:39:05.761836 [DEBUG]    [ZeonCoreService] event=session_close_completed monotonic_ms=24357312 pid=4465 generation=1788269945562984 owner=flutter_listeners
+09-01 16:39:05.762  4465  4465 I flutter : 16:39:05.762588 [DEBUG]    [ZeonCoreService] clearing outbound snapshot: stop complete
+09-01 16:39:05.762  4465  4465 I flutter : 16:39:05.762739 [DEBUG]    [ZeonCoreService] lifecycle queue: end stop (state=stopped)
+09-01 16:39:05.764  4465  4465 I flutter : 16:39:05.764459 [INFO]     [ZeonCoreService] event=vpn_snapshot_resync monotonic_ms=24357315 pid=4465 generation=1788269945562984 source=disconnect_completion status=_$CoreStoppedImpl published=false
+09-01 16:39:08.442  4465  4465 I flutter : 16:39:08.442795 [INFO]     [ZeonCoreService] lifecycle: stopped -> starting (connect requested)
+09-01 16:39:08.443  4465  4465 I flutter : 16:39:08.443037 [INFO]     [ZeonCoreService] event=vpn_session_start monotonic_ms=24359994 pid=4465 generation=1788269948442768 operation_generation=1788269948442768 current_generation=1788269948442768 session_state=starting source=connect reason=requested
+09-01 16:39:08.444  4465  4465 I flutter : 16:39:08.444435 [DEBUG]    [ZeonCoreService] changing options
+09-01 16:39:08.450  4465  4465 I flutter : 16:39:08.450278 [INFO]     [ZeonCoreService] core options prepared: full-config=false transport=wifi iface-mtu=1500 user-rules=2
+09-01 16:39:08.450  4465  4465 I flutter : 16:39:08.450575 [INFO]     [ZeonCoreService] core payload (safe): {network-profile: stable_mobile, network-mtu-mode: dynamic, network-transport-type: wifi, network-interface-mtu: 1500, enable-full-config: false, execute-config-as-is: false, fragment-mode: default, profile-dns-strategy: default, selector-interrupt-exist-connections: null, selector-tolerance: null, selector-use-sticky: null, critical-domains-fallback-enabled: null, mtu: 1500, tun-implementation: gvisor, ipv6-mode: ipv4_only, remote-dns-domain-strategy: , direct-dns-domain-strategy: , block-quic: null, strict-route: true, udp-probe-enabled: null, udp-probe-endpoint: null, udp-probe-count: null, udp-probe-size: null, udp-probe-timeout-ms: null, udp-probe-top-n: null, rules-count: 2}
+09-01 16:39:08.502  4465  4465 I flutter : 16:39:08.502430 [DEBUG]    [ZeonCoreService] background core is not started yet! gRPC Error (code: 14, codeName: UNAVAILABLE, message: Error connecting: SocketException: Connection refused (OS Error: Connection refused, errno = 111), address = 127.0.0.1, port = 37724, details: null, rawResponse: null, trailers: {})
+09-01 16:39:08.590  4465  4465 I flutter : 16:39:08.590240 [INFO]     [ZeonCoreService] event=permission_request_started monotonic_ms=24360141 pid=4465 generation=1788269948442768 operation_generation=1788269948442768 current_generation=1788269948442768 session_state=starting source=flutter reason=prepare_vpn
+09-01 16:39:08.591  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492545809 pid=4465 generation=1788269948442768 reason=flutter_generation_update
+09-01 16:39:08.592  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492545811 pid=4465 generation=1788269948442768 reason=prepare_vpn
+09-01 16:39:08.593  4465  4465 I A/VpnSession: event=permission_result_received monotonic_ms=2492545811 pid=4465 generation=1788269948442768 current_generation=1788269948442768 session_state=permission source=all reason=already_granted
+09-01 16:39:08.593  4465  4465 I flutter : 16:39:08.593744 [INFO]     [ZeonCoreService] event=permission_result_received monotonic_ms=24360144 pid=4465 generation=1788269948442768 operation_generation=1788269948442768 current_generation=1788269948442768 session_state=starting source=flutter reason=granted
+09-01 16:39:08.594  4465  4465 I flutter : 16:39:08.594072 [DEBUG]    [ZeonCoreService] lifecycle queue: enqueue start (state=starting)
+09-01 16:39:08.594  4465  4465 I flutter : 16:39:08.594238 [DEBUG]    [ZeonCoreService] lifecycle queue: begin start (state=starting)
+09-01 16:39:08.594  4465  4465 I flutter : 16:39:08.594386 [DEBUG]    [ZeonCoreService] starting
+09-01 16:39:08.595  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492545813 pid=4465 generation=1788269948442768 reason=stop_service
+09-01 16:39:08.595  4465  4465 I A/VpnSession: event=vpn_status monotonic_ms=2492545814 pid=4465 generation=1788269948442768 status=Stopped source=stop_already_complete/replacement
+09-01 16:39:08.596  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492545814 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=560 version=560 phase=DISCONNECTED
+09-01 16:39:08.599  4465  4465 I flutter : 16:39:08.599556 [INFO]     [ZeonCoreService] lifecycle: starting -> stopped (Platform snapshot/disconnected/replacement)
+09-01 16:39:08.599  4465  4465 I flutter : 16:39:08.599768 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24360150 pid=4465 generation=1788269948442768 phase=disconnected requested_action=stop stop_source=replacement
+09-01 16:39:08.601  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492545820 pid=4465 generation=1788269948442768 reason=main_activity_start
+09-01 16:39:08.602  4465  4465 I A/VpnSession: event=permission_result_received monotonic_ms=2492545820 pid=4465 generation=1788269948442768 current_generation=1788269948442768 session_state=permission source=all reason=already_granted
+09-01 16:39:08.602  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492545820 pid=4465 generation=1788269948442768 reason=main_activity_start_service
+09-01 16:39:08.609  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492545828 pid=4465 generation=1788269948442768 reason=service_start_command
+09-01 16:39:08.611  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492545830 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=561 version=561 phase=START_REQUESTED
+09-01 16:39:08.612  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492545830 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=562 version=562 phase=STARTING_PLATFORM
+09-01 16:39:08.612  4465  4465 I A/VpnSession: event=vpn_session_start monotonic_ms=2492545830 pid=4465 generation=1788269948442768 owner=android
+09-01 16:39:08.612  4465 25609 I A/VpnSession: event=vpn_status monotonic_ms=2492545831 pid=4465 generation=1788269948442768 status=Starting source=start_service
+09-01 16:39:08.612  4465 25609 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492545831 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=563 version=563 phase=STARTING_CORE
+09-01 16:39:08.616  4465  4465 I flutter : 16:39:08.616173 [INFO]     [ZeonCoreService] lifecycle: stopped -> starting (Platform snapshot/startingCore/none)
+09-01 16:39:08.616  4465  4465 I flutter : 16:39:08.616450 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24360167 pid=4465 generation=1788269948442768 phase=startingCore requested_action=connect stop_source=none
+09-01 16:39:08.621  4465 25609 I A/VpnSession: event=core_start_requested monotonic_ms=2492545839 pid=4465 generation=1788269948442768 owner=android starts_core=false
+09-01 16:39:08.682  4465 25609 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492545900 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=564 version=564 phase=WAITING_TUN
+09-01 16:39:08.682  4465 25609 I A/VpnSession: event=command_endpoint_ready monotonic_ms=2492545900 pid=4465 generation=1788269948442768
+09-01 16:39:08.682  4465 25609 I A/VpnSession: event=start_gate_waiting monotonic_ms=2492545900 pid=4465 generation=1788269948442768 current_generation=1788269948442768 session_state=starting source=command_endpoint reason=awaiting_mobile_start_tun_protect
+09-01 16:39:08.682  4465 25609 I A/VpnSession: event=vpn_status monotonic_ms=2492545900 pid=4465 generation=1788269948442768 status=CoreReady source=command_endpoint_ready
+09-01 16:39:08.687  4465  4465 I flutter : 16:39:08.687221 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24360238 pid=4465 generation=1788269948442768 phase=waitingTun requested_action=connect stop_source=none
+09-01 16:39:08.850  4465  4465 I flutter : 16:39:08.850483 [DEBUG]    [ZeonCoreService] core log streaming disabled on Android to avoid hcore log feedback
+09-01 16:39:08.852  4465  4465 I flutter : 16:39:08.852822 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:08.853  4465  4465 I flutter : 16:39:08.853331 [INFO]     [ZeonCoreService] lifecycle: starting -> stopped (coreInfoListener[bg])
+09-01 16:39:08.875  4465  4465 I flutter : 16:39:08.875287 [DEBUG]    [ZeonCoreService] core options applied to background/start
+09-01 16:39:08.875  4465  4465 I flutter : 16:39:08.875599 [INFO]     [ZeonCoreService] event=core_start_requested monotonic_ms=24360426 pid=4465 generation=1788269948442768 owner=flutter
+09-01 16:39:08.877  4465  4465 I flutter : 16:39:08.876992 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:08.878  4465  4465 I flutter : 16:39:08.878609 [INFO]     [ZeonCoreService] lifecycle: stopped -> starting (coreInfoListener[bg])
+09-01 16:39:10.073  4465 21518 I A/VpnSession: event=tun_open_requested monotonic_ms=2492547291 pid=4465 generation=1788269948442768
+09-01 16:39:10.081  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492547300 pid=4465 generation=1788269948442768 source=post_tun_probe success=true
+09-01 16:39:10.082  4465 21518 I A/VpnSession: event=tun_open_success monotonic_ms=2492547300 pid=4465 generation=1788269948442768 identity=tun-39
+09-01 16:39:10.082  4465 21518 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492547300 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=565 version=565 phase=VERIFYING
+09-01 16:39:10.083  4465  4465 I flutter : 16:39:10.083296 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24361634 pid=4465 generation=1788269948442768 phase=verifying requested_action=connect stop_source=none
+09-01 16:39:10.093  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492547311 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.093  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492547312 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.094  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492547312 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.095  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492547313 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.095  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492547313 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.095  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492547314 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.096  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492547314 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.096  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492547315 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.096  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492547315 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.098  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492547316 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.104  4465  4465 I flutter : 16:39:10.104685 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:10.105  4465  4465 I flutter : 16:39:10.105062 [WARNING]  [ZeonCoreService] event=terminal_state_blocked monotonic_ms=24361656 pid=4465 generation=1788269948442768 operation_generation=1788269948442768 current_generation=1788269948442768 session_state=starting source=coreInfoListener[bg] reason=start_gate_incomplete
+09-01 16:39:10.116  4465 25609 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492547335 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=566 version=566 phase=VERIFYING
+09-01 16:39:10.116  4465 25609 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492547335 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=567 version=567 phase=VERIFYING
+09-01 16:39:10.117  4465  4465 I flutter : 16:39:10.117650 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24361668 pid=4465 generation=1788269948442768 phase=verifying requested_action=connect stop_source=none
+09-01 16:39:10.119  4465  4465 I flutter : 16:39:10.119187 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24361670 pid=4465 generation=1788269948442768 phase=verifying requested_action=connect stop_source=none
+09-01 16:39:10.119  4465 25609 W A/VpnSession: event=platform_vpn_observed monotonic_ms=2492547337 pid=4465 generation=1788269948442768 present=true validated=false
+09-01 16:39:10.119  4465 25609 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492547337 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=568 version=568 phase=CONNECTED
+09-01 16:39:10.119  4465 25609 I A/VpnSession: event=start_gate_completed monotonic_ms=2492547337 pid=4465 generation=1788269948442768 current_generation=1788269948442768 session_state=started source=mark_core_started reason=all_required_evidence
+09-01 16:39:10.119  4465 25609 I A/VpnSession: event=core_start_success monotonic_ms=2492547337 pid=4465 generation=1788269948442768
+09-01 16:39:10.119  4465 25609 I A/VpnSession: event=vpn_status monotonic_ms=2492547337 pid=4465 generation=1788269948442768 status=Started source=all_start_gates_confirmed
+09-01 16:39:10.120  4465  4465 I flutter : 16:39:10.120682 [INFO]     [ZeonCoreService] lifecycle: starting -> started (Platform snapshot/connected/none)
+09-01 16:39:10.120  4465  4465 I flutter : 16:39:10.120844 [DEBUG]    [ZeonCoreService] core log streaming disabled on Android to avoid hcore log feedback
+09-01 16:39:10.122  4465  4465 I flutter : 16:39:10.122561 [DEBUG]    [ZeonCoreService] status listener canceled [bg]
+09-01 16:39:10.123  4465  4465 I flutter : 16:39:10.123326 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24361674 pid=4465 generation=1788269948442768 phase=connected requested_action=connect stop_source=none
+09-01 16:39:10.126  4465  4465 I flutter : 16:39:10.126412 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:10.136  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492547354 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.148  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492547366 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:10.162  4465  4465 I flutter : 16:39:10.162186 [INFO]     [ZeonCoreService] watching active groups
+09-01 16:39:10.162  4465  4465 I flutter : 16:39:10.162410 [DEBUG]    [ZeonCoreService] watching group
+09-01 16:39:10.162  4465  4465 I flutter : 16:39:10.162651 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:10.162539Z","refresh_generation":222,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":0,"selected_server_safe_id":"5751e048eb6f","selected_source":"memory_lkg","model_status":"ready","visibility_reason":"memory_lkg"}
+09-01 16:39:10.163  4465  4465 I flutter : 16:39:10.163012 [DEBUG]    [ZeonCoreService] watching stats
+09-01 16:39:10.168  4465  4465 I flutter : 16:39:10.168670 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=2
+09-01 16:39:10.169  4465  4465 I flutter : 16:39:10.169098 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:10.168956Z","refresh_generation":222,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":0,"selected_server_safe_id":"99e6da73476c","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:39:10.302  4465  4465 I flutter : 16:39:10.302177 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo initial: groups=3
+09-01 16:39:10.309  4465  4465 I flutter : 16:39:10.309403 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:10.309257Z","refresh_generation":222,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":117,"selected_server_safe_id":"5751e048eb6f","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:39:10.318  4465  4465 I flutter : 16:39:10.318099 [INFO]     [ZeonCoreService] event=core_start_success monotonic_ms=24361869 pid=4465 generation=1788269948442768
+09-01 16:39:10.321  4465  4465 I flutter : 16:39:10.321802 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:10.357  4465  4465 I flutter : 16:39:10.357828 [INFO]     [ZeonCoreService] event=runtime_indicators monotonic_ms=24361908 pid=4465 generation=1788269948442768 source=core_start_success memory_bytes=25174016 goroutines=165 connections_out=10
+09-01 16:39:10.360  4465  4465 I flutter : 16:39:10.360201 [DEBUG]    [ZeonCoreService] lifecycle queue: end start (state=started)
+09-01 16:39:10.362  4465  4465 I flutter : 16:39:10.362482 [INFO]     [ZeonCoreService] watching active groups
+09-01 16:39:10.362  4465  4465 I flutter : 16:39:10.362648 [DEBUG]    [ZeonCoreService] watching group
+09-01 16:39:10.362  4465  4465 I flutter : 16:39:10.362838 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:10.362745Z","refresh_generation":223,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":0,"selected_server_safe_id":"5751e048eb6f","selected_source":"memory_lkg","model_status":"ready","visibility_reason":"memory_lkg"}
+09-01 16:39:10.363  4465  4465 I flutter : 16:39:10.363604 [DEBUG]    [ZeonCoreService] yielding cached active groups before live stream
+09-01 16:39:10.364  4465  4465 I flutter : 16:39:10.364548 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:10.364481Z","refresh_generation":223,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":0,"selected_server_safe_id":"cfe1b904000b","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:39:10.364  4465  4465 I flutter : 16:39:10.364882 [DEBUG]    [ZeonCoreService] yielding cached group snapshot before live stream
+09-01 16:39:10.365  4465  4465 I flutter : 16:39:10.365956 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:10.365861Z","refresh_generation":223,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":117,"selected_server_safe_id":"5751e048eb6f","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:39:10.366  4465  4465 I flutter : 16:39:10.366134 [DEBUG]    [ZeonCoreService] watching stats
+09-01 16:39:10.367  4465  4465 I flutter : 16:39:10.367651 [INFO]     [ZeonCoreService] event=vpn_snapshot_resync monotonic_ms=24361918 pid=4465 generation=1788269948442768 source=connect_completion status=_$CoreStartedImpl published=false
+09-01 16:39:10.368  4465  4465 I flutter : 16:39:10.368505 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=2
+09-01 16:39:10.395  4465  4465 I flutter : 16:39:10.395718 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo initial: groups=3
+09-01 16:39:10.407  4465  4465 I flutter : 16:39:10.407870 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:11.598  4465  4465 I flutter : 16:39:11.598074 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=2
+09-01 16:39:11.603  4465  4465 I flutter : 16:39:11.602909 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=2
+09-01 16:39:11.615  4465  4465 I flutter : 16:39:11.615290 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:11.623  4465  4465 I flutter : 16:39:11.623022 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:14.387 24534 24534 I ZEON_MATRIX: run=reconnect_001_20260901_163900 target=matrix event=start monotonic_ms=2492551606 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:14.450 24534 26255 I ZEON_MATRIX: run=reconnect_001_20260901_163900 target=apple_captive event=dns monotonic_ms=2492551668 ipv4=1 ipv6=0 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:14.514 24534 26252 I ZEON_MATRIX: run=reconnect_001_20260901_163900 target=zeon_204 event=dns monotonic_ms=2492551733 ipv4=1 ipv6=0 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:15.093  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492552312 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.094  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492552312 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.094  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492552313 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.099  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492552317 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.099  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492552317 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.099  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492552318 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.100  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492552318 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.100  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492552318 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.103  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492552321 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.108  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492552326 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.138  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492552356 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.154  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492552373 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.169  4465 21164 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492552388 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=569 version=569 phase=CONNECTED
+09-01 16:39:15.172  4465  4465 I flutter : 16:39:15.172102 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24366723 pid=4465 generation=1788269948442768 phase=connected requested_action=connect stop_source=none
+09-01 16:39:15.248  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492552466 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.445  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492552664 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:15.584  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492552802 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:16.094  4465  4465 I flutter : 16:39:16.094552 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:16.113  4465  4465 I flutter : 16:39:16.113795 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:17.551  4465  4465 I flutter : 16:39:17.551595 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:17.580  4465  4465 I flutter : 16:39:17.580432 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:19.404  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492556622 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:19.409  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492556628 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:19.890 24534 26253 I ZEON_MATRIX: run=reconnect_001_20260901_163900 target=gstatic_204 event=dns monotonic_ms=2492557108 ipv4=1 ipv6=0 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:19.891 24534 26254 I ZEON_MATRIX: run=reconnect_001_20260901_163900 target=cloudflare_speed event=dns monotonic_ms=2492557109 ipv4=2 ipv6=0 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:19.914  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492557132 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:19.914  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492557133 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.105  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492557323 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.107  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492557326 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.107  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492557326 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.112  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492557330 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.112  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492557331 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.114  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492557332 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.115  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492557333 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.115  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492557334 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.116  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492557334 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.168  4465 21164 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492557386 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=570 version=570 phase=CONNECTED
+09-01 16:39:20.170  4465  4465 I flutter : 16:39:20.170081 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24371721 pid=4465 generation=1788269948442768 phase=connected requested_action=connect stop_source=none
+09-01 16:39:20.205  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492557423 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.344 24534 26253 I ZEON_MATRIX: run=reconnect_001_20260901_163900 target=gstatic_204 event=success monotonic_ms=2492557562 status=204 bytes=0 first_byte_ms=5955 total_ms=5955 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:20.378 24534 26254 I ZEON_MATRIX: run=reconnect_001_20260901_163900 target=cloudflare_speed event=success monotonic_ms=2492557596 status=200 bytes=4096 first_byte_ms=5988 total_ms=5989 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:20.873  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492558091 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:20.939  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492558157 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:21.110  4465  4465 I flutter : 16:39:21.110545 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:21.139  4465  4465 I flutter : 16:39:21.139566 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:21.884  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492559103 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:23.116  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492560334 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.108  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492562326 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.109  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492562328 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.112  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492562331 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.113  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492562331 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.113  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492562332 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.115  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492562333 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.116  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492562334 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.119  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492562338 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.120  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492562338 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.165  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492562384 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.314  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492562532 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.620  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492562838 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:25.843  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492563061 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:26.115  4465  4465 I flutter : 16:39:26.115550 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:26.130  4465  4465 I flutter : 16:39:26.130158 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:26.175  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492563393 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:26.772  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492563990 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:28.055  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492565273 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:28.119  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492565338 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.109  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492567328 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.114  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492567332 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.119  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492567337 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.120  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492567338 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.120  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492567338 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.120  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492567338 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.121  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492567339 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.135  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492567354 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.145  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492567363 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.167  4465 21164 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492567385 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=571 version=571 phase=CONNECTED
+09-01 16:39:30.169  4465  4465 I flutter : 16:39:30.169675 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24381720 pid=4465 generation=1788269948442768 phase=connected requested_action=connect stop_source=none
+09-01 16:39:30.189  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492567407 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.190  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492567408 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.249  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492567468 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:30.575  4465 21518 I A/VpnSession: event=protect_result monotonic_ms=2492567794 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:31.110  4465  4465 I flutter : 16:39:31.110724 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:31.130  4465  4465 I flutter : 16:39:31.130031 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:31.270  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492568488 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:31.450  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492568668 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:31.913  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492569132 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:32.399  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492569617 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:32.477 24534 26255 I ZEON_MATRIX: run=reconnect_001_20260901_163900 target=apple_captive event=failure monotonic_ms=2492569695 type=SocketTimeoutException reason=Read_timed_out total_ms=18088 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:32.546 24534 26252 I ZEON_MATRIX: run=reconnect_001_20260901_163900 target=zeon_204 event=failure monotonic_ms=2492569765 type=SocketTimeoutException reason=Read_timed_out total_ms=18157 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:32.546 24534 26256 I ZEON_MATRIX: run=reconnect_001_20260901_163900 target=matrix event=complete monotonic_ms=2492569765 remaining=0 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:32.651  4465  4465 I flutter : 16:39:32.651347 [INFO]     [ZeonCoreService] event=vpn_snapshot_resync monotonic_ms=24384202 pid=4465 generation=1788269948442768 source=app_resume status=_$CoreStartedImpl published=false
+09-01 16:39:32.679  4465  4465 I flutter : 16:39:32.679809 [INFO]     [ZeonCoreService] watching active groups
+09-01 16:39:32.680  4465  4465 I flutter : 16:39:32.680009 [DEBUG]    [ZeonCoreService] watching group
+09-01 16:39:32.680  4465  4465 I flutter : 16:39:32.680210 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:32.680107Z","refresh_generation":224,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":0,"selected_server_safe_id":"5751e048eb6f","selected_source":"memory_lkg","model_status":"ready","visibility_reason":"memory_lkg"}
+09-01 16:39:32.681  4465  4465 I flutter : 16:39:32.681099 [DEBUG]    [ZeonCoreService] yielding cached active groups before live stream
+09-01 16:39:32.682  4465  4465 I flutter : 16:39:32.682120 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:32.682043Z","refresh_generation":224,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":0,"selected_server_safe_id":"7420d2f10114","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:39:32.682  4465  4465 I flutter : 16:39:32.682479 [DEBUG]    [ZeonCoreService] yielding cached group snapshot before live stream
+09-01 16:39:32.683  4465  4465 I flutter : 16:39:32.683482 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:32.683382Z","refresh_generation":224,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":117,"selected_server_safe_id":"5751e048eb6f","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:39:32.683  4465  4465 I flutter : 16:39:32.683611 [DEBUG]    [ZeonCoreService] watching stats
+09-01 16:39:32.686  4465  4465 I flutter : 16:39:32.686512 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:32.714  4465  4465 I flutter : 16:39:32.714122 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo initial: groups=3
+09-01 16:39:32.718  4465  4465 I flutter : 16:39:32.718595 [DEBUG]    [ZeonCoreService] core log streaming disabled on Android to avoid hcore log feedback
+09-01 16:39:32.725  4465  4465 I flutter : 16:39:32.725288 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:32.727  4465  4465 I flutter : 16:39:32.727840 [DEBUG]    [ZeonCoreService] core log streaming disabled on Android to avoid hcore log feedback
+09-01 16:39:32.728  4465  4465 I flutter : 16:39:32.728213 [DEBUG]    [ZeonCoreService] status listener canceled [bg]
+09-01 16:39:32.728  4465  4465 I flutter : 16:39:32.728975 [INFO]     [ZeonCoreService] ZEON-core setup done
+09-01 16:39:32.731  4465  4465 I flutter : 16:39:32.731369 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:32.732  4465  4465 I flutter : 16:39:32.732752 [INFO]     [ZeonCoreService] watching active groups
+09-01 16:39:32.732  4465  4465 I flutter : 16:39:32.732835 [DEBUG]    [ZeonCoreService] watching group
+09-01 16:39:32.733  4465  4465 I flutter : 16:39:32.733050 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:32.732927Z","refresh_generation":225,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":0,"selected_server_safe_id":"5751e048eb6f","selected_source":"memory_lkg","model_status":"ready","visibility_reason":"memory_lkg"}
+09-01 16:39:32.733  4465  4465 I flutter : 16:39:32.733813 [DEBUG]    [ZeonCoreService] yielding cached active groups before live stream
+09-01 16:39:32.734  4465  4465 I flutter : 16:39:32.734656 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:32.734596Z","refresh_generation":225,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":0,"selected_server_safe_id":"7420d2f10114","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:39:32.734  4465  4465 I flutter : 16:39:32.734972 [DEBUG]    [ZeonCoreService] yielding cached group snapshot before live stream
+09-01 16:39:32.735  4465  4465 I flutter : 16:39:32.735801 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:32.735753Z","refresh_generation":225,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269948442768,"server_count":117,"selected_server_safe_id":"5751e048eb6f","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:39:32.735  4465  4465 I flutter : 16:39:32.735904 [DEBUG]    [ZeonCoreService] watching stats
+09-01 16:39:32.759  4465  4465 I flutter : 16:39:32.759556 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:32.763  4465  4465 I flutter : 16:39:32.763005 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo initial: groups=3
+09-01 16:39:32.772  4465  4465 I flutter : 16:39:32.772668 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:32.775  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492569994 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:32.811  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492570030 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:33.104  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492570322 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:33.719  4465  4465 I flutter : 16:39:33.719609 [INFO]     [ZeonCoreService] event=vpn_snapshot_resync monotonic_ms=24385270 pid=4465 generation=1788269948442768 source=app_resume status=_$CoreStartedImpl published=false
+09-01 16:39:33.860  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492571078 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.115  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492572333 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.115  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492572333 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.116  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492572334 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.116  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492572334 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.116  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492572335 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.120  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492572338 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.125  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492572343 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.125  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492572344 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.159  4465 21164 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492572377 pid=4465 generation=1788269948442768 runtime_epoch=4465-87ff16e55d0c1 sequence=572 version=572 phase=CONNECTED
+09-01 16:39:35.160  4465  4465 I flutter : 16:39:35.160013 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24386711 pid=4465 generation=1788269948442768 phase=connected requested_action=connect stop_source=none
+09-01 16:39:35.237  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492572455 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.620  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492572838 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.672  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492572890 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:35.791  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492573009 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:36.117  4465  4465 I flutter : 16:39:36.117723 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:36.120  4465  4465 I flutter : 16:39:36.120152 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:36.123  4465  4465 I flutter : 16:39:36.123106 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:36.133  4465  4465 I flutter : 16:39:36.133571 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:36.146  4465  4465 I flutter : 16:39:36.146119 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:36.150  4465  4465 I flutter : 16:39:36.150681 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:37.070  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492574288 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:37.403  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492574621 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:38.413  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492575632 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:38.822  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492576040 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:40.119  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492577338 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:40.121  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492577339 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:40.123  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492577341 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:40.133  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492577351 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:40.134  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492577352 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:40.134  4465 23870 I A/VpnSession: event=protect_result monotonic_ms=2492577352 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:40.134  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492577353 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:40.135  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492577353 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:40.135  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492577353 pid=4465 generation=1788269948442768 source=core_socket success=true
+09-01 16:39:40.221  4465  4465 I flutter : 16:39:40.221722 [INFO]     [ZeonCoreService] lifecycle: started -> stopping (preemptive mobile stop requested)
+09-01 16:39:40.223  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492577441 pid=4465 generation=1788269980221698 reason=box_service_stop/flutter
+09-01 16:39:40.223  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492577442 pid=4465 generation=1788269980221698 reason=direct_owner/flutter
+09-01 16:39:40.223  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492577442 pid=4465 generation=1788269980221698 reason=stop_service
+09-01 16:39:40.223  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492577442 pid=4465 generation=1788269980221698 runtime_epoch=4465-87ff16e55d0c1 sequence=573 version=573 phase=STOP_REQUESTED
+09-01 16:39:40.223  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492577442 pid=4465 generation=1788269980221698 runtime_epoch=4465-87ff16e55d0c1 sequence=574 version=574 phase=STOPPING
+09-01 16:39:40.224  4465 21164 I A/VpnSession: event=session_close_requested monotonic_ms=2492577443 pid=4465 generation=1788269948442768 reason=stop
+09-01 16:39:40.226  4465  4465 I flutter : 16:39:40.226702 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:40.226566Z","refresh_generation":226,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":null,"server_count":0,"selected_server_safe_id":null,"selected_source":"none","model_status":"unavailable","visibility_reason":"service_not_running"}
+09-01 16:39:40.227  4465  4465 I flutter : 16:39:40.227262 [DEBUG]    [ZeonCoreService] lifecycle queue: enqueue stop (state=stopping)
+09-01 16:39:40.227  4465  4465 I flutter : 16:39:40.227439 [DEBUG]    [ZeonCoreService] lifecycle queue: begin stop (state=stopping)
+09-01 16:39:40.230  4465  4465 I flutter : 16:39:40.230782 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:40.231  4465  4465 I flutter : 16:39:40.231154 [WARNING]  [ZeonCoreService] event=stale_callback_ignored monotonic_ms=24391782 pid=4465 generation=1788269948442768 current_generation=1788269980221698 source=coreInfoListener[bg]
+09-01 16:39:40.246  4465 19167 I A/VpnSession: event=tun_close monotonic_ms=2492577465 pid=4465 generation=1788269948442768 identity=tun-39 reason=stop
+09-01 16:39:40.247  4465 19167 I A/VpnSession: event=session_close_completed monotonic_ms=2492577466 pid=4465 generation=1788269948442768 reason=stop
+09-01 16:39:40.260  4465  4465 I flutter : 16:39:40.260626 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:40.260  4465  4465 I flutter : 16:39:40.260918 [WARNING]  [ZeonCoreService] event=stale_callback_ignored monotonic_ms=24391812 pid=4465 generation=1788269948442768 current_generation=1788269980221698 source=coreInfoListener[bg]
+09-01 16:39:40.261  4465  4465 I flutter : 16:39:40.261792 [DEBUG]    [ZeonCoreService] status listener canceled [bg]
+09-01 16:39:40.261  4465  4465 I flutter : 16:39:40.261928 [WARNING]  [ZeonCoreService] event=grpc_disconnect monotonic_ms=24391813 pid=4465 generation=1788269948442768 source=bg_status outcome=error
+09-01 16:39:40.262  4465  4465 I flutter : 16:39:40.262052 [WARNING]  [ZeonCoreService] event=stale_callback_ignored monotonic_ms=24391813 pid=4465 generation=1788269948442768 current_generation=1788269980221698 source=bgStatusListener_teardown_close
+09-01 16:39:40.262  4465  4465 I flutter : 16:39:40.262138 [WARNING]  [ZeonCoreService] event=grpc_transport_outcome monotonic_ms=24391813 pid=4465 generation=1788269948442768 source=bgStatusListener_listener outcome=expectedTeardown error_type=GrpcError native_phase=stopping
+09-01 16:39:40.262  4465  4465 I flutter : 16:39:40.262258 [DEBUG]    [ZeonCoreService] listener reconnect skipped [bgStatusListener]: lifecycle=stopping
+09-01 16:39:40.262  4465  4465 I A/VpnSession: event=stop_terminal_deferred monotonic_ms=2492577480 pid=4465 generation=1788269980221698 source=flutter remaining_owners=1 tun_owned=false core_owned=false
+09-01 16:39:40.262  4465  4465 I A/VpnSession: event=stop_terminal_deferred monotonic_ms=2492577481 pid=4465 generation=1788269980221698 source=flutter remaining_owners=1 tun_owned=false core_owned=false
+09-01 16:39:40.265  4465  4465 I A/VpnSession: event=vpn_status monotonic_ms=2492577483 pid=4465 generation=1788269980221698 status=Stopped source=stop_complete/flutter
+09-01 16:39:40.265  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492577483 pid=4465 generation=1788269980221698 runtime_epoch=4465-87ff16e55d0c1 sequence=575 version=575 phase=DISCONNECTED
+09-01 16:39:40.269  4465  4465 I flutter : 16:39:40.269877 [INFO]     [ZeonCoreService] lifecycle: stopping -> stopped (Platform snapshot/disconnected/flutter)
+09-01 16:39:40.270  4465  4465 I flutter : 16:39:40.270076 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24391821 pid=4465 generation=1788269980221698 phase=disconnected requested_action=stop stop_source=flutter
+09-01 16:39:40.393  4465  4465 I flutter : 16:39:40.393478 [DEBUG]    [ZeonCoreService] stopping
+09-01 16:39:40.394  4465  4465 I flutter : 16:39:40.394109 [DEBUG]    [ZeonCoreService] event=session_close_requested monotonic_ms=24391945 pid=4465 generation=1788269980221698 owner=flutter_listeners
+09-01 16:39:40.394  4465  4465 I flutter : 16:39:40.394275 [DEBUG]    [ZeonCoreService] event=session_close_completed monotonic_ms=24391945 pid=4465 generation=1788269980221698 owner=flutter_listeners
+09-01 16:39:40.395  4465  4465 I flutter : 16:39:40.395028 [DEBUG]    [ZeonCoreService] clearing outbound snapshot: stop complete
+09-01 16:39:40.395  4465  4465 I flutter : 16:39:40.395178 [DEBUG]    [ZeonCoreService] lifecycle queue: end stop (state=stopped)
+09-01 16:39:40.397  4465  4465 I flutter : 16:39:40.397346 [INFO]     [ZeonCoreService] event=vpn_snapshot_resync monotonic_ms=24391948 pid=4465 generation=1788269980221698 source=disconnect_completion status=_$CoreStoppedImpl published=false
+09-01 16:39:43.081  4465  4465 I flutter : 16:39:43.081251 [INFO]     [ZeonCoreService] lifecycle: stopped -> starting (connect requested)
+09-01 16:39:43.081  4465  4465 I flutter : 16:39:43.081581 [INFO]     [ZeonCoreService] event=vpn_session_start monotonic_ms=24394632 pid=4465 generation=1788269983081208 operation_generation=1788269983081208 current_generation=1788269983081208 session_state=starting source=connect reason=requested
+09-01 16:39:43.082  4465  4465 I flutter : 16:39:43.082902 [DEBUG]    [ZeonCoreService] changing options
+09-01 16:39:43.092  4465  4465 I flutter : 16:39:43.092283 [INFO]     [ZeonCoreService] core options prepared: full-config=false transport=wifi iface-mtu=1500 user-rules=2
+09-01 16:39:43.092  4465  4465 I flutter : 16:39:43.092567 [INFO]     [ZeonCoreService] core payload (safe): {network-profile: stable_mobile, network-mtu-mode: dynamic, network-transport-type: wifi, network-interface-mtu: 1500, enable-full-config: false, execute-config-as-is: false, fragment-mode: default, profile-dns-strategy: default, selector-interrupt-exist-connections: null, selector-tolerance: null, selector-use-sticky: null, critical-domains-fallback-enabled: null, mtu: 1500, tun-implementation: gvisor, ipv6-mode: ipv4_only, remote-dns-domain-strategy: , direct-dns-domain-strategy: , block-quic: null, strict-route: true, udp-probe-enabled: null, udp-probe-endpoint: null, udp-probe-count: null, udp-probe-size: null, udp-probe-timeout-ms: null, udp-probe-top-n: null, rules-count: 2}
+09-01 16:39:43.149  4465  4465 I flutter : 16:39:43.149627 [DEBUG]    [ZeonCoreService] background core is not started yet! gRPC Error (code: 14, codeName: UNAVAILABLE, message: Error connecting: SocketException: Connection refused (OS Error: Connection refused, errno = 111), address = 127.0.0.1, port = 41324, details: null, rawResponse: null, trailers: {})
+09-01 16:39:43.220  4465  4465 I flutter : 16:39:43.220908 [INFO]     [ZeonCoreService] event=permission_request_started monotonic_ms=24394772 pid=4465 generation=1788269983081208 operation_generation=1788269983081208 current_generation=1788269983081208 session_state=starting source=flutter reason=prepare_vpn
+09-01 16:39:43.222  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492580440 pid=4465 generation=1788269983081208 reason=flutter_generation_update
+09-01 16:39:43.223  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492580441 pid=4465 generation=1788269983081208 reason=prepare_vpn
+09-01 16:39:43.224  4465  4465 I A/VpnSession: event=permission_result_received monotonic_ms=2492580442 pid=4465 generation=1788269983081208 current_generation=1788269983081208 session_state=permission source=all reason=already_granted
+09-01 16:39:43.224  4465  4465 I flutter : 16:39:43.224701 [INFO]     [ZeonCoreService] event=permission_result_received monotonic_ms=24394775 pid=4465 generation=1788269983081208 operation_generation=1788269983081208 current_generation=1788269983081208 session_state=starting source=flutter reason=granted
+09-01 16:39:43.225  4465  4465 I flutter : 16:39:43.225038 [DEBUG]    [ZeonCoreService] lifecycle queue: enqueue start (state=starting)
+09-01 16:39:43.225  4465  4465 I flutter : 16:39:43.225239 [DEBUG]    [ZeonCoreService] lifecycle queue: begin start (state=starting)
+09-01 16:39:43.225  4465  4465 I flutter : 16:39:43.225404 [DEBUG]    [ZeonCoreService] starting
+09-01 16:39:43.226  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492580445 pid=4465 generation=1788269983081208 reason=stop_service
+09-01 16:39:43.227  4465  4465 I A/VpnSession: event=vpn_status monotonic_ms=2492580445 pid=4465 generation=1788269983081208 status=Stopped source=stop_already_complete/replacement
+09-01 16:39:43.227  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492580445 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=576 version=576 phase=DISCONNECTED
+09-01 16:39:43.232  4465  4465 I flutter : 16:39:43.232575 [INFO]     [ZeonCoreService] lifecycle: starting -> stopped (Platform snapshot/disconnected/replacement)
+09-01 16:39:43.232  4465  4465 I flutter : 16:39:43.232842 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24394783 pid=4465 generation=1788269983081208 phase=disconnected requested_action=stop stop_source=replacement
+09-01 16:39:43.235  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492580453 pid=4465 generation=1788269983081208 reason=main_activity_start
+09-01 16:39:43.235  4465  4465 I A/VpnSession: event=permission_result_received monotonic_ms=2492580454 pid=4465 generation=1788269983081208 current_generation=1788269983081208 session_state=permission source=all reason=already_granted
+09-01 16:39:43.235  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492580454 pid=4465 generation=1788269983081208 reason=main_activity_start_service
+09-01 16:39:43.245  4465  4465 I A/VpnSession: event=vpn_session_generation monotonic_ms=2492580464 pid=4465 generation=1788269983081208 reason=service_start_command
+09-01 16:39:43.249  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492580467 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=577 version=577 phase=START_REQUESTED
+09-01 16:39:43.249  4465  4465 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492580467 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=578 version=578 phase=STARTING_PLATFORM
+09-01 16:39:43.249  4465  4465 I A/VpnSession: event=vpn_session_start monotonic_ms=2492580467 pid=4465 generation=1788269983081208 owner=android
+09-01 16:39:43.250  4465  6756 I A/VpnSession: event=vpn_status monotonic_ms=2492580468 pid=4465 generation=1788269983081208 status=Starting source=start_service
+09-01 16:39:43.250  4465  6756 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492580468 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=579 version=579 phase=STARTING_CORE
+09-01 16:39:43.257  4465  4465 I flutter : 16:39:43.257809 [INFO]     [ZeonCoreService] lifecycle: stopped -> starting (Platform snapshot/startingCore/none)
+09-01 16:39:43.258  4465  4465 I flutter : 16:39:43.258147 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24394809 pid=4465 generation=1788269983081208 phase=startingCore requested_action=connect stop_source=none
+09-01 16:39:43.263  4465  6756 I A/VpnSession: event=core_start_requested monotonic_ms=2492580482 pid=4465 generation=1788269983081208 owner=android starts_core=false
+09-01 16:39:43.328  4465  6756 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492580546 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=580 version=580 phase=WAITING_TUN
+09-01 16:39:43.328  4465  6756 I A/VpnSession: event=command_endpoint_ready monotonic_ms=2492580546 pid=4465 generation=1788269983081208
+09-01 16:39:43.328  4465  6756 I A/VpnSession: event=start_gate_waiting monotonic_ms=2492580546 pid=4465 generation=1788269983081208 current_generation=1788269983081208 session_state=starting source=command_endpoint reason=awaiting_mobile_start_tun_protect
+09-01 16:39:43.328  4465  6756 I A/VpnSession: event=vpn_status monotonic_ms=2492580547 pid=4465 generation=1788269983081208 status=CoreReady source=command_endpoint_ready
+09-01 16:39:43.329  4465  4465 I flutter : 16:39:43.329616 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24394880 pid=4465 generation=1788269983081208 phase=waitingTun requested_action=connect stop_source=none
+09-01 16:39:43.489  4465  4465 I flutter : 16:39:43.489105 [DEBUG]    [ZeonCoreService] core log streaming disabled on Android to avoid hcore log feedback
+09-01 16:39:43.492  4465  4465 I flutter : 16:39:43.491964 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:43.492  4465  4465 I flutter : 16:39:43.492423 [INFO]     [ZeonCoreService] lifecycle: starting -> stopped (coreInfoListener[bg])
+09-01 16:39:43.518  4465  4465 I flutter : 16:39:43.518370 [DEBUG]    [ZeonCoreService] core options applied to background/start
+09-01 16:39:43.518  4465  4465 I flutter : 16:39:43.518718 [INFO]     [ZeonCoreService] event=core_start_requested monotonic_ms=24395069 pid=4465 generation=1788269983081208 owner=flutter
+09-01 16:39:43.524  4465  4465 I flutter : 16:39:43.524510 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:43.524  4465  4465 I flutter : 16:39:43.524794 [INFO]     [ZeonCoreService] lifecycle: stopped -> starting (coreInfoListener[bg])
+09-01 16:39:44.754  4465  4646 I A/VpnSession: event=tun_open_requested monotonic_ms=2492581972 pid=4465 generation=1788269983081208
+09-01 16:39:44.794  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492582012 pid=4465 generation=1788269983081208 source=post_tun_probe success=true
+09-01 16:39:44.794  4465  4646 I A/VpnSession: event=tun_open_success monotonic_ms=2492582012 pid=4465 generation=1788269983081208 identity=tun-40
+09-01 16:39:44.794  4465  4646 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492582012 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=581 version=581 phase=VERIFYING
+09-01 16:39:44.795  4465  4465 I flutter : 16:39:44.795386 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24396346 pid=4465 generation=1788269983081208 phase=verifying requested_action=connect stop_source=none
+09-01 16:39:44.806  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492582025 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:44.807  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492582025 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:44.807  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492582025 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:44.807  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492582025 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:44.807  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492582026 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:44.807  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492582026 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:44.807  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492582026 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:44.808  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492582026 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:44.808  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492582027 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:44.829  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492582048 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:44.835  4465  4465 I flutter : 16:39:44.835835 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:44.836  4465  4465 I flutter : 16:39:44.836188 [WARNING]  [ZeonCoreService] event=terminal_state_blocked monotonic_ms=24396387 pid=4465 generation=1788269983081208 operation_generation=1788269983081208 current_generation=1788269983081208 session_state=starting source=coreInfoListener[bg] reason=start_gate_incomplete
+09-01 16:39:44.849  4465  6756 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492582067 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=582 version=582 phase=VERIFYING
+09-01 16:39:44.849  4465  6756 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492582067 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=583 version=583 phase=VERIFYING
+09-01 16:39:44.850  4465  6756 I A/VpnSession: event=platform_vpn_observed monotonic_ms=2492582068 pid=4465 generation=1788269983081208 present=true validated=true
+09-01 16:39:44.850  4465  6756 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492582068 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=584 version=584 phase=CONNECTED
+09-01 16:39:44.850  4465  6756 I A/VpnSession: event=start_gate_completed monotonic_ms=2492582068 pid=4465 generation=1788269983081208 current_generation=1788269983081208 session_state=started source=mark_core_started reason=all_required_evidence
+09-01 16:39:44.850  4465  6756 I A/VpnSession: event=core_start_success monotonic_ms=2492582068 pid=4465 generation=1788269983081208
+09-01 16:39:44.850  4465  6756 I A/VpnSession: event=vpn_status monotonic_ms=2492582068 pid=4465 generation=1788269983081208 status=Started source=all_start_gates_confirmed
+09-01 16:39:44.858  4465  4465 I flutter : 16:39:44.858679 [INFO]     [ZeonCoreService] lifecycle: starting -> started (Platform snapshot/connected/none)
+09-01 16:39:44.858  4465  4465 I flutter : 16:39:44.858933 [DEBUG]    [ZeonCoreService] core log streaming disabled on Android to avoid hcore log feedback
+09-01 16:39:44.860  4465  4465 I flutter : 16:39:44.860894 [DEBUG]    [ZeonCoreService] status listener canceled [bg]
+09-01 16:39:44.861  4465  4465 I flutter : 16:39:44.861823 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24396412 pid=4465 generation=1788269983081208 phase=connected requested_action=connect stop_source=none
+09-01 16:39:44.864  4465  4465 I flutter : 16:39:44.864426 [DEBUG]    [ZeonCoreService] status
+09-01 16:39:44.872  4465  4465 I flutter : 16:39:44.871991 [INFO]     [ZeonCoreService] event=core_start_success monotonic_ms=24396423 pid=4465 generation=1788269983081208
+09-01 16:39:44.900  4465  4465 I flutter : 16:39:44.900379 [INFO]     [ZeonCoreService] watching active groups
+09-01 16:39:44.900  4465  4465 I flutter : 16:39:44.900572 [DEBUG]    [ZeonCoreService] watching group
+09-01 16:39:44.900  4465  4465 I flutter : 16:39:44.900788 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:44.900686Z","refresh_generation":227,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269983081208,"server_count":0,"selected_server_safe_id":"5751e048eb6f","selected_source":"memory_lkg","model_status":"ready","visibility_reason":"memory_lkg"}
+09-01 16:39:44.901  4465  4465 I flutter : 16:39:44.901119 [DEBUG]    [ZeonCoreService] watching stats
+09-01 16:39:45.005  4465  4465 I flutter : 16:39:45.005567 [INFO]     [ZeonCoreService] event=runtime_indicators monotonic_ms=24396556 pid=4465 generation=1788269983081208 source=core_start_success memory_bytes=28803072 goroutines=150 connections_out=3
+09-01 16:39:45.005  4465  4465 I flutter : 16:39:45.005893 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=2
+09-01 16:39:45.006  4465  4465 I flutter : 16:39:45.006144 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:45.006053Z","refresh_generation":227,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269983081208,"server_count":0,"selected_server_safe_id":"99e6da73476c","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:39:45.010  4465  4465 I flutter : 16:39:45.010081 [DEBUG]    [ZeonCoreService] lifecycle queue: end start (state=started)
+09-01 16:39:45.016  4465  4465 I flutter : 16:39:45.016745 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo initial: groups=3
+09-01 16:39:45.029  4465  4465 I flutter : 16:39:45.029453 [INFO]     [ZeonCoreService] watching active groups
+09-01 16:39:45.029  4465  4465 I flutter : 16:39:45.029625 [DEBUG]    [ZeonCoreService] watching group
+09-01 16:39:45.029  4465  4465 I flutter : 16:39:45.029819 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:45.029730Z","refresh_generation":228,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269983081208,"server_count":0,"selected_server_safe_id":"99e6da73476c","selected_source":"memory_lkg","model_status":"ready","visibility_reason":"memory_lkg"}
+09-01 16:39:45.030  4465  4465 I flutter : 16:39:45.030541 [DEBUG]    [ZeonCoreService] yielding cached active groups before live stream
+09-01 16:39:45.031  4465  4465 I flutter : 16:39:45.031364 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:45.031303Z","refresh_generation":228,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269983081208,"server_count":0,"selected_server_safe_id":"cfe1b904000b","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:39:45.031  4465  4465 I flutter : 16:39:45.031667 [DEBUG]    [ZeonCoreService] yielding cached group snapshot before live stream
+09-01 16:39:45.034  4465  4465 I flutter : 16:39:45.034810 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:39:45.034710Z","refresh_generation":228,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269983081208,"server_count":117,"selected_server_safe_id":"5751e048eb6f","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:39:45.035  4465  4465 I flutter : 16:39:45.035002 [DEBUG]    [ZeonCoreService] watching stats
+09-01 16:39:45.037  4465  4465 I flutter : 16:39:45.037178 [INFO]     [ZeonCoreService] event=vpn_snapshot_resync monotonic_ms=24396588 pid=4465 generation=1788269983081208 source=connect_completion status=_$CoreStartedImpl published=false
+09-01 16:39:45.037  4465  4465 I flutter : 16:39:45.037926 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=2
+09-01 16:39:45.061  4465  4465 I flutter : 16:39:45.061400 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo initial: groups=3
+09-01 16:39:45.122  4465  4465 I flutter : 16:39:45.122576 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:46.302  4465  4465 I flutter : 16:39:46.302202 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=2
+09-01 16:39:46.305  4465  4465 I flutter : 16:39:46.305040 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=2
+09-01 16:39:46.309  4465  4465 I flutter : 16:39:46.309873 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:48.940 24534 24534 I ZEON_MATRIX: run=reconnect_002_20260901_163935 target=matrix event=start monotonic_ms=2492586159 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:48.943 24534 26455 I ZEON_MATRIX: run=reconnect_002_20260901_163935 target=cloudflare_speed event=dns monotonic_ms=2492586161 ipv4=2 ipv6=0 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:48.943 24534 26454 I ZEON_MATRIX: run=reconnect_002_20260901_163935 target=gstatic_204 event=dns monotonic_ms=2492586161 ipv4=1 ipv6=0 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:48.943 24534 26456 I ZEON_MATRIX: run=reconnect_002_20260901_163935 target=apple_captive event=dns monotonic_ms=2492586162 ipv4=1 ipv6=0 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:48.947 24534 26452 I ZEON_MATRIX: run=reconnect_002_20260901_163935 target=zeon_204 event=dns monotonic_ms=2492586166 ipv4=1 ipv6=0 network_handle=1940435947533 vpn=true validated=true
+09-01 16:39:49.805  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492587023 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:49.806  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492587024 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:49.808  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492587026 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:49.813  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492587032 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:49.814  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492587032 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:49.814  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492587032 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:49.814  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492587032 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:49.814  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492587033 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:49.869  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492587087 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:49.902  4465  6756 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492587120 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=585 version=585 phase=CONNECTED
+09-01 16:39:49.905  4465  4465 I flutter : 16:39:49.905485 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24401456 pid=4465 generation=1788269983081208 phase=connected requested_action=connect stop_source=none
+09-01 16:39:50.810  4465  4465 I flutter : 16:39:50.810419 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:50.829  4465  4465 I flutter : 16:39:50.829388 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:54.809  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492592027 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:54.811  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492592030 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:54.815  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492592033 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:54.815  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492592033 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:54.815  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492592033 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:54.816  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492592035 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:54.818  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492592036 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:54.821  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492592039 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:54.821  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492592039 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:54.822  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492592040 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.063  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492592281 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.312  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492592531 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.813  4465  4465 I flutter : 16:39:55.813532 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:55.826  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492593045 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.832  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492593050 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.834  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492593052 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.835  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492593053 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.835  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492593054 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.837  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492593055 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.838  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492593056 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.838  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492593057 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.839  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492593057 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.843  4465  4465 I flutter : 16:39:55.843071 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:55.857  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492593075 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.897  4465  6756 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492593116 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=586 version=586 phase=CONNECTED
+09-01 16:39:55.897  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492593116 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:55.900  4465  4465 I flutter : 16:39:55.900145 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24407451 pid=4465 generation=1788269983081208 phase=connected requested_action=connect stop_source=none
+09-01 16:39:56.529  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492593747 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:56.838  4465  4465 I flutter : 16:39:56.838781 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:39:56.841  4465  4465 I flutter : 16:39:56.841574 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:39:57.525  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492594743 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:39:58.822  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492596040 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.479  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492597697 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.734  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492597953 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.832  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492598050 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.835  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492598053 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.836  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492598054 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.840  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492598058 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.842  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492598061 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.845  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492598064 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.846  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492598064 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.846  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492598065 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.847  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492598066 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:00.895  4465  6756 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492598113 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=587 version=587 phase=CONNECTED
+09-01 16:40:00.897  4465  4465 I flutter : 16:40:00.897483 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24412448 pid=4465 generation=1788269983081208 phase=connected requested_action=connect stop_source=none
+09-01 16:40:00.944  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492598162 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:01.041  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492598259 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:01.676  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492598894 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:01.834  4465  4465 I flutter : 16:40:01.834605 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:01.860  4465  4465 I flutter : 16:40:01.860023 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:02.708  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492599926 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:02.986  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492600204 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:04.041  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492601259 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:05.834  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492603052 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:05.834  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492603053 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:05.835  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492603053 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:05.836  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492603054 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:05.837  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492603055 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:05.837  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492603055 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:05.845  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492603064 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:05.846  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492603064 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:05.846  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492603064 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:05.849  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492603068 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:06.314  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492603533 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:06.341  4465  4644 I A/VpnSession: event=protect_result monotonic_ms=2492603559 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:06.739  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492603957 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:06.750  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492603968 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:06.842  4465  4465 I flutter : 16:40:06.842024 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:06.858  4465  4465 I flutter : 16:40:06.858220 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:06.864  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492604082 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:06.973 24534 26454 I ZEON_MATRIX: run=reconnect_002_20260901_163935 target=gstatic_204 event=failure monotonic_ms=2492604191 type=SocketTimeoutException reason=Read_timed_out total_ms=18032 network_handle=1940435947533 vpn=true validated=true
+09-01 16:40:06.974 24534 26456 I ZEON_MATRIX: run=reconnect_002_20260901_163935 target=apple_captive event=failure monotonic_ms=2492604191 type=SocketTimeoutException reason=Read_timed_out total_ms=18032 network_handle=1940435947533 vpn=true validated=true
+09-01 16:40:06.977 24534 26452 I ZEON_MATRIX: run=reconnect_002_20260901_163935 target=zeon_204 event=failure monotonic_ms=2492604196 type=SocketTimeoutException reason=Read_timed_out total_ms=18034 network_handle=1940435947533 vpn=true validated=true
+09-01 16:40:07.159 24534 26455 I ZEON_MATRIX: run=reconnect_002_20260901_163935 target=cloudflare_speed event=success monotonic_ms=2492604378 status=200 bytes=4096 first_byte_ms=18217 total_ms=18219 network_handle=1940435947533 vpn=true validated=true
+09-01 16:40:07.159 24534 26457 I ZEON_MATRIX: run=reconnect_002_20260901_163935 target=matrix event=complete monotonic_ms=2492604378 remaining=0 network_handle=1940435947533 vpn=true validated=true
+09-01 16:40:07.282  4465  4465 I flutter : 16:40:07.282208 [INFO]     [ZeonCoreService] event=vpn_snapshot_resync monotonic_ms=24418833 pid=4465 generation=1788269983081208 source=app_resume status=_$CoreStartedImpl published=false
+09-01 16:40:07.312  4465  4465 I flutter : 16:40:07.312404 [INFO]     [ZeonCoreService] watching active groups
+09-01 16:40:07.312  4465  4465 I flutter : 16:40:07.312608 [DEBUG]    [ZeonCoreService] watching group
+09-01 16:40:07.312  4465  4465 I flutter : 16:40:07.312856 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:40:07.312743Z","refresh_generation":229,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269983081208,"server_count":0,"selected_server_safe_id":"5751e048eb6f","selected_source":"memory_lkg","model_status":"ready","visibility_reason":"memory_lkg"}
+09-01 16:40:07.313  4465  4465 I flutter : 16:40:07.313932 [DEBUG]    [ZeonCoreService] yielding cached active groups before live stream
+09-01 16:40:07.315  4465  4465 I flutter : 16:40:07.315006 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:40:07.314912Z","refresh_generation":229,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269983081208,"server_count":0,"selected_server_safe_id":"7420d2f10114","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:40:07.315  4465  4465 I flutter : 16:40:07.315377 [DEBUG]    [ZeonCoreService] yielding cached group snapshot before live stream
+09-01 16:40:07.316  4465  4465 I flutter : 16:40:07.316337 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:40:07.316279Z","refresh_generation":229,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269983081208,"server_count":117,"selected_server_safe_id":"5751e048eb6f","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:40:07.316  4465  4465 I flutter : 16:40:07.316448 [DEBUG]    [ZeonCoreService] watching stats
+09-01 16:40:07.326  4465  4465 I flutter : 16:40:07.326100 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:07.348  4465  4465 I flutter : 16:40:07.348755 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo initial: groups=3
+09-01 16:40:07.372  4465  4465 I flutter : 16:40:07.372667 [DEBUG]    [ZeonCoreService] core log streaming disabled on Android to avoid hcore log feedback
+09-01 16:40:07.376  4465  4465 I flutter : 16:40:07.376872 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:07.378  4465  4465 I flutter : 16:40:07.378906 [DEBUG]    [ZeonCoreService] core log streaming disabled on Android to avoid hcore log feedback
+09-01 16:40:07.379  4465  4465 I flutter : 16:40:07.379190 [DEBUG]    [ZeonCoreService] status listener canceled [bg]
+09-01 16:40:07.379  4465  4465 I flutter : 16:40:07.379801 [INFO]     [ZeonCoreService] ZEON-core setup done
+09-01 16:40:07.381  4465  4465 I flutter : 16:40:07.381300 [DEBUG]    [ZeonCoreService] status
+09-01 16:40:07.384  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492604602 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:07.395  4465  4465 I flutter : 16:40:07.395847 [INFO]     [ZeonCoreService] watching active groups
+09-01 16:40:07.396  4465  4465 I flutter : 16:40:07.396043 [DEBUG]    [ZeonCoreService] watching group
+09-01 16:40:07.396  4465  4465 I flutter : 16:40:07.396232 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:40:07.396139Z","refresh_generation":230,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269983081208,"server_count":0,"selected_server_safe_id":"5751e048eb6f","selected_source":"memory_lkg","model_status":"ready","visibility_reason":"memory_lkg"}
+09-01 16:40:07.397  4465  4465 I flutter : 16:40:07.397143 [DEBUG]    [ZeonCoreService] yielding cached active groups before live stream
+09-01 16:40:07.398  4465  4465 I flutter : 16:40:07.398165 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:40:07.398067Z","refresh_generation":230,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269983081208,"server_count":0,"selected_server_safe_id":"7420d2f10114","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:40:07.398  4465  4465 I flutter : 16:40:07.398562 [DEBUG]    [ZeonCoreService] yielding cached group snapshot before live stream
+09-01 16:40:07.399  4465  4465 I flutter : 16:40:07.399670 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:40:07.399586Z","refresh_generation":230,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:25:16.486994Z","connection_generation":1788269983081208,"server_count":117,"selected_server_safe_id":"5751e048eb6f","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:40:07.399  4465  4465 I flutter : 16:40:07.399807 [DEBUG]    [ZeonCoreService] watching stats
+09-01 16:40:07.402  4465  4465 I flutter : 16:40:07.402694 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:07.408  4465  4465 I flutter : 16:40:07.408422 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo initial: groups=3
+09-01 16:40:07.417  4465  4465 I flutter : 16:40:07.417282 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:07.700  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492604919 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:07.715  4465  4465 I flutter : 16:40:07.715650 [INFO]     [ZeonCoreService] event=vpn_snapshot_resync monotonic_ms=24419266 pid=4465 generation=1788269983081208 source=app_resume status=_$CoreStartedImpl published=false
+09-01 16:40:09.204  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492606422 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:09.217  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492606436 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:10.839  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492608057 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:10.841  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492608059 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:10.842  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492608060 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:10.844  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492608062 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:10.854  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492608073 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:10.855  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492608074 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:10.856  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492608074 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:10.856  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492608074 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:10.856  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492608075 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:11.341  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492608559 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:11.716  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492608934 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:11.831  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492609049 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:11.851  4465  4465 I flutter : 16:40:11.851026 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:11.856  4465  4465 I flutter : 16:40:11.856468 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:11.857  4465  4465 I flutter : 16:40:11.857728 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:11.868  4465  4465 I flutter : 16:40:11.867944 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:11.874  4465  4465 I flutter : 16:40:11.874316 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:11.878  4465  4465 I flutter : 16:40:11.878398 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:11.975  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492609193 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:11.979  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492609197 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:11.980  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492609198 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:11.980  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492609199 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:11.988  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492609207 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:11.989  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492609208 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:11.998  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492609216 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:12.003  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492609221 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:12.079  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492609298 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:12.130  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492609348 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:12.543  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492609761 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:12.993  4465  4465 I flutter : 16:40:12.993805 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:13.001  4465  4465 I flutter : 16:40:13.000972 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:13.202  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492610420 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:13.507  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492610725 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:13.681  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492610899 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:13.681  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492610900 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:13.683  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492610901 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:13.684  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492610902 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:13.685  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492610903 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:13.686  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492610904 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:13.687  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492610905 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:13.692  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492610910 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:13.711  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492610929 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:13.899  4465  6756 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492611118 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=588 version=588 phase=CONNECTED
+09-01 16:40:13.901  4465  4465 I flutter : 16:40:13.901311 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24425452 pid=4465 generation=1788269983081208 phase=connected requested_action=connect stop_source=none
+09-01 16:40:14.050  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492611268 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:14.238  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492611457 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:14.683  4465  4465 I flutter : 16:40:14.683337 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:14.699  4465  4465 I flutter : 16:40:14.699833 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:15.066  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492612284 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:15.066  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492612285 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:15.069  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492612287 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:15.075  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492612293 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:15.077  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492612295 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:15.077  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492612295 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:15.078  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492612296 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:15.078  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492612296 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:15.080  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492612299 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:15.181  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492612399 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:15.861  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492613079 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:16.089  4465  4465 I flutter : 16:40:16.089832 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:16.093  4465  4465 I flutter : 16:40:16.093895 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:16.810  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492614028 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:16.947  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492614165 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:17.086  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492614304 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:17.255  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492614473 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:17.455  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492614674 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:17.883  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492615102 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:18.115  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492615334 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:18.429  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492615647 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:18.502  4465  4465 I flutter : 16:40:18.502847 [DEBUG]    [ZeonCoreService] changing options
+09-01 16:40:18.510  4465  4465 I flutter : 16:40:18.510509 [INFO]     [ZeonCoreService] core options prepared: full-config=false transport=wifi iface-mtu=1500 user-rules=2
+09-01 16:40:18.510  4465  4465 I flutter : 16:40:18.510791 [INFO]     [ZeonCoreService] core payload (safe): {network-profile: stable_mobile, network-mtu-mode: dynamic, network-transport-type: wifi, network-interface-mtu: 1500, enable-full-config: false, execute-config-as-is: false, fragment-mode: default, profile-dns-strategy: default, selector-interrupt-exist-connections: null, selector-tolerance: null, selector-use-sticky: null, critical-domains-fallback-enabled: null, mtu: 1500, tun-implementation: gvisor, ipv6-mode: ipv4_only, remote-dns-domain-strategy: , direct-dns-domain-strategy: , block-quic: null, strict-route: true, udp-probe-enabled: null, udp-probe-endpoint: null, udp-probe-count: null, udp-probe-size: null, udp-probe-timeout-ms: null, udp-probe-top-n: null, rules-count: 2}
+09-01 16:40:18.807  4465  4465 I flutter : 16:40:18.807742 [INFO]     [ZeonCoreService] watching active groups
+09-01 16:40:18.807  4465  4465 I flutter : 16:40:18.807973 [DEBUG]    [ZeonCoreService] watching group
+09-01 16:40:18.808  4465  4465 I flutter : 16:40:18.808255 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:40:18.808136Z","refresh_generation":231,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:40:18.502122Z","connection_generation":1788269983081208,"server_count":0,"selected_server_safe_id":"5751e048eb6f","selected_source":"memory_lkg","model_status":"ready","visibility_reason":"memory_lkg"}
+09-01 16:40:18.808  4465  4465 I flutter : 16:40:18.808462 [DEBUG]    [ZeonCoreService] yielding cached active groups before live stream
+09-01 16:40:18.808  4465  4465 I flutter : 16:40:18.808687 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:40:18.808622Z","refresh_generation":231,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:40:18.502122Z","connection_generation":1788269983081208,"server_count":0,"selected_server_safe_id":"8a8b73dbc181","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:40:18.808  4465  4465 I flutter : 16:40:18.808840 [DEBUG]    [ZeonCoreService] yielding cached group snapshot before live stream
+09-01 16:40:18.809  4465  4465 I flutter : 16:40:18.809198 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:40:18.809141Z","refresh_generation":231,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:40:18.502122Z","connection_generation":1788269983081208,"server_count":0,"selected_server_safe_id":"5751e048eb6f","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:40:18.809  4465  4465 I flutter : 16:40:18.809366 [DEBUG]    [ZeonCoreService] watching stats
+09-01 16:40:18.813  4465  4465 I flutter : 16:40:18.813 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:18.834  4465  4465 I flutter : 16:40:18.834486 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo initial: groups=3
+09-01 16:40:18.836  4465  4465 I flutter : 16:40:18.836403 [INFO]     [ActiveProxyNotifier] {"event":"server_picker_model","timestamp_utc":"2026-09-01T13:40:18.836290Z","refresh_generation":231,"profile_safe_id":"cc9cc352fdaa","profile_revision_utc":"2026-09-01T13:40:18.502122Z","connection_generation":1788269983081208,"server_count":117,"selected_server_safe_id":"5751e048eb6f","selected_source":"active","model_status":"ready","visibility_reason":"resolved"}
+09-01 16:40:18.861  4465  4465 I flutter : 16:40:18.860972 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:19.375  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492616593 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:19.656  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492616874 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:19.936  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492617154 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:20.001  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492617219 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:20.080  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492617298 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:20.083  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492617302 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:20.088  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492617306 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:20.096  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492617314 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:20.096  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492617314 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:20.100  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492617318 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:20.101  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492617319 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:20.101  4465  4626 I A/VpnSession: event=protect_result monotonic_ms=2492617319 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:20.101  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492617320 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:20.449  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492617667 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:21.083  4465  4465 I flutter : 16:40:21.082902 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:21.099  4465  4465 I flutter : 16:40:21.099470 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:21.111  4465  4465 I flutter : 16:40:21.111365 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:21.119  4465  4465 I flutter : 16:40:21.119443 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:21.120  4465  4626 I A/VpnSession: event=protect_result monotonic_ms=2492618339 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:21.276  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492618494 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:22.207  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492619426 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:22.551  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492619770 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:23.244  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492620462 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:23.443  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492620661 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:23.713  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492620931 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:23.777  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492620995 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:24.791  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492622010 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:25.090  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492622308 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:25.091  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492622309 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:25.096  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492622314 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:25.100  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492622319 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:25.109  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492622327 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:25.122  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492622340 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:25.123  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492622341 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:25.185  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492622403 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:25.632  4465  4465 I flutter : 16:40:25.632536 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:25.643  4465  4465 I flutter : 16:40:25.643235 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:25.676  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492622894 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:25.899  4465  6756 I A/VpnSession: event=vpn_snapshot monotonic_ms=2492623117 pid=4465 generation=1788269983081208 runtime_epoch=4465-87ff16e55d0c1 sequence=589 version=589 phase=CONNECTED
+09-01 16:40:25.901  4465  4465 I flutter : 16:40:25.900948 [INFO]     [ZeonCoreService] event=vpn_snapshot_applied monotonic_ms=24437452 pid=4465 generation=1788269983081208 phase=connected requested_action=connect stop_source=none
+09-01 16:40:26.006  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492623225 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:26.334  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492623552 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:26.819  4465  4465 I flutter : 16:40:26.818765 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:26.840  4465  4465 I flutter : 16:40:26.840718 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:27.198  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492624416 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:27.522  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492624740 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:28.189  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492625407 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:28.851  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492626069 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:29.117  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492626335 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:29.816  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492627035 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.138  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492627356 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.138  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492627357 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.139  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492627357 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.139  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492627357 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.139  4465  6759 I A/VpnSession: event=protect_result monotonic_ms=2492627357 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.139  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492627357 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.139  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492627358 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.139  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492627358 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.510  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492627728 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.510  4465  4626 I A/VpnSession: event=protect_result monotonic_ms=2492627729 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.521  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492627739 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.522  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492627741 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.522  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492627741 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.523  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492627741 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.523  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492627741 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.615  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492627833 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.772  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492627990 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:30.899  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492628117 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:31.099  4465  4465 I flutter : 16:40:31.099676 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:31.121  4465  4465 I flutter : 16:40:31.121632 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:31.501  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492628719 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:31.502  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492628720 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:31.503  4465  4553 I A/VpnSession: event=protect_result monotonic_ms=2492628721 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:31.503  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492628721 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:31.503  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492628721 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:31.503  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492628722 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:31.503  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492628722 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:31.747  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492628965 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:31.854  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492629072 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.036  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492629254 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.036  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492629255 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.037  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492629256 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.038  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492629257 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.042  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492629260 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.045  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492629263 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.047  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492629265 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.048  4465  4628 I A/VpnSession: event=protect_result monotonic_ms=2492629267 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.503  4465  4465 I flutter : 16:40:32.503326 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:32.527  4465  4465 I flutter : 16:40:32.527302 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3
+09-01 16:40:32.721  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492629939 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.980  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492630198 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.980  4465  4491 I A/VpnSession: event=protect_result monotonic_ms=2492630199 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.981  4465  4627 I A/VpnSession: event=protect_result monotonic_ms=2492630199 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.982  4465  4626 I A/VpnSession: event=protect_result monotonic_ms=2492630200 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.984  4465 23738 I A/VpnSession: event=protect_result monotonic_ms=2492630202 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.990  4465  4618 I A/VpnSession: event=protect_result monotonic_ms=2492630209 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.991  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492630209 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.992  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492630210 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:32.992  4465  4493 I A/VpnSession: event=protect_result monotonic_ms=2492630210 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:33.691  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492630909 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:33.691  4465  4649 I A/VpnSession: event=protect_result monotonic_ms=2492630909 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:33.691  4465  4626 I A/VpnSession: event=protect_result monotonic_ms=2492630910 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:33.692  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492630910 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:33.694  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492630912 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:33.698  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492630916 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:33.700  4465  4482 I A/VpnSession: event=protect_result monotonic_ms=2492630919 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:33.824  4465  4492 I A/VpnSession: event=protect_result monotonic_ms=2492631043 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:33.981  4465  4465 I flutter : 16:40:33.981505 [DEBUG]    [ZeonCoreService] cached outbound snapshot from mainOutboundsInfo stream: groups=3
+09-01 16:40:33.983  4465  4646 I A/VpnSession: event=protect_result monotonic_ms=2492631201 pid=4465 generation=1788269983081208 source=core_socket success=true
+09-01 16:40:33.996  4465  4465 I flutter : 16:40:33.996774 [DEBUG]    [ZeonCoreService] cached outbound snapshot from outboundsInfo stream: groups=3

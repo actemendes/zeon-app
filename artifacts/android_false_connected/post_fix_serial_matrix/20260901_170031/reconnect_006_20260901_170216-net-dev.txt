@@ -1,0 +1,33 @@
+﻿Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+rmnet_data4:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data8:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data10:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ip6_vti0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ wlan0: 6557909664 8305660    0    0    0     0          0         0 1543404853 6754812    0    0    0     0       0          0
+rmnet_data9:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data3:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+    lo: 4236837372 5812604    0    0    0     0          0         0 4236837372 5812604    0    0    0     0       0          0
+rmnet_ipa0:  223672    2175    0    0    0     0          0         0   781118    2401    0    0    0     0       0          0
+r_rmnet_data5:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data6:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data2:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data7:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ bond0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data2:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data0:  190872    2169    0    0    0     0          0         0   760822    2387    0    0    0     0       0          0
+rmnet_data6:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data0:    2380      11    0    0    0     0          0         0     1072      16    0    0    0     0       0          0
+rmnet_data3:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ip6tnl0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data8:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data1:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+dummy0:       0       0    0    0    0     0          0         0    15120     216    0    0    0     0       0          0
+  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+  p2p0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data7:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data5:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data4:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+  tun1:   11306      42    0    0    0     0          0         0     7428      47    0    0    0     0       0          0
+rmnet_data1:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ip_vti0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0

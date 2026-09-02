@@ -178,6 +178,7 @@ class MainVpnButtonState {
         commandEndpointReady: snapshot.commandEndpointReady,
         tunnelReady: snapshot.tunnelReady,
         protectSucceeded: snapshot.protectSucceeded,
+        dataPlaneReady: snapshot.dataPlaneReady,
         platformVpnValidated: snapshot.platformVpnValidated,
         selectedOutboundId: snapshot.selectedOutboundId,
         selectedOutboundLabel: snapshot.selectedOutboundLabel,

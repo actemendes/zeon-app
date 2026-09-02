@@ -10,6 +10,47 @@ import kotlinx.coroutines.coroutineScope
 import java.lang.reflect.Proxy
 
 class ActiveSessionInstrumentedTest {
+    fun dataPlaneRevalidationIsRevisionedAndSingleFlight() {
+        val session = ActiveSession(
+            VpnSessionCoordinator.next("active_session_data_plane"),
+            platform(),
+            TunDescriptorOwner(),
+        )
+
+        check(session.recordDefaultNetworkChange() == 1L)
+        check(session.recordSelectedOutboundChange() == 1L)
+        check(session.currentSelectedOutboundRevision() == 1L)
+        session.invalidateDataPlane()
+        check(session.needsDataPlaneRevalidation())
+        check(session.beginDataPlaneRevalidation())
+        check(!session.beginDataPlaneRevalidation())
+        check(session.recordSelectedOutboundChange() == 2L)
+        check(session.recordDefaultNetworkChange() == 2L)
+        check(session.currentDefaultNetworkRevision() == 2L)
+        session.finishDataPlaneRevalidation()
+        check(session.beginDataPlaneRevalidation())
+        session.finishDataPlaneRevalidation()
+        session.clearDataPlaneInvalidation()
+        check(!session.needsDataPlaneRevalidation())
+        check(session.beginDataPlaneRevalidation())
+        session.finishDataPlaneRevalidation()
+    }
+
+    fun selectedOutboundRevalidationStartsWithoutPublishedInvalidation() {
+        val session = ActiveSession(
+            VpnSessionCoordinator.next("active_session_selected_outbound"),
+            platform(),
+            TunDescriptorOwner(),
+        )
+
+        check(!session.needsDataPlaneRevalidation())
+        check(session.beginDataPlaneRevalidation())
+        check(!session.beginDataPlaneRevalidation())
+        session.finishDataPlaneRevalidation()
+        check(session.beginDataPlaneRevalidation())
+        session.finishDataPlaneRevalidation()
+    }
+
     suspend fun teardownOrderIsStableAndCloseIsIdempotent() {
         val generation = VpnSessionCoordinator.next("active_session_order")
         val tunOwner = TunDescriptorOwner()

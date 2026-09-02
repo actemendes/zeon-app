@@ -1,0 +1,34 @@
+﻿Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+rmnet_data4:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data8:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data10:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ip6_vti0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ wlan0: 6549606980 8286475    0    0    0     0          0         0 1539500171 6734911    0    0    0     0       0          0
+rmnet_data9:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data3:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+    lo: 4213504195 5792445    0    0    0     0          0         0 4213504195 5792445    0    0    0     0       0          0
+rmnet_ipa0:  223572    2174    0    0    0     0          0         0   780670    2399    0    0    0     0       0          0
+r_rmnet_data5:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data6:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data2:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data7:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ bond0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+  tun0:   20857      67    0    0    0     0          0         0     9553      73    0    0    0     0       0          0
+r_rmnet_data2:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data0:  190784    2168    0    0    0     0          0         0   760390    2385    0    0    0     0       0          0
+rmnet_data6:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data0:    2380      11    0    0    0     0          0         0     1072      16    0    0    0     0       0          0
+rmnet_data3:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ip6tnl0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data8:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data1:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+dummy0:       0       0    0    0    0     0          0         0    15050     215    0    0    0     0       0          0
+  sit0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+  p2p0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data7:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+rmnet_data5:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+r_rmnet_data4:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+  tun1:   11335      43    0    0    0     0          0         0     7378      47    0    0    0     0       0          0
+rmnet_data1:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0
+ip_vti0:       0       0    0    0    0     0          0         0        0       0    0    0    0     0       0          0

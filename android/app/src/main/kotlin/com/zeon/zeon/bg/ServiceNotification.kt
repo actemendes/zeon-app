@@ -43,7 +43,21 @@ import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.withTimeoutOrNull
-class ServiceNotification(private val status: MutableLiveData<Status>, private val service: Service) : BroadcastReceiver(){
+
+internal fun selectedOutboundRequiresDataPlaneRevalidation(
+    generation: Long,
+    before: VpnSessionSnapshot,
+    after: VpnSessionSnapshot,
+): Boolean =
+    before.generation == generation &&
+        before.provesConnected() &&
+        after.selectedOutboundId != before.selectedOutboundId
+
+class ServiceNotification(
+    private val status: MutableLiveData<Status>,
+    private val service: Service,
+    private val onSelectedOutboundChanged: (Long) -> Unit = {},
+) : BroadcastReceiver(){
     data class DetachedSystemInfoListener internal constructor(
         val generation: Long,
         internal val job: Job?,
@@ -218,11 +232,16 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
         val uplink=status.uplink_total - previous.uplink_total
         val downlink=status.downlink_total - previous.downlink_total
         val generation = activeGeneration
+        val before = VpnSessionSnapshotCoordinator.current()
         val snapshot = VpnSessionSnapshotCoordinator.selectedOutbound(
             generation,
             status.current_outbound,
             if (status.current_outbound.startsWith(AUTO_BALANCER_TAG)) AUTO_BALANCER_TAG else "selector",
         )
+        if (selectedOutboundRequiresDataPlaneRevalidation(generation, before, snapshot)) {
+            onSelectedOutboundChanged(generation)
+            return
+        }
         if (!snapshot.provesConnected()) return
         val currentOutbound = presentOutboundForNotification(snapshot.selectedOutboundLabel)
         val content = "${Libbox.formatBytes(uplink)}/s \u2191\t${Libbox.formatBytes(downlink)}/s \u2193 \n$currentOutbound"

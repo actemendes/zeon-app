@@ -1,0 +1,7 @@
+﻿"cycle","run","connected_ms","ui_connected","probe_successes","probe_failures","probe_timed_out","vpn_active","vpn_validated","tun_interface","tun_rx_delta","tun_tx_delta","false_connected"
+"1","reconnect_001_20260901_170031","6206","True","4","0","False","True","True","tun0","31103","9227","False"
+"2","reconnect_002_20260901_170049","5609","True","4","0","False","True","True","tun1","13830","5287","False"
+"3","reconnect_003_20260901_170106","5598","True","4","0","False","True","True","tun0","13868","5335","False"
+"4","reconnect_004_20260901_170124","5614","True","4","0","False","True","True","tun1","13817","5323","False"
+"5","reconnect_005_20260901_170141","6535","True","3","1","False","True","True","tun0","23448","8884","False"
+"6","reconnect_006_20260901_170216","5600","True","1","3","False","True","True","tun1","10626","4889","True"

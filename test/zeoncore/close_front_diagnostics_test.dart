@@ -522,6 +522,7 @@ VpnSessionSnapshot _connectedSnapshot(int generation) => VpnSessionSnapshot(
   commandEndpointReady: true,
   tunnelReady: true,
   protectSucceeded: true,
+  dataPlaneReady: true,
   platformVpnValidated: true,
   selectedOutboundId: 'selected',
 );

@@ -1,0 +1,5 @@
+﻿09-01 22:44:13.842 31211 31211 I flutter : 22:44:13.842127 [INFO]     [ConnectionNotifier] connection status: CONNECTING
+09-01 22:44:25.811 31211 31211 I flutter : 22:44:25.811191 [WARNING]  [ZeonCoreService] event=stale_callback_ignored monotonic_ms=105977 pid=31211 generation=0 current_generation=1788291853838530 source=platform_resync/connecting_timeout phase=idle
+09-01 22:44:25.812 31211 31211 I flutter : 22:44:25.812346 [WARNING]  [ConnectionNotifier] event=vpn_ui_connecting_timeout intent=2
+09-01 22:44:33.565 31899 31914 I ZEON_VERIFY: run=manual_01_20260901_224408 target=matrix event=start monotonic_ms=2514470783 network_handle=0 active_handle=2047810129933 active_is_vpn=false vpn=false validated=false interface=none dns_servers=0
+09-01 22:44:33.565 31899 31914 I ZEON_VERIFY: run=manual_01_20260901_224408 target=matrix event=complete monotonic_ms=2514470784 reason=vpn_network_missing network_handle=0 active_handle=2047810129933 active_is_vpn=false vpn=false validated=false interface=none dns_servers=0

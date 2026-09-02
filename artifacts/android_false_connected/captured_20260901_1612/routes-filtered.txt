@@ -1,0 +1,15 @@
+﻿default via 192.168.3.1 dev wlan0 table 1030 proto static 
+default dev tun2 table 1418 proto static scope link 
+172.19.0.0/28 dev tun2 table 1418 proto static scope link 
+172.19.0.0/28 dev tun2 table 1000000418 proto static scope link 
+default dev dummy0 table 1003 proto static scope link 
+172.19.0.0/28 dev tun2 proto kernel scope link src 172.19.0.1 
+broadcast 172.19.0.0 dev tun2 table local proto kernel scope link src 172.19.0.1 
+local 172.19.0.1 dev tun2 table local proto kernel scope host src 172.19.0.1 
+broadcast 172.19.0.15 dev tun2 table local proto kernel scope link src 172.19.0.1 
+fe80::/64 dev tun2 table 1418 proto kernel metric 256 pref medium
+unreachable default dev lo table 1418 proto static metric 1024 pref medium
+default dev dummy0 table 1003 proto static metric 1024 pref medium
+anycast fe80:: dev tun2 table local proto kernel metric 0 pref medium
+local fe80::8942:a540:70d9:3b63 dev tun2 table local proto kernel metric 0 pref medium
+ff00::/8 dev tun2 table local proto kernel metric 256 pref medium

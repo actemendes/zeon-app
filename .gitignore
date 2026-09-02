@@ -111,3 +111,7 @@ pubspec.lock
 # Local Codex deployment worktree and native compiler outputs
 /.codex-deploy-subscription/
 /*.obj
+
+# Large local verification artifacts (not suitable for regular Git hosting)
+*.qcow2
+/artifacts/android_false_connected/pre_fix_core/hiddify-core-before-fix.aar

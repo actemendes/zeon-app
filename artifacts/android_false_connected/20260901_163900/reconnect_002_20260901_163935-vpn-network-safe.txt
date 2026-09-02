@@ -1,0 +1,6 @@
+﻿vpn_connected=True
+validated=True
+interface=tun1
+dns=/172.19.0.2
+routes=0.0.0.0/0 -> 0.0.0.0 tun1 mtu 0,::/0 unreachable mtu 0,172.19.0.0/28 -> 0.0.0.0 tun1 mtu 0
+underlying_network_ids=416

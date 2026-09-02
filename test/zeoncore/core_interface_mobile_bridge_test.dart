@@ -439,6 +439,7 @@ Map<String, Object?> _iosSnapshotEvent({
   'commandEndpointReady': ready,
   'tunnelReady': ready,
   'protectSucceeded': ready,
+  'dataPlaneReady': ready,
   'platformVpnValidated': ready,
   'selectedOutboundId': ready ? 'opaque-ios-outbound' : '',
   'status': legacyStatus,

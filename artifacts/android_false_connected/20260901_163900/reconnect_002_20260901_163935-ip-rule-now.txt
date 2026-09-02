@@ -1,0 +1,42 @@
+﻿0:	from all lookup local 
+10000:	from all fwmark 0xc0000/0xd0000 lookup 99 
+11000:	from all iif lo oif dummy0 uidrange 0-0 lookup 1003 
+11000:	from all iif lo oif rmnet_data0 uidrange 0-0 lookup 1010 
+11000:	from all iif lo oif r_rmnet_data0 uidrange 0-0 lookup 1021 
+11000:	from all iif lo oif wlan0 uidrange 0-0 lookup 1030 
+12000:	from all iif tun1 lookup 97 
+13000:	from all fwmark 0x0/0x20000 iif lo uidrange 0-10279 lookup 1430 
+13000:	from all fwmark 0x0/0x20000 iif lo uidrange 10281-20279 lookup 1430 
+13000:	from all fwmark 0x0/0x20000 iif lo uidrange 20281-99999 lookup 1430 
+13000:	from all fwmark 0xc01c3/0xcffff lookup 1430 
+15040:	from all fwmark 0x101a0/0x1ffff iif lo uidrange 10108-10108 lookup 1030 
+15998:	from all fwmark 0x101a0/0x1ffff iif lo uidrange 0-2147483647 lookup 1030 
+16000:	from all fwmark 0x10063/0x1ffff iif lo lookup 97 
+16000:	from all fwmark 0xd0001/0xdffff iif lo lookup 1010 
+16000:	from all fwmark 0xd0002/0xdffff iif lo lookup 1021 
+16000:	from all fwmark 0x101a0/0x1ffff iif lo lookup 1030 
+16000:	from all fwmark 0x101c3/0x1ffff iif lo uidrange 0-10279 lookup 1430 
+16000:	from all fwmark 0x101c3/0x1ffff iif lo uidrange 10281-20279 lookup 1430 
+16000:	from all fwmark 0x101c3/0x1ffff iif lo uidrange 20281-99999 lookup 1430 
+16000:	from all fwmark 0x101c3/0x1ffff iif lo uidrange 0-0 lookup 1430 
+17000:	from all iif lo oif dummy0 lookup 1003 
+17000:	from all fwmark 0xc0000/0xc0000 iif lo oif rmnet_data0 lookup 1010 
+17000:	from all fwmark 0xc0000/0xc0000 iif lo oif r_rmnet_data0 lookup 1021 
+17000:	from all fwmark 0xc0000/0xc0000 iif lo oif wlan0 lookup 1030 
+17000:	from all iif lo oif tun1 uidrange 0-10279 lookup 1430 
+17000:	from all iif lo oif tun1 uidrange 10281-20279 lookup 1430 
+17000:	from all iif lo oif tun1 uidrange 20281-99999 lookup 1430 
+18000:	from all fwmark 0x0/0x10000 lookup 99 
+19000:	from all fwmark 0x0/0x10000 lookup 98 
+20000:	from all fwmark 0x0/0x10000 lookup 97 
+21000:	from all iif r_rmnet_data0 lookup 1030 
+21000:	from all iif r_rmnet_data0 lookup 1003 
+22040:	from all fwmark 0x1a0/0x1ffff iif lo uidrange 10108-10108 lookup 1030 
+22998:	from all fwmark 0x1a0/0x1ffff iif lo uidrange 0-2147483647 lookup 1030 
+25000:	from all fwmark 0x0/0x10000 iif lo uidrange 10108-10108 lookup 1000000030 
+25000:	from all fwmark 0x0/0x10000 iif lo uidrange 0-2147483647 lookup 1000000030 
+28000:	from all fwmark 0xc01c3/0xdffff lookup 1030 
+29040:	from all fwmark 0x0/0xffff iif lo uidrange 10108-10108 lookup 1030 
+29998:	from all fwmark 0x0/0xffff iif lo uidrange 0-2147483647 lookup 1030 
+31000:	from all fwmark 0xc0000/0xcffff iif lo lookup 1030 
+32000:	from all unreachable

@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.VpnService as AndroidVpnService
 import android.os.Build
@@ -73,6 +74,29 @@ internal data class PlatformVpnObservation(
     val present: Boolean,
     val validated: Boolean,
 )
+
+internal enum class SelectedOutboundRevalidationAction {
+    KEEP_CONNECTED,
+    INVALIDATE,
+    RETRY_CURRENT,
+    IGNORE_STALE_NETWORK,
+}
+
+internal fun selectedOutboundRevalidationAction(
+    ready: Boolean,
+    sameNetwork: Boolean,
+    expectedSelectedRevision: Long,
+    currentSelectedRevision: Long,
+    expectedSelectedOutboundId: String,
+    currentSelectedOutboundId: String,
+): SelectedOutboundRevalidationAction = when {
+    !sameNetwork -> SelectedOutboundRevalidationAction.IGNORE_STALE_NETWORK
+    expectedSelectedRevision != currentSelectedRevision ||
+        expectedSelectedOutboundId != currentSelectedOutboundId ->
+        SelectedOutboundRevalidationAction.RETRY_CURRENT
+    ready -> SelectedOutboundRevalidationAction.KEEP_CONNECTED
+    else -> SelectedOutboundRevalidationAction.INVALIDATE
+}
 
 internal fun ownsCurrentStartupFailure(
     generation: Long,
@@ -391,7 +415,7 @@ class BoxService(
     private var ownerDestroyed = false
     private val status = MutableLiveData(Status.Stopped)
     private val binder = ServiceBinder(status) { sessionGeneration }
-    private val notification = ServiceNotification(status, service)
+    private val notification = ServiceNotification(status, service, ::onSelectedOutboundChanged)
 //    private var boxService: BoxService? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -566,7 +590,9 @@ class BoxService(
                 }
             }
 
-            DefaultNetworkMonitor.start(generation)
+            DefaultNetworkMonitor.start(generation) { network ->
+                onDefaultNetworkChanged(generation, network)
+            }
             Libbox.setMemoryLimit(!Settings.disableMemoryLimit)
             val startsCoreHere = Settings.startCoreAfterStartingService
             VpnSessionCoordinator.event("core_start_requested", generation, "owner=android starts_core=$startsCoreHere")
@@ -1231,7 +1257,7 @@ class BoxService(
         }
 
         val permissionGranted = service !is AndroidVpnService || AndroidVpnService.prepare(service) == null
-        val result = VpnConnectedGate.evaluate(
+        val result = VpnConnectedGate.evaluateInfrastructure(
             session.startEvidence(
                 permissionGranted = permissionGranted,
                 mobileStartSucceeded = true,
@@ -1252,6 +1278,16 @@ class BoxService(
         }
 
         val selectedOutbound = awaitSelectedOutbound(generation)
+        if (selectedOutbound.isBlank()) {
+            VpnSessionCoordinator.event(
+                "start_gate_rejected",
+                generation,
+                "current_generation=${VpnSessionCoordinator.current()} session_state=${status.value?.name ?: "unknown"} source=data_plane_probe reason=selected_outbound_missing",
+                Log.ERROR,
+            )
+            stopAndAlert(generation, Alert.StartService, "VPN selected outbound readiness validation failed")
+            return false
+        }
         VpnSessionSnapshotCoordinator.selectedOutbound(
             generation,
             selectedOutbound,
@@ -1259,6 +1295,44 @@ class BoxService(
         )
         VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.VERIFYING) {
             it.copy(coreStarted = true)
+        }
+
+        val dataPlane = VpnDataPlaneProbe(
+            service.getSystemService(ConnectivityManager::class.java),
+        ).probe()
+        val selectedAfterProbe = readSelectedOutbound()
+        val dataPlaneStable = selectedAfterProbe == selectedOutbound
+        val targetEvidence = dataPlane.targets.joinToString(",") {
+            "${it.id}:${if (it.ready) "ready" else it.failureCategory}"
+        }
+        VpnSessionCoordinator.event(
+            "data_plane_probe_completed",
+            generation,
+            "ready=${dataPlane.ready} targets=$targetEvidence selected_stable=$dataPlaneStable",
+            if (dataPlane.ready) Log.INFO else Log.ERROR,
+        )
+        val finalGate = VpnConnectedGate.evaluate(
+            session.startEvidence(
+                permissionGranted = permissionGranted,
+                mobileStartSucceeded = true,
+                dataPlaneReady = dataPlane.ready,
+            ),
+        )
+        if (finalGate is VpnConnectedGate.Result.Rejected) {
+            val stale = !VpnSessionCoordinator.isCurrent(generation)
+            VpnSessionCoordinator.event(
+                if (stale) "stale_completion_ignored" else "start_gate_rejected",
+                generation,
+                "current_generation=${VpnSessionCoordinator.current()} session_state=${status.value?.name ?: "unknown"} source=data_plane_probe reason=${finalGate.missing.joinToString("+")}",
+                if (stale) Log.WARN else Log.ERROR,
+            )
+            if (!stale) {
+                stopAndAlert(generation, Alert.StartService, "VPN data plane readiness validation failed")
+            }
+            return false
+        }
+        VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.VERIFYING) {
+            it.copy(dataPlaneReady = true)
         }
 
         // NET_CAPABILITY_VALIDATED is Android's public-internet probe result,
@@ -1307,6 +1381,263 @@ class BoxService(
         return true
     }
 
+    /**
+     * A CONNECTED snapshot is invalid as soon as Android loses its underlying
+     * default network. Keep the TUN/core alive for an event-driven recovery,
+     * but withdraw the green UI state until a fresh HTTPS response traverses
+     * the VPN Network. No timer or polling loop is involved.
+     */
+    private fun onDefaultNetworkChanged(generation: Long, network: Network?) {
+        val session = activeSession ?: return
+        if (
+            session.generation != generation ||
+            !VpnSessionCoordinator.isCurrent(generation) ||
+            !session.acceptsOperations()
+        ) return
+
+        val networkRevision = session.recordDefaultNetworkChange()
+        if (network == null) {
+            invalidatePublishedDataPlane(
+                session,
+                generation,
+                source = "default_network_lost",
+                networkRevision = networkRevision,
+            )
+            return
+        }
+
+        if (!session.needsDataPlaneRevalidation() || !session.beginDataPlaneRevalidation()) return
+        session.scope.launch {
+            try {
+                revalidateDataPlane(session, network, networkRevision)
+            } finally {
+                session.finishDataPlaneRevalidation()
+            }
+        }
+    }
+
+    private fun onSelectedOutboundChanged(generation: Long) {
+        onSelectedOutboundChanged(generation, recordChange = true)
+    }
+
+    private fun onSelectedOutboundChanged(generation: Long, recordChange: Boolean) {
+        val session = activeSession ?: return
+        if (
+            session.generation != generation ||
+            !VpnSessionCoordinator.isCurrent(generation) ||
+            !session.acceptsOperations()
+        ) return
+        val networkRevision = session.currentDefaultNetworkRevision()
+        val selectedOutboundRevision = if (recordChange) {
+            session.recordSelectedOutboundChange()
+        } else {
+            session.currentSelectedOutboundRevision()
+        }
+        val expectedSelectedOutboundId = VpnSessionSnapshotCoordinator.current().selectedOutboundId
+        val network = DefaultNetworkMonitor.defaultNetwork
+        if (network == null) {
+            invalidatePublishedDataPlane(
+                session,
+                generation,
+                source = "selected_outbound_changed_without_default_network",
+                networkRevision = networkRevision,
+            )
+            return
+        }
+        if (!session.beginDataPlaneRevalidation()) return
+        session.scope.launch {
+            var completedSelectedOutboundRevision = selectedOutboundRevision
+            try {
+                completedSelectedOutboundRevision = revalidateSelectedOutboundDataPlane(
+                    session,
+                    network,
+                    networkRevision,
+                    selectedOutboundRevision,
+                    expectedSelectedOutboundId,
+                )
+            } finally {
+                session.finishDataPlaneRevalidation()
+                if (
+                    activeSession === session &&
+                    VpnSessionCoordinator.isCurrent(generation) &&
+                    session.acceptsOperations() &&
+                    session.currentSelectedOutboundRevision() != completedSelectedOutboundRevision
+                ) {
+                    onSelectedOutboundChanged(generation, recordChange = false)
+                }
+            }
+        }
+    }
+
+    /**
+     * A selector event is evidence that the route changed, not evidence that
+     * the data plane was lost. Verify the newest coalesced selector revision
+     * while keeping an already-proven CONNECTED snapshot. Withdraw that proof
+     * only after the fixed HTTPS probe actually fails for the current leaf.
+     */
+    private suspend fun revalidateSelectedOutboundDataPlane(
+        session: ActiveSession,
+        network: Network,
+        networkRevision: Long,
+        initialSelectedOutboundRevision: Long,
+        initialSelectedOutboundId: String,
+    ): Long {
+        val generation = session.generation
+        var expectedSelectedOutboundRevision = initialSelectedOutboundRevision
+        var expectedSelectedOutboundId = initialSelectedOutboundId
+        while (
+            activeSession === session &&
+            VpnSessionCoordinator.isCurrent(generation) &&
+            session.acceptsOperations()
+        ) {
+            VpnSessionCoordinator.event(
+                "selected_outbound_revalidation_started",
+                generation,
+                "revision=$networkRevision",
+            )
+            val result = VpnDataPlaneProbe(
+                service.getSystemService(ConnectivityManager::class.java),
+            ).probe()
+            val targetEvidence = result.targets.joinToString(",") {
+                "${it.id}:${if (it.ready) "ready" else it.failureCategory}"
+            }
+            val snapshot = VpnSessionSnapshotCoordinator.current()
+            val currentSelectedOutboundRevision = session.currentSelectedOutboundRevision()
+            val currentSelectedOutboundId = snapshot.selectedOutboundId
+            val selectedStable = currentSelectedOutboundId == expectedSelectedOutboundId
+            val sameNetwork =
+                session.currentDefaultNetworkRevision() == networkRevision &&
+                    DefaultNetworkMonitor.defaultNetwork == network
+            VpnSessionCoordinator.event(
+                "selected_outbound_revalidation_completed",
+                generation,
+                "ready=${result.ready} targets=$targetEvidence same_network=$sameNetwork " +
+                    "selected_stable=$selectedStable revision=$networkRevision",
+                if (result.ready && sameNetwork) Log.INFO else Log.WARN,
+            )
+            if (
+                activeSession !== session ||
+                !VpnSessionCoordinator.isCurrent(generation) ||
+                !session.acceptsOperations()
+            ) return expectedSelectedOutboundRevision
+            when (
+                selectedOutboundRevalidationAction(
+                    ready = result.ready,
+                    sameNetwork = sameNetwork,
+                    expectedSelectedRevision = expectedSelectedOutboundRevision,
+                    currentSelectedRevision = currentSelectedOutboundRevision,
+                    expectedSelectedOutboundId = expectedSelectedOutboundId,
+                    currentSelectedOutboundId = currentSelectedOutboundId,
+                )
+            ) {
+                SelectedOutboundRevalidationAction.KEEP_CONNECTED,
+                SelectedOutboundRevalidationAction.IGNORE_STALE_NETWORK,
+                -> return expectedSelectedOutboundRevision
+                SelectedOutboundRevalidationAction.RETRY_CURRENT -> {
+                    expectedSelectedOutboundRevision = currentSelectedOutboundRevision
+                    expectedSelectedOutboundId = currentSelectedOutboundId
+                    continue
+                }
+                SelectedOutboundRevalidationAction.INVALIDATE -> {
+                    invalidatePublishedDataPlane(
+                        session,
+                        generation,
+                        source = "selected_outbound_probe_failed",
+                        networkRevision = networkRevision,
+                    )
+                    return expectedSelectedOutboundRevision
+                }
+            }
+        }
+        return expectedSelectedOutboundRevision
+    }
+
+    private fun invalidatePublishedDataPlane(
+        session: ActiveSession,
+        generation: Long,
+        source: String,
+        networkRevision: Long,
+    ) {
+        val snapshot = VpnSessionSnapshotCoordinator.current()
+        if (snapshot.generation != generation || !snapshot.dataPlaneReady) return
+        session.invalidateDataPlane()
+        val invalidated = VpnSessionSnapshotCoordinator.transition(
+            generation,
+            VpnSessionPhase.VERIFYING,
+        ) {
+            it.copy(dataPlaneReady = false, platformVpnValidated = false)
+        }
+        VpnSessionCoordinator.event(
+            "data_plane_invalidated",
+            generation,
+            "source=$source revision=$networkRevision",
+            Log.WARN,
+        )
+        publishStatus(Status.Starting, generation, source)
+        session.scope.launch {
+            withContext(Dispatchers.Main) {
+                notification.show(activeProfileName, invalidated)
+            }
+        }
+    }
+
+    private suspend fun revalidateDataPlane(
+        session: ActiveSession,
+        network: Network,
+        networkRevision: Long,
+    ) {
+        val generation = session.generation
+        val result = VpnDataPlaneProbe(
+            service.getSystemService(ConnectivityManager::class.java),
+        ).probe()
+        val targetEvidence = result.targets.joinToString(",") {
+            "${it.id}:${if (it.ready) "ready" else it.failureCategory}"
+        }
+        val sameNetwork =
+            session.currentDefaultNetworkRevision() == networkRevision &&
+                DefaultNetworkMonitor.defaultNetwork == network
+        VpnSessionCoordinator.event(
+            "data_plane_revalidation_completed",
+            generation,
+            "ready=${result.ready} targets=$targetEvidence same_network=$sameNetwork revision=$networkRevision",
+            if (result.ready && sameNetwork) Log.INFO else Log.WARN,
+        )
+        if (
+            !result.ready ||
+            !sameNetwork ||
+            activeSession !== session ||
+            !VpnSessionCoordinator.isCurrent(generation) ||
+            !session.acceptsOperations()
+        ) return
+
+        val platformVpn = observePlatformVpn()
+        val connected = VpnSessionSnapshotCoordinator.transition(
+            generation,
+            VpnSessionPhase.CONNECTED,
+        ) {
+            it.copy(
+                dataPlaneReady = true,
+                platformVpnValidated = platformVpn.validated,
+            )
+        }
+        session.clearDataPlaneInvalidation()
+        if (
+            session.currentDefaultNetworkRevision() != networkRevision ||
+            DefaultNetworkMonitor.defaultNetwork != network
+        ) {
+            session.invalidateDataPlane()
+            VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.VERIFYING) {
+                it.copy(dataPlaneReady = false, platformVpnValidated = false)
+            }
+            return
+        }
+        if (!connected.provesConnected()) return
+        publishStatus(Status.Started, generation, "data_plane_revalidated")
+        withContext(Dispatchers.Main) {
+            notification.show(activeProfileName, connected)
+        }
+    }
+
     private fun observePlatformVpn(): PlatformVpnObservation {
         val connectivity = service.getSystemService(ConnectivityManager::class.java)
         var present = false
@@ -1328,18 +1659,20 @@ class BoxService(
     private suspend fun awaitSelectedOutbound(generation: Long): String {
         repeat(20) {
             if (!VpnSessionCoordinator.isCurrent(generation)) return ""
-            val outbound = runCatching {
-                GrpcClientProvider.grpcClient.create(CoreClient::class)
-                    .GetSystemInfo()
-                    .executeBlocking(Empty())
-                    .current_outbound
-                    .trim()
-            }.getOrDefault("")
+            val outbound = readSelectedOutbound()
             if (outbound.isNotBlank()) return outbound
             delay(100L)
         }
         return ""
     }
+
+    private fun readSelectedOutbound(): String = runCatching {
+        GrpcClientProvider.grpcClient.create(CoreClient::class)
+            .GetSystemInfo()
+            .executeBlocking(Empty())
+            .current_outbound
+            .trim()
+    }.getOrDefault("")
 
     private suspend fun closeSession(session: ActiveSession, reason: String) {
         // Detach the exact generation synchronously. The bounded async join may

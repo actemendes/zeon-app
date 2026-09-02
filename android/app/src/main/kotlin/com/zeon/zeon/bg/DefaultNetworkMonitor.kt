@@ -15,7 +15,10 @@ import java.util.concurrent.ConcurrentHashMap
 
 object DefaultNetworkMonitor {
 
-    private class MonitorOwner(val generation: Long)
+    private class MonitorOwner(
+        val generation: Long,
+        val onNetworkChanged: (Network?) -> Unit,
+    )
 
     private val ownerLock = Any()
     private val owners = ConcurrentHashMap<Long, MonitorOwner>()
@@ -26,8 +29,11 @@ object DefaultNetworkMonitor {
     @Volatile
     private var listener: InterfaceUpdateListener? = null
 
-    suspend fun start(generation: Long) {
-        val owner = MonitorOwner(generation)
+    suspend fun start(
+        generation: Long,
+        onNetworkChanged: (Network?) -> Unit = {},
+    ) {
+        val owner = MonitorOwner(generation, onNetworkChanged)
         synchronized(ownerLock) {
             owners[generation] = owner
             currentOwner = owner
@@ -36,6 +42,7 @@ object DefaultNetworkMonitor {
             if (currentOwner === owner) {
                 defaultNetwork = network
                 checkDefaultInterfaceUpdate(network)
+                owner.onNetworkChanged(network)
             }
         }
         val resolvedNetwork = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -53,6 +60,8 @@ object DefaultNetworkMonitor {
         }
         if (!remainsCurrent) {
             DefaultNetworkListener.stop(owner)
+        } else {
+            owner.onNetworkChanged(resolvedNetwork)
         }
     }
 

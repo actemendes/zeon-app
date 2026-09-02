@@ -1,0 +1,2 @@
+﻿"cycle","run","connected_ms","ui_connected","probe_successes","probe_failures","probe_timed_out","vpn_active","vpn_validated","tun_interface","tun_rx_delta","tun_tx_delta","false_connected"
+"1","reconnect_001_20260901_173024","12131","True","4","0","False","True","True","tun0","25349","5818","False"

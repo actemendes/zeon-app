@@ -71,6 +71,7 @@ VpnSessionSnapshot _snapshot() => const VpnSessionSnapshot(
   commandEndpointReady: true,
   tunnelReady: true,
   protectSucceeded: true,
+  dataPlaneReady: true,
   platformVpnValidated: true,
   selectedOutboundId: 'proxy-1',
 );

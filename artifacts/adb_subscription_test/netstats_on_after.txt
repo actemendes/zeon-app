@@ -1,0 +1,9 @@
+  ident=[{type=1, ratType=COMBINED, wifiNetworkKey="PERSIK"wpa2-psk, metered=false, defaultNetwork=true, oemManaged=OEM_NONE, subId=-1, transports={1}}] uid=10239 set=DEFAULT tag=0x0
+  ident=[{type=1, ratType=COMBINED, wifiNetworkKey="PERSIK"wpa2-psk, metered=false, defaultNetwork=true, oemManaged=OEM_NONE, subId=-1, transports={1}}] uid=10239 set=FOREGROUND tag=0x0
+  ident=[{type=17, ratType=COMBINED, metered=false, defaultNetwork=true, oemManaged=OEM_NONE, subId=-1, transports={1, 4}}] uid=10239 set=DEFAULT tag=0x0
+  ident=[{type=17, ratType=COMBINED, metered=false, defaultNetwork=true, oemManaged=OEM_NONE, subId=-1, transports={1, 4}}] uid=10239 set=FOREGROUND tag=0x0
+  ident=[{type=1, ratType=COMBINED, wifiNetworkKey="PERSIK"wpa2-psk, metered=false, defaultNetwork=true, oemManaged=OEM_NONE, subId=-1, transports={1}}] uid=10239 set=DEFAULT tag=0xffffff82
+  ident=[{type=1, ratType=COMBINED, wifiNetworkKey="PERSIK"wpa2-psk, metered=false, defaultNetwork=true, oemManaged=OEM_NONE, subId=-1, transports={1}}] uid=10239 set=FOREGROUND tag=0xffffff82
+  ident=[{type=17, ratType=COMBINED, metered=false, defaultNetwork=true, oemManaged=OEM_NONE, subId=-1, transports={1, 4}}] uid=10239 set=DEFAULT tag=0xffffff82
+  ident=[{type=17, ratType=COMBINED, metered=false, defaultNetwork=true, oemManaged=OEM_NONE, subId=-1, transports={1, 4}}] uid=10239 set=FOREGROUND tag=0xffffff82
+    uid=10239 set=1

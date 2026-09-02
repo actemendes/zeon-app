@@ -1,0 +1,1 @@
+﻿    topResumedActivity=ActivityRecord{4395425 u0 com.zeon.hiddify.validation/com.zeon.zeon.MainActivity t1439}

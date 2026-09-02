@@ -1,6 +1,8 @@
 package test.com.zeon.zeon.bg
 
 import com.zeon.zeon.bg.VpnConnectedGate
+import com.zeon.zeon.bg.VpnDataPlaneProbe
+import com.zeon.zeon.bg.VpnDataPlaneTargetResult
 import com.zeon.zeon.bg.VpnPermissionRequestCoordinator
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -99,6 +101,27 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
         check(result is VpnConnectedGate.Result.Rejected && "generation" in result.missing)
     }
 
+    fun missingDataPlaneProofCannotPublishStarted() {
+        val result = VpnConnectedGate.evaluate(readyEvidence().copy(dataPlaneReady = false))
+        check(result is VpnConnectedGate.Result.Rejected && "data_plane" in result.missing)
+    }
+
+    fun oneRealHttpsTargetProvesDataPlane() {
+        val results = listOf(
+            VpnDataPlaneTargetResult("zeon_204", ready = false, failureCategory = "timeout"),
+            VpnDataPlaneTargetResult("gstatic_204", ready = true),
+        )
+        check(VpnDataPlaneProbe.hasReadyTarget(results))
+    }
+
+    fun noRealHttpsTargetCannotProveDataPlane() {
+        val results = listOf(
+            VpnDataPlaneTargetResult("zeon_204", ready = false, failureCategory = "dns"),
+            VpnDataPlaneTargetResult("gstatic_204", ready = false, failureCategory = "timeout"),
+        )
+        check(!VpnDataPlaneProbe.hasReadyTarget(results))
+    }
+
     fun reconnectAfterPermissionFailureNeedsNoProcessRestart() {
         val h = Harness()
         h.request()
@@ -120,6 +143,7 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
         commandEndpointReady = true,
         tunOpened = true,
         postTunProtectSucceeded = true,
+        dataPlaneReady = true,
         generationCurrent = true,
         sessionAcceptingOperations = true,
     )
