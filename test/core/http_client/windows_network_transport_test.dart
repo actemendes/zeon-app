@@ -173,6 +173,16 @@ void main() {
       }
     });
 
+    test('WinHTTP secure-failure flags have stable diagnostic names', () {
+      expect(decodeWinHttpSecureFailureFlags(0x10), const ['nameMismatch']);
+      expect(decodeWinHttpSecureFailureFlags(0x01 | 0x08 | 0x20), const [
+        'revocationCheckFailed',
+        'untrustedCertificateAuthority',
+        'dateInvalid',
+      ]);
+      expect(decodeWinHttpSecureFailureFlags(0x80), const ['unknown(0x80)']);
+    });
+
     test('untrusted local TLS certificate is rejected by Windows validation', () async {
       final context = SecurityContext()
         ..useCertificateChain('hiddify-core/hiddify-sing-box/replace/psiphon-quic-go/internal/testdata/cert.pem')
@@ -187,18 +197,21 @@ void main() {
         await subscription.cancel();
       });
 
-      await expectLater(
-        const WinHttpWindowsSystemTransport().send(
-          WindowsSystemHttpRequest(
-            method: 'GET',
-            url: 'https://127.0.0.1:${server.port}/untrusted',
-            headers: const {},
-            timeout: const Duration(seconds: 2),
-            proxyMode: WindowsProxyMode.direct,
-          ),
+      final request = const WinHttpWindowsSystemTransport().send(
+        WindowsSystemHttpRequest(
+          method: 'GET',
+          url: 'https://127.0.0.1:${server.port}/untrusted',
+          headers: const {},
+          timeout: const Duration(seconds: 2),
+          proxyMode: WindowsProxyMode.direct,
         ),
+      );
+      await expectLater(
+        request,
         throwsA(
-          isA<WindowsSystemNetworkException>().having((error) => error.stage, 'stage', WindowsNetworkFailureStage.tls),
+          isA<WindowsSystemNetworkException>()
+              .having((error) => error.stage, 'stage', WindowsNetworkFailureStage.tls)
+              .having((error) => error.secureFailures, 'secureFailures', isNotEmpty),
         ),
       );
     }, skip: !Platform.isWindows);
@@ -489,6 +502,7 @@ void main() {
         stage: WindowsNetworkFailureStage.proxy,
         win32Code: 12180,
         hresult: 0x80072f94,
+        secureFailureFlags: 0x10,
       );
       final diagnostic = windowsNetworkDiagnostic(
         routeMode: HttpRouteMode.systemNetwork,
@@ -501,6 +515,7 @@ void main() {
       expect(diagnostic['failure_stage'], 'proxy');
       expect(diagnostic['win32_code'], 12180);
       expect(diagnostic['trust_store'], 'windows');
+      expect(diagnostic['secure_failures'], const ['nameMismatch']);
       expect(diagnostic.toString(), isNot(contains('private-token')));
       expect(diagnostic.keys, isNot(contains('url')));
     });

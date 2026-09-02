@@ -39,6 +39,8 @@ Map<String, Object?> windowsNetworkDiagnostic({
     'win32_code': native?.win32Code,
     'wsa_code': socket?.errorCode,
     'hresult': native == null ? null : '0x${native.hresult.toUnsigned(32).toRadixString(16).padLeft(8, '0')}',
+    'secure_failure_flags': native?.secureFailureFlags,
+    'secure_failures': native?.secureFailures,
     'trust_store': routeMode == HttpRouteMode.systemNetwork ? 'windows' : 'dart_default',
     'local_proxy_ready': localProxyReady,
     'vpn_state': vpnActive == null

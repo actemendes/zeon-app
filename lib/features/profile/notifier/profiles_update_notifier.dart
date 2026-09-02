@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:dartx/dartx.dart';
 import 'package:meta/meta.dart';
 import 'package:neat_periodic_task/neat_periodic_task.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/failures.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
@@ -21,6 +21,62 @@ part 'profiles_update_notifier.g.dart';
 typedef ProfileUpdateStatus = ({String name, bool success});
 
 const unifiedProfileAndRuleSetRefreshInterval = Duration(minutes: 15);
+const foregroundProfileRefreshFailureRetryInterval = Duration(minutes: 1);
+
+@visibleForTesting
+bool shouldStartForegroundProfileRefresh({
+  required bool force,
+  required DateTime? lastAttempt,
+  required DateTime? lastSuccess,
+  required DateTime now,
+}) {
+  if (force) return true;
+  if (lastSuccess != null && now.isBefore(lastSuccess.add(unifiedProfileAndRuleSetRefreshInterval))) {
+    return false;
+  }
+  if (lastAttempt != null && now.isBefore(lastAttempt.add(foregroundProfileRefreshFailureRetryInterval))) {
+    return false;
+  }
+  return true;
+}
+
+@visibleForTesting
+Duration foregroundProfileRefreshRetryDelay(int consecutiveFailures) {
+  const delays = <Duration>[
+    Duration(minutes: 1),
+    Duration(minutes: 2),
+    Duration(minutes: 4),
+    Duration(minutes: 8),
+    unifiedProfileAndRuleSetRefreshInterval,
+  ];
+  final index = (consecutiveFailures - 1).clamp(0, delays.length - 1);
+  return delays[index];
+}
+
+@visibleForTesting
+class ForegroundProfileRefreshTimestamps {
+  ForegroundProfileRefreshTimestamps(this._preferences);
+
+  static const lastAttemptKey = "profiles_update_last_attempt";
+  static const lastSuccessKey = "profiles_update_last_success";
+  static const legacyRunKey = "profiles_update_check";
+
+  final SharedPreferences _preferences;
+
+  DateTime? get lastAttempt =>
+      _read(lastAttemptKey) ?? _read(legacyRunKey); // Legacy value is attempt-only: it may represent a failed cycle.
+
+  DateTime? get lastSuccess => _read(lastSuccessKey);
+
+  Future<void> recordAttempt(DateTime timestamp) async {
+    await _preferences.setString(lastAttemptKey, timestamp.toIso8601String());
+    await _preferences.remove(legacyRunKey);
+  }
+
+  Future<void> recordSuccess(DateTime timestamp) => _preferences.setString(lastSuccessKey, timestamp.toIso8601String());
+
+  DateTime? _read(String key) => DateTime.tryParse(_preferences.getString(key) ?? "");
+}
 
 @visibleForTesting
 bool shouldRefreshProfileInUnifiedCycle({
@@ -33,7 +89,6 @@ bool shouldRefreshProfileInUnifiedCycle({
 
 @Riverpod(keepAlive: true)
 class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifier with AppLogger {
-  static const prefKey = "profiles_update_check";
   static const interval = unifiedProfileAndRuleSetRefreshInterval;
 
   @override
@@ -50,6 +105,8 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
     );
 
     ref.onDispose(() async {
+      _retryTimer?.cancel();
+      _retryTimer = null;
       await _scheduler?.stop();
       _scheduler = null;
     });
@@ -64,6 +121,8 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
   }
 
   NeatPeriodicTaskScheduler? _scheduler;
+  Timer? _retryTimer;
+  int _consecutiveFailedCycles = 0;
   bool _forceNextRun = false;
 
   Future<void> trigger() async {
@@ -80,15 +139,29 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
       _forceNextRun = false;
     }
 
+    final timestamps = ForegroundProfileRefreshTimestamps(ref.read(sharedPreferencesProvider).requireValue);
+    final now = DateTime.now();
+    if (!shouldStartForegroundProfileRefresh(
+      force: force,
+      lastAttempt: timestamps.lastAttempt,
+      lastSuccess: timestamps.lastSuccess,
+      now: now,
+    )) {
+      loggy.debug("too soon! last attempt: [${timestamps.lastAttempt}], last success: [${timestamps.lastSuccess}]");
+      return;
+    }
+    await timestamps.recordAttempt(now);
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    loggy.debug(
+      "${force ? "[FORCED] " : ""}running, last attempt: [${timestamps.lastAttempt}], "
+      "last success: [${timestamps.lastSuccess}]",
+    );
+
+    var attemptedProfileUpdate = false;
+    var allProfileUpdatesSucceeded = true;
+    var cycleCompleted = false;
     try {
-      final previousRun = DateTime.tryParse(ref.read(sharedPreferencesProvider).requireValue.getString(prefKey) ?? "");
-
-      if (!force && previousRun != null && previousRun.add(interval) > DateTime.now()) {
-        loggy.debug("too soon! previous run: [$previousRun]");
-        return;
-      }
-      loggy.debug("${force ? "[FORCED] " : ""}running, previous run: [$previousRun]");
-
       // RULESET and remote profiles form one freshness transaction. Fetch the
       // policy first so every config generated by this cycle sees the same
       // active generation. The service remains fail-open and preserves its LKG
@@ -122,8 +195,9 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
           lastUpdate: profile.lastUpdate,
           now: DateTime.now(),
         )) {
+          attemptedProfileUpdate = true;
           final t = ref.read(translationsProvider).requireValue;
-          await ref
+          final result = await ref
               .read(profileRepositoryProvider)
               .requireValue
               .upsertRemote(profile.url, proxyOnly: proxyOnly, syncManagedRuleSets: false)
@@ -151,6 +225,7 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
                 state = AsyncData((name: displayProfileName, success: true));
               })
               .run();
+          if (result.isLeft()) allProfileUpdatesSucceeded = false;
         } else {
           loggy.debug(
             "skipping profile [${profile.id}] update. last successful update: [${profile.lastUpdate}] - "
@@ -158,8 +233,26 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
           );
         }
       }
+      cycleCompleted = true;
     } finally {
-      await ref.read(sharedPreferencesProvider).requireValue.setString(prefKey, DateTime.now().toIso8601String());
+      if (cycleCompleted && attemptedProfileUpdate && allProfileUpdatesSucceeded) {
+        await timestamps.recordSuccess(DateTime.now());
+        _consecutiveFailedCycles = 0;
+      } else if (cycleCompleted && attemptedProfileUpdate) {
+        _consecutiveFailedCycles++;
+        _scheduleFailedCycleRetry();
+      }
     }
+  }
+
+  void _scheduleFailedCycleRetry() {
+    final delay = foregroundProfileRefreshRetryDelay(_consecutiveFailedCycles);
+    loggy.debug("scheduling failed profile refresh retry in [$delay]");
+    _retryTimer?.cancel();
+    _retryTimer = Timer(delay, () {
+      _retryTimer = null;
+      final scheduler = _scheduler;
+      if (scheduler != null) unawaited(scheduler.trigger());
+    });
   }
 }

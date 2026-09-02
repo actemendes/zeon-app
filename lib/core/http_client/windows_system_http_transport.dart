@@ -158,18 +158,68 @@ class WindowsSystemNetworkException implements Exception {
     required this.stage,
     required this.win32Code,
     required this.hresult,
+    this.secureFailureFlags,
   });
 
   final String operation;
   final WindowsNetworkFailureStage stage;
   final int win32Code;
   final int hresult;
+  final int? secureFailureFlags;
+
+  List<String> get secureFailures => decodeWinHttpSecureFailureFlags(secureFailureFlags ?? 0);
 
   @override
-  String toString() =>
-      'WindowsSystemNetworkException(operation=$operation, stage=${stage.name}, '
-      'win32=$win32Code, hresult=0x${hresult.toUnsigned(32).toRadixString(16).padLeft(8, '0')})';
+  String toString() {
+    final secureFailure = secureFailures.isEmpty ? '' : ', secureFailure=${secureFailures.join('|')}';
+    return 'WindowsSystemNetworkException(operation=$operation, stage=${stage.name}, '
+        'win32=$win32Code, hresult=0x${hresult.toUnsigned(32).toRadixString(16).padLeft(8, '0')}'
+        '$secureFailure)';
+  }
 }
+
+@visibleForTesting
+List<String> decodeWinHttpSecureFailureFlags(int flags) {
+  if (flags == 0) return const <String>[];
+  final failures = <String>[];
+  var known = 0;
+  void add(int flag, String name) {
+    known |= flag;
+    if ((flags & flag) != 0) failures.add(name);
+  }
+
+  add(_winHttpSecureFlagCertRevFailed, 'revocationCheckFailed');
+  add(_winHttpSecureFlagInvalidCert, 'invalidCertificate');
+  add(_winHttpSecureFlagCertRevoked, 'certificateRevoked');
+  add(_winHttpSecureFlagInvalidCa, 'untrustedCertificateAuthority');
+  add(_winHttpSecureFlagCertCnInvalid, 'nameMismatch');
+  add(_winHttpSecureFlagCertDateInvalid, 'dateInvalid');
+  add(_winHttpSecureFlagCertWrongUsage, 'wrongUsage');
+  add(_winHttpSecureFlagSecurityChannelError, 'securityChannelError');
+  final unknown = flags & ~known;
+  if (unknown != 0) failures.add('unknown(0x${unknown.toUnsigned(32).toRadixString(16)})');
+  return List<String>.unmodifiable(failures);
+}
+
+void _captureWinHttpSecureFailure(
+  int _,
+  int context,
+  int internetStatus,
+  Pointer<Void> statusInformation,
+  int statusInformationLength,
+) {
+  if (internetStatus != _winHttpCallbackStatusSecureFailure ||
+      context == 0 ||
+      statusInformation == nullptr ||
+      statusInformationLength < sizeOf<Uint32>()) {
+    return;
+  }
+  final destination = Pointer<Uint32>.fromAddress(context);
+  destination.value |= statusInformation.cast<Uint32>().value;
+}
+
+final Pointer<NativeFunction<_WinHttpStatusCallbackNative>> _secureFailureCallback =
+    Pointer.fromFunction<_WinHttpStatusCallbackNative>(_captureWinHttpSecureFailure);
 
 WindowsSystemHttpResponse _performWinHttpRequest(WindowsSystemHttpRequest request) {
   final uri = Uri.parse(request.url);
@@ -186,6 +236,7 @@ WindowsSystemHttpResponse _performWinHttpRequest(WindowsSystemHttpRequest reques
   Pointer<Utf16>? rawHeaders;
   Pointer<Uint8>? body;
   Pointer<Utf16>? namedProxy;
+  Pointer<Uint32>? secureFailureFlags;
 
   Never fail(String operation) {
     final code = api.getLastError();
@@ -194,6 +245,7 @@ WindowsSystemHttpResponse _performWinHttpRequest(WindowsSystemHttpRequest reques
       stage: _stageForWinHttpError(code, operation, secureRequest: uri.scheme == 'https'),
       win32Code: code,
       hresult: _hresultFromWin32(code),
+      secureFailureFlags: secureFailureFlags == null || secureFailureFlags.value == 0 ? null : secureFailureFlags.value,
     );
   }
 
@@ -230,6 +282,13 @@ WindowsSystemHttpResponse _performWinHttpRequest(WindowsSystemHttpRequest reques
     final requestHandle = api.winHttpOpenRequest(connect, verb, target, nullptr, nullptr, nullptr, flags);
     if (requestHandle == 0) fail('open_request');
     handles.add(requestHandle);
+    if (uri.scheme == 'https') {
+      secureFailureFlags = calloc<Uint32>();
+      // This transport opens WinHTTP without WINHTTP_FLAG_ASYNC. Secure-failure
+      // callbacks therefore run synchronously during the request and copy only
+      // the documented DWORD flags into request-owned memory.
+      api.winHttpSetStatusCallback(requestHandle, _secureFailureCallback, _winHttpCallbackFlagSecureFailure, 0);
+    }
 
     final sanitizedHeaders = <String, String>{...request.headers}
       ..removeWhere((key, _) => const {'host', 'content-length', 'connection'}.contains(key.toLowerCase()));
@@ -251,7 +310,7 @@ WindowsSystemHttpResponse _performWinHttpRequest(WindowsSystemHttpRequest reques
             body?.cast<Void>() ?? nullptr,
             payload?.length ?? 0,
             payload?.length ?? 0,
-            0,
+            secureFailureFlags?.address ?? 0,
           ) ==
           0) {
         fail('send');
@@ -285,6 +344,7 @@ WindowsSystemHttpResponse _performWinHttpRequest(WindowsSystemHttpRequest reques
     if (rawHeaders != null) calloc.free(rawHeaders);
     if (body != null) calloc.free(body);
     if (namedProxy != null) calloc.free(namedProxy);
+    if (secureFailureFlags != null) calloc.free(secureFailureFlags);
   }
 }
 
@@ -482,6 +542,16 @@ const _winHttpAuthTargetProxy = 1;
 const _winHttpAuthSchemeNtlm = 0x00000002;
 const _winHttpAuthSchemeNegotiate = 0x00000010;
 const _errorWinHttpTimeout = 12002;
+const _winHttpCallbackStatusSecureFailure = 0x00010000;
+const _winHttpCallbackFlagSecureFailure = _winHttpCallbackStatusSecureFailure;
+const _winHttpSecureFlagCertRevFailed = 0x00000001;
+const _winHttpSecureFlagInvalidCert = 0x00000002;
+const _winHttpSecureFlagCertRevoked = 0x00000004;
+const _winHttpSecureFlagInvalidCa = 0x00000008;
+const _winHttpSecureFlagCertCnInvalid = 0x00000010;
+const _winHttpSecureFlagCertDateInvalid = 0x00000020;
+const _winHttpSecureFlagCertWrongUsage = 0x00000040;
+const _winHttpSecureFlagSecurityChannelError = 0x80000000;
 
 class _WinHttpApi {
   _WinHttpApi() {
@@ -494,6 +564,9 @@ class _WinHttpApi {
     );
     winHttpSetTimeouts = winhttp.lookupFunction<_WinHttpSetTimeoutsNative, _WinHttpSetTimeoutsDart>(
       'WinHttpSetTimeouts',
+    );
+    winHttpSetStatusCallback = winhttp.lookupFunction<_WinHttpSetStatusCallbackNative, _WinHttpSetStatusCallbackDart>(
+      'WinHttpSetStatusCallback',
     );
     winHttpSendRequest = winhttp.lookupFunction<_WinHttpSendRequestNative, _WinHttpSendRequestDart>(
       'WinHttpSendRequest',
@@ -524,6 +597,7 @@ class _WinHttpApi {
   late final _WinHttpConnectDart winHttpConnect;
   late final _WinHttpOpenRequestDart winHttpOpenRequest;
   late final _WinHttpSetTimeoutsDart winHttpSetTimeouts;
+  late final _WinHttpSetStatusCallbackDart winHttpSetStatusCallback;
   late final _WinHttpSendRequestDart winHttpSendRequest;
   late final _WinHttpReceiveResponseDart winHttpReceiveResponse;
   late final _WinHttpQueryHeadersDart winHttpQueryHeaders;
@@ -553,6 +627,21 @@ typedef _WinHttpOpenRequestDart =
     int Function(int, Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>, Pointer<Pointer<Utf16>>, int);
 typedef _WinHttpSetTimeoutsNative = Int32 Function(IntPtr, Int32, Int32, Int32, Int32);
 typedef _WinHttpSetTimeoutsDart = int Function(int, int, int, int, int);
+typedef _WinHttpStatusCallbackNative = Void Function(IntPtr, IntPtr, Uint32, Pointer<Void>, Uint32);
+typedef _WinHttpSetStatusCallbackNative =
+    Pointer<NativeFunction<_WinHttpStatusCallbackNative>> Function(
+      IntPtr,
+      Pointer<NativeFunction<_WinHttpStatusCallbackNative>>,
+      Uint32,
+      IntPtr,
+    );
+typedef _WinHttpSetStatusCallbackDart =
+    Pointer<NativeFunction<_WinHttpStatusCallbackNative>> Function(
+      int,
+      Pointer<NativeFunction<_WinHttpStatusCallbackNative>>,
+      int,
+      int,
+    );
 typedef _WinHttpSendRequestNative =
     Int32 Function(IntPtr, Pointer<Utf16>, Uint32, Pointer<Void>, Uint32, Uint32, IntPtr);
 typedef _WinHttpSendRequestDart = int Function(int, Pointer<Utf16>, int, Pointer<Void>, int, int, int);
