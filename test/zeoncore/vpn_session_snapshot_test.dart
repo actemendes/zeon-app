@@ -244,10 +244,12 @@ void main() {
         'sequenceNumber': 8,
         'snapshotVersion': 9,
         'phase': 'stop_requested',
+        'failureDetail': 'VPN data plane readiness validation failed (zeon_204:dns)',
         'recoverable': 'true',
       });
       expect(parsed.generation, 7);
       expect(parsed.phase, VpnSessionPhase.stopRequested);
+      expect(parsed.failureDetail, 'VPN data plane readiness validation failed (zeon_204:dns)');
       expect(parsed.recoverable, isTrue);
     });
 

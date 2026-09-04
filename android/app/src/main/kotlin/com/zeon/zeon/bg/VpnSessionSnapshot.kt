@@ -70,6 +70,7 @@ data class VpnSessionSnapshot(
     val selectedOutboundLabel: String = "",
     val strategy: String = "",
     val failureCode: String = "",
+    val failureDetail: String = "",
     val failureOwner: String = "",
     val recoverable: Boolean = false,
 ) {
@@ -103,6 +104,7 @@ data class VpnSessionSnapshot(
         "selectedOutboundLabel" to selectedOutboundLabel,
         "strategy" to strategy,
         "failureCode" to failureCode,
+        "failureDetail" to failureDetail,
         "failureOwner" to failureOwner,
         "recoverable" to recoverable,
     )
@@ -173,9 +175,11 @@ object VpnSessionSnapshotCoordinator {
         code: String,
         owner: String,
         recoverable: Boolean,
+        detail: String = "",
     ): VpnSessionSnapshot = transition(generation, VpnSessionPhase.FAILED) {
         it.copy(
             failureCode = code.take(96),
+            failureDetail = detail.replace(Regex("\\s+"), " ").trim().take(256),
             failureOwner = owner.take(48),
             recoverable = recoverable,
         )
@@ -214,6 +218,7 @@ object VpnSessionSnapshotCoordinator {
             selectedOutboundLabel = "",
             strategy = "",
             failureCode = "",
+            failureDetail = "",
             failureOwner = "",
             recoverable = false,
         )

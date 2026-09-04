@@ -94,6 +94,7 @@ class VpnSessionSnapshot {
     this.selectedOutboundLabel = '',
     this.strategy = '',
     this.failureCode = '',
+    this.failureDetail = '',
     this.failureOwner = '',
     this.recoverable = false,
   });
@@ -131,6 +132,7 @@ class VpnSessionSnapshot {
       selectedOutboundLabel: text('selectedOutboundLabel'),
       strategy: text('strategy'),
       failureCode: text('failureCode'),
+      failureDetail: text('failureDetail'),
       failureOwner: text('failureOwner'),
       recoverable: boolean('recoverable'),
     );
@@ -154,6 +156,7 @@ class VpnSessionSnapshot {
   final String selectedOutboundLabel;
   final String strategy;
   final String failureCode;
+  final String failureDetail;
   final String failureOwner;
   final bool recoverable;
 

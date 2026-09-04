@@ -4,6 +4,8 @@ import com.zeon.zeon.bg.VpnConnectedGate
 import com.zeon.zeon.bg.VpnDataPlaneProbe
 import com.zeon.zeon.bg.VpnDataPlaneTargetResult
 import com.zeon.zeon.bg.VpnPermissionRequestCoordinator
+import com.zeon.zeon.bg.StartupDataPlaneProbeAction
+import com.zeon.zeon.bg.startupDataPlaneProbeAction
 import com.zeon.zeon.bg.startupDataPlaneProofReady
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -126,6 +128,59 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
         )
         check(!VpnDataPlaneProbe.hasReadyTarget(results))
         check(!startupDataPlaneProofReady(false, "leaf-a", "leaf-a"))
+    }
+
+    fun stableTransientVpnDnsFailureGetsBoundedRetry() {
+        check(
+            startupDataPlaneProbeAction(
+                proofReady = false,
+                selectedBeforeProbe = "leaf-a",
+                selectedAfterProbe = "leaf-a",
+                failureCategories = listOf("dns", "dns", "dns"),
+                attempt = 1,
+                maxAttempts = 3,
+            ) == StartupDataPlaneProbeAction.RETRY_TRANSIENT_VPN_NETWORK,
+        )
+    }
+
+    fun transientVpnDnsRetryNeverAuthorizesConnectedAndRemainsBounded() {
+        check(
+            startupDataPlaneProbeAction(
+                proofReady = false,
+                selectedBeforeProbe = "leaf-a",
+                selectedAfterProbe = "leaf-a",
+                failureCategories = listOf("dns", "dns_empty", "vpn_network_missing"),
+                attempt = 3,
+                maxAttempts = 3,
+            ) == StartupDataPlaneProbeAction.COMPLETE,
+        )
+        check(!startupDataPlaneProofReady(false, "leaf-a", "leaf-a"))
+    }
+
+    fun stableNonTransientDataPlaneFailureIsNotRetried() {
+        check(
+            startupDataPlaneProbeAction(
+                proofReady = false,
+                selectedBeforeProbe = "leaf-a",
+                selectedAfterProbe = "leaf-a",
+                failureCategories = listOf("timeout", "connect", "tls"),
+                attempt = 1,
+                maxAttempts = 3,
+            ) == StartupDataPlaneProbeAction.COMPLETE,
+        )
+    }
+
+    fun changedAutoselectLeafStillRequiresFreshProof() {
+        check(
+            startupDataPlaneProbeAction(
+                proofReady = false,
+                selectedBeforeProbe = "leaf-a",
+                selectedAfterProbe = "leaf-b",
+                failureCategories = listOf("timeout"),
+                attempt = 1,
+                maxAttempts = 3,
+            ) == StartupDataPlaneProbeAction.RETRY_SELECTED_OUTBOUND,
+        )
     }
 
     fun reconnectAfterPermissionFailureNeedsNoProcessRestart() {

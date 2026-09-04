@@ -107,6 +107,37 @@ internal fun startupDataPlaneProofReady(
         selectedBeforeProbe.isNotBlank() &&
         selectedBeforeProbe == selectedAfterProbe
 
+internal enum class StartupDataPlaneProbeAction {
+    COMPLETE,
+    RETRY_SELECTED_OUTBOUND,
+    RETRY_TRANSIENT_VPN_NETWORK,
+}
+
+internal fun startupDataPlaneProbeAction(
+    proofReady: Boolean,
+    selectedBeforeProbe: String,
+    selectedAfterProbe: String,
+    failureCategories: List<String>,
+    attempt: Int,
+    maxAttempts: Int,
+): StartupDataPlaneProbeAction {
+    if (proofReady || selectedAfterProbe.isBlank() || attempt >= maxAttempts) {
+        return StartupDataPlaneProbeAction.COMPLETE
+    }
+    if (selectedBeforeProbe != selectedAfterProbe) {
+        return StartupDataPlaneProbeAction.RETRY_SELECTED_OUTBOUND
+    }
+    val transientVpnNetworkFailures = setOf("vpn_network_missing", "dns", "dns_empty")
+    return if (
+        failureCategories.isNotEmpty() &&
+        failureCategories.all(transientVpnNetworkFailures::contains)
+    ) {
+        StartupDataPlaneProbeAction.RETRY_TRANSIENT_VPN_NETWORK
+    } else {
+        StartupDataPlaneProbeAction.COMPLETE
+    }
+}
+
 internal fun ownsCurrentStartupFailure(
     generation: Long,
     currentGeneration: Long,
@@ -127,7 +158,8 @@ class BoxService(
         private const val TAG = "A/BoxService"
         private const val OUTBOUND_SELECTOR_TAG = "select"
         private const val AUTO_BALANCER_TAG = "balance"
-        private const val STARTUP_DATA_PLANE_SELECTION_ATTEMPTS = 3
+        private const val STARTUP_DATA_PLANE_SELECTION_ATTEMPTS = 4
+        private const val STARTUP_DATA_PLANE_TRANSIENT_RETRY_DELAY_MILLIS = 2_000L
         const val EXTRA_SESSION_GENERATION = "com.zeon.zeon.extra.SESSION_GENERATION"
         const val EXTRA_STOP_SOURCE = "com.zeon.zeon.extra.STOP_SOURCE"
         private const val STOP_FALLBACK_INITIAL_DELAY_MILLIS = 300L
@@ -920,6 +952,7 @@ class BoxService(
             type.name,
             "android_service",
             recoverable = true,
+            detail = message.orEmpty(),
         )
         activeSession?.let { closeSession(it, "failed_start") }
         withContext(Dispatchers.Main) {
@@ -1308,6 +1341,7 @@ class BoxService(
         }
 
         var dataPlaneReady = false
+        var lastTargetEvidence = "none"
         for (attempt in 1..STARTUP_DATA_PLANE_SELECTION_ATTEMPTS) {
             val dataPlane = VpnDataPlaneProbe(
                 service.getSystemService(ConnectivityManager::class.java),
@@ -1317,6 +1351,7 @@ class BoxService(
             val targetEvidence = dataPlane.targets.joinToString(",") {
                 "${it.id}:${if (it.ready) "ready" else it.failureCategory}"
             }
+            lastTargetEvidence = targetEvidence
             dataPlaneReady = startupDataPlaneProofReady(
                 ready = dataPlane.ready,
                 selectedBeforeProbe = selectedOutbound,
@@ -1328,26 +1363,48 @@ class BoxService(
                 "ready=${dataPlane.ready} targets=$targetEvidence selected_stable=$dataPlaneStable attempt=$attempt",
                 if (dataPlaneReady) Log.INFO else Log.ERROR,
             )
-            if (dataPlaneStable || selectedAfterProbe.isBlank() || attempt == STARTUP_DATA_PLANE_SELECTION_ATTEMPTS) {
-                break
+            when (
+                startupDataPlaneProbeAction(
+                    proofReady = dataPlaneReady,
+                    selectedBeforeProbe = selectedOutbound,
+                    selectedAfterProbe = selectedAfterProbe,
+                    failureCategories = dataPlane.targets.filterNot { it.ready }.map { it.failureCategory },
+                    attempt = attempt,
+                    maxAttempts = STARTUP_DATA_PLANE_SELECTION_ATTEMPTS,
+                )
+            ) {
+                StartupDataPlaneProbeAction.COMPLETE -> break
+                StartupDataPlaneProbeAction.RETRY_SELECTED_OUTBOUND -> {
+                    // Autoselect can legitimately replace its leaf while the
+                    // HTTPS proof is in flight. The proof belongs to the old
+                    // leaf and cannot authorize CONNECTED for its replacement.
+                    selectedOutbound = selectedAfterProbe
+                    VpnSessionSnapshotCoordinator.selectedOutbound(
+                        generation,
+                        selectedOutbound,
+                        if (selectedOutbound.startsWith(AUTO_BALANCER_TAG)) AUTO_BALANCER_TAG else "selector",
+                    )
+                    VpnSessionCoordinator.event(
+                        "data_plane_probe_restarted",
+                        generation,
+                        "source=selected_outbound_changed next_attempt=${attempt + 1}",
+                        Log.INFO,
+                    )
+                }
+                StartupDataPlaneProbeAction.RETRY_TRANSIENT_VPN_NETWORK -> {
+                    // VpnService.establish() can publish the VPN Network before
+                    // Android's per-network DNS resolver is ready. Retry only
+                    // this bounded startup transition; CONNECTED still requires
+                    // a fresh successful VPN-bound HTTPS response.
+                    VpnSessionCoordinator.event(
+                        "data_plane_probe_restarted",
+                        generation,
+                        "source=transient_vpn_network next_attempt=${attempt + 1}",
+                        Log.INFO,
+                    )
+                    delay(STARTUP_DATA_PLANE_TRANSIENT_RETRY_DELAY_MILLIS)
+                }
             }
-
-            // Autoselect can legitimately replace its leaf while the first
-            // HTTPS proof is in flight. That proof belongs to the old leaf and
-            // cannot authorize CONNECTED for the replacement. Restart only on
-            // the observed identity change; do not retry a stable failed path.
-            selectedOutbound = selectedAfterProbe
-            VpnSessionSnapshotCoordinator.selectedOutbound(
-                generation,
-                selectedOutbound,
-                if (selectedOutbound.startsWith(AUTO_BALANCER_TAG)) AUTO_BALANCER_TAG else "selector",
-            )
-            VpnSessionCoordinator.event(
-                "data_plane_probe_restarted",
-                generation,
-                "source=selected_outbound_changed next_attempt=${attempt + 1}",
-                Log.INFO,
-            )
         }
         val finalGate = VpnConnectedGate.evaluate(
             session.startEvidence(
@@ -1365,7 +1422,11 @@ class BoxService(
                 if (stale) Log.WARN else Log.ERROR,
             )
             if (!stale) {
-                stopAndAlert(generation, Alert.StartService, "VPN data plane readiness validation failed")
+                stopAndAlert(
+                    generation,
+                    Alert.StartService,
+                    "VPN data plane readiness validation failed ($lastTargetEvidence)",
+                )
             }
             return false
         }

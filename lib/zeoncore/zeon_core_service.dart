@@ -1683,7 +1683,8 @@ class ZeonCoreService with InfraLogger {
             "background_setup=${backgroundSetupFailure.name} "
             "native_generation=${nativeSnapshot?.generation ?? 0} "
             "native_phase=${nativeSnapshot?.phase.name ?? "none"} "
-            "failure_code=${nativeSnapshot?.failureCode.isNotEmpty == true ? nativeSnapshot!.failureCode : "none"}",
+            "failure_code=${nativeSnapshot?.failureCode.isNotEmpty == true ? nativeSnapshot!.failureCode : "none"} "
+            "failure_detail=${nativeSnapshot?.failureDetail.isNotEmpty == true ? nativeSnapshot!.failureDetail : "none"}",
       ),
     );
   }
@@ -1699,7 +1700,8 @@ class ZeonCoreService with InfraLogger {
         "category=${disposition.name} signal=${signal.name} generation=$generation "
         "background_setup=${backgroundSetupFailure.name} "
         "native_phase=${nativeSnapshot?.phase.name ?? "none"} "
-        "native_failure=${nativeSnapshot?.failureCode.isNotEmpty == true ? nativeSnapshot!.failureCode : "none"}";
+        "native_failure=${nativeSnapshot?.failureCode.isNotEmpty == true ? nativeSnapshot!.failureCode : "none"} "
+        "native_detail=${nativeSnapshot?.failureDetail.isNotEmpty == true ? nativeSnapshot!.failureDetail : "none"}";
     if (disposition == StartupOutcomeDisposition.controlChannelFailure) {
       return ConnectionFailure.backgroundCoreNotAvailable("background control startup failed [$detail]");
     }

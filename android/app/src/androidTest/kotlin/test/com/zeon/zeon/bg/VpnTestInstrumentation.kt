@@ -285,6 +285,14 @@ class VpnTestInstrumentation : Instrumentation() {
             "missingDataPlaneProofCannotPublishStarted" to permissionTests::missingDataPlaneProofCannotPublishStarted,
             "oneRealHttpsTargetProvesDataPlane" to permissionTests::oneRealHttpsTargetProvesDataPlane,
             "noRealHttpsTargetCannotProveDataPlane" to permissionTests::noRealHttpsTargetCannotProveDataPlane,
+            "stableTransientVpnDnsFailureGetsBoundedRetry" to
+                permissionTests::stableTransientVpnDnsFailureGetsBoundedRetry,
+            "transientVpnDnsRetryNeverAuthorizesConnectedAndRemainsBounded" to
+                permissionTests::transientVpnDnsRetryNeverAuthorizesConnectedAndRemainsBounded,
+            "stableNonTransientDataPlaneFailureIsNotRetried" to
+                permissionTests::stableNonTransientDataPlaneFailureIsNotRetried,
+            "changedAutoselectLeafStillRequiresFreshProof" to
+                permissionTests::changedAutoselectLeafStillRequiresFreshProof,
             "reconnectAfterPermissionFailureNeedsNoProcessRestart" to permissionTests::reconnectAfterPermissionFailureNeedsNoProcessRestart,
         ).forEach { (name, body) ->
             tests += TestCase(permissionTests.javaClass.name, name) { body() }
