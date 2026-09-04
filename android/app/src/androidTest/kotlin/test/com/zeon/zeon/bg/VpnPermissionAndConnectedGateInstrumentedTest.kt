@@ -4,6 +4,7 @@ import com.zeon.zeon.bg.VpnConnectedGate
 import com.zeon.zeon.bg.VpnDataPlaneProbe
 import com.zeon.zeon.bg.VpnDataPlaneTargetResult
 import com.zeon.zeon.bg.VpnPermissionRequestCoordinator
+import com.zeon.zeon.bg.startupDataPlaneProofReady
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -113,6 +114,8 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
             VpnDataPlaneTargetResult("cloudflare_byte", ready = false, failureCategory = "dns"),
         )
         check(VpnDataPlaneProbe.hasReadyTarget(results))
+        check(startupDataPlaneProofReady(true, "leaf-a", "leaf-a"))
+        check(!startupDataPlaneProofReady(true, "leaf-a", "leaf-b"))
     }
 
     fun noRealHttpsTargetCannotProveDataPlane() {
@@ -122,6 +125,7 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
             VpnDataPlaneTargetResult("cloudflare_byte", ready = false, failureCategory = "connect"),
         )
         check(!VpnDataPlaneProbe.hasReadyTarget(results))
+        check(!startupDataPlaneProofReady(false, "leaf-a", "leaf-a"))
     }
 
     fun reconnectAfterPermissionFailureNeedsNoProcessRestart() {

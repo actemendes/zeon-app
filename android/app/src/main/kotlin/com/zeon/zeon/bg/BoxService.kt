@@ -98,6 +98,15 @@ internal fun selectedOutboundRevalidationAction(
     else -> SelectedOutboundRevalidationAction.INVALIDATE
 }
 
+internal fun startupDataPlaneProofReady(
+    ready: Boolean,
+    selectedBeforeProbe: String,
+    selectedAfterProbe: String,
+): Boolean =
+    ready &&
+        selectedBeforeProbe.isNotBlank() &&
+        selectedBeforeProbe == selectedAfterProbe
+
 internal fun ownsCurrentStartupFailure(
     generation: Long,
     currentGeneration: Long,
@@ -118,6 +127,7 @@ class BoxService(
         private const val TAG = "A/BoxService"
         private const val OUTBOUND_SELECTOR_TAG = "select"
         private const val AUTO_BALANCER_TAG = "balance"
+        private const val STARTUP_DATA_PLANE_SELECTION_ATTEMPTS = 3
         const val EXTRA_SESSION_GENERATION = "com.zeon.zeon.extra.SESSION_GENERATION"
         const val EXTRA_STOP_SOURCE = "com.zeon.zeon.extra.STOP_SOURCE"
         private const val STOP_FALLBACK_INITIAL_DELAY_MILLIS = 300L
@@ -1277,7 +1287,7 @@ class BoxService(
             return false
         }
 
-        val selectedOutbound = awaitSelectedOutbound(generation)
+        var selectedOutbound = awaitSelectedOutbound(generation)
         if (selectedOutbound.isBlank()) {
             VpnSessionCoordinator.event(
                 "start_gate_rejected",
@@ -1297,25 +1307,53 @@ class BoxService(
             it.copy(coreStarted = true)
         }
 
-        val dataPlane = VpnDataPlaneProbe(
-            service.getSystemService(ConnectivityManager::class.java),
-        ).probe()
-        val selectedAfterProbe = readSelectedOutbound()
-        val dataPlaneStable = selectedAfterProbe == selectedOutbound
-        val targetEvidence = dataPlane.targets.joinToString(",") {
-            "${it.id}:${if (it.ready) "ready" else it.failureCategory}"
+        var dataPlaneReady = false
+        for (attempt in 1..STARTUP_DATA_PLANE_SELECTION_ATTEMPTS) {
+            val dataPlane = VpnDataPlaneProbe(
+                service.getSystemService(ConnectivityManager::class.java),
+            ).probe()
+            val selectedAfterProbe = readSelectedOutbound()
+            val dataPlaneStable = selectedAfterProbe == selectedOutbound
+            val targetEvidence = dataPlane.targets.joinToString(",") {
+                "${it.id}:${if (it.ready) "ready" else it.failureCategory}"
+            }
+            dataPlaneReady = startupDataPlaneProofReady(
+                ready = dataPlane.ready,
+                selectedBeforeProbe = selectedOutbound,
+                selectedAfterProbe = selectedAfterProbe,
+            )
+            VpnSessionCoordinator.event(
+                "data_plane_probe_completed",
+                generation,
+                "ready=${dataPlane.ready} targets=$targetEvidence selected_stable=$dataPlaneStable attempt=$attempt",
+                if (dataPlaneReady) Log.INFO else Log.ERROR,
+            )
+            if (dataPlaneStable || selectedAfterProbe.isBlank() || attempt == STARTUP_DATA_PLANE_SELECTION_ATTEMPTS) {
+                break
+            }
+
+            // Autoselect can legitimately replace its leaf while the first
+            // HTTPS proof is in flight. That proof belongs to the old leaf and
+            // cannot authorize CONNECTED for the replacement. Restart only on
+            // the observed identity change; do not retry a stable failed path.
+            selectedOutbound = selectedAfterProbe
+            VpnSessionSnapshotCoordinator.selectedOutbound(
+                generation,
+                selectedOutbound,
+                if (selectedOutbound.startsWith(AUTO_BALANCER_TAG)) AUTO_BALANCER_TAG else "selector",
+            )
+            VpnSessionCoordinator.event(
+                "data_plane_probe_restarted",
+                generation,
+                "source=selected_outbound_changed next_attempt=${attempt + 1}",
+                Log.INFO,
+            )
         }
-        VpnSessionCoordinator.event(
-            "data_plane_probe_completed",
-            generation,
-            "ready=${dataPlane.ready} targets=$targetEvidence selected_stable=$dataPlaneStable",
-            if (dataPlane.ready) Log.INFO else Log.ERROR,
-        )
         val finalGate = VpnConnectedGate.evaluate(
             session.startEvidence(
                 permissionGranted = permissionGranted,
                 mobileStartSucceeded = true,
-                dataPlaneReady = dataPlane.ready,
+                dataPlaneReady = dataPlaneReady,
             ),
         )
         if (finalGate is VpnConnectedGate.Result.Rejected) {
