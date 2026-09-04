@@ -5,6 +5,8 @@ param(
 
     [string]$DeviceId = "18bfc103",
 
+    [int]$CorePort = 18178,
+
     [string]$EvidenceRoot = "artifacts/android_false_connected/autoselect_stability"
 )
 
@@ -33,7 +35,7 @@ function Get-CurrentOutboundId {
         '-import-path', $protoRoot,
         '-proto', 'v2/hcore/hcore_service.proto',
         '-d', '{}',
-        'localhost:17178',
+        "localhost:$CorePort",
         'hcore.Core/GetSystemInfo'
     )
     $raw = (& $grpc @arguments 2>$null) -join "`n"
@@ -51,7 +53,7 @@ function Get-CurrentOutboundId {
     ).Replace('-', '').Substring(0, 16).ToLowerInvariant()
 }
 
-Invoke-Adb forward tcp:17178 tcp:17178 | Out-Null
+Invoke-Adb forward "tcp:$CorePort" "tcp:$CorePort" | Out-Null
 $initial = Get-CurrentOutboundId
 if (-not $initial) { throw "core current_outbound is unavailable; Autoselect must already be connected" }
 

@@ -141,6 +141,11 @@ class CoreInterface {
     return true;
   }
 
+  /// Drops a poisoned foreground transport before the owner rebuilds it.
+  /// Mobile keeps the background data plane separate, while desktop recovery
+  /// owns its process/channel lifecycle internally.
+  Future<void> invalidateForegroundControlChannel() async {}
+
   Future<bool> isActiveBg({PortProbeObserver? onPortProbe}) async {
     return true;
   }

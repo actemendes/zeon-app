@@ -41,6 +41,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
             SetSessionGeneration("set_session_generation"),
             MarkCoreStarted("mark_core_started"),
             GetVpnSessionSnapshot("get_vpn_session_snapshot"),
+            GetPackageName("get_package_name"),
             AddGrpcClientPublicKey("add_grpc_client_public_key"),
             GetGrpcServerPublicKey("get_grpc_server_public_key"),
 
@@ -61,6 +62,8 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            Trigger.GetPackageName.method -> result.success(Application.application.packageName)
+
             Trigger.AddGrpcClientPublicKey.method -> {
                 scope.launch {
                     result.runCatching {

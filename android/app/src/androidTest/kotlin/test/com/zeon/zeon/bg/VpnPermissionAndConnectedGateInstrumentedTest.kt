@@ -110,6 +110,7 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
         val results = listOf(
             VpnDataPlaneTargetResult("zeon_204", ready = false, failureCategory = "timeout"),
             VpnDataPlaneTargetResult("gstatic_204", ready = true),
+            VpnDataPlaneTargetResult("cloudflare_byte", ready = false, failureCategory = "dns"),
         )
         check(VpnDataPlaneProbe.hasReadyTarget(results))
     }
@@ -118,6 +119,7 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
         val results = listOf(
             VpnDataPlaneTargetResult("zeon_204", ready = false, failureCategory = "dns"),
             VpnDataPlaneTargetResult("gstatic_204", ready = false, failureCategory = "timeout"),
+            VpnDataPlaneTargetResult("cloudflare_byte", ready = false, failureCategory = "connect"),
         )
         check(!VpnDataPlaneProbe.hasReadyTarget(results))
     }

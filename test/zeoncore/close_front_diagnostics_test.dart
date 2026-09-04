@@ -181,7 +181,7 @@ void main() {
       expect(fixture.service.currentState, isA<CoreStarted>());
     });
 
-    test('resume overlap cannot overwrite Started and only cleans captured foreground resources', () async {
+    test('resume setup waits for closeFront and only cleans captured foreground resources', () async {
       final barrier = Completer<void>();
       final enteredProbe = Completer<void>();
       final fixture = _CloseFrontFixture(PortProbeOutcome.closed, probeBarrier: barrier, onProbeEntered: enteredProbe);
@@ -208,11 +208,20 @@ void main() {
       fixture.service.subscriptions['fg-test'] = newSubscription;
       fixture.service.recordAppResume();
       fixture.publishStarted();
+      var setupCompleted = false;
+      final setupOperation = fixture.service.setup().run().then((result) {
+        setupCompleted = true;
+        return result;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(setupCompleted, isFalse);
       barrier.complete();
 
       await closeOperation;
+      final setupResult = await setupOperation;
       await Future<void>.delayed(Duration.zero);
 
+      expect(setupResult.isRight(), isTrue);
       expect(fixture.events.whereType<CoreStopped>(), isEmpty);
       expect(fixture.service.currentState, isA<CoreStarted>());
       expect(oldListenerCancelled, isTrue);
@@ -522,7 +531,6 @@ VpnSessionSnapshot _connectedSnapshot(int generation) => VpnSessionSnapshot(
   commandEndpointReady: true,
   tunnelReady: true,
   protectSucceeded: true,
-  dataPlaneReady: true,
   platformVpnValidated: true,
   selectedOutboundId: 'selected',
 );

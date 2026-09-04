@@ -42,6 +42,7 @@ internal class VpnDataPlaneProbe(
         private val targets = listOf(
             "zeon_204" to "https://zeon-vps.link/generate_204",
             "gstatic_204" to "https://www.gstatic.com/generate_204",
+            "cloudflare_byte" to "https://speed.cloudflare.com/__down?bytes=1",
         )
 
         internal fun hasReadyTarget(results: List<VpnDataPlaneTargetResult>): Boolean =

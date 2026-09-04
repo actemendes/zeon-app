@@ -264,6 +264,7 @@ class ZeonCoreService with InfraLogger {
   final Map<String, int> _listenerReconnectAttempt = {};
   final Map<String, Future<void>> _statusListenerRecoveryByKey = {};
   int _stoppingStatusWatchdogGeneration = 0;
+  Future<Either<String, Unit>>? _setupInFlight;
   ({int generation, Future<Either<String, Unit>> future})? _stopInFlight;
   late final SessionGenerationGate _sessionGeneration = SessionGenerationGate(
     onStale: (stale, current, source) {
@@ -282,6 +283,7 @@ class ZeonCoreService with InfraLogger {
   _CoreLifecycleState _lifecycleState = _CoreLifecycleState.stopped;
   int _connectedGeneration = 0;
   int _closeFrontOperationSequence = 0;
+  Future<void>? _closeFrontInFlight;
   int _appResumeSequence = 0;
   int _foregroundLifecycleEpoch = 0;
   final Map<TransportCloseIntent, int> _activeTransportTeardownIntents = {};
@@ -1298,77 +1300,113 @@ class ZeonCoreService with InfraLogger {
   }
 
   TaskEither<String, Unit> setup() {
-    return TaskEither(() async {
-      _foregroundLifecycleEpoch++;
-      if (_useMockCore) {
-        if (_lifecycleState != _CoreLifecycleState.starting && _lifecycleState != _CoreLifecycleState.stopping) {
-          currentState = const CoreStatus.stopped();
-          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock setup");
-          statusController.add(currentState);
-        }
-        return right(unit);
-      }
-      try {
-        await _deleteCoreCurrentConfigSnapshot();
-        final directories = ref.read(appDirectoriesProvider).requireValue;
-        // hcore's Android debug bridge re-emits sing-box records through the
-        // same logger that writes data/box.log. A single Smart Active record can
-        // therefore feed itself back indefinitely, grow the file by gigabytes,
-        // and starve Mobile.start before the TUN callback. Android retains
-        // bounded lifecycle/logcat diagnostics, but the affected native bridge
-        // must stay disabled until hcore separates its source and sink.
-        final debug = coreSetupDebugEnabledForPlatform(
-          isAndroid: Platform.isAndroid,
-          userDebugEnabled: ref.read(debugModeNotifierProvider),
-          isDebugBuild: kDebugMode,
-        );
-        final setupResponse = await core.setup(directories, debug, 3);
+    return TaskEither(() {
+      final existing = _setupInFlight;
+      if (existing != null) return existing;
 
-        if (setupResponse.isNotEmpty) return left(setupResponse);
-
-        await startListeningLogs("fg", core.fgClient);
-        // await startListeningStatus("fg", core.fgClient);
-        final backgroundState = await _probeBackgroundCoreState(attempts: PlatformUtils.isIOS ? 8 : 1);
-        final bgActive = backgroundState == CloseFrontBackgroundState.active;
-        if (bgActive && !core.isSingleChannel()) {
-          await startListeningLogs("bg", core.bgClient);
+      final operation = _performSetup();
+      _setupInFlight = operation;
+      return operation.whenComplete(() {
+        if (identical(_setupInFlight, operation)) {
+          _setupInFlight = null;
         }
-        final lifecycleIntentReserved =
-            _lifecycleState == _CoreLifecycleState.starting || _lifecycleState == _CoreLifecycleState.stopping;
-        var publishSetupStatus = core.isSingleChannel();
-        if (!core.isSingleChannel() && !lifecycleIntentReserved) {
-          final decision = classifyLocalControlStatus(
-            backgroundState: backgroundState,
-            nativeProvesConnected: _nativeSnapshotProvesCurrentConnected(),
-            nativeProvesStopped: _nativeSnapshotProvesCurrentStopped(),
-          );
-          switch (decision) {
-            case LocalControlStatusDecision.publishStarted:
-              currentState = const CoreStatus.started();
-              _transitionLifecycle(_CoreLifecycleState.started, reason: "setup background/native state");
-              publishSetupStatus = true;
-            case LocalControlStatusDecision.publishStopped:
-              currentState = const CoreStatus.stopped();
-              _transitionLifecycle(_CoreLifecycleState.stopped, reason: "setup background/native state");
-              publishSetupStatus = true;
-            case LocalControlStatusDecision.preserve:
-              loggy.warning("setup background probe was inconclusive; preserving current VPN status");
-          }
-        }
-        if (!lifecycleIntentReserved && publishSetupStatus) {
-          statusController.add(currentState);
-        } else {
-          loggy.debug("setup background probe preserved reserved lifecycle=${_lifecycleState.name}");
-        }
-        if (bgActive) {
-          await startListeningStatus("bg", core.bgClient);
-        }
-        // ref.read(coreRestartSignalProvider.notifier).restart();
-        return right(unit);
-      } catch (e) {
-        return left(e.toString());
-      }
+      });
     });
+  }
+
+  Future<Either<String, Unit>> _performSetup() async {
+    if (_useMockCore) {
+      if (_lifecycleState != _CoreLifecycleState.starting && _lifecycleState != _CoreLifecycleState.stopping) {
+        currentState = const CoreStatus.stopped();
+        _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock setup");
+        statusController.add(currentState);
+      }
+      return right(unit);
+    }
+
+    final closeFrontOperation = _closeFrontInFlight;
+    if (closeFrontOperation != null) {
+      loggy.debug("waiting for foreground close before rebuilding control channel");
+      await closeFrontOperation;
+    }
+
+    // Bootstrap already owns the live foreground core on mobile. Opening a
+    // second hello channel to the single native server can wait indefinitely
+    // behind the existing channel and prevents Connect from reaching TUN setup.
+    // Reuse the proven live channel; a closed/unhealthy channel still falls
+    // through to the normal reconstruction path used on app resume.
+    if (core.isInitialized()) {
+      try {
+        if (await core.isActiveFg()) {
+          loggy.debug("foreground core is already initialized; reusing control channel");
+          return right(unit);
+        }
+      } catch (e) {
+        loggy.debug("foreground core reuse probe failed; rebuilding control channel", e);
+      }
+    }
+
+    _foregroundLifecycleEpoch++;
+    try {
+      await _deleteCoreCurrentConfigSnapshot();
+      final directories = ref.read(appDirectoriesProvider).requireValue;
+      // hcore's Android debug bridge re-emits sing-box records through the
+      // same logger that writes data/box.log. A single Smart Active record can
+      // therefore feed itself back indefinitely, grow the file by gigabytes,
+      // and starve Mobile.start before the TUN callback. Android retains
+      // bounded lifecycle/logcat diagnostics, but the affected native bridge
+      // must stay disabled until hcore separates its source and sink.
+      final debug = coreSetupDebugEnabledForPlatform(
+        isAndroid: Platform.isAndroid,
+        userDebugEnabled: ref.read(debugModeNotifierProvider),
+        isDebugBuild: kDebugMode,
+      );
+      final setupResponse = await core.setup(directories, debug, 3);
+
+      if (setupResponse.isNotEmpty) return left(setupResponse);
+
+      await startListeningLogs("fg", core.fgClient);
+      // await startListeningStatus("fg", core.fgClient);
+      final backgroundState = await _probeBackgroundCoreState(attempts: PlatformUtils.isIOS ? 8 : 1);
+      final bgActive = backgroundState == CloseFrontBackgroundState.active;
+      if (bgActive && !core.isSingleChannel()) {
+        await startListeningLogs("bg", core.bgClient);
+      }
+      final lifecycleIntentReserved =
+          _lifecycleState == _CoreLifecycleState.starting || _lifecycleState == _CoreLifecycleState.stopping;
+      var publishSetupStatus = core.isSingleChannel();
+      if (!core.isSingleChannel() && !lifecycleIntentReserved) {
+        final decision = classifyLocalControlStatus(
+          backgroundState: backgroundState,
+          nativeProvesConnected: _nativeSnapshotProvesCurrentConnected(),
+          nativeProvesStopped: _nativeSnapshotProvesCurrentStopped(),
+        );
+        switch (decision) {
+          case LocalControlStatusDecision.publishStarted:
+            currentState = const CoreStatus.started();
+            _transitionLifecycle(_CoreLifecycleState.started, reason: "setup background/native state");
+            publishSetupStatus = true;
+          case LocalControlStatusDecision.publishStopped:
+            currentState = const CoreStatus.stopped();
+            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "setup background/native state");
+            publishSetupStatus = true;
+          case LocalControlStatusDecision.preserve:
+            loggy.warning("setup background probe was inconclusive; preserving current VPN status");
+        }
+      }
+      if (!lifecycleIntentReserved && publishSetupStatus) {
+        statusController.add(currentState);
+      } else {
+        loggy.debug("setup background probe preserved reserved lifecycle=${_lifecycleState.name}");
+      }
+      if (bgActive) {
+        await startListeningStatus("bg", core.bgClient);
+      }
+      // ref.read(coreRestartSignalProvider.notifier).restart();
+      return right(unit);
+    } catch (e) {
+      return left(e.toString());
+    }
   }
 
   TaskEither<String, Unit> changeOptions(SingboxConfigOption options) {
@@ -1393,26 +1431,32 @@ class ZeonCoreService with InfraLogger {
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           final client = await _clientForForegroundOperation("change options");
-          final res = await client.ChangeHiddifySettings(request, options: CallOptions(timeout: _grpcControlTimeout));
+          final res = await client.ChangeHiddifySettings(
+            request,
+            options: CallOptions(timeout: _grpcControlTimeout),
+          ).timeout(_grpcControlTimeout);
           if (res.messageType != MessageType.EMPTY) {
             return left("${res.messageType} ${res.message}");
           }
           try {
-            await core.bgClient.ChangeHiddifySettings(request, options: CallOptions(timeout: _grpcControlTimeout));
-          } on GrpcError catch (e) {
-            if (e.code == StatusCode.unavailable || _isTransientGrpcTransportClose(e)) {
+            await core.bgClient
+                .ChangeHiddifySettings(request, options: CallOptions(timeout: _grpcControlTimeout))
+                .timeout(_grpcControlTimeout);
+          } catch (e) {
+            if (_isTransientCoreFailure(e)) {
               loggy.debug("background core is not started yet! $e");
             } else {
               rethrow;
             }
           }
           return right(unit);
-        } on GrpcError catch (e, st) {
-          if (!_isTransientGrpcFailure(e)) {
+        } catch (e, st) {
+          if (!_isTransientCoreFailure(e)) {
             rethrow;
           }
           lastTransientError = e;
           loggy.warning("change options grpc unavailable [$attempt/$maxAttempts]", e, st);
+          await core.invalidateForegroundControlChannel();
           await setup().run();
           await Future<void>.delayed(const Duration(milliseconds: 200));
         }
@@ -1702,6 +1746,7 @@ class ZeonCoreService with InfraLogger {
   }
 
   bool _isTransientCoreFailure(Object error) {
+    if (error is TimeoutException) return true;
     if (error is GrpcError) return _isTransientGrpcFailure(error);
     final message = error.toString().toLowerCase();
     return message.contains("core unavailable") ||
@@ -3751,7 +3796,20 @@ class ZeonCoreService with InfraLogger {
     }
   }
 
-  Future<void> closeFront() async {
+  Future<void> closeFront() {
+    final existing = _closeFrontInFlight;
+    if (existing != null) return existing;
+
+    final operation = _performCloseFront();
+    _closeFrontInFlight = operation;
+    return operation.whenComplete(() {
+      if (identical(_closeFrontInFlight, operation)) {
+        _closeFrontInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _performCloseFront() async {
     final operationSequence = ++_closeFrontOperationSequence;
     final capturedGeneration = _sessionGeneration.current;
     final capturedRuntimeEpoch = _currentRuntimeEpoch();

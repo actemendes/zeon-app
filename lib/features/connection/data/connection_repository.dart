@@ -76,22 +76,15 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   @override
   SingboxConfigOption? get configOptionsSnapshot => _configOptionsSnapshot;
 
-  bool _initialized = false;
-
   @override
   TaskEither<ConnectionFailure, Unit> setup() {
-    if (_initialized) return TaskEither.of(unit);
     return exceptionHandler(() {
       loggy.debug("setting up singbox");
 
-      return singbox
-          .setup()
-          .map((r) {
-            _initialized = true;
-            return r;
-          })
-          .mapLeft(UnexpectedConnectionFailure.new)
-          .run();
+      // ZeonCoreService owns idempotence and foreground-channel health. A
+      // repository-local permanent latch becomes stale after Android closes or
+      // wedges the foreground gRPC transport during repeated VPN lifecycles.
+      return singbox.setup().mapLeft(UnexpectedConnectionFailure.new).run();
     }, UnexpectedConnectionFailure.new);
   }
 
