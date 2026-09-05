@@ -270,7 +270,10 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     if (!state.hasValue) return;
     final current = state.value;
     if (current == null || current.tag != groupTag || !current.items.any((item) => item.tag == outboundTag)) return;
-    final outbounds = OutboundGroup()..mergeFromMessage(current);
+    // combineLatest retains this snapshot for subsequent statistics ticks.
+    // Update it only after native acknowledgement and successful persistence,
+    // so those ticks cannot restore the pre-selection value.
+    final outbounds = current;
     await ref.read(hapticServiceProvider.notifier).lightImpact();
     final pending = PendingProxySelection(groupTag: groupTag, outboundTag: outboundTag);
     final serviceRunning = await ref.read(serviceRunningProvider.future);

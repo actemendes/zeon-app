@@ -17,6 +17,34 @@ import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('statistics do not revert an acknowledged live selection', () async {
+    SharedPreferences.setMockInitialValues({'haptic_feedback': false});
+    final preferences = await SharedPreferences.getInstance();
+    final stats = _ChangingStats();
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWith((ref) async => preferences),
+        proxyRepositoryProvider.overrideWithValue(_AcceptingRepository()),
+        statsRepositoryProvider.overrideWithValue(stats),
+        serviceRunningProvider.overrideWith((ref) async => true),
+      ],
+    );
+    addTearDown(container.dispose);
+    addTearDown(stats.controller.close);
+    await container.read(sharedPreferencesProvider.future);
+    final subscription = container.listen(proxiesOverviewNotifierProvider, (_, _) {});
+    addTearDown(subscription.close);
+    await container.read(proxiesOverviewNotifierProvider.future);
+    await container.read(proxiesOverviewNotifierProvider.notifier).changeProxy('select', 'server-b');
+    expect(container.read(proxiesOverviewNotifierProvider).requireValue?.selected, 'server-b');
+    stats.controller.add(right(SystemInfo()));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(
+      container.read(proxiesOverviewNotifierProvider).requireValue?.selected,
+      'server-b',
+      reason: 'a stats tick is not a new native selector snapshot',
+    );
+  });
   test('offline choice survives provider restart without calling the stopped core', () async {
     SharedPreferences.setMockInitialValues({'haptic_feedback': false});
     final preferences = await SharedPreferences.getInstance();
@@ -114,4 +142,15 @@ class _RejectingRepository implements ProxyRepository {
 class _Stats implements StatsRepository {
   @override
   Stream<Either<StatsFailure, SystemInfo>> watchStats() => const Stream.empty();
+}
+
+class _AcceptingRepository extends _RejectingRepository {
+  @override
+  TaskEither<ProxyFailure, Unit> selectProxy(String groupTag, String outboundTag) => TaskEither.right(unit);
+}
+
+class _ChangingStats implements StatsRepository {
+  final controller = StreamController<Either<StatsFailure, SystemInfo>>();
+  @override
+  Stream<Either<StatsFailure, SystemInfo>> watchStats() => controller.stream;
 }
