@@ -17,6 +17,7 @@ import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/singbox/model/singbox_config_option.dart';
+import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 void main() {
@@ -56,6 +57,27 @@ void main() {
   });
 
   group('disconnect reconciliation', () {
+    testWidgets('core restart preserves the connection stream and completion resync', (tester) async {
+      final repository = _FakeConnectionRepository();
+      final setup = await _createContainer(repository);
+      addTearDown(setup.dispose);
+      final restartSignal = setup.container.read(coreRestartSignalProvider.notifier);
+      repository.onReconnectCompleted = restartSignal.restart;
+      setup.observedStates.clear();
+
+      await setup.notifier.restartForConfigChange(setup.profile);
+
+      expect(repository.resyncSources, contains('mode_reconnect_completion'));
+      repository.emit(const Disconnecting());
+      await tester.pump();
+      expect(setup.status, const Disconnecting());
+      repository.emit(const Connected());
+      await tester.pump();
+      expect(setup.status, const Connected());
+      expect(setup.observedStates.whereType<AsyncLoading<ConnectionStatus>>(), isEmpty);
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
     testWidgets('authoritative stopped snapshot releases a hung Disconnecting UI', (tester) async {
       final repository = _FakeConnectionRepository();
       repository.disconnectBarrier = Completer<void>();
@@ -531,6 +553,7 @@ class _FakeConnectionRepository implements ConnectionRepository {
   ConnectionStatus? authoritativeStatus = const Connected();
   Completer<void>? disconnectBarrier;
   Completer<void>? reconnectBarrier;
+  void Function()? onReconnectCompleted;
   Completer<void>? connectBarrier;
   ConnectionStatus? reconnectStatus;
   int connectCalls = 0;
@@ -593,6 +616,7 @@ class _FakeConnectionRepository implements ConnectionRepository {
       if (status != null) emit(status);
       final barrier = reconnectBarrier;
       if (barrier != null) await barrier.future;
+      onReconnectCompleted?.call();
       return right(unit);
     });
   }

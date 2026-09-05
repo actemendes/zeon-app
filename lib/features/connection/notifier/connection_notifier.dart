@@ -26,7 +26,6 @@ import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 part 'connection_notifier.g.dart';
@@ -74,15 +73,16 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
   @override
   Stream<ConnectionStatus> build() async* {
-    // Preserve the DB-audit fix: stream callbacks must not read an obsolete
-    // Riverpod ref after a core restart invalidates this build.
+    // Capture owners for stream callbacks, preserving the DB-audit fix.
     final connectionRepo = ref.read(connectionRepositoryProvider);
     final startedByUserNotifier = ref.read(Preferences.startedByUser.notifier);
     final snapshotSource = ref.read(vpnSessionSnapshotSourceProvider);
     final errorReportController = ref.read(appInfoProvider).hasValue ? ref.read(errorReportControllerProvider) : null;
     var disposed = false;
     ref.onDispose(() => disposed = true);
-    ref.watch(coreRestartSignalProvider);
+    // watchStatus owns a persistent controller across native generations.
+    // Rebuilding this notifier on a core restart invalidates the ref while
+    // reconnect completion still needs it and interrupts the status stream.
     _appLifecycleListener ??= AppLifecycleListener(onResume: () => unawaited(_resyncFromPlatform("app_resume")));
     ref.onDispose(() {
       _appLifecycleListener?.dispose();
