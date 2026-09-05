@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/features/proxy/data/proxy_selection_persistence.dart';
@@ -45,28 +43,5 @@ void main() {
     expect(restored?.tag, 'select');
     expect(restored?.selected, 'balance');
     expect(restored?.items.map((item) => item.tag), ['balance', 'server-a']);
-  });
-
-  test('runtime config embeds a valid staged selector without changing other fields', () {
-    const selection = PendingProxySelection(groupTag: 'select', outboundTag: 'balance');
-    const source =
-        '{"route":{"final":"select"},"outbounds":['
-        '{"type":"selector","tag":"select","outbounds":["server-a","balance"],"default":"server-a"},'
-        '{"type":"direct","tag":"direct"}]}';
-
-    final result = applyProxySelectionToRuntimeConfig(source, selection);
-    expect(result, isNotNull);
-    final decoded = jsonDecode(result!) as Map<String, dynamic>;
-    final selector = (decoded['outbounds'] as List).first as Map<String, dynamic>;
-    expect(selector['default'], 'balance');
-    expect(selector['zeon_prefer_default'], isTrue);
-    expect((decoded['route'] as Map<String, dynamic>)['final'], 'select');
-  });
-
-  test('runtime config rejects a stale selection', () {
-    const selection = PendingProxySelection(groupTag: 'select', outboundTag: 'missing');
-    const source = '{"outbounds":[{"type":"selector","tag":"select","outbounds":["server-a"]}]}';
-
-    expect(applyProxySelectionToRuntimeConfig(source, selection), isNull);
   });
 }

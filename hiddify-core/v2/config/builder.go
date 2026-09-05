@@ -471,12 +471,21 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 
 		}
 	}
+	preferDefault := false
+	for _, tag := range selectorTags {
+		if tag == opt.PreferredSelectorOutbound {
+			defaultSelect = tag
+			preferDefault = true
+			break
+		}
+	}
 	selector := option.Outbound{
 		Type: C.TypeSelector,
 		Tag:  OutboundSelectTag,
 		Options: &option.SelectorOutboundOptions{
 			Outbounds:                 selectorTags,
 			Default:                   defaultSelect,
+			ZeonPreferDefault:         preferDefault,
 			InterruptExistConnections: PreserveExistingUserConnections,
 		},
 	}
