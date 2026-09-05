@@ -25,11 +25,13 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     Future<bool> Function(String, int)? portProbe,
     Duration nativeSetupTimeout = const Duration(seconds: 15),
     Duration nativeControlTimeout = const Duration(seconds: 10),
+    Duration nativeStartupConfirmationTimeout = const Duration(seconds: 55),
     Duration platformStopTimeout = const Duration(seconds: 12),
     Duration terminalSnapshotTimeout = const Duration(seconds: 2),
     Duration terminalSnapshotPollInterval = const Duration(milliseconds: 120),
   }) : _nativeSetupTimeout = nativeSetupTimeout,
        _nativeControlTimeout = nativeControlTimeout,
+       _nativeStartupConfirmationTimeout = nativeStartupConfirmationTimeout,
        _platformStopTimeout = platformStopTimeout,
        _terminalSnapshotTimeout = terminalSnapshotTimeout,
        _terminalSnapshotPollInterval = terminalSnapshotPollInterval,
@@ -67,6 +69,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   final Future<bool> Function(String, int) _portProbe;
   final Duration _nativeSetupTimeout;
   final Duration _nativeControlTimeout;
+  final Duration _nativeStartupConfirmationTimeout;
   final Duration _platformStopTimeout;
   final Duration _terminalSnapshotTimeout;
   final Duration _terminalSnapshotPollInterval;
@@ -634,7 +637,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     }
     await methodChannel
         .invokeMethod<int>("mark_core_started", {"generation": generation})
-        .timeout(_nativeControlTimeout);
+        .timeout(_nativeStartupConfirmationTimeout);
   }
 
   Future<bool> _waitForBackgroundCommandEndpoint(int generation) async {

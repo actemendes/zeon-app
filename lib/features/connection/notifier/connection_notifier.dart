@@ -35,6 +35,7 @@ part 'connection_notifier.g.dart';
 class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
   static const _disconnectingResyncDelay = Duration(seconds: 2);
+  static const _connectingProofExtension = Duration(seconds: 48);
   static const _platformResyncTimeout = Duration(seconds: 2);
   static const _mainButtonResyncTimeout = Duration(milliseconds: 800);
   static const _disconnectingResyncAttempts = 3;
@@ -312,6 +313,18 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       intentEpoch: intentEpoch,
       shouldApply: (_) => _isCurrentIntent(intentEpoch, running: true) && state.asData?.value is Connecting,
     );
+    if (_isCurrentIntent(intentEpoch, running: true) &&
+        state.asData?.value is Connecting &&
+        nativeSnapshotIndicatesStartupProgress(ref.read(vpnSessionSnapshotSourceProvider).current)) {
+      loggy.info("event=vpn_ui_connecting_proof_extension intent=$intentEpoch");
+      await Future<void>.delayed(_connectingProofExtension);
+      if (!_isCurrentIntent(intentEpoch, running: true) || state.asData?.value is! Connecting) return;
+      await _resyncFromPlatform(
+        "connecting_proof_timeout",
+        intentEpoch: intentEpoch,
+        shouldApply: (_) => _isCurrentIntent(intentEpoch, running: true) && state.asData?.value is Connecting,
+      );
+    }
     if (_isCurrentIntent(intentEpoch, running: true) && state.asData?.value is Connecting) {
       const failure = ConnectionFailure.unexpected(
         "VPN start status could not be confirmed within the recovery deadline",
@@ -1077,6 +1090,19 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
     return true;
   }
+}
+
+@visibleForTesting
+bool nativeSnapshotIndicatesStartupProgress(VpnSessionSnapshot? snapshot) {
+  if (snapshot == null || snapshot.requestedAction != 'connect') return false;
+  return switch (snapshot.phase) {
+    VpnSessionPhase.startRequested ||
+    VpnSessionPhase.startingPlatform ||
+    VpnSessionPhase.startingCore ||
+    VpnSessionPhase.waitingTun ||
+    VpnSessionPhase.verifying => true,
+    _ => false,
+  };
 }
 
 /// Returns true only for a non-terminal stop-looking callback that belongs to

@@ -21,6 +21,19 @@ import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 void main() {
+  group('nativeSnapshotIndicatesStartupProgress', () {
+    test('keeps the UI watchdog open only for a current connect startup phase', () {
+      expect(nativeSnapshotIndicatesStartupProgress(_snapshot(VpnSessionPhase.verifying)), isTrue);
+      expect(nativeSnapshotIndicatesStartupProgress(_snapshot(VpnSessionPhase.waitingTun)), isTrue);
+      expect(nativeSnapshotIndicatesStartupProgress(_snapshot(VpnSessionPhase.failed)), isFalse);
+      expect(
+        nativeSnapshotIndicatesStartupProgress(_snapshot(VpnSessionPhase.stopping, requestedAction: 'stop')),
+        isFalse,
+      );
+      expect(nativeSnapshotIndicatesStartupProgress(null), isFalse);
+    });
+  });
+
   group('shouldReconnectForActiveProfileChange', () {
     test('reconnects when a release-speed transition has no previous provider value', () {
       expect(

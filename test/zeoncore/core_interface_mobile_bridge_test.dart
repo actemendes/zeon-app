@@ -205,6 +205,28 @@ void main() {
     pending.complete(null);
   });
 
+  test('startup proof uses its dedicated bounded confirmation timeout', () async {
+    const generation = 95015;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      CoreInterfaceMobile.methodChannel,
+      (call) async {
+        if (call.method == 'set_session_generation') return generation;
+        if (call.method == 'mark_core_started') {
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          return generation;
+        }
+        throw StateError('unexpected native call: ${call.method}');
+      },
+    );
+    final core = _testCore(
+      nativeControlTimeout: const Duration(milliseconds: 10),
+      nativeStartupConfirmationTimeout: const Duration(milliseconds: 100),
+    );
+
+    await core.setSessionGeneration(generation);
+    await core.markCoreStarted(generation);
+  });
+
   test('native VPN preparation has a bounded MethodChannel timeout', () async {
     const generation = 9502;
     final pending = Completer<Object?>();
@@ -407,12 +429,14 @@ void main() {
 CoreInterfaceMobile _testCore({
   Duration nativeSetupTimeout = const Duration(milliseconds: 100),
   Duration nativeControlTimeout = const Duration(milliseconds: 100),
+  Duration? nativeStartupConfirmationTimeout,
   Duration terminalSnapshotTimeout = const Duration(milliseconds: 100),
 }) => CoreInterfaceMobile(
   androidOverride: false,
   portProbe: (_, _) async => false,
   nativeSetupTimeout: nativeSetupTimeout,
   nativeControlTimeout: nativeControlTimeout,
+  nativeStartupConfirmationTimeout: nativeStartupConfirmationTimeout ?? nativeControlTimeout,
   platformStopTimeout: const Duration(milliseconds: 100),
   terminalSnapshotTimeout: terminalSnapshotTimeout,
   terminalSnapshotPollInterval: const Duration(milliseconds: 1),
