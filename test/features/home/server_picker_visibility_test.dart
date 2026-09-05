@@ -8,13 +8,14 @@ import 'package:zeon/features/proxy/active/active_proxy_card.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 void main() {
-  testWidgets('connected Home does not invent a server card before resolution', (tester) async {
+  testWidgets('connected Home exposes server picker while resolution is pending', (tester) async {
     await _pumpFooter(tester, status: const Connected(), activeProxy: const AsyncLoading());
 
-    expect(find.byKey(const ValueKey('home_server_picker')), findsNothing);
+    expect(find.byKey(const ValueKey('home_server_picker')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home_server_picker_loading')), findsOneWidget);
   });
 
-  testWidgets('disconnected Home never renders the active server card', (tester) async {
+  testWidgets('disconnected Home exposes the cached server picker entry point', (tester) async {
     await _pumpFooter(
       tester,
       status: const Disconnected(),
@@ -23,7 +24,15 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('home_server_picker')), findsNothing);
+    expect(find.byKey(const ValueKey('home_server_picker')), findsOneWidget);
+    expect(find.text('Test Server'), findsOneWidget);
+  });
+
+  testWidgets('disconnected Home exposes an offline picker placeholder without a cached active proxy', (tester) async {
+    await _pumpFooter(tester, status: const Disconnected(), activeProxy: const AsyncLoading());
+
+    expect(find.byKey(const ValueKey('home_server_picker')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home_server_picker_offline')), findsOneWidget);
   });
 
   testWidgets('connected Home renders the existing active server button once resolved', (tester) async {

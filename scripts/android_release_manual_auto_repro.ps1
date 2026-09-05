@@ -3,7 +3,7 @@ param(
     [ValidateRange(1, 30)]
     [int]$Cycles = 10,
 
-    [ValidateSet('AutoAfterConnected', 'AutoBeforeConnect')]
+    [ValidateSet('AutoAfterConnected', 'AutoBeforeConnect', 'AutoDuringReconnect')]
     [string]$Scenario = 'AutoAfterConnected',
 
     [string]$DeviceId = '18bfc103',
@@ -16,6 +16,7 @@ Set-StrictMode -Version Latest
 
 $targetPackage = 'com.zeon.hiddify'
 $targetActivity = "$targetPackage/com.zeon.zeon.MainActivity"
+$shortcutActivity = "$targetPackage/com.zeon.zeon.ShortcutActivity"
 $probeService = 'com.zeon.hiddify.validation.test/test.com.zeon.zeon.bg.VerificationTrafficService'
 $uiDumpPath = [IO.Path]::Combine([IO.Path]::GetTempPath(), "zeon_release_repro_$PID.xml")
 $resolvedRoot = [IO.Path]::GetFullPath((Join-Path (Get-Location) $EvidenceRoot))
@@ -102,6 +103,35 @@ function Get-ValidatedVpn {
     return $connectivity.Substring($start, $length).Contains('IS_VALIDATED')
 }
 
+function Test-VpnNetworkPresent {
+    $connectivity = (Invoke-Adb shell dumpsys connectivity) -join "`n"
+    return $connectivity.Contains("VPN:$targetPackage")
+}
+
+function Wait-VpnNetworkState {
+    param(
+        [Parameter(Mandatory = $true)][bool]$Present,
+        [int]$TimeoutSeconds = 35
+    )
+
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        if ((Test-VpnNetworkPresent) -eq $Present) { return }
+        Start-Sleep -Seconds 1
+    } while ($clock.Elapsed.TotalSeconds -lt $TimeoutSeconds)
+    throw "VPN network presence did not become '$Present' within $TimeoutSeconds seconds"
+}
+
+function Invoke-ShortcutToggle {
+    Invoke-Adb shell am start -W -a android.intent.action.MAIN -n $shortcutActivity | Out-Null
+    Start-Sleep -Seconds 2
+}
+
+function Resume-MainActivity {
+    Invoke-Adb shell am start -W -n $targetActivity | Out-Null
+    Start-Sleep -Seconds 2
+}
+
 function Enter-HomeScreen {
     for ($attempt = 0; $attempt -lt 4; $attempt++) {
         $ui = Get-UiXml
@@ -162,12 +192,31 @@ function Select-ManualServer {
 }
 
 function Select-AutoServer {
+    param([switch]$SkipHomeAssertion)
+
     $top = Move-PickerToAutoRow -Picker (Open-ServerPicker)
-    $auto = $top.Auto
-    Invoke-NodeTap -Node $auto
-    Start-Sleep -Seconds 3
+    Select-AutoOnCurrentPicker -PickerState $top
     Invoke-Adb shell input keyevent KEYCODE_BACK | Out-Null
     Start-Sleep -Seconds 2
+    if (-not $SkipHomeAssertion) {
+        Assert-AutoSelectedOnHome
+    }
+}
+
+function Select-AutoOnCurrentPicker {
+    param([Parameter(Mandatory = $true)]$PickerState)
+
+    $auto = $PickerState.Auto
+    Invoke-NodeTap -Node $auto
+    Start-Sleep -Seconds 3
+    $selectedUi = Get-UiXml
+    $selectedAuto = Find-Node -Ui $selectedUi -Predicate {
+        $_.selected -eq 'true' -and ([string]$_.'content-desc').Contains("$autoLabel ")
+    }
+    if ($null -eq $selectedAuto) { throw 'Autoselect row did not become selected' }
+}
+
+function Assert-AutoSelectedOnHome {
     $homeUi = Get-UiXml
     $selectedAuto = Find-Node -Ui $homeUi -Predicate {
         ([string]$_.'content-desc').StartsWith("$activeServerPrefix`n", [StringComparison]::Ordinal) -and
@@ -229,17 +278,31 @@ for ($cycle = 1; $cycle -le $Cycles; $cycle++) {
         $null = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $disconnectLabel }
         Start-TrafficProbe -Run $manualRun
 
-        $connected = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $disconnectLabel }
-        Invoke-NodeTap -Node $connected.Node
-        $disconnected = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $connectLabel }
-
         if ($Scenario -eq 'AutoBeforeConnect') {
-            Select-AutoServer
+            $connected = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $disconnectLabel }
+            Invoke-NodeTap -Node $connected.Node
+            $null = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $connectLabel }
+            Select-AutoServer -SkipHomeAssertion
             $disconnected = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $connectLabel }
             Invoke-NodeTap -Node $disconnected.Node
             $null = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $disconnectLabel }
         }
+        elseif ($Scenario -eq 'AutoDuringReconnect') {
+            $connected = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $disconnectLabel }
+            Invoke-NodeTap -Node $connected.Node
+            $disconnected = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $connectLabel }
+            Invoke-NodeTap -Node $disconnected.Node
+            Start-Sleep -Milliseconds 250
+            $picker = Move-PickerToAutoRow -Picker (Open-ServerPicker)
+            Select-AutoOnCurrentPicker -PickerState $picker
+            Invoke-Adb shell input keyevent KEYCODE_BACK | Out-Null
+            Start-Sleep -Seconds 2
+            $null = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $disconnectLabel }
+        }
         else {
+            $connected = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $disconnectLabel }
+            Invoke-NodeTap -Node $connected.Node
+            $disconnected = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $connectLabel }
             Invoke-NodeTap -Node $disconnected.Node
             $null = Wait-UiNode -Predicate { [string]$_.'content-desc' -eq $disconnectLabel }
             Select-AutoServer

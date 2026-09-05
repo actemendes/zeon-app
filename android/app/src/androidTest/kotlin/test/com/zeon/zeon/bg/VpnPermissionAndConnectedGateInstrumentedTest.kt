@@ -7,6 +7,7 @@ import com.zeon.zeon.bg.VpnPermissionRequestCoordinator
 import com.zeon.zeon.bg.StartupDataPlaneProbeAction
 import com.zeon.zeon.bg.startupDataPlaneProbeAction
 import com.zeon.zeon.bg.startupDataPlaneProofReady
+import com.zeon.zeon.bg.parsePendingOutboundSelection
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -180,6 +181,22 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
                 attempt = 1,
                 maxAttempts = 3,
             ) == StartupDataPlaneProbeAction.RETRY_SELECTED_OUTBOUND,
+        )
+    }
+
+    fun pendingOutboundSelectionAcceptsOnlyBoundedValidTags() {
+        val parsed = parsePendingOutboundSelection(
+            """{"group_tag":"select","outbound_tag":"balance"}""",
+        )
+        check(parsed?.groupTag == "select")
+        check(parsed?.outboundTag == "balance")
+        check(parsePendingOutboundSelection("""{"group_tag":"","outbound_tag":"balance"}""") == null)
+        check(parsePendingOutboundSelection("""{"group_tag":"select","outbound_tag":"bad\nvalue"}""") == null)
+        check(parsePendingOutboundSelection("not-json") == null)
+        check(
+            parsePendingOutboundSelection(
+                """{"group_tag":"select","outbound_tag":"${"x".repeat(513)}"}""",
+            ) == null,
         )
     }
 

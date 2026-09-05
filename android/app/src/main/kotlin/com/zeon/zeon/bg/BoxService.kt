@@ -46,6 +46,7 @@ import com.zeon.zeon.MainActivity
 import com.zeon.zeon.constant.Bugs
 import com.zeon.zeon.utils.GrpcClientProvider
 import com.hiddify.core.api.v2.hcommon.Empty
+import com.hiddify.core.api.v2.hcommon.ResponseCode
 import com.hiddify.core.api.v2.hcore.CoreClient
 import com.hiddify.core.api.v2.hcore.SelectOutboundRequest
 import com.hiddify.core.api.v2.hcore.UrlTestRequest
@@ -63,6 +64,7 @@ import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
+import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
 internal data class CommandEndpointProbe(
@@ -136,6 +138,24 @@ internal fun startupDataPlaneProbeAction(
     } else {
         StartupDataPlaneProbeAction.COMPLETE
     }
+}
+
+internal data class PendingOutboundSelection(
+    val groupTag: String,
+    val outboundTag: String,
+)
+
+internal fun parsePendingOutboundSelection(raw: String?): PendingOutboundSelection? {
+    if (raw.isNullOrBlank()) return null
+    return runCatching {
+        val pending = JSONObject(raw)
+        val groupTag = pending.optString("group_tag").trim()
+        val outboundTag = pending.optString("outbound_tag").trim()
+        require(groupTag.isNotBlank() && groupTag.length <= 512)
+        require(outboundTag.isNotBlank() && outboundTag.length <= 512)
+        require(groupTag.none(Char::isISOControl) && outboundTag.none(Char::isISOControl))
+        PendingOutboundSelection(groupTag, outboundTag)
+    }.getOrNull()
 }
 
 internal fun ownsCurrentStartupFailure(
@@ -1320,6 +1340,7 @@ class BoxService(
             return false
         }
 
+        applyPendingOutboundSelection(generation)
         var selectedOutbound = awaitSelectedOutbound(generation)
         if (selectedOutbound.isBlank()) {
             VpnSessionCoordinator.event(
@@ -1763,6 +1784,38 @@ class BoxService(
             delay(100L)
         }
         return ""
+    }
+
+    private fun applyPendingOutboundSelection(generation: Long) {
+        val pending = parsePendingOutboundSelection(Settings.pendingProxySelection) ?: return
+        if (!VpnSessionCoordinator.isCurrent(generation)) return
+        runCatching {
+            val response = GrpcClientProvider.grpcClient.create(CoreClient::class)
+                .SelectOutbound()
+                .executeBlocking(
+                    SelectOutboundRequest(
+                        group_tag = pending.groupTag,
+                        outbound_tag = pending.outboundTag,
+                    ),
+                )
+            check(response.code == ResponseCode.OK) { "core rejected pending outbound selection" }
+            if (VpnSessionCoordinator.isCurrent(generation)) {
+                Settings.pendingProxySelection = null
+                VpnSessionCoordinator.event(
+                    "pending_outbound_applied",
+                    generation,
+                    "group=${pending.groupTag} outbound=${pending.outboundTag}",
+                    Log.INFO,
+                )
+            }
+        }.onFailure {
+            VpnSessionCoordinator.event(
+                "pending_outbound_apply_failed",
+                generation,
+                "error=${it.javaClass.simpleName}",
+                Log.WARN,
+            )
+        }
     }
 
     private fun readSelectedOutbound(): String = runCatching {

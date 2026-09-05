@@ -9,6 +9,7 @@ import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/core/utils/preferences_utils.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/proxy/data/proxy_data_providers.dart';
+import 'package:zeon/features/proxy/data/proxy_selection_persistence.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/features/proxy/model/proxy_failure.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
@@ -62,12 +63,21 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
   String? _lastAutoDisplaySignature;
   OutboundGroup? _lastGoodGroup;
 
+  ProxySelectionPersistence get _selectionPersistence =>
+      ProxySelectionPersistence(ref.read(sharedPreferencesProvider).requireValue);
+
   @override
   Stream<OutboundGroup?> build() async* {
     ref.disposeDelay(const Duration(seconds: 15));
     ref.watch(coreRestartSignalProvider);
     final serviceRunning = await ref.watch(serviceRunningProvider.future);
     if (!serviceRunning) {
+      final cached = _lastGoodGroup ?? _selectionPersistence.readGroupSnapshot();
+      if (cached != null) {
+        _lastGoodGroup = OutboundGroup()..mergeFromMessage(cached);
+        yield OutboundGroup()..mergeFromMessage(cached);
+        return;
+      }
       throw const ServiceNotRunning();
     }
     final sortBy = ref.watch(proxiesSortNotifierProvider);
@@ -110,6 +120,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       final group = await _sortOutbounds(event.proxies, sortBy, event.stats);
       if (group != null) {
         _lastGoodGroup = OutboundGroup()..mergeFromMessage(group);
+        await _selectionPersistence.writeGroupSnapshot(_lastGoodGroup!);
       }
       return group;
     });
@@ -259,21 +270,38 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     if (!state.hasValue) return;
     final outbounds = state.value!;
     await ref.read(hapticServiceProvider.notifier).lightImpact();
-    await ref.read(proxyRepositoryProvider).selectProxy(groupTag, outboundTag).getOrElse((err) {
-      loggy.warning("error selecting outbound", err);
-      throw err;
-    }).run();
+    final pending = PendingProxySelection(groupTag: groupTag, outboundTag: outboundTag);
+    if (!await _selectionPersistence.stage(pending)) {
+      throw StateError('failed to persist pending outbound selection');
+    }
+
+    final serviceRunning = await ref.read(serviceRunningProvider.future);
+    if (serviceRunning) {
+      final result = await ref.read(proxyRepositoryProvider).selectProxy(groupTag, outboundTag).run();
+      if (result.isLeft()) {
+        loggy.warning("live outbound selection deferred until startup", result.getLeft().toNullable());
+      } else {
+        await _selectionPersistence.clearPending();
+      }
+    } else {
+      loggy.info('outbound selection staged for the next VPN startup');
+    }
     final newselected = outbounds.items.where((e) => e.tag == outboundTag).firstOrNull;
     if (newselected != null) {
+      for (final item in outbounds.items) {
+        item.isSelected = item.tag == outboundTag;
+      }
       newselected.isSelected = true;
       outbounds.selected = newselected.tag;
       state = AsyncValue.data(outbounds);
+      _lastGoodGroup = OutboundGroup()..mergeFromMessage(outbounds);
+      await _selectionPersistence.writeGroupSnapshot(_lastGoodGroup!);
     }
   }
 
   Future<void> urlTest(String groupTag) async {
     loggy.debug("testing group: [$groupTag]");
-    if (state case AsyncData()) {
+    if (state.hasValue && await ref.read(serviceRunningProvider.future)) {
       await ref.read(hapticServiceProvider.notifier).lightImpact();
       await ref.read(proxyRepositoryProvider).urlTest(groupTag).getOrElse((err) {
         loggy.error("error testing group", err);

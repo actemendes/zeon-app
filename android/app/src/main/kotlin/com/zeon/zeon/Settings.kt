@@ -97,6 +97,16 @@ object Settings {
         get() = preferences.getBoolean(SettingsKey.STARTED_BY_USER, false)
         set(value) = preferences.edit().putBoolean(SettingsKey.STARTED_BY_USER, value).apply()
 
+    var pendingProxySelection: String?
+        get() = preferences.getString(SettingsKey.PENDING_PROXY_SELECTION, null)
+        set(value) {
+            if (value == null) {
+                preferences.edit().remove(SettingsKey.PENDING_PROXY_SELECTION).apply()
+            } else {
+                preferences.edit().putString(SettingsKey.PENDING_PROXY_SELECTION, value).apply()
+            }
+        }
+
     fun serviceClass(): Class<*> {
         return when (serviceMode) {
             ServiceMode.VPN -> VPNService::class.java
