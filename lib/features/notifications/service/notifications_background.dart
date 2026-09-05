@@ -3,6 +3,9 @@ import 'dart:ui';
 import 'package:flutter/widgets.dart';
 import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
+import 'package:zeon/core/http_client/local_zeon_proxy_readiness.dart';
+import 'package:zeon/core/http_client/windows_system_http_transport.dart';
+import 'package:zeon/core/http_client/windows_system_websocket_transport.dart';
 import 'package:zeon/features/notifications/data/notification_api_data_source.dart';
 import 'package:zeon/features/notifications/data/notification_device_auth.dart';
 import 'package:zeon/features/notifications/data/notification_local_data_source.dart';
@@ -44,6 +47,9 @@ Future<bool> runNotificationsBackgroundSync() async {
       timeout: const Duration(seconds: 8),
       userAgent: 'ZEON/${packageInfo.version} ($platform) like ClashMeta v2ray sing-box',
       debug: false,
+      proxyProbe: isLocalZeonProxyReady,
+      windowsSystemTransport: createWindowsSystemHttpTransport(),
+      windowsSystemWebSocketTransport: createWindowsSystemWebSocketTransport(),
     );
     // The worker runs in a separate isolate, so it cannot reuse the provider's
     // in-memory port. If the local VPN proxy is alive it is used exclusively;

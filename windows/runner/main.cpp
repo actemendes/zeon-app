@@ -1,14 +1,17 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
+#include <shellapi.h>
 #include <shobjidl_core.h>
 
 #include <chrono>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <thread>
 
 #include "flutter_window.h"
+#include "system_proxy_recovery.h"
 #include "utils.h"
 #include "app_links/app_links_plugin_c_api.h"
 // #include <protocol_handler_windows/protocol_handler_windows_plugin_c_api.h>
@@ -57,6 +60,56 @@ void HardenDllSearchPath()
     }
   }
   ::SetDllDirectoryW(L"");
+}
+
+bool HasProcessArgument(std::wstring_view expected)
+{
+  int argument_count = 0;
+  wchar_t **arguments = ::CommandLineToArgvW(
+      ::GetCommandLineW(), &argument_count);
+  if (arguments == nullptr)
+  {
+    return false;
+  }
+  bool found = false;
+  for (int index = 1; index < argument_count; ++index)
+  {
+    if (expected == arguments[index])
+    {
+      found = true;
+      break;
+    }
+  }
+  ::LocalFree(arguments);
+  return found;
+}
+
+const char *ProxyRecoveryMarker(SystemProxyRecoveryResult result)
+{
+  switch (result)
+  {
+  case SystemProxyRecoveryResult::kNoRecord:
+    return "proxy_recovery_no_record";
+  case SystemProxyRecoveryResult::kOwnerStillRunning:
+    return "proxy_recovery_owner_live";
+  case SystemProxyRecoveryResult::kBaselineRestored:
+    return "proxy_recovery_restored";
+  case SystemProxyRecoveryResult::kForeignStatePreserved:
+    return "proxy_recovery_foreign_preserved";
+  case SystemProxyRecoveryResult::kMutexFailed:
+    return "proxy_recovery_failed_mutex";
+  case SystemProxyRecoveryResult::kRecordReadFailed:
+    return "proxy_recovery_failed_record_read";
+  case SystemProxyRecoveryResult::kProxyQueryFailed:
+    return "proxy_recovery_failed_proxy_query";
+  case SystemProxyRecoveryResult::kInvalidMarker:
+    return "proxy_recovery_failed_invalid_marker";
+  case SystemProxyRecoveryResult::kProxyRestoreFailed:
+    return "proxy_recovery_failed_proxy_restore";
+  case SystemProxyRecoveryResult::kStateCleanupFailed:
+    return "proxy_recovery_failed_state_cleanup";
+  }
+  return "proxy_recovery_unknown";
 }
 
 HWND FindZeonWindow()
@@ -110,6 +163,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command)
 {
   HardenDllSearchPath();
+  const bool recovery_only =
+      HasProcessArgument(L"--recover-system-proxy");
+  const SystemProxyRecoveryResult proxy_recovery =
+      RecoverZeonSystemProxy(false);
+  WriteStartupMarker(ProxyRecoveryMarker(proxy_recovery));
+  if (recovery_only)
+  {
+    return SystemProxyRecoveryFailed(proxy_recovery)
+               ? EXIT_FAILURE
+               : EXIT_SUCCESS;
+  }
   SetCurrentProcessExplicitAppUserModelID(kZeonAppUserModelId);
   WriteStartupMarker("process_entry");
 

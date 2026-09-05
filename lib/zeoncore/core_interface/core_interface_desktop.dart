@@ -21,6 +21,7 @@ typedef StopFunc = Pointer<Utf8> Function();
 typedef StopFuncDart = Pointer<Utf8> Function();
 
 class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
+  static const managementHost = "127.0.0.1";
   static const _startupValidationGuard = bool.fromEnvironment("zeon_windows_startup_validation");
   static final ZeonCoreNativeLibrary _box = _gen();
 
@@ -89,7 +90,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     const channelOption = ChannelCredentials.insecure();
     final helloClient = HelloClient(
       ClientChannel(
-        '127.0.0.1',
+        managementHost,
         port: port,
         options: const ChannelOptions(credentials: channelOption),
       ),
@@ -101,7 +102,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
         directories.workingDir.path.toNativeUtf8(allocator: arena).cast(),
         directories.tempDir.path.toNativeUtf8(allocator: arena).cast(),
         SetupMode.GRPC_NORMAL_INSECURE.value,
-        "127.0.0.1:$port".toNativeUtf8(allocator: arena).cast(),
+        "$managementHost:$port".toNativeUtf8(allocator: arena).cast(),
         secret.toNativeUtf8(allocator: arena).cast(),
         0,
         debug ? 1 : 0,
@@ -121,7 +122,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
 
     bgClient = fgClient = CoreClient(
       ClientChannel(
-        'localhost',
+        managementHost,
         port: port,
         options: const ChannelOptions(
           credentials: ChannelCredentials.insecure(),
@@ -220,7 +221,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   @override
   Future<bool> isActiveFg() async {
     final port = _port;
-    return port != null && await isPortOpen("127.0.0.1", port);
+    return port != null && await isPortOpen(managementHost, port);
   }
 
   @override
