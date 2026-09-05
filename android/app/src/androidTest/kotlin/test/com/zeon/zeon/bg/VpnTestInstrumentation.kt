@@ -295,6 +295,8 @@ class VpnTestInstrumentation : Instrumentation() {
                 permissionTests::changedAutoselectLeafStillRequiresFreshProof,
             "pendingOutboundSelectionAcceptsOnlyBoundedValidTags" to
                 permissionTests::pendingOutboundSelectionAcceptsOnlyBoundedValidTags,
+            "pendingSelectionGetsOneFreshProofWithoutAuthorizingConnected" to
+                permissionTests::pendingSelectionGetsOneFreshProofWithoutAuthorizingConnected,
             "reconnectAfterPermissionFailureNeedsNoProcessRestart" to permissionTests::reconnectAfterPermissionFailureNeedsNoProcessRestart,
         ).forEach { (name, body) ->
             tests += TestCase(permissionTests.javaClass.name, name) { body() }

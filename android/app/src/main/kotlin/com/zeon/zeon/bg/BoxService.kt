@@ -112,6 +112,7 @@ internal fun startupDataPlaneProofReady(
 internal enum class StartupDataPlaneProbeAction {
     COMPLETE,
     RETRY_SELECTED_OUTBOUND,
+    RETRY_PENDING_SELECTION,
     RETRY_TRANSIENT_VPN_NETWORK,
 }
 
@@ -122,12 +123,16 @@ internal fun startupDataPlaneProbeAction(
     failureCategories: List<String>,
     attempt: Int,
     maxAttempts: Int,
+    pendingSelectionApplied: Boolean = false,
 ): StartupDataPlaneProbeAction {
     if (proofReady || selectedAfterProbe.isBlank() || attempt >= maxAttempts) {
         return StartupDataPlaneProbeAction.COMPLETE
     }
     if (selectedBeforeProbe != selectedAfterProbe) {
         return StartupDataPlaneProbeAction.RETRY_SELECTED_OUTBOUND
+    }
+    if (pendingSelectionApplied && attempt == 1) {
+        return StartupDataPlaneProbeAction.RETRY_PENDING_SELECTION
     }
     val transientVpnNetworkFailures = setOf("vpn_network_missing", "dns", "dns_empty")
     return if (
@@ -1340,7 +1345,7 @@ class BoxService(
             return false
         }
 
-        applyPendingOutboundSelection(generation)
+        val pendingSelectionApplied = applyPendingOutboundSelection(generation)
         var selectedOutbound = awaitSelectedOutbound(generation)
         if (selectedOutbound.isBlank()) {
             VpnSessionCoordinator.event(
@@ -1392,6 +1397,7 @@ class BoxService(
                     failureCategories = dataPlane.targets.filterNot { it.ready }.map { it.failureCategory },
                     attempt = attempt,
                     maxAttempts = STARTUP_DATA_PLANE_SELECTION_ATTEMPTS,
+                    pendingSelectionApplied = pendingSelectionApplied,
                 )
             ) {
                 StartupDataPlaneProbeAction.COMPLETE -> break
@@ -1411,6 +1417,18 @@ class BoxService(
                         "source=selected_outbound_changed next_attempt=${attempt + 1}",
                         Log.INFO,
                     )
+                }
+                StartupDataPlaneProbeAction.RETRY_PENDING_SELECTION -> {
+                    // A selector changed before startup may need one fresh
+                    // Android -> TUN attempt after the new route becomes
+                    // active. This never authorizes CONNECTED by itself.
+                    VpnSessionCoordinator.event(
+                        "data_plane_probe_restarted",
+                        generation,
+                        "source=pending_outbound_selection next_attempt=${attempt + 1}",
+                        Log.INFO,
+                    )
+                    delay(STARTUP_DATA_PLANE_TRANSIENT_RETRY_DELAY_MILLIS)
                 }
                 StartupDataPlaneProbeAction.RETRY_TRANSIENT_VPN_NETWORK -> {
                     // VpnService.establish() can publish the VPN Network before
@@ -1786,10 +1804,10 @@ class BoxService(
         return ""
     }
 
-    private fun applyPendingOutboundSelection(generation: Long) {
-        val pending = parsePendingOutboundSelection(Settings.pendingProxySelection) ?: return
-        if (!VpnSessionCoordinator.isCurrent(generation)) return
-        runCatching {
+    private fun applyPendingOutboundSelection(generation: Long): Boolean {
+        val pending = parsePendingOutboundSelection(Settings.pendingProxySelection) ?: return false
+        if (!VpnSessionCoordinator.isCurrent(generation)) return false
+        return runCatching {
             val response = GrpcClientProvider.grpcClient.create(CoreClient::class)
                 .SelectOutbound()
                 .executeBlocking(
@@ -1808,6 +1826,7 @@ class BoxService(
                     Log.INFO,
                 )
             }
+            VpnSessionCoordinator.isCurrent(generation)
         }.onFailure {
             VpnSessionCoordinator.event(
                 "pending_outbound_apply_failed",
@@ -1815,7 +1834,7 @@ class BoxService(
                 "error=${it.javaClass.simpleName}",
                 Log.WARN,
             )
-        }
+        }.getOrDefault(false)
     }
 
     private fun readSelectedOutbound(): String = runCatching {

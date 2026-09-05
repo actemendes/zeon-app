@@ -184,6 +184,32 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
         )
     }
 
+    fun pendingSelectionGetsOneFreshProofWithoutAuthorizingConnected() {
+        check(
+            startupDataPlaneProbeAction(
+                proofReady = false,
+                selectedBeforeProbe = "balance",
+                selectedAfterProbe = "balance",
+                failureCategories = listOf("timeout", "dns", "dns"),
+                attempt = 1,
+                maxAttempts = 4,
+                pendingSelectionApplied = true,
+            ) == StartupDataPlaneProbeAction.RETRY_PENDING_SELECTION,
+        )
+        check(
+            startupDataPlaneProbeAction(
+                proofReady = false,
+                selectedBeforeProbe = "balance",
+                selectedAfterProbe = "balance",
+                failureCategories = listOf("timeout", "dns", "dns"),
+                attempt = 2,
+                maxAttempts = 4,
+                pendingSelectionApplied = true,
+            ) == StartupDataPlaneProbeAction.COMPLETE,
+        )
+        check(!startupDataPlaneProofReady(false, "balance", "balance"))
+    }
+
     fun pendingOutboundSelectionAcceptsOnlyBoundedValidTags() {
         val parsed = parsePendingOutboundSelection(
             """{"group_tag":"select","outbound_tag":"balance"}""",
