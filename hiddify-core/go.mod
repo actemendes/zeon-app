@@ -284,6 +284,8 @@ replace github.com/hiddify/ray2sing => ./ray2sing
 
 replace github.com/sagernet/sing-box => ./hiddify-sing-box
 
+replace github.com/sagernet/sing-tun => ./hiddify-sing-box/replace/sing-tun
+
 replace github.com/sagernet/wireguard-go => ./hiddify-sing-box/replace/wireguard-go
 
 replace github.com/sagernet/tailscale => ./hiddify-sing-box/replace/tailscale

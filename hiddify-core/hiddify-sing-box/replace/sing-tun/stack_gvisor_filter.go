@@ -19,6 +19,12 @@ type LinkEndpointFilter struct {
 }
 
 func (w *LinkEndpointFilter) Attach(dispatcher stack.NetworkDispatcher) {
+	// A nil dispatcher detaches the endpoint and stops native packet polling.
+	// Wrapping nil keeps a non-nil interface and prevents that shutdown.
+	if dispatcher == nil {
+		w.LinkEndpoint.Attach(nil)
+		return
+	}
 	w.LinkEndpoint.Attach(&networkDispatcherFilter{dispatcher, w.BroadcastAddress, w.Writer})
 }
 
