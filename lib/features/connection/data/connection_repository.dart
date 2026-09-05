@@ -5,12 +5,14 @@ import 'package:fpdart/fpdart.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:meta/meta.dart';
 import 'package:zeon/core/model/directories.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/utils/exception_handler.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/profile/data/profile_config_store.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
+import 'package:zeon/features/proxy/data/proxy_selection_persistence.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/features/settings/notifier/warp_option/warp_option_notifier.dart';
 import 'package:zeon/singbox/model/core_status.dart';
@@ -283,7 +285,7 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   Future<File> _createRuntimeConfigFile(ProfileEntity activeProfile) async {
     final content = await profileConfigStore.read(activeProfile.id);
     if (_looksLikeGeneratedJsonConfig(content)) {
-      return profileConfigStore.createRuntimeConnectionFile(activeProfile.id, content: content);
+      return _createSelectedRuntimeConfigFile(activeProfile.id, content);
     }
 
     final repair = _runtimeConfigRepairByProfile.putIfAbsent(
@@ -302,15 +304,27 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   Future<File> _repairRuntimeConfig(ProfileEntity activeProfile) async {
     final content = await profileConfigStore.read(activeProfile.id);
     if (_looksLikeGeneratedJsonConfig(content)) {
-      return profileConfigStore.createRuntimeConnectionFile(activeProfile.id, content: content);
+      return _createSelectedRuntimeConfigFile(activeProfile.id, content);
     }
 
     loggy.warning("stored profile config is not generated JSON; trying to regenerate it before core start");
     final regenerated = await _regenerateStoredConfig(activeProfile, content);
     await profileConfigStore.write(activeProfile.id, regenerated);
-    final file = await profileConfigStore.createRuntimeConnectionFile(activeProfile.id, content: regenerated);
+    final file = await _createSelectedRuntimeConfigFile(activeProfile.id, regenerated);
     loggy.info("stored profile config repaired and runtime config refreshed");
     return file;
+  }
+
+  Future<File> _createSelectedRuntimeConfigFile(String profileId, String content) async {
+    final selections = ProxySelectionPersistence(ref.read(sharedPreferencesProvider).requireValue);
+    final selection = selections.readPending();
+    final selectedContent = selection == null ? null : applyProxySelectionToRuntimeConfig(content, selection);
+    if (selection != null && selectedContent == null) {
+      // Server removal must not leave startup pinned to an invalid outbound.
+      await selections.clearPending();
+      loggy.warning('saved selection is absent from the active profile; using its default');
+    }
+    return profileConfigStore.createRuntimeConnectionFile(profileId, content: selectedContent ?? content);
   }
 
   Future<String> _regenerateStoredConfig(ProfileEntity activeProfile, String rawContent) async {

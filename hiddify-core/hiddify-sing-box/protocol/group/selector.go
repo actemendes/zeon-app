@@ -42,6 +42,7 @@ type Selector struct {
 	logger                       logger.ContextLogger
 	tags                         []string
 	defaultTag                   string
+	preferDefault                bool
 	outbounds                    map[string]adapter.Outbound
 	selected                     common.TypedValue[adapter.Outbound]
 	interruptGroup               *interrupt.Group
@@ -58,6 +59,7 @@ func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextL
 		logger:                       logger,
 		tags:                         options.Outbounds,
 		defaultTag:                   options.Default,
+		preferDefault:                options.ZeonPreferDefault,
 		outbounds:                    make(map[string]adapter.Outbound),
 		interruptGroup:               interrupt.NewGroup(),
 		interruptExternalConnections: options.InterruptExistConnections,
@@ -84,6 +86,14 @@ func (s *Selector) Start() error {
 			return E.New("outbound ", i, " not found: ", tag)
 		}
 		s.outbounds[tag] = detour
+	}
+	if s.preferDefault && s.defaultTag != "" {
+		detour, loaded := s.outbounds[s.defaultTag]
+		if !loaded {
+			return E.New("preferred default outbound not found: ", s.defaultTag)
+		}
+		s.selected.Store(detour)
+		return nil
 	}
 	if s.Tag() != "" {
 		cacheFile := service.FromContext[adapter.CacheFile](s.ctx)

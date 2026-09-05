@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
@@ -8,7 +9,7 @@ import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/proxy/active/ip_widget.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/utils/custom_loggers.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
   const ActiveProxyFooter({super.key});
@@ -20,17 +21,12 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
     final connectionState = ref.watch(
       connectionNotifierProvider.select((value) => value.valueOrNull ?? const Disconnected()),
     );
-
-    final activeProxy = ref.watch(activeProxyNotifierProvider.select((value) => value.valueOrNull));
+    final activeProxy = ref.watch(activeProxyNotifierProvider);
+    final proxy = connectionState == const Connected() ? activeProxy.valueOrNull : null;
     final t = ref.watch(translationsProvider).requireValue;
 
-    // Early return if required data is not available
-    if (connectionState != const Connected() || activeProxy == null) {
-      return const SizedBox.shrink();
-    }
-
     final theme = Theme.of(context);
-    final displayInfo = resolveOutboundDisplayInfo(activeProxy);
+    final displayInfo = proxy == null ? null : resolveOutboundDisplayInfo(proxy);
     final navBarBackground = theme.navigationBarTheme.backgroundColor ?? theme.colorScheme.surface;
     final navBarTextColor =
         theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
@@ -49,6 +45,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
     }
 
     return Container(
+      key: const ValueKey('home_server_picker'),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
         color: navBarBackground,
@@ -65,56 +62,107 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(_panelRadius),
-          onTap: () {
-            context.goNamed('proxies');
-          },
+          onTap: () => context.goNamed('proxies'),
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                InkWell(
-                  onTap: () async {
-                    await handleUrlTest();
-                    await ref.read(dialogNotifierProvider.notifier).showProxyInfo(outboundInfo: activeProxy);
-                  },
-                  onLongPress: () {},
-                  borderRadius: BorderRadius.circular(_panelRadius),
-                  child: IPCountryFlag(
-                    countryCode: resolveProxyCountryCode(
-                      tagDisplay: activeProxy.tagDisplay,
-                      fallbackCountryCode: displayInfo.countryCode ?? activeProxy.ipinfo.countryCode,
+            child: proxy == null
+                ? Semantics(
+                    label: '${t.pages.proxies.activeProxy}\n${t.pages.proxies.title}',
+                    button: true,
+                    child: _ServerPickerPlaceholder(
+                      connected: connectionState == const Connected(),
+                      label: t.pages.proxies.title,
+                      foregroundColor: navBarTextColor,
+                      iconColor: navBarIconColor,
                     ),
-                    size: 40,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SizedBox(
-                    height: 40,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Semantics(
-                        label: t.pages.proxies.activeProxy,
-                        child: Text(
-                          displayInfo.title,
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: navBarTextColor,
+                  )
+                : Row(
+                    children: [
+                      InkWell(
+                        onTap: () async {
+                          await handleUrlTest();
+                          await ref.read(dialogNotifierProvider.notifier).showProxyInfo(outboundInfo: proxy);
+                        },
+                        onLongPress: () {},
+                        borderRadius: BorderRadius.circular(_panelRadius),
+                        child: IPCountryFlag(
+                          countryCode: resolveProxyCountryCode(
+                            tagDisplay: proxy.tagDisplay,
+                            fallbackCountryCode: displayInfo?.countryCode ?? proxy.ipinfo.countryCode,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          size: 40,
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SizedBox(
+                          height: 40,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Semantics(
+                              label: t.pages.proxies.activeProxy,
+                              child: Text(
+                                displayInfo?.title ?? proxy.tagDisplay,
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: navBarTextColor,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Icon(Icons.apps, color: navBarIconColor, size: 20),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 12),
-                Icon(Icons.apps, color: navBarIconColor, size: 20),
-              ],
-            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ServerPickerPlaceholder extends StatelessWidget {
+  const _ServerPickerPlaceholder({
+    required this.connected,
+    required this.label,
+    required this.foregroundColor,
+    required this.iconColor,
+  });
+
+  final bool connected;
+  final String label;
+  final Color foregroundColor;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      key: ValueKey(connected ? 'home_server_picker_loading' : 'home_server_picker_offline'),
+      children: [
+        SizedBox.square(
+          dimension: 40,
+          child: Center(
+            child: connected
+                ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(Icons.dns_outlined, color: iconColor, size: 24),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold, color: foregroundColor),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Icon(Icons.apps, color: iconColor, size: 20),
+      ],
     );
   }
 }

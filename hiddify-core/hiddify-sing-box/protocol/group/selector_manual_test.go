@@ -10,7 +10,60 @@ import (
 	adapterOutbound "github.com/sagernet/sing-box/adapter/outbound"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	"github.com/sagernet/sing/service"
 )
+
+type selectorTestManager struct {
+	adapter.OutboundManager
+	items map[string]adapter.Outbound
+}
+
+func (m selectorTestManager) Outbound(tag string) (adapter.Outbound, bool) {
+	value, ok := m.items[tag]
+	return value, ok
+}
+
+type selectorTestCache struct {
+	adapter.CacheFile
+	selected string
+}
+
+func (c selectorTestCache) LoadSelected(string) string { return c.selected }
+
+func TestStartupSelectionHonorsExplicitChoiceAndOtherwiseKeepsCache(t *testing.T) {
+	for _, tc := range []struct {
+		name                     string
+		prefer                   bool
+		configured, cached, want string
+		wantError                bool
+	}{
+		{"baseline cache", false, "balance", "manual-server", "manual-server", false},
+		{"explicit Auto", true, "balance", "manual-server", "balance", false},
+		{"explicit manual", true, "manual-server", "balance", "manual-server", false},
+		{"removed server", true, "removed", "balance", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			items := map[string]adapter.Outbound{"balance": newSelectorTestOutbound("balance"), "manual-server": newSelectorTestOutbound("manual-server")}
+			ctx := service.ContextWith[adapter.CacheFile](context.Background(), selectorTestCache{selected: tc.cached})
+			s := &Selector{Adapter: adapterOutbound.NewAdapter("selector", "select", nil, nil), ctx: ctx,
+				outbound: selectorTestManager{items: items}, tags: []string{"balance", "manual-server"},
+				outbounds: make(map[string]adapter.Outbound), defaultTag: tc.configured, preferDefault: tc.prefer}
+			err := s.Start()
+			if tc.wantError {
+				if err == nil {
+					t.Fatal("invalid explicit choice accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := s.Now(); got != tc.want {
+				t.Fatalf("runtime=%s want=%s", got, tc.want)
+			}
+		})
+	}
+}
 
 type selectorTestOutbound struct {
 	adapterOutbound.Adapter
