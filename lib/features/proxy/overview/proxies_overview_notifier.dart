@@ -280,8 +280,6 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       final result = await ref.read(proxyRepositoryProvider).selectProxy(groupTag, outboundTag).run();
       if (result.isLeft()) {
         loggy.warning("live outbound selection deferred until startup", result.getLeft().toNullable());
-      } else {
-        await _selectionPersistence.clearPending();
       }
     } else {
       loggy.info('outbound selection staged for the next VPN startup');

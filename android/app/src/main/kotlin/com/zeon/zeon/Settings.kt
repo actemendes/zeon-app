@@ -107,6 +107,9 @@ object Settings {
             }
         }
 
+    val preparedProxySelection: String?
+        get() = preferences.getString(SettingsKey.PREPARED_PROXY_SELECTION, null)
+
     fun serviceClass(): Class<*> {
         return when (serviceMode) {
             ServiceMode.VPN -> VPNService::class.java

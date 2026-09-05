@@ -1807,6 +1807,16 @@ class BoxService(
     private fun applyPendingOutboundSelection(generation: Long): Boolean {
         val pending = parsePendingOutboundSelection(Settings.pendingProxySelection) ?: return false
         if (!VpnSessionCoordinator.isCurrent(generation)) return false
+        val prepared = parsePendingOutboundSelection(Settings.preparedProxySelection)
+        if (prepared == pending) {
+            VpnSessionCoordinator.event(
+                "pending_outbound_preapplied",
+                generation,
+                "group=${pending.groupTag} outbound=${pending.outboundTag}",
+                Log.INFO,
+            )
+            return false
+        }
         return runCatching {
             val response = GrpcClientProvider.grpcClient.create(CoreClient::class)
                 .SelectOutbound()
@@ -1818,7 +1828,6 @@ class BoxService(
                 )
             check(response.code == ResponseCode.OK) { "core rejected pending outbound selection" }
             if (VpnSessionCoordinator.isCurrent(generation)) {
-                Settings.pendingProxySelection = null
                 VpnSessionCoordinator.event(
                     "pending_outbound_applied",
                     generation,

@@ -5,6 +5,7 @@ import "github.com/sagernet/sing/common/json/badoption"
 type SelectorOutboundOptions struct {
 	Outbounds                 []string `json:"outbounds"`
 	Default                   string   `json:"default,omitempty"`
+	ZeonPreferDefault         bool     `json:"zeon_prefer_default,omitempty"`
 	InterruptExistConnections bool     `json:"interrupt_exist_connections,omitempty"`
 }
 

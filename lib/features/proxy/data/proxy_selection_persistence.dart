@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 const pendingProxySelectionPreferenceKey = 'pending_proxy_selection';
+const preparedProxySelectionPreferenceKey = 'prepared_proxy_selection_v1';
 const proxyGroupSnapshotPreferenceKey = 'proxy_group_snapshot_v1';
 
 class PendingProxySelection {
@@ -46,6 +47,14 @@ class ProxySelectionPersistence {
 
   Future<bool> clearPending() => preferences.remove(pendingProxySelectionPreferenceKey);
 
+  PendingProxySelection? readPrepared() =>
+      PendingProxySelection.decode(preferences.getString(preparedProxySelectionPreferenceKey));
+
+  Future<bool> writePrepared(PendingProxySelection selection) =>
+      preferences.setString(preparedProxySelectionPreferenceKey, selection.encode());
+
+  Future<bool> clearPrepared() => preferences.remove(preparedProxySelectionPreferenceKey);
+
   OutboundGroup? readGroupSnapshot() {
     final raw = preferences.getString(proxyGroupSnapshotPreferenceKey);
     if (raw == null || raw.isEmpty) return null;
@@ -58,4 +67,30 @@ class ProxySelectionPersistence {
 
   Future<bool> writeGroupSnapshot(OutboundGroup group) =>
       preferences.setString(proxyGroupSnapshotPreferenceKey, base64Encode(group.writeToBuffer()));
+}
+
+/// Applies a staged selector choice to the ephemeral runtime config.
+///
+/// The generated profile remains untouched. The forked core recognizes
+/// `zeon_prefer_default` and therefore does not let its older selector cache
+/// override a choice made while the VPN was stopped.
+String? applyProxySelectionToRuntimeConfig(String content, PendingProxySelection selection) {
+  try {
+    final root = jsonDecode(content);
+    if (root is! Map<String, dynamic>) return null;
+    final outbounds = root['outbounds'];
+    if (outbounds is! List) return null;
+    for (final outbound in outbounds) {
+      if (outbound is! Map<String, dynamic>) continue;
+      if (outbound['type'] != 'selector' || outbound['tag'] != selection.groupTag) continue;
+      final candidates = outbound['outbounds'];
+      if (candidates is! List || !candidates.contains(selection.outboundTag)) return null;
+      outbound['default'] = selection.outboundTag;
+      outbound['zeon_prefer_default'] = true;
+      return jsonEncode(root);
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
 }
