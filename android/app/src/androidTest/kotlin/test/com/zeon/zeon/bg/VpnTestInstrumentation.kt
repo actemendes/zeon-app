@@ -259,6 +259,7 @@ class VpnTestInstrumentation : Instrumentation() {
             "duplicatePermissionCallbackCompletesOnlyOnce" to permissionTests::duplicatePermissionCallbackCompletesOnlyOnce,
             "stalePermissionResultCannotCompleteNewGeneration" to permissionTests::stalePermissionResultCannotCompleteNewGeneration,
             "commandEndpointWithoutTunCannotPublishStarted" to permissionTests::commandEndpointWithoutTunCannotPublishStarted,
+            "proxyRequiresCoreAndCurrentSessionWithoutTun" to permissionTests::proxyRequiresCoreAndCurrentSessionWithoutTun,
             "tunWithoutMobileStartCannotPublishStarted" to permissionTests::tunWithoutMobileStartCannotPublishStarted,
             "oldGenerationCoreSuccessCannotPublishStarted" to permissionTests::oldGenerationCoreSuccessCannotPublishStarted,
             "reconnectAfterPermissionFailureNeedsNoProcessRestart" to permissionTests::reconnectAfterPermissionFailureNeedsNoProcessRestart,

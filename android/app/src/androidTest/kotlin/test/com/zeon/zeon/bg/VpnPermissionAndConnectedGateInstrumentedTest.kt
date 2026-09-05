@@ -94,6 +94,21 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
         check(result is VpnConnectedGate.Result.Rejected && "mobile_start" in result.missing)
     }
 
+    fun proxyRequiresCoreAndCurrentSessionWithoutTun() {
+        val proxy = readyEvidence().copy(tunnelRequired = false, tunOpened = false, postTunProtectSucceeded = false)
+        check(VpnConnectedGate.evaluate(proxy) == VpnConnectedGate.Result.Ready)
+        for (incomplete in listOf(
+            proxy.copy(mobileStartSucceeded = false),
+            proxy.copy(commandEndpointReady = false),
+            proxy.copy(generationCurrent = false),
+            proxy.copy(sessionAcceptingOperations = false),
+            proxy.copy(tunnelRequired = true),
+        )) {
+            check(VpnConnectedGate.evaluate(incomplete) is VpnConnectedGate.Result.Rejected)
+        }
+        check(VpnConnectedGate.evaluate(readyEvidence().copy(postTunProtectSucceeded = false)) is VpnConnectedGate.Result.Rejected)
+    }
+
     fun oldGenerationCoreSuccessCannotPublishStarted() {
         val result = VpnConnectedGate.evaluate(readyEvidence().copy(generationCurrent = false))
         check(result is VpnConnectedGate.Result.Rejected && "generation" in result.missing)

@@ -22,6 +22,7 @@ class ActiveSession(
     val generation: Long,
     val platformInterface: PlatformInterface,
     val tunOwner: TunDescriptorOwner,
+    val tunnelRequired: Boolean = true,
 ) {
     companion object {
         private const val ALREADY_CLOSING_TIMEOUT_MILLIS = 11_500L
@@ -66,6 +67,7 @@ class ActiveSession(
         postTunProtectSucceeded = postTunProtectSucceeded,
         generationCurrent = VpnSessionCoordinator.isCurrent(generation),
         sessionAcceptingOperations = acceptsOperations(),
+        tunnelRequired = tunnelRequired,
     )
 
     suspend fun close(

@@ -625,7 +625,7 @@ class BoxService(
                 CoreStartupGate.Result.Ready -> {
                     session.markCommandEndpointReady()
                     val currentPhase = VpnSessionSnapshotCoordinator.current().phase
-                    VpnSessionSnapshotCoordinator.transition(generation, phaseAfterCommandEndpointReady(currentPhase)) {
+                    VpnSessionSnapshotCoordinator.transition(generation, phaseAfterCommandEndpointReady(currentPhase, session.tunnelRequired)) {
                         it.copy(coreReady = true, commandEndpointReady = true)
                     }
                     VpnSessionCoordinator.event("command_endpoint_ready", generation)
@@ -747,7 +747,7 @@ class BoxService(
             stopPreemptively(generation, VpnStopSource.INTERNAL)
             return
         }
-        val session = ActiveSession(generation, platformInterfaceForGeneration(generation), tunOwner)
+        val session = ActiveSession(generation, platformInterfaceForGeneration(generation), tunOwner, service is AndroidVpnService)
         val committed = VpnLifecycleIntentCoordinator.commitReload(this, generation) {
             if (ownerDestroyed) {
                 false
@@ -758,6 +758,7 @@ class BoxService(
                 // These activation side effects are intentionally inside the
                 // lifecycle lock. Destruction either runs after them and cleans
                 // them up, or wins first and rejects the entire commit.
+                VpnSessionSnapshotCoordinator.begin(generation, "connect", session.tunnelRequired)
                 notification.showStarting(Settings.activeProfileName, generation)
                 publishStatus(Status.Starting, generation, "service_reload")
                 session.scope.launch {
@@ -1017,7 +1018,7 @@ class BoxService(
     }
 
     private fun beginExplicitSession(generation: Long): Boolean {
-        val session = ActiveSession(generation, platformInterfaceForGeneration(generation), tunOwner)
+        val session = ActiveSession(generation, platformInterfaceForGeneration(generation), tunOwner, service is AndroidVpnService)
         val committed = VpnLifecycleIntentCoordinator.commitStart(generation) {
             if (ownerDestroyed || activeSession != null) {
                 false
@@ -1042,7 +1043,7 @@ class BoxService(
             }
             return false
         }
-        VpnSessionSnapshotCoordinator.begin(generation, "connect")
+        VpnSessionSnapshotCoordinator.begin(generation, "connect", session.tunnelRequired)
         VpnSessionSnapshotCoordinator.transition(generation, VpnSessionPhase.STARTING_PLATFORM)
         VpnSessionCoordinator.event("vpn_session_start", generation, "owner=android")
 
@@ -1265,7 +1266,7 @@ class BoxService(
         // not proof that VpnService.establish(), TUN, or the core failed. Some
         // OEM builds publish it late or never publish it for an otherwise
         // working user-space VPN, so keep it as diagnostics only.
-        val platformVpn = observePlatformVpn()
+        val platformVpn = if (session.tunnelRequired) observePlatformVpn() else PlatformVpnObservation(false, false)
         VpnSessionCoordinator.event(
             "platform_vpn_observed",
             generation,

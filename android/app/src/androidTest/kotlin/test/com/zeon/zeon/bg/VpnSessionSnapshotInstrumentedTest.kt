@@ -39,6 +39,15 @@ class VpnSessionSnapshotInstrumentedTest {
         check(!snapshot(VpnSessionPhase.CONNECTED, ready = true, outbound = "").provesConnected())
         check(snapshot(VpnSessionPhase.CONNECTED, ready = true, platformValidated = false).provesConnected())
         check(snapshot(VpnSessionPhase.CONNECTED, ready = true).provesConnected())
+        val proxy = snapshot(VpnSessionPhase.CONNECTED, ready = true).copy(
+            tunnelRequired = false, tunnelReady = false, protectSucceeded = false, platformVpnValidated = false,
+        )
+        check(proxy.provesConnected())
+        check(proxy.toEvent()["tunnelRequired"] == false)
+        check(!proxy.copy(coreStarted = false).provesConnected())
+        check(!proxy.copy(commandEndpointReady = false).provesConnected())
+        check(!proxy.copy(selectedOutboundId = "").provesConnected())
+        check(!proxy.copy(tunnelRequired = true).provesConnected())
     }
 
     fun nonConnectedPhaseCannotPassTheGate() {
@@ -47,6 +56,7 @@ class VpnSessionSnapshotInstrumentedTest {
     }
 
     fun commandEndpointReadinessCannotRegressAnOpenedTun() {
+        check(phaseAfterCommandEndpointReady(VpnSessionPhase.STARTING_CORE, false) == VpnSessionPhase.VERIFYING)
         check(phaseAfterCommandEndpointReady(VpnSessionPhase.STARTING_CORE) == VpnSessionPhase.WAITING_TUN)
         check(phaseAfterCommandEndpointReady(VpnSessionPhase.WAITING_TUN) == VpnSessionPhase.WAITING_TUN)
         check(phaseAfterCommandEndpointReady(VpnSessionPhase.VERIFYING) == VpnSessionPhase.VERIFYING)
@@ -55,7 +65,10 @@ class VpnSessionSnapshotInstrumentedTest {
 
     fun duplicateSelectedOutboundDoesNotPublishANewSnapshot() {
         val generation = VpnSessionCoordinator.next("snapshot_duplicate_outbound_test")
+        VpnSessionSnapshotCoordinator.begin(generation, "connect", false)
+        check(!VpnSessionSnapshotCoordinator.current().tunnelRequired)
         VpnSessionSnapshotCoordinator.begin(generation, "connect")
+        check(VpnSessionSnapshotCoordinator.current().tunnelRequired)
         val first = VpnSessionSnapshotCoordinator.selectedOutbound(generation, "opaque-test-name", "selector")
         val second = VpnSessionSnapshotCoordinator.selectedOutbound(generation, "opaque-test-name", "selector")
         check(second.sequenceNumber == first.sequenceNumber) {

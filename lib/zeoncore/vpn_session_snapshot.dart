@@ -81,6 +81,7 @@ class VpnSessionSnapshot {
     this.coreReady = false,
     this.coreStarted = false,
     this.commandEndpointReady = false,
+    this.tunnelRequired = true,
     this.tunnelReady = false,
     this.protectSucceeded = false,
     this.platformVpnValidated = false,
@@ -117,6 +118,9 @@ class VpnSessionSnapshot {
       coreReady: boolean('coreReady'),
       coreStarted: boolean('coreStarted'),
       commandEndpointReady: boolean('commandEndpointReady'),
+      // Only an explicit native false identifies a service without VPN ownership.
+      // Older or malformed events retain the strict VPN requirements.
+      tunnelRequired: map['tunnelRequired'] != false,
       tunnelReady: boolean('tunnelReady'),
       protectSucceeded: boolean('protectSucceeded'),
       platformVpnValidated: boolean('platformVpnValidated'),
@@ -139,6 +143,7 @@ class VpnSessionSnapshot {
   final bool coreReady;
   final bool coreStarted;
   final bool commandEndpointReady;
+  final bool tunnelRequired;
   final bool tunnelReady;
   final bool protectSucceeded;
   final bool platformVpnValidated;
@@ -159,8 +164,7 @@ class VpnSessionSnapshot {
       coreReady &&
       coreStarted &&
       commandEndpointReady &&
-      tunnelReady &&
-      protectSucceeded &&
+      (!tunnelRequired || (tunnelReady && protectSucceeded)) &&
       selectedOutboundId.isNotEmpty;
 
   CoreStatus toCoreStatus() => switch (phase) {

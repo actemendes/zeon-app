@@ -29,6 +29,36 @@ VpnSessionSnapshot snapshot({
 );
 
 void main() {
+  test('proxy service confirms its core without claiming VPN ownership', () {
+    final event = <String, Object>{
+      'generation': 1,
+      'runtimeEpoch': 'proxy-process',
+      'sequenceNumber': 1,
+      'snapshotVersion': 1,
+      'phase': 'connected',
+      'coreReady': true,
+      'coreStarted': true,
+      'commandEndpointReady': true,
+      'tunnelRequired': false,
+      'tunnelReady': false,
+      'protectSucceeded': false,
+      'selectedOutboundId': 'confirmed-outbound',
+    };
+    final proxy = VpnSessionSnapshot.fromEvent(event);
+    expect(proxy.provesConnected, isTrue);
+    expect(proxy.toCoreStatus(), isA<CoreStarted>());
+    expect(proxy.tunnelReady, isFalse);
+    expect(proxy.protectSucceeded, isFalse);
+    for (final field in ['coreReady', 'coreStarted', 'commandEndpointReady']) {
+      expect(VpnSessionSnapshot.fromEvent({...event, field: false}).provesConnected, isFalse);
+    }
+    expect(VpnSessionSnapshot.fromEvent({...event, 'selectedOutboundId': ''}).provesConnected, isFalse);
+    for (final value in [true, null, 'invalid']) {
+      expect(VpnSessionSnapshot.fromEvent({...event, 'tunnelRequired': value}).provesConnected, isFalse);
+    }
+    event.remove('tunnelRequired');
+    expect(VpnSessionSnapshot.fromEvent(event).provesConnected, isFalse);
+  });
   group('VpnSessionSnapshotGate', () {
     test('rejects stale and duplicate events', () {
       final gate = VpnSessionSnapshotGate();

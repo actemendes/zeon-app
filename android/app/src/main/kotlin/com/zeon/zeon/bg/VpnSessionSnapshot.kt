@@ -22,12 +22,12 @@ enum class VpnSessionPhase {
     FAILED,
 }
 
-internal fun phaseAfterCommandEndpointReady(current: VpnSessionPhase): VpnSessionPhase =
+internal fun phaseAfterCommandEndpointReady(current: VpnSessionPhase, tunnelRequired: Boolean = true): VpnSessionPhase =
     when (current) {
         VpnSessionPhase.VERIFYING,
         VpnSessionPhase.CONNECTED,
         -> current
-        else -> VpnSessionPhase.WAITING_TUN
+        else -> if (tunnelRequired) VpnSessionPhase.WAITING_TUN else VpnSessionPhase.VERIFYING
     }
 
 enum class VpnStopSource(
@@ -62,6 +62,7 @@ data class VpnSessionSnapshot(
     val coreReady: Boolean = false,
     val coreStarted: Boolean = false,
     val commandEndpointReady: Boolean = false,
+    val tunnelRequired: Boolean = true,
     val tunnelReady: Boolean = false,
     val protectSucceeded: Boolean = false,
     val platformVpnValidated: Boolean = false,
@@ -78,8 +79,7 @@ data class VpnSessionSnapshot(
             coreReady &&
             coreStarted &&
             commandEndpointReady &&
-            tunnelReady &&
-            protectSucceeded &&
+            (!tunnelRequired || (tunnelReady && protectSucceeded)) &&
             selectedOutboundId.isNotBlank()
 
     fun toEvent(): Map<String, Any> = mapOf(
@@ -93,6 +93,7 @@ data class VpnSessionSnapshot(
         "coreReady" to coreReady,
         "coreStarted" to coreStarted,
         "commandEndpointReady" to commandEndpointReady,
+        "tunnelRequired" to tunnelRequired,
         "tunnelReady" to tunnelReady,
         "protectSucceeded" to protectSucceeded,
         "platformVpnValidated" to platformVpnValidated,
@@ -129,7 +130,7 @@ object VpnSessionSnapshotCoordinator {
 
     fun current(): VpnSessionSnapshot = authoritative.get()
 
-    fun begin(generation: Long, action: String): VpnSessionSnapshot = update(generation) {
+    fun begin(generation: Long, action: String, tunnelRequired: Boolean = true): VpnSessionSnapshot = update(generation) {
         VpnSessionSnapshot(
             generation = generation,
             runtimeEpoch = runtimeEpoch,
@@ -137,6 +138,7 @@ object VpnSessionSnapshotCoordinator {
             snapshotVersion = 0L,
             phase = VpnSessionPhase.START_REQUESTED,
             requestedAction = action,
+            tunnelRequired = tunnelRequired,
         )
     }
 
