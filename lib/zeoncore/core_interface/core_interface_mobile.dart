@@ -36,6 +36,10 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   static const portBack = int.fromEnvironment("mobile_grpc_port_back", defaultValue: 17179);
   static const portFront = int.fromEnvironment("mobile_grpc_port_front", defaultValue: 17178);
 
+  bool _portsResolved = false;
+  int _portFront = portFront;
+  int _portBack = portBack;
+
   bool _isBgClientAvailable = false;
   bool _debug = false;
   final bool _isAndroid;
@@ -48,6 +52,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
   late LastStream<CoreStatus> _status;
   @override
   Future<String> setup(Directories directories, bool debug, int mode) async {
+    await _resolveGrpcPorts();
     final channelOption = [1, 2].contains(mode)
         ? MTLSChannelCredentials(serverPublicKey: serverPublicKey, clientKey: cert)
         : const ChannelCredentials.insecure();
@@ -55,7 +60,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     final helloClient = HelloClient(
       ClientChannel(
         '127.0.0.1',
-        port: portFront,
+        port: _portFront,
         options: ChannelOptions(credentials: channelOption),
       ),
     );
@@ -77,7 +82,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
         "baseDir": directories.baseDir.path,
         "workingDir": directories.workingDir.path,
         "tempDir": directories.tempDir.path,
-        "grpcPort": portFront,
+        "grpcPort": _portFront,
         "mode": mode,
         "debug": debug,
       });
@@ -99,7 +104,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     fgClient = CoreClient(
       ClientChannel(
         '127.0.0.1',
-        port: portFront,
+        port: _portFront,
         options: ChannelOptions(credentials: channelOption),
       ),
     );
@@ -107,12 +112,29 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     bgClient = CoreClient(
       ClientChannel(
         '127.0.0.1',
-        port: portBack,
+        port: _portBack,
         options: ChannelOptions(credentials: channelOption),
       ),
     );
     // await start("/sdcard/Android/data/app.zeonvpn.com/files/configs/cdc633e9-8cfc-4a67-948d-009f779a5c91.json", "zeon");
     return "";
+  }
+
+  Future<void> _resolveGrpcPorts() async {
+    if (_portsResolved || !Platform.isAndroid) return;
+    final packageName = await methodChannel
+        .invokeMethod<String>("get_package_name")
+        .timeout(const Duration(seconds: 10));
+    if (packageName == null || packageName.isEmpty) {
+      throw StateError("Android package identity is unavailable");
+    }
+    // The validation APK has a separate UID and must never adopt the installed
+    // production application's foreground core through a successful Hello.
+    if (packageName.endsWith(".validation")) {
+      _portFront = portFront + 1000;
+      _portBack = portBack + 1000;
+    }
+    _portsResolved = true;
   }
 
   Stream<CoreStatus> _androidSnapshotStatuses() async* {
@@ -258,7 +280,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     await methodChannel.invokeMethod("start", {
       "path": path,
       "name": name,
-      "grpcPort": portBack,
+      "grpcPort": _portBack,
       "startBg": true,
       "debug": _debug,
       "generation": generation,
@@ -267,7 +289,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     _isBgClientAvailable = true;
     PortProbeObservation? lastPortProbe;
     if (!await waitUntilPort(
-      portBack,
+      _portBack,
       true,
       null,
       maxTry: 18,
@@ -335,7 +357,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     final prepared = await methodChannel.invokeMethod<bool>("prepare_vpn", {
       "path": path,
       "name": name,
-      "grpcPort": portBack,
+      "grpcPort": _portBack,
       "disableMemoryLimit": disableMemoryLimit,
       "generation": generation,
     });
@@ -360,7 +382,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
       return false;
     }
     final stopped = await waitUntilPort(
-      portBack,
+      _portBack,
       false,
       () => stopMethodChannel(generation: generation, replacement: replacement),
       baseDelay: const Duration(milliseconds: 160),
@@ -468,12 +490,12 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
 
   @override
   Future<bool> isActiveFg() async {
-    return await isPortOpen("127.0.0.1", portFront);
+    return await isPortOpen("127.0.0.1", _portFront);
   }
 
   @override
   Future<bool> isActiveBg({PortProbeObserver? onPortProbe}) async {
-    return await isPortOpen("127.0.0.1", portBack, onObservation: onPortProbe);
+    return await isPortOpen("127.0.0.1", _portBack, onObservation: onPortProbe);
   }
 }
 
