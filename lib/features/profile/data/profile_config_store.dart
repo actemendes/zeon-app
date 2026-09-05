@@ -43,6 +43,7 @@ class ProfileConfigStore with InfraLogger {
   static const _secureKeyName = 'profile_config_encryption_key_v1';
   static const _fallbackKeyName = 'profile_config_encryption_key_v1_insecure_fallback';
   static const _fallbackMarkerName = 'profile_config_encryption_key_uses_insecure_fallback';
+  static const _keyInitializedMarkerName = 'profile_config_encryption_key_v1_initialized';
   static const _nonceLength = 12;
   static const _keyLength = 32;
 
@@ -298,14 +299,26 @@ class ProfileConfigStore with InfraLogger {
     if (cached != null) return cached;
 
     final secure = await _tryReadSecureKey();
-    if (secure != null) return _cacheKey(secure);
+    if (secure != null) {
+      await _markKeyInitialized();
+      return _cacheKey(secure);
+    }
 
     if (_allowInsecureFallback) {
       final fallback = _readFallbackKey();
-      if (fallback != null) return _cacheKey(fallback);
+      if (fallback != null) {
+        await _markKeyInitialized();
+        return _cacheKey(fallback);
+      }
     } else if (_hasFallbackKey()) {
       throw ProfileConfigStoreException(
         'secure profile key storage is unavailable; refusing insecure SharedPreferences fallback',
+      );
+    }
+
+    if (await _hasEncryptedArtifacts()) {
+      throw ProfileConfigStoreException(
+        'secure profile key is missing while encrypted profile data still exists; refusing to replace the key',
       );
     }
 
@@ -385,6 +398,7 @@ class ProfileConfigStore with InfraLogger {
       });
       if (verified == encoded) {
         await _preferences.remove(_fallbackMarkerName);
+        await _markKeyInitialized();
         return true;
       }
       return false;
@@ -421,7 +435,22 @@ class ProfileConfigStore with InfraLogger {
   Future<void> _writeFallbackKey(List<int> keyBytes) async {
     await _preferences.setString(_fallbackKeyName, base64Encode(keyBytes));
     await _preferences.setBool(_fallbackMarkerName, true);
+    await _markKeyInitialized();
     loggy.warning('profile encryption key stored in insecure SharedPreferences fallback');
+  }
+
+  Future<void> _markKeyInitialized() async {
+    if (_preferences.getBool(_keyInitializedMarkerName) == true) return;
+    await _preferences.setBool(_keyInitializedMarkerName, true);
+  }
+
+  Future<bool> _hasEncryptedArtifacts() async {
+    if (_preferences.getBool(_keyInitializedMarkerName) == true) return true;
+    if (!await _pathResolver.directory.exists()) return false;
+    await for (final entity in _pathResolver.directory.list(followLinks: false)) {
+      if (entity is File && p.extension(entity.path).toLowerCase() == '.zcfg') return true;
+    }
+    return false;
   }
 
   List<int> _randomBytes(int length) {

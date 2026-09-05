@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
@@ -11,6 +13,7 @@ import 'package:zeon/features/log/data/log_data_providers.dart';
 import 'package:zeon/features/mobile/data/stable_device_id_service.dart';
 import 'package:zeon/features/notifications/data/notification_data_providers.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
+import 'package:zeon/gen/translations.g.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
 final errorReportQueueProvider = Provider<ErrorReportQueue>((ref) {
@@ -29,10 +32,9 @@ final errorReportSenderProvider = Provider<ErrorReportSender>((ref) {
 });
 
 final errorReportControllerProvider = Provider<ErrorReportController>((ref) {
-  final appLocale = ref.watch(localePreferencesProvider);
-  final locale = appLocale.countryCode == null
-      ? appLocale.languageCode
-      : '${appLocale.languageCode}-${appLocale.countryCode}';
+  String formatLocale(AppLocale appLocale) =>
+      appLocale.countryCode == null ? appLocale.languageCode : '${appLocale.languageCode}-${appLocale.countryCode}';
+
   final controller = ErrorReportController(
     appInfo: ref.watch(appInfoProvider).requireValue,
     preferences: ref.watch(sharedPreferencesProvider).requireValue,
@@ -43,8 +45,12 @@ final errorReportControllerProvider = Provider<ErrorReportController>((ref) {
     coreService: ref.watch(zeonCoreServiceProvider),
     activeProfileReader: () => ref.read(activeProfileProvider.future),
     configOptionsSnapshotReader: () => ref.read(connectionRepositoryProvider).configOptionsSnapshot,
-    locale: locale,
+    locale: formatLocale(ref.read(localePreferencesProvider)),
   );
+  ref.listen(localePreferencesProvider, (_, next) => controller.locale = formatLocale(next));
   ref.onDispose(controller.dispose);
+  // Every consumer gets a live reporter. Bootstrap still calls init(), which
+  // is idempotent, but a provider recreation can no longer disable reporting.
+  unawaited(controller.init());
   return controller;
 });

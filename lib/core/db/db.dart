@@ -28,7 +28,10 @@ class Db extends _$Db with InfraLogger {
     return LazyDatabase(
       () => driftDatabase(
         name: "db",
-        native: const DriftNativeOptions(databaseDirectory: AppDirectories.getDatabaseDirectory),
+        native: const DriftNativeOptions(
+          databaseDirectory: AppDirectories.getDatabaseDirectory,
+          shareAcrossIsolates: true,
+        ),
         web: DriftWebOptions(sqlite3Wasm: Uri.parse('sqlite3.wasm'), driftWorker: Uri.parse('drift_worker.js')),
       ),
     );
@@ -90,6 +93,14 @@ class Db extends _$Db with InfraLogger {
           await m.createTable(notificationSyncStateEntries);
         },
       ),
+      beforeOpen: (_) async {
+        // The foreground app and the Android WorkManager isolate both use this
+        // database. WAL lets readers continue during short writes, while the
+        // busy timeout prevents transient lock contention from surfacing as a
+        // user-visible profile failure.
+        await customStatement('PRAGMA journal_mode = WAL');
+        await customStatement('PRAGMA busy_timeout = 5000');
+      },
     );
   }
 

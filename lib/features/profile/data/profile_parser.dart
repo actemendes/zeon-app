@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:dartx/dartx.dart';
 import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:meta/meta.dart';
 import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/features/profile/data/profile_data_mapper.dart';
@@ -14,8 +16,6 @@ import 'package:zeon/features/profile/model/profile_failure.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/singbox/model/singbox_proxy_type.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:meta/meta.dart';
 
 /// parse profile subscription url and headers for data
 ///
@@ -131,7 +131,7 @@ class ProfileParser {
     bool disableRetry = false,
   }) =>
       _downloadProfile(
-        url,
+        canonicalizeZeonProfileUrl(url),
         tempFilePath,
         cancelToken,
         proxyOnly: proxyOnly,
@@ -149,7 +149,7 @@ class ProfileParser {
                     id: id,
                     active: true,
                     name: '',
-                    url: url,
+                    url: canonicalizeZeonProfileUrl(url),
                     lastUpdate: DateTime.now(),
                     userOverride: userOverride,
                     populatedHeaders: populatedHeaders,
@@ -168,7 +168,7 @@ class ProfileParser {
     bool disableRetry = false,
   }) =>
       _downloadProfile(
-        rp.url,
+        canonicalizeZeonProfileUrl(rp.url),
         tempFilePath,
         cancelToken,
         proxyOnly: proxyOnly,
@@ -182,7 +182,7 @@ class ProfileParser {
               (populatedHeaders) => TaskEither.fromEither(
                 parse(
                   tempFilePath: tempFilePath,
-                  profile: rp.copyWith(populatedHeaders: populatedHeaders),
+                  profile: rp.copyWith(url: canonicalizeZeonProfileUrl(rp.url), populatedHeaders: populatedHeaders),
                 ).flatMap((profEntity) => Either.tryCatch(() => profEntity.toUpdateEntry(), ProfileFailure.unexpected)),
               ),
             ),

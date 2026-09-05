@@ -13,6 +13,7 @@ import 'package:zeon/features/profile/data/profile_data_mapper.dart';
 import 'package:zeon/features/profile/data/profile_data_source.dart';
 import 'package:zeon/features/profile/data/profile_parser.dart';
 import 'package:zeon/features/profile/data/profile_path_resolver.dart';
+import 'package:zeon/features/profile/data/subscription_url_policy.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/model/profile_failure.dart';
 import 'package:zeon/features/profile/model/profile_sort_enum.dart';
@@ -155,7 +156,14 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
     bool validateConfigOnImport = true,
     bool syncManagedRuleSets = true,
   }) => TaskEither.tryCatch(() async {
-    final existingProfile = await _profileDataSource.getByUrl(url).then((profEntry) => profEntry?.toEntity());
+    final originalUrl = url.trim();
+    final canonicalUrl = canonicalizeZeonProfileUrl(originalUrl);
+    var existingProfile = await _profileDataSource.getByUrl(canonicalUrl).then((profEntry) => profEntry?.toEntity());
+    if (existingProfile == null && canonicalUrl != originalUrl) {
+      // A pre-domain row is still keyed by the legacy URL until the first
+      // fully validated update persists the canonical URL below.
+      existingProfile = await _profileDataSource.getByUrl(originalUrl).then((profEntry) => profEntry?.toEntity());
+    }
     final isUpdate = existingProfile != null && existingProfile is RemoteProfileEntity;
     final id = existingProfile?.id ?? const Uuid().v4();
     final tempFile = _profilePathResolver.tempFile(id);
@@ -177,7 +185,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
           : await _profileParser
                 .addRemote(
                   id: id,
-                  url: url,
+                  url: canonicalUrl,
                   tempFilePath: tempFile.path,
                   userOverride: userOverride,
                   cancelToken: cancelToken,
