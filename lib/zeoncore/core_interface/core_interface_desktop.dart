@@ -11,6 +11,7 @@ import 'package:zeon/gen/zeon_core_generated_bindings.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface.dart';
+import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/generated/v2/hello/hello.pb.dart';
@@ -59,7 +60,6 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   int? _port;
   Future<String>? _setupOperation;
   int _sessionGeneration = 0;
-  bool _coreStarted = false;
   static String generateRandomPassword(int length) {
     const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random();
@@ -165,7 +165,6 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   @override
   Future<BackgroundSetupResult> setupBackground(String path, String name, {int generation = 0}) async {
     await setSessionGeneration(generation);
-    _coreStarted = false;
     if (_startupValidationGuard) {
       loggy.warning("Windows startup validation guard blocked an explicit VPN start");
       return BackgroundSetupResult(
@@ -196,7 +195,6 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     if (generation != _sessionGeneration) {
       throw StateError("cannot mark stale desktop VPN generation ready");
     }
-    _coreStarted = true;
   }
 
   @override
@@ -207,7 +205,6 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   @override
   Future<bool> stop({int generation = 0}) async {
     if (generation > 0) await setSessionGeneration(generation);
-    _coreStarted = false;
     // The shared lifecycle already stops the service over gRPC. The desktop
     // management endpoint is process-owned and remains ready for a later
     // explicit user start.
@@ -215,8 +212,21 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   }
 
   @override
-  Future<CoreStatus?> resyncSessionStatus() async =>
-      _coreStarted ? const CoreStatus.started() : const CoreStatus.stopped();
+  Future<CoreStatus?> resyncSessionStatus() async {
+    if (!isInitialized()) return null;
+    try {
+      // Desktop resource ownership stays in the native core. A local start
+      // acknowledgement cannot describe an in-flight start or a later stop.
+      final state = await bgClient
+          .coreInfoListener(Empty(), options: CallOptions(timeout: const Duration(seconds: 2)))
+          .first;
+      return CoreStatus.fromCoreInfo(state);
+    } catch (error) {
+      // An unavailable management endpoint is not proof of either terminal state.
+      loggy.warning('desktop native state unavailable: $error');
+      return null;
+    }
+  }
 
   @override
   Future<bool> isActiveFg() async {
