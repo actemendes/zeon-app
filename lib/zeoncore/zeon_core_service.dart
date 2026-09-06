@@ -2815,6 +2815,27 @@ class ZeonCoreService with InfraLogger {
         return right(unit);
       } catch (e) {
         loggy.error("error selecting outbound: $e");
+        // A lost acknowledgement does not undo the native selector swap. Read
+        // the live group once before rejecting the user's committed choice.
+        // Do not repeat the mutation or infer acceptance from UI/cache state.
+        if (e is GrpcError &&
+            (e.code == StatusCode.deadlineExceeded || e.code == StatusCode.unavailable) &&
+            _sessionGeneration.isCurrent(generation, source: "select_outbound_confirmation_request")) {
+          try {
+            final snapshot = await core.bgClient
+                .outboundsInfo(Empty(), options: CallOptions(timeout: const Duration(seconds: 5)))
+                .first;
+            if (!_sessionGeneration.isCurrent(generation, source: "select_outbound_confirmation_result")) {
+              return left("stale VPN session");
+            }
+            if (snapshot.items.any((group) => group.tag == groupTag && group.selected == outboundTag)) {
+              loggy.info("outbound selection confirmed by native snapshot after lost acknowledgement");
+              return right(unit);
+            }
+          } catch (confirmationError) {
+            loggy.warning("outbound selection confirmation unavailable", confirmationError);
+          }
+        }
         rethrow;
       }
     });
