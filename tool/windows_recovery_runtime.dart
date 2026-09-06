@@ -14,8 +14,8 @@ import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/features/app/widget/app.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
-import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
+import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/proxy/overview/proxies_overview_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/main_prod.dart' as app;
@@ -98,24 +98,33 @@ Future<void> traffic(ServiceMode mode) async {
 }
 
 Future<void> networkSnapshot(String name) async {
-  // Read-only evidence taken at each native state, including disconnected.
-  // PowerShell writes directly to the evidence directory; no credentials are
-  // included in the deliberately restricted registry and network fields.
-  final result = await Process.run('powershell.exe', [
-    '-NoProfile',
-    '-Command',
-    r'''$snapshot = @{
-proxy = Get-ItemProperty 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Internet Settings' | Select-Object ProxyEnable,ProxyServer,ProxyOverride;
-routes = @(Get-NetRoute | Select-Object DestinationPrefix,NextHop,InterfaceIndex,InterfaceAlias,RouteMetric);
-adapters = @(Get-NetAdapter -IncludeHidden | Select-Object Name,InterfaceDescription,InterfaceIndex,Status);
-listeners = @(Get-NetTCPConnection -State Listen -LocalPort 13434 -ErrorAction SilentlyContinue | Select-Object LocalAddress,LocalPort,OwningProcess)
-}; $snapshot | ConvertTo-Json -Depth 5''',
-  ]).timeout(const Duration(seconds: 20));
-  if (result.exitCode != 0) throw StateError('network evidence capture failed');
-  await File('${evidence.path}/$phase-$name-network.json').writeAsString(result.stdout as String, flush: true);
+  // Native utilities avoid cold PowerShell/CIM initialization in a fresh VM.
+  // Keep their complete output so routing and proxy cleanup remain reviewable.
+  final commands = <String, List<String>>{
+    'routes_ipv4': ['route.exe', 'print', '-4'],
+    'routes_ipv6': ['route.exe', 'print', '-6'],
+    'interfaces': ['ipconfig.exe', '/all'],
+    'tcp_endpoints': ['netstat.exe', '-ano', '-p', 'tcp'],
+    for (final value in ['ProxyEnable', 'ProxyServer', 'ProxyOverride'])
+      value: ['reg.exe', 'query', r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings', '/v', value],
+  };
+  final snapshot = <String, Object?>{};
+  for (final entry in commands.entries) {
+    final result = await Process.run(
+      entry.value.first,
+      entry.value.skip(1).toList(),
+    ).timeout(const Duration(seconds: 20));
+    // reg.exe returns 1 for an absent optional value; retain that fact.
+    if (result.exitCode != 0 && !(entry.value.first == 'reg.exe' && result.exitCode == 1)) {
+      throw StateError('network evidence capture failed: ${entry.key}');
+    }
+    snapshot[entry.key] = {'exit_code': result.exitCode, 'stdout': result.stdout, 'stderr': result.stderr};
+  }
+  await File('${evidence.path}/$phase-$name-network.json').writeAsString(jsonEncode(snapshot), flush: true);
 }
 
 Future<void> connect() async {
+  await record('connect_requested');
   await container!.read(connectionNotifierProvider.notifier).toggleConnection().timeout(const Duration(seconds: 60));
   await until(() => container!.read(connectionNotifierProvider).valueOrNull is Connected, 'UI not connected');
   await until(proxyListening, 'local proxy not listening');
@@ -182,11 +191,11 @@ Future<void> main() async {
   if (Platform.environment['COMPUTERNAME']?.toUpperCase() != 'ZEON-RECOVERY') {
     throw StateError('Runtime validation requires the dedicated ZEON-RECOVERY virtual machine');
   }
-  final machine = await Process.run('powershell.exe', [
-    '-NoProfile',
-    '-NonInteractive',
-    '-Command',
-    '(Get-CimInstance Win32_ComputerSystem).Manufacturer',
+  final machine = await Process.run('reg.exe', [
+    'query',
+    r'HKLM\HARDWARE\DESCRIPTION\System\BIOS',
+    '/v',
+    'SystemManufacturer',
   ]).timeout(const Duration(seconds: 30));
   if (machine.exitCode != 0 || !(machine.stdout as String).toLowerCase().contains('qemu')) {
     throw StateError('QEMU guest identity was not confirmed');
