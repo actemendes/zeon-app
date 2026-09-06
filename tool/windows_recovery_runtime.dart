@@ -147,9 +147,21 @@ Future<void> networkSnapshot(String name) async {
 }
 
 Future<void> connect() async {
-  await record('connect_requested');
-  await container!.read(connectionNotifierProvider.notifier).toggleConnection().timeout(const Duration(seconds: 60));
-  await record('connect_operation_returned');
+  final configured = Platform.environment['ZEON_RUNTIME_CONNECT_TIMEOUT_SECONDS'];
+  final seconds = configured == null ? 60 : int.tryParse(configured);
+  if (seconds == null || seconds < 60 || seconds > 180) {
+    throw StateError('Diagnostic connect deadline must be between 60 and 180 seconds');
+  }
+  // Software emulation can spend the normal test budget before native TUN
+  // creation begins. An explicit diagnostic run may observe completion longer;
+  // record that budget and elapsed time without altering application timeouts.
+  final elapsed = Stopwatch()..start();
+  await record('connect_requested', {'deadline_seconds': seconds});
+  await container!.read(connectionNotifierProvider.notifier).toggleConnection().timeout(Duration(seconds: seconds));
+  await record('connect_operation_returned', {
+    'elapsed_ms': elapsed.elapsedMilliseconds,
+    'exceeded_default_test_budget': elapsed.elapsedMilliseconds > 60000,
+  });
   await until(() => container!.read(connectionNotifierProvider).valueOrNull is Connected, 'UI not connected');
   await record('ui_connected');
   await until(proxyListening, 'local proxy not listening');
