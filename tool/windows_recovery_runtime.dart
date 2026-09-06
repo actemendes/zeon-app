@@ -21,6 +21,7 @@ import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/main_prod.dart' as app;
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
 const port = 13434;
@@ -193,7 +194,23 @@ Future<void> modeMatrix(ServiceMode mode) async {
     await container!.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, 'balance');
     await connect();
     await traffic(mode);
-    final groups = await core.bgClient.outboundsInfo(Empty()).first.timeout(const Duration(seconds: 8));
+    final snapshotClock = Stopwatch()..start();
+    final snapshot = core.bgClient.outboundsInfo(Empty()).first;
+    OutboundGroupList groups;
+    try {
+      groups = await snapshot.timeout(const Duration(seconds: 8));
+    } on TimeoutException {
+      await record('selector_snapshot_deadline_missed');
+      // Preserve the failure, but observe the original request long enough to
+      // distinguish slow VM execution from a stream that never produces data.
+      try {
+        await snapshot.timeout(const Duration(seconds: 22));
+        await record('selector_snapshot_received_late', {'elapsed_ms': snapshotClock.elapsedMilliseconds});
+      } catch (error) {
+        await record('selector_snapshot_still_unavailable', {'error_type': error.runtimeType.toString()});
+      }
+      rethrow;
+    }
     if (groups.items.firstWhere((item) => item.tag == group.tag).selected != 'balance') {
       throw StateError('offline Auto not applied by runtime');
     }
@@ -243,7 +260,12 @@ Future<void> main() async {
     await until(() => container!.read(activeProfileProvider).valueOrNull != null, 'profile unavailable', seconds: 60);
     await container!.read(ConfigOptions.mixedPort.notifier).update(port);
     if (await proxyListening()) throw StateError('validation proxy port already occupied');
-    for (final mode in ServiceMode.values) {
+    final requestedModes = Platform.environment['ZEON_RUNTIME_MODES'];
+    final modes = requestedModes == null
+        ? ServiceMode.values
+        : requestedModes.split(',').map((name) => ServiceMode.values.byName(name)).toList();
+    if (modes.isEmpty) throw StateError('At least one validation mode is required');
+    for (final mode in modes) {
       await modeMatrix(mode);
     }
     passed = true;
