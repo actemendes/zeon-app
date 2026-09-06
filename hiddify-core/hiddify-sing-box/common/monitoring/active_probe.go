@@ -20,6 +20,27 @@ const (
 
 var errActiveProbeAlreadyRunning = errors.New("active outbound probe already running")
 
+// A single-server ping must not replace one member of an in-flight full check
+// with a newer generation. Doing so leaves a starting Auto group with no
+// coherent cohort until the next periodic full check.
+func (m *OutboundMonitoring) testSingleOutbound(tag string, timeout time.Duration) error {
+	ctx := m.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	result, err := m.ProbeActiveOutbound(ctx, tag)
+	if errors.Is(err, errActiveProbeAlreadyRunning) {
+		return nil
+	}
+	m.PublishActiveProbePresentation(result)
+	return err
+}
+
 // ActiveProbeResult is an isolated, lightweight health sample for the outbound
 // that currently carries user traffic. It deliberately does not replace the
 // full-generation history used to rank the whole balancer cohort.
@@ -157,10 +178,9 @@ func (m *OutboundMonitoring) ProbeActiveOutbound(parent context.Context, tag str
 
 // PublishActiveProbePresentation exposes a completed active-only sample to
 // history consumers and group subscribers without mutating state.history.
-// The caller must first verify that OutboundTag is still the live active
-// outbound; keeping that validation at the balancer avoids committing a probe
-// that raced with an active-server switch. state.history remains the coherent
-// full-generation ranking source.
+// A balancer caller must first verify that OutboundTag is still its live active
+// outbound. An explicit single-server refresh instead publishes the requested
+// tag's diagnostic result. Neither path mutates the full-generation ranking.
 func (m *OutboundMonitoring) PublishActiveProbePresentation(result ActiveProbeResult) bool {
 	if result.OutboundTag == "" || result.History.Time.IsZero() {
 		return false
