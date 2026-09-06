@@ -25,6 +25,8 @@ import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
+import 'runtime_core_snapshot.dart' show resolveRuntimeLeaf, safeId;
+
 const port = 13434;
 late Directory evidence;
 ProviderContainer? container;
@@ -227,7 +229,13 @@ Future<void> modeMatrix(ServiceMode mode) async {
     if (groups.items.firstWhere((item) => item.tag == group.tag).selected != 'balance') {
       throw StateError('offline Auto not applied by runtime');
     }
-    await record('offline_auto_runtime_matches');
+    final autoStats = await core.bgClient.getSystemInfo(Empty()).timeout(const Duration(seconds: 8));
+    final autoLeaf = resolveRuntimeLeaf(groups, autoStats.currentOutbound);
+    if (autoLeaf == null) throw StateError('Auto has no confirmed concrete native server');
+    await record('offline_auto_runtime_matches', {
+      'runtime_outbound_id': await safeId(autoLeaf.tag),
+      'native_report_id': await safeId(autoStats.currentOutbound),
+    });
     await disconnect();
   } finally {
     overview.close();
