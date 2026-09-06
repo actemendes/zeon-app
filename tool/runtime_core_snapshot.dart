@@ -1,12 +1,31 @@
 // Read-only core inspection. Android: adb forward tcp:28179 tcp:18179.
 import 'dart:convert';
 import 'dart:io';
-import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:grpc/grpc.dart';
 import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 
-String safeId(String value) => sha256.convert(utf8.encode(value)).toString().substring(0, 12);
+Future<String> safeId(String value) async {
+  final digest = await Sha256().hash(utf8.encode(value));
+  return digest.bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join().substring(0, 12);
+}
+
+String trimNativeTag(String value) => value.split('§').first.split('В§').first.trim();
+
+OutboundInfo? resolveRuntimeLeaf(OutboundGroupList groups, String nativeReport) {
+  final selected = groups.items.where((group) => group.tag == 'select').first;
+  final selectedTag = trimNativeTag(selected.selected);
+  final prefix = '$selectedTag -> ';
+  final leafReport = nativeReport.startsWith(prefix) ? nativeReport.substring(prefix.length) : nativeReport;
+  final matches = <String, OutboundInfo>{
+    for (final item in groups.items.expand((group) => group.items))
+      if (!item.isGroup && trimNativeTag(item.tag) == leafReport) item.tag: item,
+  };
+  // An empty/group-only or ambiguous report is not proof of a concrete server.
+  return matches.length == 1 ? matches.values.single : null;
+}
 
 Future<void> main(List<String> args) async {
   if (args.length != 1) throw ArgumentError('Expected forwarded loopback port');
@@ -23,17 +42,18 @@ Future<void> main(List<String> args) async {
     final stats = await client.getSystemInfo(Empty(), options: options);
     final selected = groups.items.where((g) => g.tag == 'select').first;
     final selectedItems = selected.items.where((item) => item.tag == selected.selected);
-    final realItems = groups.items.expand((g) => g.items).where((item) => item.tag == stats.currentOutbound);
+    final runtimeLeaf = resolveRuntimeLeaf(groups, stats.currentOutbound);
     stdout.writeln(
       jsonEncode({
         'core_status': status.coreState.toString(),
-        'selector': safeId(selected.tag),
-        'selected_id': safeId(selected.selected),
+        'selector': await safeId(selected.tag),
+        'selected_id': await safeId(selected.selected),
         'selected_display': selectedItems.isEmpty ? null : selectedItems.first.tagDisplay,
         'auto_selected': selected.selected == 'balance',
-        'runtime_outbound_id': safeId(stats.currentOutbound),
-        'runtime_outbound_display': realItems.isEmpty ? null : realItems.first.tagDisplay,
-        'runtime_outbound_present': stats.currentOutbound.isNotEmpty,
+        'native_report_id': await safeId(stats.currentOutbound),
+        'runtime_outbound_id': runtimeLeaf == null ? null : await safeId(runtimeLeaf.tag),
+        'runtime_outbound_display': runtimeLeaf?.tagDisplay,
+        'runtime_outbound_present': runtimeLeaf != null,
       }),
     );
   } finally {
