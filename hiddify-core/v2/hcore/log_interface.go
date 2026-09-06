@@ -33,13 +33,15 @@ func (h *LogInterface) SetSystemProxyEnabled(enabled bool) error {
 
 func (h *LogInterface) WriteDebugMessage(message string) {
 	if isSmartActiveDiagnosticMessage(message) {
-		Log(LogLevel_WARNING, LogType_SERVICE, message)
+		publishLog(LogLevel_WARNING, LogType_SERVICE, message)
 		return
 	}
 	h.WriteMessage(log.LevelDebug, message)
 }
 func (h *LogInterface) WriteMessage(level log.Level, message string) {
-	Log(convertLogLevel(level), LogType_SERVICE, message)
+	// This callback already originates in sing-box's logger. Sending it through
+	// Log would enter that same logger and invoke this callback recursively.
+	publishLog(convertLogLevel(level), LogType_SERVICE, message)
 }
 
 func isSmartActiveDiagnosticMessage(message string) bool {

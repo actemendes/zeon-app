@@ -40,11 +40,20 @@ func Log(level LogLevel, typ LogType, message ...any) {
 	// os.Stderr.WriteString(fmt.Sprintf("%v %v %v\n", level, typ, fmt.Sprint(message...)))
 	// }
 
+	publishLog(level, typ, fmt.Sprint(message...))
+}
+
+// publishLog forwards an existing native log entry to clients without writing
+// it back to the native logger that produced it.
+func publishLog(level LogLevel, typ LogType, message string) {
+	if level < static.logLevel {
+		return
+	}
 	static.logObserver.Publish(&LogMessage{
 		Level:   level,
 		Type:    typ,
 		Time:    timestamppb.New(time.Now()),
-		Message: fmt.Sprint(message...),
+		Message: message,
 	})
 }
 
