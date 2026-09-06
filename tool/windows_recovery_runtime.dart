@@ -14,6 +14,7 @@ import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/features/app/widget/app.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/features/log/model/log_level.dart' as app_log;
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/proxy/overview/proxies_overview_notifier.dart';
@@ -229,8 +230,8 @@ Future<void> main() async {
       output == null) {
     throw StateError('Dedicated Windows validation build and evidence directory required');
   }
-  if (Platform.environment['COMPUTERNAME']?.toUpperCase() != 'ZEON-RECOVERY') {
-    throw StateError('Runtime validation requires the dedicated ZEON-RECOVERY virtual machine');
+  if (!{'ZEON-RECOVERY', 'ZEON-W11-LAB'}.contains(Platform.environment['COMPUTERNAME']?.toUpperCase())) {
+    throw StateError('Runtime validation requires a dedicated ZEON recovery virtual machine');
   }
   final machine = await Process.run('reg.exe', [
     'query',
@@ -259,6 +260,10 @@ Future<void> main() async {
     }
     await until(() => container!.read(activeProfileProvider).valueOrNull != null, 'profile unavailable', seconds: 60);
     await container!.read(ConfigOptions.mixedPort.notifier).update(port);
+    if (Platform.environment['ZEON_RUNTIME_NATIVE_DEBUG'] == '1') {
+      await container!.read(ConfigOptions.logLevel.notifier).update(app_log.LogLevel.debug);
+      await record('native_debug_requested');
+    }
     if (await proxyListening()) throw StateError('validation proxy port already occupied');
     final requestedModes = Platform.environment['ZEON_RUNTIME_MODES'];
     final modes = requestedModes == null
