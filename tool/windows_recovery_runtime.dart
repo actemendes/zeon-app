@@ -126,8 +126,11 @@ Future<void> networkSnapshot(String name) async {
 Future<void> connect() async {
   await record('connect_requested');
   await container!.read(connectionNotifierProvider.notifier).toggleConnection().timeout(const Duration(seconds: 60));
+  await record('connect_operation_returned');
   await until(() => container!.read(connectionNotifierProvider).valueOrNull is Connected, 'UI not connected');
+  await record('ui_connected');
   await until(proxyListening, 'local proxy not listening');
+  await record('proxy_listener_confirmed');
   final core = container!.read(zeonCoreServiceProvider).core;
   final native = await core.bgClient.coreInfoListener(Empty()).first.timeout(const Duration(seconds: 8));
   if (native.coreState.toString() != 'STARTED') throw StateError('native not STARTED');
@@ -226,6 +229,7 @@ Future<void> main() async {
   } catch (error) {
     await record('failed', {
       'error_type': error.runtimeType.toString(),
+      if (error is TimeoutException) 'timeout_ms': error.duration?.inMilliseconds,
       'reason': error is StateError ? error.message : 'see redacted application logs',
     });
   } finally {
