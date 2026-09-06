@@ -27,6 +27,7 @@ const port = 13434;
 late Directory evidence;
 ProviderContainer? container;
 String phase = 'bootstrap';
+int networkSequence = 0;
 
 Future<void> record(String event, [Map<String, Object?> details = const {}]) async {
   await File('${evidence.path}/events.jsonl').writeAsString(
@@ -108,19 +109,39 @@ Future<void> networkSnapshot(String name) async {
     for (final value in ['ProxyEnable', 'ProxyServer', 'ProxyOverride'])
       value: ['reg.exe', 'query', r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings', '/v', value],
   };
+  final prefix = '${(++networkSequence).toString().padLeft(2, '0')}-$phase-$name';
+  String quote(String value) {
+    if (value.contains(RegExp(r'["%!\r\n]'))) throw StateError('Unsafe diagnostic command value');
+    return '"$value"';
+  }
+
+  final script = File('${evidence.path}/$prefix-network.cmd');
+  final lines = <String>['@echo off', 'setlocal DisableDelayedExpansion'];
+  for (final entry in commands.entries) {
+    final path = '${evidence.path}/$prefix-${entry.key}';
+    lines.add('${entry.value.map(quote).join(' ')} 1>${quote('$path.stdout')} 2>${quote('$path.stderr')}');
+    lines.add('echo %errorlevel% >${quote('$path.exitcode')}');
+  }
+  await script.writeAsString('${lines.join('\r\n')}\r\n');
+  // One pipe-owning child avoids repeated process startup on a software VM.
+  // The total capture deadline stays below the old seven 20-second deadlines.
+  await Process.run('cmd.exe', ['/d', '/c', script.path]).timeout(const Duration(seconds: 120));
   final snapshot = <String, Object?>{};
   for (final entry in commands.entries) {
-    final result = await Process.run(
-      entry.value.first,
-      entry.value.skip(1).toList(),
-    ).timeout(const Duration(seconds: 20));
+    final path = '${evidence.path}/$prefix-${entry.key}';
+    final exitCode = int.parse((await File('$path.exitcode').readAsString()).trim());
     // reg.exe returns 1 for an absent optional value; retain that fact.
-    if (result.exitCode != 0 && !(entry.value.first == 'reg.exe' && result.exitCode == 1)) {
+    if (exitCode != 0 && !(entry.value.first == 'reg.exe' && exitCode == 1)) {
       throw StateError('network evidence capture failed: ${entry.key}');
     }
-    snapshot[entry.key] = {'exit_code': result.exitCode, 'stdout': result.stdout, 'stderr': result.stderr};
+    snapshot[entry.key] = {
+      'exit_code': exitCode,
+      'stdout': await File('$path.stdout').readAsString(encoding: systemEncoding),
+      'stderr': await File('$path.stderr').readAsString(encoding: systemEncoding),
+    };
   }
-  await File('${evidence.path}/$phase-$name-network.json').writeAsString(jsonEncode(snapshot), flush: true);
+  await File('${evidence.path}/$prefix-network.json').writeAsString(jsonEncode(snapshot), flush: true);
+  await record('network_snapshot_saved', {'snapshot': '$prefix-network.json'});
 }
 
 Future<void> connect() async {
