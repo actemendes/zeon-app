@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "startup_diagnostics.h"
 #include "system_proxy_recovery.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -11,7 +12,9 @@ FlutterWindow::FlutterWindow(const flutter::DartProject& project)
 FlutterWindow::~FlutterWindow() {}
 
 bool FlutterWindow::OnCreate() {
+  WriteStartupMarker("flutter_window_on_create_begin");
   if (!Win32Window::OnCreate()) {
+    WriteStartupMarker("flutter_window_base_create_failed");
     return false;
   }
 
@@ -19,24 +22,32 @@ bool FlutterWindow::OnCreate() {
 
   // The size here must match the window dimensions to avoid unnecessary surface
   // creation / destruction in the startup path.
+  WriteStartupMarker("flutter_controller_create_begin");
   flutter_controller_ = std::make_unique<flutter::FlutterViewController>(
       frame.right - frame.left, frame.bottom - frame.top, project_);
+  WriteStartupMarker("flutter_controller_created");
   // Ensure that basic setup of the controller was successful.
   if (!flutter_controller_->engine() || !flutter_controller_->view()) {
+    WriteStartupMarker("flutter_controller_invalid");
     return false;
   }
+  WriteStartupMarker("flutter_controller_valid");
+  WriteStartupMarker("plugins_register_begin");
   RegisterPlugins(flutter_controller_->engine());
+  WriteStartupMarker("plugins_registered");
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  WriteStartupMarker("flutter_child_attached");
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
+  flutter_controller_->engine()->SetNextFrameCallback([]() {
+    WriteStartupMarker("flutter_first_frame");
     // this->Show(); window_manager hidden at launch
-    "";
   });
 
   // Flutter can complete the first frame before the "show window" callback is
   // registered. The following call ensures a frame is pending to ensure the
   // window is shown. It is a no-op if the first frame hasn't completed yet.
   flutter_controller_->ForceRedraw();
+  WriteStartupMarker("flutter_force_redraw_requested");
 
   return true;
 }

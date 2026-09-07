@@ -2,13 +2,13 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:zeon/core/preferences/general_preferences.dart';
-import 'package:zeon/features/connection/notifier/connection_notifier.dart';
-import 'package:zeon/utils/utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/utils/utils.dart';
 
 part 'window_notifier.g.dart';
 
@@ -26,7 +26,9 @@ class WindowNotifier extends _$WindowNotifier with AppLogger {
     //   await WindowsSingleInstance.ensureSingleInstance([], "ZEON");
     // }
 
+    _writeWindowStartupMarker("dart_window_manager_ensure_begin");
     await windowManager.ensureInitialized();
+    _writeWindowStartupMarker("dart_window_manager_ensured");
     await initWindowState();
   }
 
@@ -54,9 +56,11 @@ class WindowNotifier extends _$WindowNotifier with AppLogger {
     final silentStart = ref.read(Preferences.silentStart);
     loggy.debug("window state. silent start: ${silentStart ? "Enabled" : "Disabled"}");
 
+    _writeWindowStartupMarker("dart_window_wait_ready_begin");
     await windowManager.waitUntilReadyToShow(
       WindowOptions(size: size, center: !isWindowVisible, minimumSize: minimumWindowSize),
     );
+    _writeWindowStartupMarker("dart_window_ready_to_show");
     if (isWindowVisible) {
       await windowManager.setPosition(position);
       loggy.debug("restoring window to position: $position");
@@ -96,7 +100,9 @@ class WindowNotifier extends _$WindowNotifier with AppLogger {
   }
 
   Future<void> show({bool focus = true}) async {
+    _writeWindowStartupMarker("dart_window_show_begin");
     await windowManager.show();
+    _writeWindowStartupMarker("dart_window_shown");
     if (focus) await windowManager.focus();
     if (Platform.isMacOS) {
       await windowManager.setSkipTaskbar(false);
@@ -128,5 +134,20 @@ class WindowNotifier extends _$WindowNotifier with AppLogger {
         });
     await trayManager.destroy();
     await windowManager.destroy();
+  }
+}
+
+void _writeWindowStartupMarker(String marker) {
+  if (!Platform.isWindows) return;
+  final path = Platform.environment["ZEON_STARTUP_DIAGNOSTICS_FILE"]?.trim();
+  if (path == null || path.isEmpty) return;
+  try {
+    File(path).writeAsStringSync(
+      "${DateTime.now().toUtc().toIso8601String()} pid=$pid marker=$marker\n",
+      mode: FileMode.append,
+      flush: true,
+    );
+  } catch (_) {
+    // Startup diagnostics must never affect application startup.
   }
 }
