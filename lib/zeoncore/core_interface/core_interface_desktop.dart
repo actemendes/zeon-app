@@ -22,9 +22,12 @@ typedef StopFunc = Pointer<Utf8> Function();
 typedef StopFuncDart = Pointer<Utf8> Function();
 
 class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
-  CoreInterfaceDesktop({CoreClient? commandClient}) : _commandClient = commandClient;
+  CoreInterfaceDesktop({CoreClient? commandClient, ClientChannel Function()? lifecycleChannelFactory})
+    : _commandClient = commandClient,
+      _lifecycleChannelFactory = lifecycleChannelFactory;
 
   CoreClient? _commandClient;
+  final ClientChannel Function()? _lifecycleChannelFactory;
 
   @override
   CoreClient get foregroundCommandClient => _commandClient ?? fgClient;
@@ -228,8 +231,32 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     if (generation > 0) await setSessionGeneration(generation);
     // A timed-out Stop RPC is not terminal proof. The idempotent native call
     // acknowledges only after the cancelled startup and its resources drain.
-    final result = await backgroundCommandClient.stop(Empty());
+    final result = await _withLifecycleClient(
+      (client) => client.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 14))),
+    );
     return result.coreState == CoreStates.STOPPED;
+  }
+
+  Future<T> _withLifecycleClient<T>(Future<T> Function(CoreClient) operation) async {
+    final port = _port;
+    final factory = _lifecycleChannelFactory;
+    if (port == null && factory == null) return operation(backgroundCommandClient);
+    // A pooled HTTP/2 connection may fail while native Stop is already draining
+    // resources. Deliver/confirm lifecycle commands on their own connection to
+    // the same process-owned daemon, without inheriting that connection's ACK
+    // failure or terminating another session's telemetry/configuration calls.
+    final channel =
+        factory?.call() ??
+        ClientChannel(
+          managementHost,
+          port: port!,
+          options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+        );
+    try {
+      return await operation(CoreClient(channel));
+    } finally {
+      await channel.terminate();
+    }
   }
 
   @override
@@ -238,9 +265,9 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     try {
       // Desktop resource ownership stays in the native core. A local start
       // acknowledgement cannot describe an in-flight start or a later stop.
-      final state = await backgroundCommandClient
-          .coreInfoListener(Empty(), options: CallOptions(timeout: const Duration(seconds: 2)))
-          .first;
+      final state = await _withLifecycleClient(
+        (client) => client.coreInfoListener(Empty(), options: CallOptions(timeout: const Duration(seconds: 2))).first,
+      );
       return CoreStatus.fromCoreInfo(state);
     } catch (error) {
       // An unavailable management endpoint is not proof of either terminal state.

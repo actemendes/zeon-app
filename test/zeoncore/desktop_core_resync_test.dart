@@ -158,4 +158,42 @@ void main() {
     expect(await stop, isTrue);
     expect(await desktop.resyncSessionStatus(), isA<CoreStopped>());
   });
+
+  test('pooled command transport loss during stop cannot erase a native terminal acknowledgement', () async {
+    final pooled = ClientChannel(
+      '127.0.0.1',
+      port: server.port!,
+      options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+    );
+    addTearDown(pooled.terminate);
+    final lifecycleChannels = <ClientChannel>[];
+    desktop = CoreInterfaceDesktop(
+      commandClient: CoreClient(pooled),
+      lifecycleChannelFactory: () {
+        final fresh = ClientChannel(
+          '127.0.0.1',
+          port: server.port!,
+          options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+        );
+        lifecycleChannels.add(fresh);
+        return fresh;
+      },
+    )..bgClient = CoreClient(pooled);
+    await desktop.setSessionGeneration(1);
+    service.state = CoreStates.STOPPING;
+    service.stopBarrier = Completer<void>();
+    final pooledCall = desktop.backgroundCommandClient.stop(Empty());
+    final rejected = expectLater(pooledCall, throwsA(isA<GrpcError>()));
+    final nativeStop = desktop.stop(generation: 2);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await pooled.terminate();
+    await rejected;
+    service.state = CoreStates.STOPPED;
+    service.stopBarrier!.complete();
+    expect(await nativeStop, isTrue);
+    expect(await desktop.resyncSessionStatus(), isA<CoreStopped>());
+    service.unavailable = true;
+    expect(await desktop.resyncSessionStatus(), isNull);
+    expect(lifecycleChannels, hasLength(3));
+  });
 }
