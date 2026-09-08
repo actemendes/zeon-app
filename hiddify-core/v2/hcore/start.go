@@ -18,7 +18,19 @@ import (
 )
 
 func (s *CoreService) Start(ctx context.Context, in *StartRequest) (*CoreInfoResponse, error) {
-	return Start(static.BaseContext, in)
+	// Keep the platform registry, but retain cancellation of this RPC until
+	// startup completes. A successful session must outlive the unary request.
+	startup, cancel := context.WithCancel(static.BaseContext)
+	detach := context.AfterFunc(ctx, cancel)
+	defer detach()
+	if ctx.Err() != nil {
+		cancel()
+	}
+	result, err := Start(startup, in)
+	if err != nil || startup.Err() != nil {
+		cancel()
+	}
+	return result, err
 }
 
 func Start(ctx context.Context, in *StartRequest) (*CoreInfoResponse, error) {
@@ -81,6 +93,9 @@ func StartService(ctx context.Context, in *StartRequest) (coreResponse *CoreInfo
 	})
 	static.lock.Lock()
 	defer static.lock.Unlock()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	if static.CoreState != CoreStates_STOPPED {
 		// return errorWrapper(MessageType_ALREADY_STARTED, fmt.Errorf("instance already started"))
@@ -90,6 +105,22 @@ func StartService(ctx context.Context, in *StartRequest) (coreResponse *CoreInfo
 			Message:     "instance already started",
 		}, nil
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	static.startupAccess.Lock()
+	static.startupCancel = cancel
+	static.startupAccess.Unlock()
+	defer func() {
+		static.startupAccess.Lock()
+		static.startupCancel = nil
+		static.startupAccess.Unlock()
+		if ctx.Err() != nil {
+			SetCoreStatus(CoreStates_STOPPED, MessageType_EMPTY, "startup cancelled")
+			coreResponse, err = nil, ctx.Err()
+		}
+		if err != nil {
+			cancel()
+		}
+	}()
 	SetCoreStatus(CoreStates_STARTING, MessageType_EMPTY, "")
 
 	in, err = loadLastStartRequestIfNeeded(in)
@@ -101,6 +132,9 @@ func StartService(ctx context.Context, in *StartRequest) (coreResponse *CoreInfo
 	options, err := BuildConfig(ctx, in)
 	if err != nil {
 		return errorWrapper(MessageType_ERROR_BUILDING_CONFIG, err)
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 	saveLastStartRequest(in)
 
@@ -124,12 +158,23 @@ func StartService(ctx context.Context, in *StartRequest) (coreResponse *CoreInfo
 	}
 	Log(LogLevel_DEBUG, LogType_CORE, "Stating Service with delay ?", in.DelayStart)
 	if in.DelayStart {
-		<-time.After(1000 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(1000 * time.Millisecond):
+		}
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 	libbox.SetMemoryLimit(C.IsIos || !in.DisableMemoryLimit)
 	instance, err := NewService(ctx, *options)
 	if err != nil {
 		return errorWrapper(MessageType_START_SERVICE, err)
+	}
+	if ctx.Err() != nil {
+		_ = closeStartedService(instance)
+		return nil, ctx.Err()
 	}
 	static.StartedService = instance
 	if static.debug {

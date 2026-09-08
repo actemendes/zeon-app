@@ -239,6 +239,7 @@ class ZeonCoreService with InfraLogger {
   final Map<String, Future<void>> _statusListenerRecoveryByKey = {};
   int _stoppingStatusWatchdogGeneration = 0;
   ({int generation, Future<Either<String, Unit>> future})? _stopInFlight;
+  ResponseFuture<CoreInfoResponse>? _startupCall;
   late final SessionGenerationGate _sessionGeneration = SessionGenerationGate(
     onStale: (stale, current, source) {
       loggy.warning(
@@ -509,7 +510,7 @@ class ZeonCoreService with InfraLogger {
   }
 
   Future<CoreStatus?> resyncFromPlatform(String source, {bool publish = false}) async {
-    final authoritative = await core.resyncSessionStatus();
+    var authoritative = await core.resyncSessionStatus();
     final snapshot = core.authoritativeSessionSnapshot;
     if (snapshot != null) {
       _sessionGeneration.advanceTo(snapshot.generation);
@@ -520,6 +521,15 @@ class ZeonCoreService with InfraLogger {
       _sessionGeneration.advanceTo(core.authoritativeSessionGeneration);
     }
     if (authoritative == null) return null;
+    if (authoritative is CoreStopped &&
+        _lifecycleState == _CoreLifecycleState.starting &&
+        core.isInitialized() &&
+        core.isSingleChannel()) {
+      // The daemon's initial STOPPED describes the previous session while
+      // configuration/start is still being dispatched. The start operation
+      // owns failure publication; an initial stream sample cannot cancel it.
+      authoritative = const CoreStatus.starting();
+    }
     if (publish) {
       currentState = authoritative;
       _syncLifecycleFromCoreStatus(authoritative, reason: "platform resync/$source");
@@ -626,6 +636,10 @@ class ZeonCoreService with InfraLogger {
       return currentState;
     }
     final gatedNext = _gateTerminalStatus(next, generation, "coreInfoListener[$key]");
+    if (core.isSingleChannel() && gatedNext is CoreStopped && _lifecycleState == _CoreLifecycleState.starting) {
+      loggy.debug("ignore pre-start daemon stopped sample [generation=$generation]");
+      return currentState;
+    }
     // A local control listener cannot declare the platform VPN stopped unless
     // the background endpoint or authoritative native session confirms it.
     if (gatedNext is CoreStopped && _lifecycleState == _CoreLifecycleState.started) {
@@ -1728,9 +1742,17 @@ class ZeonCoreService with InfraLogger {
 
         try {
           loggy.info(vpnDiagnosticEvent("core_start_requested", generation, details: "owner=flutter"));
-          final res = await core.bgClient.start(
+          if (_isStaleOperation(generation, "before_native_start")) return right(unit);
+          final startupCall = core.bgClient.start(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
           );
+          _startupCall = startupCall;
+          final CoreInfoResponse res;
+          try {
+            res = await startupCall;
+          } finally {
+            if (identical(_startupCall, startupCall)) _startupCall = null;
+          }
           if (_isStaleOperation(generation, "core_start_result")) return right(unit);
           ref.read(coreRestartSignalProvider.notifier).restart();
           if (res.messageType == MessageType.ALREADY_STARTED) {
@@ -2035,6 +2057,11 @@ class ZeonCoreService with InfraLogger {
       // wait. This makes Stop immediately supersede an older start/restart.
       final generation = _sessionGeneration.next();
       _connectedGeneration = 0;
+      // Cancel the exact in-flight RPC before waiting for the lifecycle queue.
+      // Native startup observes this request cancellation and releases its
+      // resources before the serialized Stop acknowledges terminal state.
+      final startupCall = _startupCall;
+      if (startupCall != null) unawaited(startupCall.cancel());
       final operation = _stopInternal(force: force, generation: generation);
       if (force) return operation;
       _stopInFlight = (generation: generation, future: operation);
@@ -2329,9 +2356,17 @@ class ZeonCoreService with InfraLogger {
           }
 
           loggy.info(vpnDiagnosticEvent("core_start_requested", generation, details: "owner=flutter source=$source"));
-          final res = await core.bgClient.start(
+          if (_isStaleOperation(generation, "before_native_restart")) return right(unit);
+          final startupCall = core.bgClient.start(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
           );
+          _startupCall = startupCall;
+          final CoreInfoResponse res;
+          try {
+            res = await startupCall;
+          } finally {
+            if (identical(_startupCall, startupCall)) _startupCall = null;
+          }
           if (_isStaleOperation(generation, "core_restart_start_result")) return right(unit);
           if (res.messageType == MessageType.ALREADY_STARTED) {
             loggy.warning(vpnDiagnosticEvent("core_already_started_conflict", generation));

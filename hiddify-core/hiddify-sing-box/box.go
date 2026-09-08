@@ -39,6 +39,7 @@ import (
 var _ adapter.SimpleLifecycle = (*Box)(nil)
 
 type Box struct {
+	ctx             context.Context
 	createdAt       time.Time
 	logFactory      log.Factory
 	logger          log.ContextLogger
@@ -414,6 +415,7 @@ func New(options Options) (*Box, error) {
 		internalServices = append(internalServices, adapter.NewLifecycleService(ntpService, "ntp service"))
 	}
 	return &Box{
+		ctx:             ctx,
 		network:         networkManager,
 		endpoint:        endpointManager,
 		inbound:         inboundManager,
@@ -470,6 +472,9 @@ func (s *Box) Start() error {
 }
 
 func (s *Box) preStart() error {
+	if err := s.ctx.Err(); err != nil {
+		return err
+	}
 	monitor := taskmonitor.New(s.logger, C.StartTimeout)
 	monitor.Start("start logger")
 	err := s.logFactory.Start()
@@ -497,8 +502,14 @@ func (s *Box) start() error {
 	if err != nil {
 		return err
 	}
+	if err := s.ctx.Err(); err != nil {
+		return err
+	}
 	err = adapter.StartNamed(s.logger, adapter.StartStateStart, s.internalService)
 	if err != nil {
+		return err
+	}
+	if err := s.ctx.Err(); err != nil {
 		return err
 	}
 	err = adapter.Start(s.logger, adapter.StartStateStart, s.inbound, s.endpoint, s.service)

@@ -68,7 +68,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   bool? _desiredRunning;
   int? _timedOutConnectingIntentEpoch;
   int? _timedOutDisconnectingIntentEpoch;
-  bool _mainButtonStartInFlight = false;
+  Object? _mainButtonStartOwner;
   bool _mainButtonStopInFlight = false;
 
   @override
@@ -317,6 +317,9 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   }
 
   int _beginStopIntent() {
+    // A cancelled start must not retain the button while its asynchronous
+    // completion drains. Its finally block may only release its own claim.
+    _mainButtonStartOwner = null;
     final intentEpoch = _beginConnectionIntent(running: false);
     state = const AsyncData(Disconnecting());
     unawaited(_boundedDisconnectingResync(intentEpoch));
@@ -462,15 +465,18 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
     switch (authoritative.action) {
       case MainVpnButtonAction.start:
-        if (authoritative.blocksStart || _mainButtonStartInFlight) return;
-        _mainButtonStartInFlight = true;
+        if (authoritative.blocksStart || _mainButtonStartOwner != null) return;
+        final startOwner = Object();
+        _mainButtonStartOwner = startOwner;
         try {
           if (confirmStart != null && !await confirmStart()) return;
+          if (!identical(_mainButtonStartOwner, startOwner)) return;
           // Dialogs/profile selection are asynchronous. Re-read Android after
           // them so a notification/tile start cannot be followed by a stale
           // second START from this tap.
           final afterConfirmation = await _authoritativeMainButtonState('main_button_before_start');
-          if (afterConfirmation == null ||
+          if (!identical(_mainButtonStartOwner, startOwner) ||
+              afterConfirmation == null ||
               afterConfirmation.action != MainVpnButtonAction.start ||
               afterConfirmation.blocksStart) {
             return;
@@ -483,7 +489,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
           if (!_isCurrentIntent(intentEpoch, running: true)) return;
           await _connect(intentEpoch);
         } finally {
-          _mainButtonStartInFlight = false;
+          if (identical(_mainButtonStartOwner, startOwner)) _mainButtonStartOwner = null;
         }
         return;
       case MainVpnButtonAction.stop:

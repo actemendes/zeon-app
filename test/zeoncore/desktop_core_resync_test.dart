@@ -12,11 +12,22 @@ import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 class _StateService extends Service {
   CoreStates state = CoreStates.STOPPED;
   bool unavailable = false;
+  Completer<void>? stopBarrier;
 
   @override
   String get $name => 'hcore.Core';
 
   _StateService() {
+    $addMethod(
+      ServiceMethod<Empty, CoreInfoResponse>(
+        'Stop',
+        _stop,
+        false,
+        false,
+        Empty.fromBuffer,
+        (response) => response.writeToBuffer(),
+      ),
+    );
     $addMethod(
       ServiceMethod<Empty, CoreInfoResponse>(
         'CoreInfoListener',
@@ -27,6 +38,12 @@ class _StateService extends Service {
         (response) => response.writeToBuffer(),
       ),
     );
+  }
+
+  Future<CoreInfoResponse> _stop(ServiceCall call, Future<Empty> request) async {
+    await request;
+    await stopBarrier?.future;
+    return CoreInfoResponse(coreState: state, messageType: MessageType.EMPTY);
   }
 
   Stream<CoreInfoResponse> _listen(ServiceCall call, Future<Empty> request) async* {
@@ -72,6 +89,22 @@ void main() {
     expect(await desktop.resyncSessionStatus(), isA<CoreStarting>());
     service.state = CoreStates.STARTED;
     expect(await desktop.resyncSessionStatus(), isA<CoreStarted>());
+  });
+
+  test('desktop stop waits for native acknowledgement and rejects nonterminal response', () async {
+    service.state = CoreStates.STARTING;
+    service.stopBarrier = Completer<void>();
+    var completed = false;
+    final pending = desktop.stop(generation: 2).then((value) {
+      completed = true;
+      return value;
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(completed, isFalse);
+    service.stopBarrier!.complete();
+    expect(await pending, isFalse);
+    service.state = CoreStates.STOPPED;
+    expect(await desktop.stop(generation: 2), isTrue);
   });
 
   test('native stop supersedes a previously acknowledged start', () async {

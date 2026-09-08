@@ -205,10 +205,10 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   @override
   Future<bool> stop({int generation = 0}) async {
     if (generation > 0) await setSessionGeneration(generation);
-    // The shared lifecycle already stops the service over gRPC. The desktop
-    // management endpoint is process-owned and remains ready for a later
-    // explicit user start.
-    return true;
+    // A timed-out Stop RPC is not terminal proof. The idempotent native call
+    // acknowledges only after the cancelled startup and its resources drain.
+    final result = await bgClient.stop(Empty());
+    return result.coreState == CoreStates.STOPPED;
   }
 
   @override

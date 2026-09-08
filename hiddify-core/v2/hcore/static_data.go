@@ -24,6 +24,8 @@ type HiddifyInstance struct {
 	outboundsInfoObserver     *monitoring.Broadcaster[*OutboundGroupList]
 	mainOutboundsInfoObserver *monitoring.Broadcaster[*OutboundGroupList]
 	lock                      sync.Mutex
+	startupAccess             sync.Mutex
+	startupCancel             context.CancelFunc
 	globalPlatformInterface   libbox.PlatformInterface
 	previousStartRequest      *StartRequest
 	debug                     bool

@@ -359,6 +359,34 @@ void main() {
   });
 
   group('authoritative main VPN button', () {
+    testWidgets('cancel allows retry before old start completes and preserves new owner', (tester) async {
+      final oldStart = Completer<void>();
+      final newStart = Completer<void>();
+      final repository = _FakeConnectionRepository()
+        ..initialStatus = const Disconnected()
+        ..authoritativeStatus = const Disconnected()
+        ..connectBarrier = oldStart;
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.disconnected));
+      final setup = await _createContainer(repository, snapshotSource: snapshots, startedByUser: false);
+      addTearDown(setup.dispose);
+      final first = setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      await _pumpUntil(tester, () => repository.connectCalls == 1);
+      snapshots.currentSnapshot = _snapshot(VpnSessionPhase.startingCore, sequence: 2);
+      await setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      expect(repository.disconnectCalls, 1);
+      snapshots.currentSnapshot = _snapshot(VpnSessionPhase.disconnected, sequence: 3);
+      repository.connectBarrier = newStart;
+      final retry = setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      await _pumpUntil(tester, () => repository.connectCalls == 2);
+      oldStart.complete();
+      await first;
+      await setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      expect(repository.connectCalls, 2);
+      newStart.complete();
+      await retry;
+      await tester.pump(const Duration(seconds: 12));
+    });
+
     testWidgets('CONNECTED snapshot dispatches STOP once and never START', (tester) async {
       final repository = _FakeConnectionRepository()..disconnectBarrier = Completer<void>();
       final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.connected));

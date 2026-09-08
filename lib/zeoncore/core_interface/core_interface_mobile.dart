@@ -297,8 +297,15 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
       maxDelay: const Duration(milliseconds: 1600),
       portProbe: _portProbe,
       onObservation: (observation) => lastPortProbe = observation,
+      isCurrent: () => generation == _sessionGeneration,
     )) {
+      if (generation != _sessionGeneration) {
+        return BackgroundSetupResult(generation: generation, status: const CoreStatus.stopped());
+      }
       final nativeSnapshot = await _snapshotBeforeFailedStartCleanup();
+      if (generation != _sessionGeneration) {
+        return BackgroundSetupResult(generation: generation, status: const CoreStatus.stopped());
+      }
       await stopMethodChannel(generation: generation);
       return BackgroundSetupResult(
         generation: generation,
@@ -309,7 +316,13 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
       );
     }
     if (!await _waitForBackgroundCommandEndpoint(generation)) {
+      if (generation != _sessionGeneration) {
+        return BackgroundSetupResult(generation: generation, status: const CoreStatus.stopped());
+      }
       final nativeSnapshot = await _snapshotBeforeFailedStartCleanup();
+      if (generation != _sessionGeneration) {
+        return BackgroundSetupResult(generation: generation, status: const CoreStatus.stopped());
+      }
       await stopMethodChannel(generation: generation);
       return BackgroundSetupResult(
         generation: generation,
@@ -509,10 +522,12 @@ Future<bool> waitUntilPort(
   double factor = 1.8,
   Future<bool> Function(String, int)? portProbe,
   PortProbeObserver? onObservation,
+  bool Function()? isCurrent,
 }) async {
   var delay = baseDelay;
   final random = Random();
   for (var i = 0; i < maxTry; i++) {
+    if (isCurrent != null && !isCurrent()) return false;
     final observed = portProbe == null
         ? await isPortOpen("127.0.0.1", portNumber, onObservation: onObservation)
         : await portProbe("127.0.0.1", portNumber);
@@ -522,6 +537,7 @@ Future<bool> waitUntilPort(
         PortProbeObservation(observed ? PortProbeOutcome.connected : PortProbeOutcome.closed),
       );
     }
+    if (isCurrent != null && !isCurrent()) return false;
     if (observed == isOpen) {
       return true;
     }
