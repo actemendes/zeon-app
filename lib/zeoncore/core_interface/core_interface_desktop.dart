@@ -22,6 +22,16 @@ typedef StopFunc = Pointer<Utf8> Function();
 typedef StopFuncDart = Pointer<Utf8> Function();
 
 class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
+  CoreInterfaceDesktop({CoreClient? commandClient}) : _commandClient = commandClient;
+
+  CoreClient? _commandClient;
+
+  @override
+  CoreClient get foregroundCommandClient => _commandClient ?? fgClient;
+
+  @override
+  CoreClient get backgroundCommandClient => _commandClient ?? bgClient;
+
   static const managementHost = "127.0.0.1";
   static const _startupValidationGuard = bool.fromEnvironment("zeon_windows_startup_validation");
   static final ZeonCoreNativeLibrary _box = _gen();
@@ -134,6 +144,17 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
       ),
     );
 
+    // A stalled telemetry connection must not hold Start/Stop or terminal
+    // confirmation behind its streams. This endpoint still belongs to the
+    // same native process; only its HTTP/2 transport is independent.
+    _commandClient = CoreClient(
+      ClientChannel(
+        managementHost,
+        port: port,
+        options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+      ),
+    );
+
     return "";
   }
 
@@ -207,7 +228,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     if (generation > 0) await setSessionGeneration(generation);
     // A timed-out Stop RPC is not terminal proof. The idempotent native call
     // acknowledges only after the cancelled startup and its resources drain.
-    final result = await bgClient.stop(Empty());
+    final result = await backgroundCommandClient.stop(Empty());
     return result.coreState == CoreStates.STOPPED;
   }
 
@@ -217,7 +238,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     try {
       // Desktop resource ownership stays in the native core. A local start
       // acknowledgement cannot describe an in-flight start or a later stop.
-      final state = await bgClient
+      final state = await backgroundCommandClient
           .coreInfoListener(Empty(), options: CallOptions(timeout: const Duration(seconds: 2)))
           .first;
       return CoreStatus.fromCoreInfo(state);

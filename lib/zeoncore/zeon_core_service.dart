@@ -953,7 +953,7 @@ class ZeonCoreService with InfraLogger {
       if (_useMockCore) {
         return right("{}");
       }
-      final response = await core.fgClient.parse(ParseRequest(content: content, debug: false));
+      final response = await core.foregroundCommandClient.parse(ParseRequest(content: content, debug: false));
       if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
       return right(response.content);
     });
@@ -1092,7 +1092,7 @@ class ZeonCoreService with InfraLogger {
             return left("${res.messageType} ${res.message}");
           }
           try {
-            await core.bgClient.ChangeHiddifySettings(request);
+            await core.backgroundCommandClient.ChangeHiddifySettings(request);
           } on GrpcError catch (e) {
             if (e.code == StatusCode.unavailable || _isTransientGrpcTransportClose(e)) {
               loggy.debug("background core is not started yet! $e");
@@ -1115,7 +1115,7 @@ class ZeonCoreService with InfraLogger {
       if (core.isInitialized() && !core.isSingleChannel()) {
         try {
           if (await core.isActiveBg()) {
-            return await _applyCoreOptionsToClient(request, core.bgClient, "background");
+            return await _applyCoreOptionsToClient(request, core.backgroundCommandClient, "background");
           }
         } catch (e, st) {
           if (!_isTransientCoreFailure(e)) rethrow;
@@ -1152,7 +1152,7 @@ class ZeonCoreService with InfraLogger {
   Future<Either<String, Unit>> _applyLatestCoreOptionsToBackground(String reason) async {
     final request = _latestCoreOptionsRequest;
     if (request == null || _useMockCore) return right(unit);
-    return _applyCoreOptionsToClient(request, core.bgClient, "background/$reason");
+    return _applyCoreOptionsToClient(request, core.backgroundCommandClient, "background/$reason");
   }
 
   Future<Either<String, Unit>> _applyCoreOptionsToClient(
@@ -1187,7 +1187,7 @@ class ZeonCoreService with InfraLogger {
   Future<CoreClient> _clientForForegroundOperation(String operation) async {
     try {
       if (await core.isActiveFg()) {
-        return core.fgClient;
+        return core.foregroundCommandClient;
       }
     } catch (e) {
       loggy.debug("$operation: failed checking foreground core", e);
@@ -1196,7 +1196,7 @@ class ZeonCoreService with InfraLogger {
     try {
       await setup().run();
       if (await core.isActiveFg()) {
-        return core.fgClient;
+        return core.foregroundCommandClient;
       }
     } catch (e) {
       loggy.debug("$operation: foreground setup retry failed", e);
@@ -1206,14 +1206,14 @@ class ZeonCoreService with InfraLogger {
       try {
         if (await core.isActiveBg()) {
           loggy.warning("$operation: foreground core unavailable, using background core");
-          return core.bgClient;
+          return core.backgroundCommandClient;
         }
       } catch (e) {
         loggy.debug("$operation: failed checking background core", e);
       }
     }
 
-    return core.fgClient;
+    return core.foregroundCommandClient;
   }
 
   Future<bool> _ensureCoreInitializedForStream(String operation) async {
@@ -1743,7 +1743,7 @@ class ZeonCoreService with InfraLogger {
         try {
           loggy.info(vpnDiagnosticEvent("core_start_requested", generation, details: "owner=flutter"));
           if (_isStaleOperation(generation, "before_native_start")) return right(unit);
-          final startupCall = core.bgClient.start(
+          final startupCall = core.backgroundCommandClient.start(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
           );
           _startupCall = startupCall;
@@ -2163,7 +2163,7 @@ class ZeonCoreService with InfraLogger {
           await _closeSessionListeners(operationGeneration);
           platformStopped = _platformConfirmsStopped(operationGeneration);
           if (!platformStopped) {
-            await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
+            await core.backgroundCommandClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
           }
         });
       } on GrpcError catch (e) {
@@ -2269,7 +2269,10 @@ class ZeonCoreService with InfraLogger {
           final oldClosed = await _withinExpectedTransportTeardown(TransportCloseIntent.restartReplacement, () async {
             await _closeSessionListeners(generation);
             try {
-              await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
+              await core.backgroundCommandClient.stop(
+                Empty(),
+                options: CallOptions(timeout: const Duration(seconds: 3)),
+              );
             } on GrpcError catch (error) {
               if (!_isTransientGrpcTransportClose(error)) rethrow;
               _recordTransportCloseOutcome(
@@ -2357,7 +2360,7 @@ class ZeonCoreService with InfraLogger {
 
           loggy.info(vpnDiagnosticEvent("core_start_requested", generation, details: "owner=flutter source=$source"));
           if (_isStaleOperation(generation, "before_native_restart")) return right(unit);
-          final startupCall = core.bgClient.start(
+          final startupCall = core.backgroundCommandClient.start(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
           );
           _startupCall = startupCall;
@@ -2687,7 +2690,7 @@ class ZeonCoreService with InfraLogger {
 
     while (_lifecycleState != _CoreLifecycleState.stopped) {
       try {
-        final snapshot = await core.bgClient
+        final snapshot = await core.backgroundCommandClient
             .outboundsInfo(Empty())
             .map((event) {
               _rememberOutboundGroups(event.items, "outboundsInfo initial");
@@ -2786,7 +2789,7 @@ class ZeonCoreService with InfraLogger {
     loggy.debug("watching stats");
     try {
       try {
-        yield await core.bgClient.getSystemInfo(Empty());
+        yield await core.backgroundCommandClient.getSystemInfo(Empty());
       } catch (e, st) {
         loggy.debug("failed to read initial stats snapshot", e, st);
       }
@@ -2838,7 +2841,7 @@ class ZeonCoreService with InfraLogger {
       }
       loggy.debug("selecting outbound");
       try {
-        final res = await core.bgClient.selectOutbound(
+        final res = await core.backgroundCommandClient.selectOutbound(
           SelectOutboundRequest(groupTag: groupTag, outboundTag: outboundTag),
           options: CallOptions(timeout: const Duration(seconds: 1)),
         );
@@ -2857,7 +2860,7 @@ class ZeonCoreService with InfraLogger {
             (e.code == StatusCode.deadlineExceeded || e.code == StatusCode.unavailable) &&
             _sessionGeneration.isCurrent(generation, source: "select_outbound_confirmation_request")) {
           try {
-            final snapshot = await core.bgClient
+            final snapshot = await core.backgroundCommandClient
                 .outboundsInfo(Empty(), options: CallOptions(timeout: const Duration(seconds: 5)))
                 .first;
             if (!_sessionGeneration.isCurrent(generation, source: "select_outbound_confirmation_result")) {
@@ -2907,7 +2910,7 @@ class ZeonCoreService with InfraLogger {
       }
       loggy.debug("url test");
       try {
-        final res = await core.bgClient.urlTest(UrlTestRequest(tag: tag));
+        final res = await core.backgroundCommandClient.urlTest(UrlTestRequest(tag: tag));
         if (!_sessionGeneration.isCurrent(generation, source: "url_test_result")) {
           return left("stale VPN session");
         }
@@ -2974,7 +2977,7 @@ class ZeonCoreService with InfraLogger {
   }) {
     return TaskEither(() async {
       loggy.debug("generating warp config");
-      final warpConfig = await core.fgClient.generateWarpConfig(
+      final warpConfig = await core.foregroundCommandClient.generateWarpConfig(
         GenerateWarpConfigRequest(
           licenseKey: licenseKey,
           accountId: previousAccountId,
@@ -3230,7 +3233,7 @@ class ZeonCoreService with InfraLogger {
 
   Future<void> _logRuntimeIndicators(int generation, String source) async {
     try {
-      final info = await core.bgClient.getSystemInfo(Empty()).timeout(const Duration(milliseconds: 800));
+      final info = await core.backgroundCommandClient.getSystemInfo(Empty()).timeout(const Duration(milliseconds: 800));
       loggy.info(
         vpnDiagnosticEvent(
           "runtime_indicators",

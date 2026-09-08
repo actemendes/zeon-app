@@ -45,6 +45,11 @@ class CoreInterface {
   late CoreClient fgClient;
   late CoreClient bgClient;
 
+  // Platforms may isolate commands from long-lived telemetry streams while
+  // retaining the same foreground/background native service ownership.
+  CoreClient get foregroundCommandClient => fgClient;
+  CoreClient get backgroundCommandClient => bgClient;
+
   Future<String> setup(Directories directories, bool debug, int mode) async {
     return "";
   }

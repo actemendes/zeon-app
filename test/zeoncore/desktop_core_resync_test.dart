@@ -120,4 +120,42 @@ void main() {
     service.unavailable = true;
     expect(await desktop.resyncSessionStatus(), isNull);
   });
+
+  test('unresponsive telemetry transport cannot block stop or terminal confirmation', () async {
+    // Accept TCP but never answer HTTP/2: the old telemetry connection remains
+    // open, so socket liveness cannot establish that it can deliver a command.
+    final silentServer = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final sockets = <Socket>[];
+    final accepted = silentServer.listen(sockets.add);
+    final telemetry = ClientChannel(
+      '127.0.0.1',
+      port: silentServer.port,
+      options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+    );
+    addTearDown(() async {
+      await telemetry.terminate();
+      for (final socket in sockets) {
+        socket.destroy();
+      }
+      await accepted.cancel();
+      await silentServer.close();
+    });
+    desktop = CoreInterfaceDesktop(commandClient: CoreClient(channel))..bgClient = CoreClient(telemetry);
+    await desktop.setSessionGeneration(1);
+    await expectLater(
+      desktop.bgClient.coreInfoListener(Empty(), options: CallOptions(timeout: const Duration(milliseconds: 50))).first,
+      throwsA(isA<GrpcError>().having((error) => error.code, 'code', StatusCode.deadlineExceeded)),
+    );
+    service.state = CoreStates.STOPPING;
+    expect(await desktop.resyncSessionStatus(), isA<CoreStopping>());
+    service.stopBarrier = Completer<void>();
+    var terminal = false;
+    final stop = desktop.stop(generation: 2).then((value) => terminal = value);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(terminal, isFalse);
+    service.state = CoreStates.STOPPED;
+    service.stopBarrier!.complete();
+    expect(await stop, isTrue);
+    expect(await desktop.resyncSessionStatus(), isA<CoreStopped>());
+  });
 }
