@@ -13,6 +13,7 @@ class _StateService extends Service {
   CoreStates state = CoreStates.STOPPED;
   bool unavailable = false;
   Completer<void>? stopBarrier;
+  final stopReceived = Completer<void>();
 
   @override
   String get $name => 'hcore.Core';
@@ -42,6 +43,7 @@ class _StateService extends Service {
 
   Future<CoreInfoResponse> _stop(ServiceCall call, Future<Empty> request) async {
     await request;
+    if (!stopReceived.isCompleted) stopReceived.complete();
     await stopBarrier?.future;
     return CoreInfoResponse(coreState: state, messageType: MessageType.EMPTY);
   }
@@ -57,6 +59,24 @@ class _StateService extends Service {
     } finally {
       await updates.close();
     }
+  }
+}
+
+class _SlowClosingChannel extends ClientChannel {
+  _SlowClosingChannel(int port)
+    : super(
+        '127.0.0.1',
+        port: port,
+        options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+      );
+  final closeBarrier = Completer<void>();
+  bool closeRequested = false;
+
+  @override
+  Future<void> terminate() {
+    closeRequested = true;
+    unawaited(super.terminate());
+    return closeBarrier.future;
   }
 }
 
@@ -99,7 +119,7 @@ void main() {
       completed = true;
       return value;
     });
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await service.stopReceived.future;
     expect(completed, isFalse);
     service.stopBarrier!.complete();
     expect(await pending, isFalse);
@@ -192,8 +212,49 @@ void main() {
     service.stopBarrier!.complete();
     expect(await nativeStop, isTrue);
     expect(await desktop.resyncSessionStatus(), isA<CoreStopped>());
+    await desktop.setSessionGeneration(3);
     service.unavailable = true;
     expect(await desktop.resyncSessionStatus(), isNull);
-    expect(lifecycleChannels, hasLength(3));
+    expect(lifecycleChannels, hasLength(2));
+  });
+
+  test('confirmed stop permits retry without waiting for socket teardown or another snapshot', () async {
+    final closing = _SlowClosingChannel(server.port!);
+    addTearDown(() {
+      if (!closing.closeBarrier.isCompleted) closing.closeBarrier.complete();
+    });
+    desktop = CoreInterfaceDesktop(lifecycleChannelFactory: () => closing)..bgClient = CoreClient(channel);
+    await desktop.setSessionGeneration(1);
+    service.state = CoreStates.STOPPED;
+    expect(await desktop.stop(generation: 2).timeout(const Duration(seconds: 1)), isTrue);
+    expect(closing.closeRequested, isTrue);
+    expect(closing.closeBarrier.isCompleted, isFalse);
+    service.unavailable = true;
+    expect(await desktop.resyncSessionStatus(), isA<CoreStopped>());
+    closing.closeBarrier.complete();
+  });
+
+  test('late stop acknowledgement cannot certify a newer generation', () async {
+    service.stopBarrier = Completer<void>();
+    final stopping = desktop.stop(generation: 2);
+    await service.stopReceived.future;
+    await desktop.setSessionGeneration(3);
+    service.stopBarrier!.complete();
+    expect(await stopping, isTrue);
+    service.unavailable = true;
+    expect(await desktop.resyncSessionStatus(), isNull);
+  });
+
+  test('unacknowledged stop and a newer start cannot reuse terminal proof', () async {
+    service.state = CoreStates.STOPPING;
+    expect(await desktop.stop(generation: 2), isFalse);
+    service.unavailable = true;
+    expect(await desktop.resyncSessionStatus(), isNull);
+    service.unavailable = false;
+    service.state = CoreStates.STOPPED;
+    expect(await desktop.stop(generation: 2), isTrue);
+    await desktop.setSessionGeneration(3);
+    service.state = CoreStates.STARTING;
+    expect(await desktop.resyncSessionStatus(), isA<CoreStarting>());
   });
 }

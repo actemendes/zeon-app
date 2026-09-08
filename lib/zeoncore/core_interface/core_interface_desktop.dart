@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
@@ -73,6 +74,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   int? _port;
   Future<String>? _setupOperation;
   int _sessionGeneration = 0;
+  int? _confirmedStoppedGeneration;
   static String generateRandomPassword(int length) {
     const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random();
@@ -189,6 +191,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   @override
   Future<BackgroundSetupResult> setupBackground(String path, String name, {int generation = 0}) async {
     await setSessionGeneration(generation);
+    _confirmedStoppedGeneration = null;
     if (_startupValidationGuard) {
       loggy.warning("Windows startup validation guard blocked an explicit VPN start");
       return BackgroundSetupResult(
@@ -212,6 +215,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
       throw StateError("stale desktop VPN generation");
     }
     _sessionGeneration = generation;
+    _confirmedStoppedGeneration = null;
   }
 
   @override
@@ -219,6 +223,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     if (generation != _sessionGeneration) {
       throw StateError("cannot mark stale desktop VPN generation ready");
     }
+    _confirmedStoppedGeneration = null;
   }
 
   @override
@@ -229,11 +234,15 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   @override
   Future<bool> stop({int generation = 0}) async {
     if (generation > 0) await setSessionGeneration(generation);
+    final stopGeneration = _sessionGeneration;
     // A timed-out Stop RPC is not terminal proof. The idempotent native call
     // acknowledges only after the cancelled startup and its resources drain.
     final result = await _withLifecycleClient(
       (client) => client.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 14))),
     );
+    if (stopGeneration == _sessionGeneration) {
+      _confirmedStoppedGeneration = result.coreState == CoreStates.STOPPED ? stopGeneration : null;
+    }
     return result.coreState == CoreStates.STOPPED;
   }
 
@@ -255,13 +264,24 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     try {
       return await operation(CoreClient(channel));
     } finally {
-      await channel.terminate();
+      // The native acknowledgement is already authoritative. Closing its
+      // HTTP/2 socket must not consume the caller's readiness/stop budget.
+      unawaited(
+        channel.terminate().catchError((Object error, StackTrace stackTrace) {
+          loggy.debug('lifecycle transport shutdown failed', error, stackTrace);
+        }),
+      );
     }
   }
 
   @override
   Future<CoreStatus?> resyncSessionStatus() async {
     if (!isInitialized()) return null;
+    // This is an acknowledged native Stop, not an optimistic local status.
+    // A new generation/start invalidates it before resources can be created.
+    // Requiring another network round trip here can discard the user's retry
+    // despite the previous generation already being fully drained.
+    if (_confirmedStoppedGeneration == _sessionGeneration) return const CoreStatus.stopped();
     try {
       // Desktop resource ownership stays in the native core. A local start
       // acknowledgement cannot describe an in-flight start or a later stop.
