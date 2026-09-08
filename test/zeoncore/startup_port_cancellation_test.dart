@@ -12,7 +12,7 @@ void main() {
       18179,
       true,
       () async => cleanupCalls++,
-      portProbe: (_, __) {
+      portProbe: (_, _) {
         probes++;
         return probe.future;
       },
@@ -23,6 +23,6 @@ void main() {
     expect(await pending, isFalse);
     expect(probes, 1);
     expect(cleanupCalls, 0);
-    expect(await waitUntilPort(18179, true, null, portProbe: (_, __) async => true, isCurrent: () => true), isTrue);
+    expect(await waitUntilPort(18179, true, null, portProbe: (_, _) async => true, isCurrent: () => true), isTrue);
   });
 }
