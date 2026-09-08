@@ -359,6 +359,17 @@ void main() {
   });
 
   group('authoritative main VPN button', () {
+    testWidgets('displayed Stop reaches the owner without waiting for a readiness query', (tester) async {
+      final repository = _FakeConnectionRepository()..authoritativeStatus = const Disconnected();
+      final snapshots = _FakeSnapshotSource(_snapshot(VpnSessionPhase.connected));
+      final setup = await _createContainer(repository, snapshotSource: snapshots);
+      addTearDown(setup.dispose);
+      await setup.notifier.handleMainVpnButtonTap(MainVpnButtonState.fromSnapshot(snapshots.current!));
+      expect(repository.disconnectCalls, 1);
+      expect(repository.connectCalls, 0);
+      expect(snapshots.resyncSources, isEmpty);
+      await tester.pump(const Duration(seconds: 2));
+    });
     testWidgets('cancel allows retry before old start completes and preserves new owner', (tester) async {
       final oldStart = Completer<void>();
       final newStart = Completer<void>();

@@ -453,6 +453,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     MainVpnButtonState displayedState, {
     Future<bool> Function()? confirmStart,
   }) async {
+    // Stop is an idempotent user intent. It must reach the owner even while
+    // startup/readiness RPCs are blocked; only a new Start needs a state query.
+    if (displayedState.action == MainVpnButtonAction.stop) {
+      return _stopFromMainButton(displayedState);
+    }
     final authoritative = await _authoritativeMainButtonState('main_button_tap');
     if (authoritative == null) return;
     if (authoritative != displayedState) {
@@ -493,18 +498,21 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         }
         return;
       case MainVpnButtonAction.stop:
-        if (_mainButtonStopInFlight) return;
-        _mainButtonStopInFlight = true;
-        try {
-          final intentEpoch = _beginStopIntent();
-          _markUserAction(authoritative.isStarting ? 'cancel_pending_connect' : 'manual_disconnect', expectsStop: true);
-          await _dispatchStopIntent(intentEpoch, haptic: ref.read(hapticServiceProvider.notifier).mediumImpact);
-        } finally {
-          _mainButtonStopInFlight = false;
-        }
-        return;
+        return _stopFromMainButton(authoritative);
       case MainVpnButtonAction.none:
         return;
+    }
+  }
+
+  Future<void> _stopFromMainButton(MainVpnButtonState displayedState) async {
+    if (_mainButtonStopInFlight) return;
+    _mainButtonStopInFlight = true;
+    try {
+      final intentEpoch = _beginStopIntent();
+      _markUserAction(displayedState.isStarting ? 'cancel_pending_connect' : 'manual_disconnect', expectsStop: true);
+      await _dispatchStopIntent(intentEpoch, haptic: ref.read(hapticServiceProvider.notifier).mediumImpact);
+    } finally {
+      _mainButtonStopInFlight = false;
     }
   }
 
