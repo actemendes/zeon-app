@@ -181,4 +181,10 @@ void main() {
     expect(event, containsPair('event', 'schema_probe'));
     expect(event, containsPair('run_id', 'schema-001'));
   });
+
+  test('runtime source bounds subscription disposal before terminal result', () async {
+    final source = await File('tool/windows_recovery_runtime.dart').readAsString();
+    expect(source, contains('subscription.cancel().timeout(const Duration(seconds: 10))'));
+    expect(source.indexOf('await harness.dispose()'), lessThan(source.indexOf('await reporter.writeResult()')));
+  });
 }

@@ -1064,10 +1064,33 @@ class RuntimeHarness {
   }
 
   Future<void> dispose() async {
-    await coreSubscription?.cancel();
-    appSubscription?.close();
-    proxyKeepAlive?.close();
-    container?.dispose();
+    final errors = <String>[];
+    final subscription = coreSubscription;
+    if (subscription != null) {
+      try {
+        await subscription.cancel().timeout(const Duration(seconds: 10));
+      } catch (error) {
+        errors.add('core_subscription:${error.runtimeType}');
+      }
+    }
+    try {
+      appSubscription?.close();
+    } catch (error) {
+      errors.add('app_subscription:${error.runtimeType}');
+    }
+    try {
+      proxyKeepAlive?.close();
+    } catch (error) {
+      errors.add('proxy_subscription:${error.runtimeType}');
+    }
+    try {
+      container?.dispose();
+    } catch (error) {
+      errors.add('provider_container:${error.runtimeType}');
+    }
+    if (errors.isNotEmpty) {
+      throw RuntimeFailure.harness('Harness disposal failed: ${errors.join(',')}');
+    }
   }
 }
 
@@ -1164,7 +1187,15 @@ Future<void> main(List<String> args) async {
           reason = 'Cleanup verification failed';
         }
       }
-      await harness.dispose();
+      try {
+        await harness.dispose();
+      } on RuntimeFailure catch (error) {
+        await reporter.event('runtime_dispose_failed', {'reason': error.reason});
+        if (verdict == RuntimeVerdict.pass) {
+          verdict = RuntimeVerdict.harnessError;
+          reason = error.reason;
+        }
+      }
     }
     if (reporter != null) {
       reporter.verdict = verdict;
