@@ -6,6 +6,8 @@ The app is designed for simple profile management, broad protocol support, and c
 
 ## Links
 
+- Development and testing requirements: [docs/testing](docs/testing/README.md)
+
 - Latest version: https://zeon-vps.net/download
 - Knowledge base: https://zeon-vps.net/faq/?k=HHhBa3AAQleuzYt3Tl2GYycjl8HGG_a_m0lucqCqJDg#/
 - Telegram community: https://t.me/zvo_net

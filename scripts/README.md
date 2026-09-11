@@ -2,6 +2,10 @@
 
 Все команды ниже запускаются из корня репозитория в PowerShell.
 
+Требования и приёмка: [docs/testing](../docs/testing/README.md). Скрипт является
+инструментом, а не источником критериев PASS; runtime-проверки выполняются отдельным
+заданием. Новое evidence и вспомогательные бинарники размещать в `Temp` вне репозитория.
+
 ## Точный Android-тест переключения в Auto
 
 `verify_android_exact_auto.py` проверяет последовательность: выбран ручной сервер
@@ -11,9 +15,11 @@
 `VerificationTrafficService` и установленный Telegram.
 
 ```powershell
-New-Item -ItemType Directory -Force .codex-artifacts | Out-Null
-dart compile exe tool/runtime_core_snapshot.dart -o .codex-artifacts/runtime_core_snapshot.exe
-python scripts/verify_android_exact_auto.py --serial DEVICE_SERIAL --manual-label 'ОАЭ | БЫСТРЫЙ⚡' --snapshot-exe .codex-artifacts/runtime_core_snapshot.exe --evidence-dir .codex-artifacts/exact-auto
+$testRunDir = Join-Path 'Z:\Zeon-Envelope\Temp\zeon-app-testing' ('exact-auto-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+New-Item -ItemType Directory -Path $testRunDir | Out-Null
+$snapshotExe = Join-Path $testRunDir 'runtime_core_snapshot.exe'
+dart compile exe tool/runtime_core_snapshot.dart -o $snapshotExe
+python scripts/verify_android_exact_auto.py --serial DEVICE_SERIAL --manual-label 'MANUAL_SERVER_LABEL' --snapshot-exe $snapshotExe --evidence-dir $testRunDir
 ```
 
 Если ADB отсутствует в `PATH`, передайте `--adb` с путём к нему. Название ручного

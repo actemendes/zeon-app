@@ -1,5 +1,9 @@
 # Contributing
 
+Current ZEON recovery and testing workflow: [docs/testing](docs/testing/README.md).
+Use its pinned toolchain and acceptance requirements; historical SDK examples below
+are not the current version pin. Runtime acceptance is a separate testing assignment.
+
 Every contribution to ZEONApp is welcome, whether it is reporting a bug, submitting a fix, proposing new features, or just asking a question. To make contributing to ZEONApp as easy as possible, you will find more details for the development flow in this documentation. [Basic tutorial on how to contribute to ZEONApp](https://zeonvpn.com/app/How-to-contribute-to-this-project/)
 
 Please note, we have a [Code of Conduct](https://github.com/zeon/zeon-app/blob/main/CODE_OF_CONDUCT.md), please follow it in all your interactions with the project.
