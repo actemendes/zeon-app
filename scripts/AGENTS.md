@@ -2,7 +2,7 @@
 
 `build.ps1` is the canonical entrypoint for Windows and Android application builds.
 `build.sh` is the canonical entrypoint for Apple application builds. Keep existing
-specialized scripts as implementation details or compatibility wrappers; new build
+specialized scripts only as documented implementation details; new build
 flows must be added to these entrypoints instead of creating an unrelated script.
 
 Every installable or distributable artifact must be published below the repository

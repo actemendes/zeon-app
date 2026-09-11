@@ -24,11 +24,9 @@ $powershellFiles = @(
     "build_windows_release_folder.ps1",
     "build_windows_installer_exe.ps1",
     "build_windows_installer_msix.ps1",
-    "package_windows.ps1",
     "package_windows_installers.ps1",
     "build_android_installation_apks.ps1",
-    "build_and_install_android.ps1",
-    "build_and_install_android_device.ps1"
+    "build_and_install_android.ps1"
 )
 
 foreach ($relativePath in $powershellFiles) {
@@ -83,13 +81,10 @@ finally {
     Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force
 }
 
-$legacyWindowsWrapper = Get-Content -LiteralPath (Join-Path $scriptDir "package_windows.ps1") -Raw
-Assert-True -Condition (-not $legacyWindowsWrapper.Contains('$HOME')) -Message "package_windows.ps1 must not mutate HOME caches"
-Assert-True -Condition (-not $legacyWindowsWrapper.Contains('Join-Path $repoRoot "out"')) -Message "package_windows.ps1 still publishes to out root"
-
 $appleBuild = Get-Content -LiteralPath (Join-Path $scriptDir "apple\build.sh") -Raw
 Assert-True -Condition $appleBuild.Contains("out/installers") -Message "Apple build does not publish to out/installers"
 Assert-True -Condition (-not $appleBuild.Contains("out/apple")) -Message "Apple build still publishes to out/apple"
+Assert-True -Condition $appleBuild.Contains("build_and_install_ios_device") -Message "Apple entrypoint is missing iOS device installation"
 
 $windowsBuilder = Get-Content -LiteralPath (Join-Path $scriptDir "build_and_install_windows.ps1") -Raw
 Assert-True -Condition $windowsBuilder.Contains('$flutterExitCode') -Message "Windows Flutter version check must preserve the native exit code"

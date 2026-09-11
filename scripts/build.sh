@@ -29,11 +29,8 @@ EOF
 
 case "${ACTION}" in
   help|-h|--help) show_help ;;
-  doctor|apple-upload|macos-app|macos-artifacts|macos-app-store|macos-app-store-upload|ios-unsigned|ios-ipa|ios-upload)
+  doctor|apple-upload|macos-app|macos-artifacts|macos-app-store|macos-app-store-upload|ios-unsigned|ios-ipa|ios-device|ios-upload)
     exec "${SCRIPT_DIR}/apple/build.sh" "${ACTION}" "$@"
-    ;;
-  ios-device)
-    exec "${SCRIPT_DIR}/rebuild_ios_install_iphone.sh" "$@"
     ;;
   *)
     echo "Unknown build action: ${ACTION}" >&2

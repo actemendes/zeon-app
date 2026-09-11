@@ -214,6 +214,69 @@ build_ios_ipa() {
   echo "${IOS_OUT_DIR}/ZEON-iOS.ipa"
 }
 
+detect_ios_device_id() {
+  xcrun devicectl list devices |
+    awk '/ connected / {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^[A-Fa-f0-9-]{36}$/) {
+          print $i
+          exit
+        }
+      }
+    }'
+}
+
+build_and_install_ios_device() {
+  local mode="${IOS_MODE:-profile}"
+  local device_id="${DEVICE_ID:-}"
+  local bundle_id="${BUNDLE_ID:-app.zeon.ios}"
+  case "${mode}" in
+    debug|profile|release) ;;
+    *)
+      echo "Unsupported IOS_MODE=${mode}. Use debug, profile, or release." >&2
+      exit 2
+      ;;
+  esac
+
+  if [[ -z "${device_id}" ]]; then
+    device_id="$(detect_ios_device_id)"
+  fi
+  if [[ -z "${device_id}" ]]; then
+    echo "No connected iPhone was detected. Connect/unlock it or set DEVICE_ID." >&2
+    exit 1
+  fi
+
+  local device_args=(--"${mode}" --target "${TARGET}")
+  device_args+=(--dart-define "release=${APPLE_RELEASE}")
+  if [[ -n "${APP_VERSION}" ]]; then
+    device_args+=(--dart-define "app_version=${APP_VERSION}")
+  fi
+  if [[ -n "${APP_BUILD_NUMBER}" ]]; then
+    device_args+=(--dart-define "app_build_number=${APP_BUILD_NUMBER}")
+  fi
+  if [[ -n "${SENTRY_DSN:-}" ]]; then
+    device_args+=(--dart-define "sentry_dsn=${SENTRY_DSN}")
+  fi
+
+  require_file ios/Frameworks/HiddifyCore.xcframework
+  ensure_generated_sources
+  flutter build ios "${device_args[@]}"
+
+  local app_path="${PROJECT_ROOT}/build/ios/iphoneos/Runner.app"
+  require_file "${app_path}"
+  local artifact_version="${PUBSPEC_VERSION//+/-}"
+  local published_app="${IOS_OUT_DIR}/ZEON-${artifact_version}-iOS-${mode}-device.app"
+  mkdir -p "${IOS_OUT_DIR}"
+  rm -rf "${published_app}"
+  cp -R "${app_path}" "${published_app}"
+  echo "Published: ${published_app}"
+
+  xcrun devicectl device install app --device "${device_id}" "${published_app}"
+  if [[ "${LAUNCH_APP:-0}" == "1" ]]; then
+    xcrun devicectl device process launch --device "${device_id}" --terminate-existing "${bundle_id}"
+  fi
+}
+
 upload_ios_app_store() {
   require_file ios/AppleSigning.xcconfig
   require_file ios/exportOptions.plist
@@ -268,9 +331,10 @@ case "${1:-doctor}" in
   macos-app-store-upload) upload_macos_app_store ;;
   ios-unsigned) build_ios_unsigned ;;
   ios-ipa) build_ios_ipa ;;
+  ios-device) build_and_install_ios_device ;;
   ios-upload) upload_ios_app_store ;;
   *)
-    echo "Usage: $0 {doctor|apple-upload|macos-app|macos-artifacts|macos-app-store|macos-app-store-upload|ios-unsigned|ios-ipa|ios-upload}" >&2
+    echo "Usage: $0 {doctor|apple-upload|macos-app|macos-artifacts|macos-app-store|macos-app-store-upload|ios-unsigned|ios-ipa|ios-device|ios-upload}" >&2
     exit 2
     ;;
 esac

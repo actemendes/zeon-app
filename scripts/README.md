@@ -13,8 +13,8 @@ PowerShell; для iOS и macOS — терминал на Mac.
 - `build.sh` — iOS и macOS.
 
 Это публичные точки входа для человека, ИИ-агента, локальных Make-обёрток и новых сценариев.
-Специализированные `build_*`, `package_*` и `apple/build.sh` остаются реализацией
-и совместимыми обёртками. Если сборка сломалась, исправляется этот маршрут и его
+Специализированные `build_*`, `package_windows_installers.ps1` и `apple/build.sh`
+остаются внутренней реализацией. Если сборка сломалась, исправляется этот маршрут и его
 тест — обходная ручная команда не становится новой инструкцией.
 
 Все готовые к установке или передаче артефакты публикуются только в:
@@ -168,8 +168,10 @@ make build-macos-libs
 ## Что ещё лежит в папке
 
 - `build/common.ps1` — единая проверка пути и публикация артефактов.
-- `build_*` и `package_*` — реализации и старые совместимые имена; новые инструкции
-  должны ссылаться на `build.ps1`/`build.sh`.
+- `build_*`, `package_windows_installers.ps1` и `apple/build.sh` — только реализация
+  действий `build.ps1`/`build.sh`; напрямую их не вызывают.
 - `rebuild_hiddify_core.ps1` — пересборка native core, а не приложения.
-- `verify_*`, `validate_*`, `stage2_*`, `diagnostics/` и `tests/` — проверки и диагностика.
+- `verify_android_exact_auto.py`, `verify_android_window_api_refs.ps1`, `diagnostics/`
+  и `tests/` — действующие проверки и диагностика.
+- `generate_brand_icons.py` — явная ручная регенерация иконок из брендового SVG.
 - `bootstrap.ps1`, `bootstrap.sh` и `apple/bootstrap.sh` — подготовка окружения.

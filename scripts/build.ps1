@@ -149,7 +149,7 @@ try {
             if ($DeviceId) { $params.DeviceId = $DeviceId }
             if ($CleanInstall) { $params.CleanInstall = $true }
             if ($Launch) { $params.Launch = $true }
-            & (Join-Path $scriptDir "build_and_install_android_device.ps1") @params
+            & (Join-Path $scriptDir "build_and_install_android.ps1") @params
         }
         "android-release-install" {
             $params = @{ BuildMode = "release"; BuildTarget = $BuildTarget }
@@ -157,7 +157,7 @@ try {
             if ($DeviceId) { $params.DeviceId = $DeviceId }
             if ($CleanInstall) { $params.CleanInstall = $true }
             if ($Launch) { $params.Launch = $true }
-            & (Join-Path $scriptDir "build_and_install_android_device.ps1") @params
+            & (Join-Path $scriptDir "build_and_install_android.ps1") @params
         }
     }
 }

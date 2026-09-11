@@ -130,12 +130,12 @@ Apple-сборки должны передавать dart-define:
 Для macOS Mac App Store path описан через:
 
 - `macos/exportOptions.plist`: `method=app-store-connect`;
-- `make macos-app-store` или `scripts/apple/build.sh macos-app-store`;
+- `make macos-app-store` или `scripts/build.sh macos-app-store`;
 - `MACOS_EXPORT_DESTINATION=export` по умолчанию;
 - `MACOS_EXPORT_DESTINATION=upload` для прямой отправки через Xcode/App Store
   Connect, если в Xcode есть аккаунт или заданы App Store Connect API key env vars.
 
-Обычный helper `scripts/apple/build.sh macos-artifacts` сохраняет прежнюю роль:
+Обычный helper `scripts/build.sh macos-artifacts` сохраняет прежнюю роль:
 он производит DMG/PKG для вне-магазинной дистрибуции и не является Mac App Store
 артефактом.
 
