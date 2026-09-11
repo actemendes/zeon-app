@@ -38,10 +38,10 @@ foreach ($path in @($zipPath, $buildManifestPath, (Join-Path $artifactDirectory 
 }
 if ((Get-RuntimeFileHash -Path $zipPath) -cne ([string]$request.artifact_sha256).ToLowerInvariant()) { throw 'Published artifact ZIP hash mismatch.' }
 $buildManifest = Get-Content -LiteralPath $buildManifestPath -Raw | ConvertFrom-Json
-if ([string]$buildManifest.source_sha -cne [string]$request.source_sha -or [string]$buildManifest.artifact_sha256 -cne [string]$request.artifact_sha256) {
+if (([string]$buildManifest.source_sha).ToLowerInvariant() -cne ([string]$request.source_sha).ToLowerInvariant() -or ([string]$buildManifest.artifact_sha256).ToLowerInvariant() -cne ([string]$request.artifact_sha256).ToLowerInvariant()) {
     throw 'Published build provenance does not match the request.'
 }
-if ([string]$buildManifest.executable_sha256 -cne [string]$request.executable_sha256 -or [string]$buildManifest.native_core_sha256 -cne [string]$request.native_core_sha256) {
+if (([string]$buildManifest.executable_sha256).ToLowerInvariant() -cne ([string]$request.executable_sha256).ToLowerInvariant() -or ([string]$buildManifest.native_core_sha256).ToLowerInvariant() -cne ([string]$request.native_core_sha256).ToLowerInvariant()) {
     throw 'Published executable/core provenance does not match the request.'
 }
 if ([string]$request.scenario -eq 'connect') {
