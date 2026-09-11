@@ -13,7 +13,13 @@ param(
 
     [switch]$SkipClean,
 
-    [switch]$StartupValidation
+    [switch]$StartupValidation,
+
+    [switch]$RuntimeValidation,
+
+    [string]$RuntimeSourceSha = "",
+
+    [string]$RuntimeBuildUtc = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,11 +39,16 @@ if ($SkipSecureStoragePatch) { $params.SkipSecureStoragePatch = $true }
 if ($SkipCodeGeneration) { $params.SkipCodeGeneration = $true }
 if ($SkipClean) { $params.SkipClean = $true }
 if ($StartupValidation) { $params.StartupValidation = $true }
+if ($RuntimeValidation) {
+    $params.RuntimeValidation = $true
+    $params.RuntimeSourceSha = $RuntimeSourceSha
+    $params.RuntimeBuildUtc = $RuntimeBuildUtc
+}
 
 & (Join-Path $scriptDir "build_windows_release_folder.ps1") @params
 
 $version = ConvertTo-ZeonArtifactVersion -Version (Get-ZeonAppVersion -RepoRoot $repoRoot)
-$validationSuffix = if ($StartupValidation) { "-startup-validation" } else { "" }
+$validationSuffix = if ($StartupValidation) { "-startup-validation" } elseif ($RuntimeValidation) { "-runtime-validation" } else { "" }
 $folderName = "ZEON-$version-Windows-$BuildMode-x64$validationSuffix"
 $sourceDirectory = Join-Path (Get-ZeonInstallerPlatformDirectory -RepoRoot $repoRoot -Platform "win") $folderName
 $zipName = "ZEON-$version-Windows-Portable-$BuildMode-x64$validationSuffix.zip"

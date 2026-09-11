@@ -153,6 +153,15 @@ fixture и среды. Новый SHA после merge с тем же дерев
 Не добавлять новые `out/`, `.codex-*`, временные checkout и архивы в корень проекта.
 Старые неизвестные файлы не удалять массово: отдельный аудит владельца и ценности.
 
+Windows lifecycle harness собирается действием `windows-runtime` через canonical
+`scripts/build.ps1` и запускается `scripts/windows_runtime_lab.ps1`. Он управляет
+`ConnectionNotifier`, настройками и proxy selector через внутренние Riverpod API,
+не кликами. Поддерживаемые конечные сценарии: connect, S02, фазовый S06,
+manual-proxy и возврат auto-proxy. Harness сохраняет test-only compile guard,
+portable data, 45-секундный connect contract, отдельный cleanup timeout и
+150-секундное наблюдение поздней активации S06. Его `PASS` — результат только
+указанного сценария/режима; он не заменяет SHORT/FULL или ручной S05.
+
 На запуск достаточно `report.json`, краткого `report.md` и необходимого evidence.
 Не создавать новый план, матрицу и десяток summary-файлов для каждого повтора.
 Минимальные поля отчёта:

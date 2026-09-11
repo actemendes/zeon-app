@@ -17,7 +17,13 @@ param(
 
     [switch]$Portable,
 
-    [switch]$StartupValidation
+    [switch]$StartupValidation,
+
+    [switch]$RuntimeValidation,
+
+    [string]$RuntimeSourceSha = "",
+
+    [string]$RuntimeBuildUtc = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,6 +50,11 @@ if ($SkipCodeGeneration) { $params.SkipCodeGeneration = $true }
 if ($SkipClean) { $params.SkipClean = $true }
 if ($Portable) { $params.Portable = $true }
 if ($StartupValidation) { $params.StartupValidation = $true }
+if ($RuntimeValidation) {
+    $params.RuntimeValidation = $true
+    $params.RuntimeSourceSha = $RuntimeSourceSha
+    $params.RuntimeBuildUtc = $RuntimeBuildUtc
+}
 
 Write-Host "Building Windows application folder..."
 Write-Host "Build target: $BuildTarget"
@@ -57,7 +68,7 @@ $configuration = switch ($BuildMode) {
 }
 $sourceDirectory = Join-Path $repoRoot "build\windows\x64\runner\$configuration"
 $version = ConvertTo-ZeonArtifactVersion -Version (Get-ZeonAppVersion -RepoRoot $repoRoot)
-$validationSuffix = if ($StartupValidation) { "-startup-validation" } else { "" }
+$validationSuffix = if ($StartupValidation) { "-startup-validation" } elseif ($RuntimeValidation) { "-runtime-validation" } else { "" }
 $destinationName = "ZEON-$version-Windows-$BuildMode-x64$validationSuffix"
 $publishedDirectory = Publish-ZeonDirectory `
     -RepoRoot $repoRoot `

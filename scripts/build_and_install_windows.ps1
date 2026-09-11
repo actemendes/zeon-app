@@ -19,7 +19,15 @@ param(
 
     # Creates an isolated portable UI artifact whose desktop core refuses all
     # VPN start operations. This switch is for startup validation only.
-    [switch]$StartupValidation
+    [switch]$StartupValidation,
+
+    # Builds the allow-listed, headless lifecycle harness. Unlike startup
+    # validation this mode must retain the real core Start path.
+    [switch]$RuntimeValidation,
+
+    [string]$RuntimeSourceSha = "",
+
+    [string]$RuntimeBuildUtc = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -487,6 +495,21 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $BuildTarget))) {
         throw "Build target not found: $BuildTarget"
     }
+    if ($StartupValidation -and $RuntimeValidation) {
+        throw "StartupValidation and RuntimeValidation are mutually exclusive."
+    }
+    if ($RuntimeValidation) {
+        if ($BuildTarget -ne "tool/windows_recovery_runtime.dart") {
+            throw "RuntimeValidation requires tool/windows_recovery_runtime.dart."
+        }
+        if ($RuntimeSourceSha -notmatch '^[0-9a-f]{40}$') {
+            throw "RuntimeValidation requires a lowercase 40-character source SHA."
+        }
+        $parsedRuntimeBuildUtc = [DateTimeOffset]::MinValue
+        if (-not [DateTimeOffset]::TryParse($RuntimeBuildUtc, [ref]$parsedRuntimeBuildUtc)) {
+            throw "RuntimeValidation requires an ISO-8601 build time."
+        }
+    }
 
     if (Test-PathHasFlutterBlockedCharacters -PathToCheck $repoRoot) {
         $junctionPath = New-CleanPathJunction -RepoRoot $repoRoot
@@ -525,12 +548,19 @@ try {
         if ($SentryDsn) {
             $buildArgs += @("--dart-define", "sentry_dsn=$SentryDsn")
         }
-        if ($Portable -or $StartupValidation) {
+        if ($Portable -or $StartupValidation -or $RuntimeValidation) {
             $buildArgs += "--dart-define=portable=true"
         }
         if ($StartupValidation) {
             $buildArgs += "--dart-define=zeon_windows_startup_validation=true"
             Write-Host "Startup validation guard: enabled (VPN start is blocked)"
+        }
+        if ($RuntimeValidation) {
+            $buildArgs += "--dart-define=zeon_runtime_validation=true"
+            $buildArgs += "--dart-define=zeon_source_sha=$RuntimeSourceSha"
+            $buildArgs += "--dart-define=zeon_build_type=windows-runtime-validation"
+            $buildArgs += "--dart-define=zeon_build_utc=$RuntimeBuildUtc"
+            Write-Host "Runtime validation guard: enabled (headless app lifecycle harness)"
         }
         Write-Host "Build target: $BuildTarget"
         Write-Host ("Running: flutter " + ($buildArgs -join " "))

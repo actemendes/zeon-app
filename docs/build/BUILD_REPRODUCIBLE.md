@@ -38,6 +38,7 @@ Use them instead of assembling a new direct Flutter/Fastforge command:
 .\scripts\build.ps1 -Action windows-folder
 .\scripts\build.ps1 -Action windows-portable
 .\scripts\build.ps1 -Action windows-exe
+.\scripts\build.ps1 -Action windows-runtime
 ```
 
 On macOS:
@@ -50,6 +51,22 @@ On macOS:
 Every installable or distributable result is published below `out/installers`.
 Flutter, Gradle, CMake, Fastforge and Xcode paths under `build`, `dist` or temporary
 workspaces are intermediate outputs, not handoff artifacts.
+
+`windows-runtime` is the dedicated headless lifecycle harness, not a release
+client. It requires a clean committed tree, the exact Flutter version declared
+in `pubspec.yaml`, `tool/windows_recovery_runtime.dart`, portable mode and the
+test-only compile guard. The resulting ZIP and provenance manifest are published
+under `out/installers/win`. A manifest maps version/build number to source SHA,
+build type/time and artifact/native hashes. The script refuses to overwrite a
+previously recorded build number; increment `+N` in `pubspec.yaml` before the
+next actual compilation.
+
+The `ZEON-W10-LAB` controller is `scripts/windows_runtime_lab.ps1`. It restores
+the clean QEMU/TCG snapshot, waits for WinRM, stages hash-verified inputs, starts
+an elevated hidden Scheduled Task and retrieves `result.json`, `events.jsonl`,
+logs and network evidence. The task survives loss of the controller session;
+`-CollectOnly -RunId <id>` resumes evidence collection. The controller performs
+no UI automation and restores the stopped clean snapshot after ordinary runs.
 
 ## 4) Team rules to avoid drift
 

@@ -27,6 +27,43 @@ out/installers/
 └── macos/
 ```
 
+### Безоконный Windows runtime harness
+
+Отдельный тестовый runtime собирается только из чистого зафиксированного commit и
+не заменяет обычную Windows-сборку или runtime-приёмку:
+
+```powershell
+.\scripts\build.ps1 -Action windows-runtime -Mode release
+```
+
+Команда использует `tool/windows_recovery_runtime.dart`, portable-режим, compile-time
+guard и Flutter из `pubspec.yaml`. ZIP и manifest создаются в `out/installers/win`.
+Manifest фиксирует version/build number, source SHA, время и тип сборки, Flutter,
+SHA-256 ZIP, EXE и native core. Повторная сборка с уже записанным build number
+отклоняется; перед новой компиляцией увеличьте `+N` в единственном источнике версии —
+`pubspec.yaml`.
+
+Подготовленный `ZEON-W10-LAB` запускается без кликов и распознавания окон. Fixture
+храните только в `Z:\Zeon-Envelope\Temp`; его содержимое и секреты не попадают в
+вывод контроллера:
+
+```powershell
+.\scripts\windows_runtime_lab.ps1 `
+  -ArtifactPath 'Z:\Zeon-Envelope\Projects\zeon-app\out\installers\win\ZEON-1.5.0+1-Windows-Portable-release-x64-runtime-validation.zip' `
+  -FixturePath 'Z:\Zeon-Envelope\Temp\zeon-app-testing\fixtures\windows-safe-profile.txt' `
+  -RunId 'HARNESS-PREFLIGHT-20260911-001' `
+  -Scenario connect `
+  -NetworkMode system-proxy
+```
+
+Контроллер восстанавливает clean snapshot, ждёт WinRM, передаёт проверенные по хэшу
+файлы, создаёт повышенную скрытую Scheduled Task и забирает evidence. Задача внутри
+ВМ не зависит от WinRM-сессии. Для намеренного отсоединения используйте `-Detach`,
+затем заберите результат отдельной командой
+`.\scripts\windows_runtime_lab.ps1 -CollectOnly -RunId '<run-id>'`. Обычный запуск
+после сбора останавливает ВМ и возвращает clean snapshot. `-ValidateOnly` проверяет
+контракт контроллера без запуска ВМ.
+
 Каталоги Flutter/Gradle/Xcode `build`, `dist` и временная рабочая копия — только
 промежуточные данные. Их путь нельзя передавать как итог сборки.
 

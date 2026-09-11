@@ -7,6 +7,7 @@ param(
         "windows-exe",
         "windows-msix",
         "windows-run",
+        "windows-runtime",
         "android-apk",
         "android-apks",
         "android-debug-install",
@@ -58,6 +59,7 @@ $actions = @(
     [pscustomobject]@{ Action = "windows-exe"; Result = "Windows EXE installer in out/installers/win" },
     [pscustomobject]@{ Action = "windows-msix"; Result = "Windows MSIX installer in out/installers/win" },
     [pscustomobject]@{ Action = "windows-run"; Result = "Debug Windows build, published folder, and optional launch" },
+    [pscustomobject]@{ Action = "windows-runtime"; Result = "Headless Windows runtime harness ZIP and provenance manifest" },
     [pscustomobject]@{ Action = "android-apk"; Result = "Universal APK in out/installers/android" },
     [pscustomobject]@{ Action = "android-apks"; Result = "Universal and per-ABI APKs in out/installers/android" },
     [pscustomobject]@{ Action = "android-debug-install"; Result = "Debug APK in out/installers/android and install via ADB" },
@@ -122,6 +124,9 @@ try {
             $params = Add-CommonWindowsParameters -Parameters @{ BuildMode = "debug" }
             $params.Launch = $true
             & (Join-Path $scriptDir "build_windows_release_folder.ps1") @params
+        }
+        "windows-runtime" {
+            & (Join-Path $scriptDir "build_windows_runtime.ps1") -BuildMode $Mode
         }
         "android-apk" {
             $params = @{

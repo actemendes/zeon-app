@@ -53,6 +53,24 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   _writeWindowsStartupMarker("dart_run_app_returned");
 }
 
+/// Initializes the production dependency graph for the dedicated Windows
+/// runtime harness without mounting the application UI or desktop shell.
+///
+/// The compile-time and portable guards keep this entrypoint unusable from an
+/// ordinary application build. Lifecycle operations still flow through the
+/// same Riverpod repositories and [ZeonCoreService] as the application.
+Future<ProviderContainer> bootstrapWindowsRuntimeHarness(Environment env) {
+  if (!PlatformUtils.isWindows || !Environment.isPortable || !const bool.fromEnvironment('zeon_runtime_validation')) {
+    throw StateError('Windows runtime harness build guards are not enabled');
+  }
+
+  WidgetsFlutterBinding.ensureInitialized();
+  LoggerController.preInit();
+  FlutterError.onError = Logger.logFlutterError;
+  WidgetsBinding.instance.platformDispatcher.onError = Logger.logPlatformDispatcherError;
+  return _bootstrapContainer(env, isFirstLaunch: false, initializeDesktopUi: false);
+}
+
 class _BootstrapHost extends StatefulWidget {
   const _BootstrapHost({required this.environment, required this.shouldRemoveNativeSplash});
 
@@ -85,10 +103,7 @@ class _BootstrapHostState extends State<_BootstrapHost> {
     await WidgetsBinding.instance.endOfFrame;
     _writeWindowsStartupMarker("dart_end_of_frame_completed");
     try {
-      final container = await _bootstrapContainer(
-        widget.environment,
-        isFirstLaunch: widget.shouldRemoveNativeSplash,
-      );
+      final container = await _bootstrapContainer(widget.environment, isFirstLaunch: widget.shouldRemoveNativeSplash);
       _writeWindowsStartupMarker("dart_bootstrap_completed");
       return container;
     } catch (_) {
@@ -191,7 +206,11 @@ class _BootstrapFailureApp extends StatelessWidget {
   }
 }
 
-Future<ProviderContainer> _bootstrapContainer(Environment env, {required bool isFirstLaunch}) async {
+Future<ProviderContainer> _bootstrapContainer(
+  Environment env, {
+  required bool isFirstLaunch,
+  bool initializeDesktopUi = true,
+}) async {
   final stopWatch = Stopwatch()..start();
 
   final container = ProviderContainer(overrides: [environmentProvider.overrideWithValue(env)]);
@@ -221,7 +240,7 @@ Future<ProviderContainer> _bootstrapContainer(Environment env, {required bool is
     timeout: 5000,
   );
 
-  if (PlatformUtils.isDesktop) {
+  if (PlatformUtils.isDesktop && initializeDesktopUi) {
     await _init("window controller", () => container.read(windowNotifierProvider.future));
 
     final silentStart = container.read(Preferences.silentStart);
@@ -308,7 +327,7 @@ Future<ProviderContainer> _bootstrapContainer(Environment env, {required bool is
     //   timeout: 1000,
     // );
 
-    if (PlatformUtils.isDesktop) {
+    if (PlatformUtils.isDesktop && initializeDesktopUi) {
       _initSystemTrayInBackground(container);
     }
 

@@ -21,6 +21,8 @@ $powershellFiles = @(
     "build.ps1",
     "build\common.ps1",
     "build_windows_portable.ps1",
+    "build_windows_runtime.ps1",
+    "windows_runtime_lab.ps1",
     "build_windows_release_folder.ps1",
     "build_windows_installer_exe.ps1",
     "build_windows_installer_msix.ps1",
@@ -43,6 +45,7 @@ foreach ($action in @(
     "windows-portable",
     "windows-exe",
     "windows-msix",
+    "windows-runtime",
     "android-apk",
     "android-apks",
     "android-debug-install"
@@ -88,6 +91,23 @@ Assert-True -Condition $appleBuild.Contains("build_and_install_ios_device") -Mes
 
 $windowsBuilder = Get-Content -LiteralPath (Join-Path $scriptDir "build_and_install_windows.ps1") -Raw
 Assert-True -Condition $windowsBuilder.Contains('$flutterExitCode') -Message "Windows Flutter version check must preserve the native exit code"
+Assert-True -Condition $windowsBuilder.Contains('zeon_runtime_validation=true') -Message "Windows builder is missing the runtime compile-time guard"
+Assert-True -Condition $windowsBuilder.Contains('zeon_source_sha=') -Message "Windows runtime build must embed source provenance"
+
+$runtimeBuilder = Get-Content -LiteralPath (Join-Path $scriptDir "build_windows_runtime.ps1") -Raw
+Assert-True -Condition $runtimeBuilder.Contains('build-registry.jsonl') -Message "Runtime builds must record their version/SHA mapping"
+Assert-True -Condition $runtimeBuilder.Contains('Runtime artifacts must be built from a clean committed working tree') -Message "Runtime builds must reject dirty source"
+
+$runtimeLab = Get-Content -LiteralPath (Join-Path $scriptDir "windows_runtime_lab.ps1") -Raw
+Assert-True -Condition $runtimeLab.Contains('New-ScheduledTaskPrincipal') -Message "Runtime lab must create an elevated scheduled task"
+Assert-True -Condition $runtimeLab.Contains('-WindowStyle Hidden') -Message "Runtime lab launcher must remain hidden"
+Assert-True -Condition $runtimeLab.Contains('restore-clean.ps1') -Message "Runtime lab must restore the clean VM snapshot"
+Assert-True -Condition $runtimeLab.Contains('CollectOnly') -Message "Runtime lab must support collection after controller disconnect"
+Assert-True -Condition $runtimeLab.Contains('systemd-run') -Message "Runtime inputs must be staged in the WSL namespace used by QEMU"
+
+$runtimeHarness = Get-Content -LiteralPath (Join-Path $repoRoot "tool\windows_recovery_runtime.dart") -Raw
+Assert-True -Condition $runtimeHarness.Contains('connectionNotifierProvider.notifier') -Message "Runtime harness must use the application lifecycle owner"
+Assert-True -Condition ($runtimeHarness -notmatch '(?i)sendkeys|findwindow|pyautogui|\.click\(') -Message "Runtime harness must not contain UI automation"
 
 $windowsPackager = Get-Content -LiteralPath (Join-Path $scriptDir "package_windows_installers.ps1") -Raw
 Assert-True -Condition $windowsPackager.Contains('Z:\Zeon-Envelope\Temp\wz') -Message "Canonical Windows workspace must use ZEON Temp"
