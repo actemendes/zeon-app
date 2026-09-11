@@ -35,6 +35,7 @@ const _defaultProxyPort = 13434;
 const _cancelObservation = Duration(seconds: 150);
 
 enum RuntimeScenario {
+  preflight('preflight'),
   connect('connect'),
   s02('s02'),
   s06('s06'),
@@ -112,7 +113,7 @@ class RuntimeOptions {
     required this.scenario,
     required this.mode,
     required this.evidenceDirectory,
-    required this.profileFile,
+    this.profileFile,
     required this.runId,
     required this.connectTimeout,
     required this.bootstrapTimeout,
@@ -129,7 +130,7 @@ class RuntimeOptions {
   final RuntimeScenario scenario;
   final HarnessMode mode;
   final String evidenceDirectory;
-  final String profileFile;
+  final String? profileFile;
   final String runId;
   final Duration connectTimeout;
   final Duration bootstrapTimeout;
@@ -204,7 +205,9 @@ class RuntimeOptions {
     final profileFile = one('profile-file', 'ZEON_RUNTIME_PROFILE_FILE');
     final runId = one('run-id', 'ZEON_RUNTIME_RUN_ID');
     if (evidenceDirectory == null) throw const FormatException('Evidence directory is required');
-    if (profileFile == null) throw const FormatException('Profile fixture file is required');
+    if (scenario != RuntimeScenario.preflight && profileFile == null) {
+      throw const FormatException('Profile fixture file is required outside preflight');
+    }
     if (runId == null || !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$').hasMatch(runId)) {
       throw const FormatException('Run ID must contain 3-80 safe filename characters');
     }
@@ -219,6 +222,7 @@ class RuntimeOptions {
     );
     final cleanupSeconds = integer('cleanup-timeout-seconds', 'ZEON_RUNTIME_CLEANUP_TIMEOUT_SECONDS', 90, 15, 300);
     final defaultScenarioSeconds = switch (scenario) {
+      RuntimeScenario.preflight => 300,
       RuntimeScenario.s02 => 3600,
       RuntimeScenario.s06 => 300,
       RuntimeScenario.manualProxy || RuntimeScenario.autoProxy => 600,
@@ -239,7 +243,7 @@ class RuntimeOptions {
             .where((item) => item.isNotEmpty)
             .toList() ??
         const ['https://speed.cloudflare.com/__down?bytes=4096', 'https://captive.apple.com/hotspot-detect.html'];
-    if (trafficValues.length < 2) throw const FormatException('At least two traffic URLs are required');
+    if (trafficValues.isEmpty) throw const FormatException('At least one traffic URL is required');
     final trafficUrls = trafficValues.map((value) => httpsUri(value, 'Traffic URL')).toList(growable: false);
     final backendHealthUrl = httpsUri(
       one('backend-health-url', 'ZEON_RUNTIME_BACKEND_HEALTH_URL') ?? 'https://api.zeon-vps.online/health',
@@ -506,7 +510,9 @@ class RuntimeHarness {
     });
 
     await container!.read(Preferences.introCompleted.notifier).update(true);
-    await _ensureProfile();
+    if (options.scenario != RuntimeScenario.preflight) {
+      await _ensureProfile();
+    }
     originalMode = container!.read(ConfigOptions.serviceMode);
     originalMixedPort = container!.read(ConfigOptions.mixedPort);
     await container!.read(ConfigOptions.mixedPort.notifier).update(options.proxyPort);
@@ -530,6 +536,7 @@ class RuntimeHarness {
       await reporter.startPhase('scenario-${options.scenario.cliName}');
       try {
         await switch (options.scenario) {
+          RuntimeScenario.preflight => _scenarioPreflight(),
           RuntimeScenario.connect => _scenarioConnect(),
           RuntimeScenario.s02 => _scenarioS02(),
           RuntimeScenario.s06 => _scenarioS06(),
@@ -550,6 +557,25 @@ class RuntimeHarness {
     if (!cleanupOk) {
       throw RuntimeFailure.fail('Scenario passed but cleanup verification failed');
     }
+  }
+
+  Future<void> _scenarioPreflight() async {
+    if (container!.read(connectionNotifierProvider).valueOrNull is! Disconnected) {
+      throw RuntimeFailure.environment('Application is not disconnected at preflight boundary');
+    }
+    if (coreService.currentState is! CoreStopped) {
+      throw RuntimeFailure.environment('Native core is not stopped at preflight boundary');
+    }
+    if (await _proxyListening()) {
+      throw RuntimeFailure.environment('Proxy listener exists at preflight boundary');
+    }
+    reporter.appState = _appStateJson(container!.read(connectionNotifierProvider));
+    reporter.nativeState = _coreStateJson(coreService.currentState);
+    await reporter.event('harness_preflight_passed', {
+      'application_state': reporter.appState,
+      'native_core_state': reporter.nativeState,
+      'ui_created': false,
+    });
   }
 
   Future<void> _scenarioConnect() async {
@@ -692,26 +718,44 @@ class RuntimeHarness {
 
     await reporter.event('connect_requested', {'readiness_budget_seconds': options.connectTimeout.inSeconds});
     final operation = container!.read(connectionNotifierProvider.notifier).toggleConnection();
-    await _until(
-      () => container!.read(connectionNotifierProvider).valueOrNull is Connected,
-      'application connected readiness',
-      options.connectTimeout,
-    );
-    await operation.timeout(
-      remaining(),
-      onTimeout: () => throw RuntimeFailure.deadline('connect operation', options.connectTimeout),
-    );
-    await _until(_proxyListening, 'local proxy listener readiness', remaining());
-    final coreInfo = await coreService.core.backgroundCommandClient
-        .coreInfoListener(Empty())
-        .first
-        .timeout(
-          remaining(),
-          onTimeout: () => throw RuntimeFailure.deadline('native core readiness', options.connectTimeout),
-        );
-    if (coreInfo.coreState != CoreStates.STARTED) throw RuntimeFailure.fail('Native core did not report STARTED');
-    await reporter.event('connection_ready', {'elapsed_ms': stopwatch.elapsedMilliseconds});
-    await _networkSnapshot('connected');
+    try {
+      await _until(
+        () => container!.read(connectionNotifierProvider).valueOrNull is Connected,
+        'application connected readiness',
+        options.connectTimeout,
+      );
+      await operation.timeout(
+        remaining(),
+        onTimeout: () => throw RuntimeFailure.deadline('connect operation', options.connectTimeout),
+      );
+      await _until(_proxyListening, 'local proxy listener readiness', remaining());
+      final coreInfo = await coreService.core.backgroundCommandClient
+          .coreInfoListener(Empty())
+          .first
+          .timeout(
+            remaining(),
+            onTimeout: () => throw RuntimeFailure.deadline('native core readiness', options.connectTimeout),
+          );
+      if (coreInfo.coreState != CoreStates.STARTED) throw RuntimeFailure.fail('Native core did not report STARTED');
+      await reporter.event('connection_ready', {'elapsed_ms': stopwatch.elapsedMilliseconds});
+      await _networkSnapshot('connected');
+    } on RuntimeFailure catch (error) {
+      if (error.timeoutKind != null) {
+        await reporter.event('connect_timeout_cancellation_started', {'timeout_kind': error.timeoutKind});
+        try {
+          await container!.read(connectionNotifierProvider.notifier).abortConnection().timeout(options.cleanupTimeout);
+          await coreService.stop(force: true).run().timeout(options.cleanupTimeout);
+          await _verifyStopped('connect-timeout-cancellation');
+          await reporter.event('connect_timeout_cancellation_completed');
+        } catch (cancelError) {
+          await reporter.event('connect_timeout_cancellation_failed', {
+            'error_type': cancelError.runtimeType.toString(),
+          });
+        }
+        unawaited(operation.catchError((_) {}));
+      }
+      rethrow;
+    }
   }
 
   Future<void> _disconnectAndVerify(String label) async {
@@ -834,7 +878,9 @@ class RuntimeHarness {
   Future<void> _ensureProfile() async {
     final existing = await container!.read(activeProfileProvider.future);
     if (existing != null) return;
-    final fixture = File(options.profileFile);
+    final fixturePath = options.profileFile;
+    if (fixturePath == null) throw RuntimeFailure.environment('Profile fixture file is required');
+    final fixture = File(fixturePath);
     if (!await fixture.exists()) throw RuntimeFailure.environment('Profile fixture file does not exist');
     final repository = await container!.read(profileRepositoryProvider.future);
     final imported = await repository.addLocal(await fixture.readAsString()).run();
@@ -866,11 +912,20 @@ class RuntimeHarness {
       '/v',
       'SystemManufacturer',
     ]).timeout(const Duration(seconds: 30));
-    if (manufacturer.exitCode != 0 || !(manufacturer.stdout as String).toLowerCase().contains('qemu')) {
-      throw RuntimeFailure.environment('QEMU guest identity was not confirmed');
+    if (manufacturer.exitCode != 0) {
+      throw RuntimeFailure.environment('Unable to confirm laboratory manufacturer');
+    }
+    final manufacturerText = (manufacturer.stdout as String).toLowerCase();
+    final virtualization = manufacturerText.contains('qemu')
+        ? 'qemu'
+        : manufacturerText.contains('openstack')
+        ? 'openstack'
+        : null;
+    if (virtualization == null) {
+      throw RuntimeFailure.environment('ZEON laboratory manufacturer was not confirmed');
     }
     reporter.machine = machineName;
-    await reporter.event('machine_guard_passed', {'machine': machineName, 'virtualization': 'qemu'});
+    await reporter.event('machine_guard_passed', {'machine': machineName, 'virtualization': virtualization});
   }
 
   Future<void> _networkSnapshot(String label) async {
@@ -916,6 +971,24 @@ class RuntimeHarness {
           await coreService.stop(force: true).run().timeout(options.cleanupTimeout);
         } catch (error) {
           errors.add('core_stop:${error.runtimeType}');
+        }
+        try {
+          await _until(
+            () => container!.read(connectionNotifierProvider).valueOrNull is Disconnected,
+            'cleanup application disconnect',
+            options.cleanupTimeout,
+          );
+        } catch (error) {
+          errors.add('application_state:${error.runtimeType}');
+        }
+        try {
+          await _until(
+            () => coreService.currentState is CoreStopped,
+            'cleanup native core stop',
+            options.cleanupTimeout,
+          );
+        } catch (error) {
+          errors.add('native_core_state:${error.runtimeType}');
         }
         try {
           await _until(() async => !await _proxyListening(), 'cleanup proxy listener', options.cleanupTimeout);
@@ -968,7 +1041,10 @@ class RuntimeHarness {
         errors.add('cleanup_evidence:${error.runtimeType}');
       }
     } finally {
-      final verified = errors.isEmpty && !await _proxyListening();
+      final appDisconnected = reporter.appState['status'] == 'disconnected';
+      final coreStopped = reporter.nativeState['status'] == 'stopped';
+      final proxyClosed = !await _proxyListening();
+      final verified = errors.isEmpty && appDisconnected && coreStopped && proxyClosed;
       reporter.cleanupAttempts.add({
         'label': label,
         'started_utc': started.toIso8601String(),
@@ -977,6 +1053,9 @@ class RuntimeHarness {
         'errors': errors,
         'application_state': reporter.appState,
         'native_core_state': reporter.nativeState,
+        'application_disconnected': appDisconnected,
+        'native_core_stopped': coreStopped,
+        'proxy_listener_closed': proxyClosed,
       });
       await reporter.event('cleanup_completed', {'verified': verified, 'errors': errors});
       await reporter.endPhase(status: verified ? 'passed' : 'failed');

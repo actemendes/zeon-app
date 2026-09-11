@@ -99,11 +99,27 @@ Assert-True -Condition $runtimeBuilder.Contains('build-registry.jsonl') -Message
 Assert-True -Condition $runtimeBuilder.Contains('Runtime artifacts must be built from a clean committed working tree') -Message "Runtime builds must reject dirty source"
 
 $runtimeLab = Get-Content -LiteralPath (Join-Path $scriptDir "windows_runtime_lab.ps1") -Raw
-Assert-True -Condition $runtimeLab.Contains('New-ScheduledTaskPrincipal') -Message "Runtime lab must create an elevated scheduled task"
-Assert-True -Condition $runtimeLab.Contains('-WindowStyle Hidden') -Message "Runtime lab launcher must remain hidden"
-Assert-True -Condition $runtimeLab.Contains('restore-clean.ps1') -Message "Runtime lab must restore the clean VM snapshot"
+Assert-True -Condition $runtimeLab.Contains('BatchMode=yes') -Message "Runtime lab must use non-interactive key-only SSH"
+Assert-True -Condition $runtimeLab.Contains('IdentitiesOnly=yes') -Message "Runtime lab must pin the dedicated SSH identity"
+Assert-True -Condition $runtimeLab.Contains('validated immutable JSON') -Message "Runtime lab must pass run parameters through immutable JSON"
+Assert-True -Condition $runtimeLab.Contains('ZEON-LAB Runtime Validation') -Message "Runtime lab must target the detached product Scheduled Task"
 Assert-True -Condition $runtimeLab.Contains('CollectOnly') -Message "Runtime lab must support collection after controller disconnect"
-Assert-True -Condition $runtimeLab.Contains('systemd-run') -Message "Runtime inputs must be staged in the WSL namespace used by QEMU"
+Assert-True -Condition (-not $runtimeLab.Contains('vm_cmd.ps1')) -Message "Remote runtime controller must not use the historical guest command bridge"
+Assert-True -Condition (-not $runtimeLab.Contains('restore-clean.ps1')) -Message "Remote runtime controller must not restore a historical VM snapshot"
+
+$runtimeRemoteRoot = Join-Path $scriptDir 'windows_runtime_lab'
+$runtimeInstaller = Get-Content -LiteralPath (Join-Path $runtimeRemoteRoot 'Install-RuntimeHarness.ps1') -Raw
+$runtimeRunner = Get-Content -LiteralPath (Join-Path $runtimeRemoteRoot 'Invoke-RuntimeRunner.ps1') -Raw
+$runtimeWatchdog = Get-Content -LiteralPath (Join-Path $runtimeRemoteRoot 'Invoke-RuntimeWatchdog.ps1') -Raw
+$runtimeRecovery = Get-Content -LiteralPath (Join-Path $runtimeRemoteRoot 'Invoke-RuntimeRecovery.ps1') -Raw
+$runtimeFixture = Get-Content -LiteralPath (Join-Path $runtimeRemoteRoot 'Protect-RuntimeFixture.ps1') -Raw
+Assert-True -Condition $runtimeInstaller.Contains("New-ScheduledTaskPrincipal -UserId 'SYSTEM'") -Message "Runtime task must run as SYSTEM"
+Assert-True -Condition $runtimeRunner.Contains('$startInfo.CreateNoWindow = $true') -Message "Runtime process must remain windowless"
+Assert-True -Condition $runtimeRunner.Contains("@('preflight', 'connect')") -Message "Remote runner must enable only preflight and connect"
+Assert-True -Condition $runtimeWatchdog.Contains('arming_valid') -Message "Watchdog apply mode must require a run-scoped arming manifest"
+Assert-True -Condition $runtimeRecovery.Contains('Stop-RuntimeOwnedProcesses') -Message "Recovery must stop only explicitly recorded lab-owned processes"
+Assert-True -Condition (-not ($runtimeRecovery -match '(?i)shutdown\.exe|Restart-Computer')) -Message "Runtime recovery must never reboot automatically"
+Assert-True -Condition $runtimeFixture.Contains('DataProtectionScope]::LocalMachine') -Message "Fixture must be encrypted outside evidence with machine DPAPI"
 
 $runtimeHarness = Get-Content -LiteralPath (Join-Path $repoRoot "tool\windows_recovery_runtime.dart") -Raw
 Assert-True -Condition $runtimeHarness.Contains('connectionNotifierProvider.notifier') -Message "Runtime harness must use the application lifecycle owner"

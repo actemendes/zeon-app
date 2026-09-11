@@ -162,6 +162,16 @@ portable data, 45-секундный connect contract, отдельный cleanu
 150-секундное наблюдение поздней активации S06. Его `PASS` — результат только
 указанного сценария/режима; он не заменяет SHORT/FULL или ручной S05.
 
+Прямой remote-controller для `ZEON-W10-LAB` не использует историческую локальную
+VM: он публикует version/build неизменяемо, ставит отдельную SYSTEM Scheduled Task
+и передаёт запрос immutable JSON через SSH/SCP. В разрешённом лабораторном этапе
+controller принимает только `preflight` и один bounded `connect` в System Proxy;
+S02, S06, TUN и остальные режимы остаются вне scope. Fixture шифруется DPAPI вне
+evidence, plaintext существует только во временном каталоге процесса и удаляется
+после secret-scan. Результат этой Windows Server 2022 лаборатории не является
+Windows 10 compatibility evidence; System Proxy под SYSTEM не доказывает профиль
+интерактивного Administrator.
+
 На запуск достаточно `report.json`, краткого `report.md` и необходимого evidence.
 Не создавать новый план, матрицу и десяток summary-файлов для каждого повтора.
 Минимальные поля отчёта:

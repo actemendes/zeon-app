@@ -37,6 +37,33 @@ void main() {
       expect(HarnessMode.parse('local-proxy').serviceMode, ServiceMode.proxy);
     });
 
+    test('allows preflight without a profile and requires one for connect', () {
+      final preflight = RuntimeOptions.parse([
+        '--scenario',
+        'preflight',
+        '--mode',
+        'system-proxy',
+        '--evidence-dir',
+        r'C:\evidence',
+        '--run-id',
+        'preflight-remote-001',
+      ], environment: const {});
+
+      expect(preflight.scenario, RuntimeScenario.preflight);
+      expect(preflight.profileFile, isNull);
+      expect(
+        () => RuntimeOptions.parse([
+          '--scenario',
+          'connect',
+          '--evidence-dir',
+          r'C:\evidence',
+          '--run-id',
+          'connect-no-fixture',
+        ], environment: const {}),
+        throwsFormatException,
+      );
+    });
+
     test('accepts environment configuration and repeated HTTPS targets', () {
       final options = RuntimeOptions.parse(
         const [],

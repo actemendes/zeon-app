@@ -43,26 +43,50 @@ SHA-256 ZIP, EXE и native core. Повторная сборка с уже за�
 отклоняется; перед новой компиляцией увеличьте `+N` в единственном источнике версии —
 `pubspec.yaml`.
 
-Подготовленный `ZEON-W10-LAB` запускается без кликов и распознавания окон. Fixture
-храните только в `Z:\Zeon-Envelope\Temp`; его содержимое и секреты не попадают в
-вывод контроллера:
+Прямая лаборатория `ZEON-W10-LAB` — это фактически Windows Server 2022, а не
+Windows 10. Controller использует только key-only SSH/SCP и отдельную Scheduled
+Task `\ZEON-LAB\ZEON-LAB Runtime Validation` от `SYSTEM`. Сначала локально
+проверьте controller, затем неизменяемо опубликуйте артефакт и установите harness:
 
 ```powershell
 .\scripts\windows_runtime_lab.ps1 `
-  -ArtifactPath 'Z:\Zeon-Envelope\Projects\zeon-app\out\installers\win\ZEON-1.5.0+1-Windows-Portable-release-x64-runtime-validation.zip' `
-  -FixturePath 'Z:\Zeon-Envelope\Temp\zeon-app-testing\fixtures\windows-safe-profile.txt' `
-  -RunId 'HARNESS-PREFLIGHT-20260911-001' `
-  -Scenario connect `
-  -NetworkMode system-proxy
+  -ValidateOnly `
+  -ArtifactPath '<out/installers/win/ZEON-1.5.0+N-...zip>'
+.\scripts\windows_runtime_lab.ps1 `
+  -PublishArtifact `
+  -ArtifactPath '<out/installers/win/ZEON-1.5.0+N-...zip>'
+.\scripts\windows_runtime_lab.ps1 `
+  -DeployHarness -ApplyNoOpRecovery `
+  -ArtifactPath '<out/installers/win/ZEON-1.5.0+N-...zip>'
 ```
 
-Контроллер восстанавливает clean snapshot, ждёт WinRM, передаёт проверенные по хэшу
-файлы, создаёт повышенную скрытую Scheduled Task и забирает evidence. Задача внутри
-ВМ не зависит от WinRM-сессии. Для намеренного отсоединения используйте `-Detach`,
-затем заберите результат отдельной командой
-`.\scripts\windows_runtime_lab.ps1 -CollectOnly -RunId '<run-id>'`. Обычный запуск
-после сбора останавливает ВМ и возвращает clean snapshot. `-ValidateOnly` проверяет
-контракт контроллера без запуска ВМ.
+На текущем этапе remote request принимает только `preflight` и один ограниченный
+`connect` в `system-proxy`. Параметры передаются валидируемым immutable JSON, а не
+аргументами Scheduled Task. После queue SSH-сессия закрывается; статус читается
+новыми сессиями. Watchdog по умолчанию dry-run и может применить recovery только
+по одноразовому manifest конкретного `run_id`. Автоматический reboot запрещён.
+
+`preflight` не требует профиля. Для `connect` fixture храните только в
+`Z:\Zeon-Envelope\Temp`: controller передаёт его во временный файл, remote host
+сразу шифрует его DPAPI вне evidence, создаёт plaintext только на время процесса и
+удаляет после secret-scan. Содержимое fixture не выводится:
+
+```powershell
+.\scripts\windows_runtime_lab.ps1 `
+  -Scenario preflight -RunId '<unique-preflight-id>' `
+  -ArtifactPath '<out/installers/win/ZEON-1.5.0+N-...zip>'
+.\scripts\windows_runtime_lab.ps1 `
+  -Scenario connect -NetworkMode system-proxy -RunId '<unique-connect-id>' `
+  -ArtifactPath '<out/installers/win/ZEON-1.5.0+N-...zip>' `
+  -FixturePath 'Z:\Zeon-Envelope\Temp\zeon-app-testing\fixtures\windows-safe-profile.txt'
+```
+
+Remote evidence находится в `C:\ZEON-LAB\evidence\runs\<run_id>`, локальная
+проверенная копия — в `Z:\Zeon-Envelope\Temp\zeon-app-testing\<run_id>\evidence`.
+Повторный сбор после обрыва controller: `.\scripts\windows_runtime_lab.ps1
+-CollectOnly -RunId '<run-id>'`. System Proxy под `SYSTEM` проверяет только профиль
+SYSTEM и не доказывает состояние интерактивного Administrator. S02, S06, TUN и
+полная матрица этим controller не поддерживаются.
 
 Каталоги Flutter/Gradle/Xcode `build`, `dist` и временная рабочая копия — только
 промежуточные данные. Их путь нельзя передавать как итог сборки.
