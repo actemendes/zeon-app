@@ -5,6 +5,8 @@ param(
 
     [string]$BuildTarget = "lib/main_prod.dart",
 
+    [string]$SentryDsn = "",
+
     [ValidateSet("split", "universal", "both")]
     [string]$Artifacts = "both",
 
@@ -38,28 +40,6 @@ function Get-CoreVersion {
     }
 
     return ($line -split '=')[1].Trim()
-}
-
-function Get-PubspecVersion {
-    param([Parameter(Mandatory = $true)][string]$RepoRoot)
-
-    $pubspecPath = Join-Path $RepoRoot "pubspec.yaml"
-    if (-not (Test-Path -LiteralPath $pubspecPath)) {
-        throw "pubspec.yaml not found: $pubspecPath"
-    }
-
-    $line = Select-String -Path $pubspecPath -Pattern "^\s*version:\s*(.+)$" | Select-Object -First 1
-    if (-not $line) {
-        throw "Could not find 'version' in $pubspecPath"
-    }
-
-    return $line.Matches[0].Groups[1].Value.Trim()
-}
-
-function ConvertTo-ArtifactVersion {
-    param([Parameter(Mandatory = $true)][string]$Version)
-
-    return ($Version -replace '[<>:"/\\|?*]', '-')
 }
 
 function Ensure-AndroidCoreAar {
@@ -195,8 +175,7 @@ function Copy-AndroidInstallersToOut {
         throw "APK output directory not found: $apkDir"
     }
 
-    $outDir = Join-Path $RepoRoot "out\installers\android"
-    New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+    $outDir = Get-ZeonInstallerPlatformDirectory -RepoRoot $RepoRoot -Platform "android"
 
     $modeSuffix = if ($BuildMode -eq "release") { "" } else { "-$BuildMode" }
     $copies = @()
@@ -217,12 +196,11 @@ function Copy-AndroidInstallersToOut {
             throw "Expected APK was not found: $sourcePath"
         }
 
-        $legacyPath = Join-Path $outDir $copy.Source
-        if (Test-Path -LiteralPath $legacyPath) {
-            Remove-Item -LiteralPath $legacyPath -Force
-        }
-
-        Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $outDir $copy.Destination) -Force
+        Publish-ZeonFile `
+            -RepoRoot $RepoRoot `
+            -Platform "android" `
+            -SourcePath $sourcePath `
+            -DestinationName $copy.Destination | Out-Null
     }
 
     Write-Host ""
@@ -235,6 +213,7 @@ function Copy-AndroidInstallersToOut {
 
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
+. (Join-Path $scriptDir "build\common.ps1")
 
 Push-Location $repoRoot
 $previousGradleOpts = $env:GRADLE_OPTS
@@ -257,7 +236,7 @@ try {
     if ($BuildMode -eq "release") {
         Ensure-AndroidReleaseSigningKey -RepoRoot $repoRoot
     }
-    $appVersion = ConvertTo-ArtifactVersion -Version (Get-PubspecVersion -RepoRoot $repoRoot)
+    $appVersion = ConvertTo-ZeonArtifactVersion -Version (Get-ZeonAppVersion -RepoRoot $repoRoot)
 
     if (-not $SkipPubGet) {
         Write-Host "Running: flutter pub get"
@@ -279,6 +258,9 @@ try {
 
     if ($Artifacts -in @("split", "both")) {
         $splitArgs = @("build", "apk", "--$BuildMode", "--target", $BuildTarget, "--split-per-abi")
+        if ($SentryDsn) {
+            $splitArgs += @("--dart-define", "sentry_dsn=$SentryDsn")
+        }
         Write-Host ("Running: flutter " + ($splitArgs -join " "))
         & flutter @splitArgs
         if ($LASTEXITCODE -ne 0) {
@@ -288,6 +270,9 @@ try {
 
     if ($Artifacts -in @("universal", "both")) {
         $universalArgs = @("build", "apk", "--$BuildMode", "--target", $BuildTarget)
+        if ($SentryDsn) {
+            $universalArgs += @("--dart-define", "sentry_dsn=$SentryDsn")
+        }
         Write-Host ("Running: flutter " + ($universalArgs -join " "))
         & flutter @universalArgs
         if ($LASTEXITCODE -ne 0) {

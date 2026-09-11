@@ -304,42 +304,22 @@ android-aab-release:
 windows-release: windows-zip-release windows-exe-release windows-msix-release
 
 windows-zip-release:
-	fastforge package \
-	  --platform windows \
-	  --targets zip \
-	  --skip-clean \
-	  --build-target=$(TARGET) \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) \
-	  --build-dart-define=portable=true
-	@FULL_PATH=$$(ls dist/*/*.zip | head -n 1); \
-	ZIP_DIR=$$(dirname "$$FULL_PATH"); \
-	ZIP_FILE=$$(basename "$$FULL_PATH"); \
-	FILE_NAME=$${ZIP_FILE%.*}; \
-	$(YELLOW)Post-processing Windows portable$(DONE); \
-	cd "$$ZIP_DIR"; \
-	$(BLUE)Extracting and Repacking...$(DONE); \
-	mkdir -p ZEON; \
-	unzip -q "$$ZIP_FILE" -d ZEON/; \
-	rm "$$ZIP_FILE"; \
-	tar -a -cf "$$FILE_NAME.zip" ZEON; \
-	rm -rf ZEON; \
-	$(GREEN)Successful$(DONE)
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 \
+	  -Action windows-portable \
+	  -BuildTarget $(TARGET) \
+	  -SentryDsn "$(SENTRY_DSN)"
 
 windows-exe-release:
-	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package_windows_installers.ps1 \
-	  -Target exe \
-	  -NoIsolatedWorkspace \
-	  -SkipClean \
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 \
+	  -Action windows-exe \
 	  -BuildTarget $(TARGET) \
 	  -SentryDsn "$(SENTRY_DSN)"
 
 windows-msix-release: sync-msix-version
-	fastforge package \
-	  --platform windows \
-	  --targets msix \
-	  --skip-clean \
-	  --build-target=$(TARGET) \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN)
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 \
+	  -Action windows-msix \
+	  -BuildTarget $(TARGET) \
+	  -SentryDsn "$(SENTRY_DSN)"
 
 linux-release: linux-deb-release linux-appimage-release
 
@@ -479,40 +459,40 @@ linux-docker-release:
 	@$(GREEN)Successful. Output is in 'dist_docker' folder.$(DONE)
 
 macos-release:
-	fastforge package --platform macos --targets dmg,pkg $(DISTRIBUTOR_ARGS)
+	./scripts/build.sh macos-artifacts
 
 ios-release: #not tested
-	fastforge package --platform ios --targets ipa --build-export-options-plist  ios/exportOptions.plist $(DISTRIBUTOR_ARGS) --build-dart-define=release=app-store
+	./scripts/build.sh ios-ipa
 
 apple-setup:
 	./scripts/apple/bootstrap.sh
 
 apple-doctor:
-	./scripts/apple/build.sh doctor
+	./scripts/build.sh doctor
 
 apple-upload:
-	./scripts/apple/build.sh apple-upload
+	./scripts/build.sh apple-upload
 
 macos-app:
-	./scripts/apple/build.sh macos-app
+	./scripts/build.sh macos-app
 
 macos-artifacts:
-	./scripts/apple/build.sh macos-artifacts
+	./scripts/build.sh macos-artifacts
 
 macos-app-store:
-	./scripts/apple/build.sh macos-app-store
+	./scripts/build.sh macos-app-store
 
 macos-app-store-upload:
-	./scripts/apple/build.sh macos-app-store-upload
+	./scripts/build.sh macos-app-store-upload
 
 ios-unsigned:
-	./scripts/apple/build.sh ios-unsigned
+	./scripts/build.sh ios-unsigned
 
 ios-ipa:
-	./scripts/apple/build.sh ios-ipa
+	./scripts/build.sh ios-ipa
 
 ios-upload:
-	./scripts/apple/build.sh ios-upload
+	./scripts/build.sh ios-upload
 
 android-libs:
 	$(MKDIR) $(ANDROID_OUT) || echo Folder already exists. Skipping...

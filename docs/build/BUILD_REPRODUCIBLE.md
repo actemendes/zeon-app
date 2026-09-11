@@ -30,12 +30,31 @@ What bootstrap does:
 
 ## 3) Build targets
 
-- Android: `make android-prepare && make android-apk-release`
-- Windows: `make windows-prepare && make windows-release`
-- macOS: `make macos-prepare && make macos-release`
+Public local entrypoints are documented in [`scripts/README.md`](../../scripts/README.md).
+Use them instead of assembling a new direct Flutter/Fastforge command:
+
+```powershell
+.\scripts\build.ps1 -Action android-apk
+.\scripts\build.ps1 -Action windows-folder
+.\scripts\build.ps1 -Action windows-portable
+.\scripts\build.ps1 -Action windows-exe
+```
+
+On macOS:
+
+```bash
+./scripts/build.sh macos-artifacts
+./scripts/build.sh ios-ipa
+```
+
+Every installable or distributable result is published below `out/installers`.
+Flutter, Gradle, CMake, Fastforge and Xcode paths under `build`, `dist` or temporary
+workspaces are intermediate outputs, not handoff artifacts.
 
 ## 4) Team rules to avoid drift
 
 - Always commit `pubspec.lock`.
 - Never edit `android/local.properties` and similar local machine files in git.
 - Do not remove or partially update `hiddify-core` files; treat it as versioned source in this repository.
+- Add or repair application build flows in `scripts/build.ps1`, `scripts/build.sh`
+  and their shared implementation. Do not document an ad-hoc bypass when a script fails.

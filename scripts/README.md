@@ -1,10 +1,83 @@
 # Скрипты сборки ZEON
 
-Все команды ниже запускаются из корня репозитория в PowerShell.
+Все команды запускаются из корня репозитория. Для Windows и Android используйте
+PowerShell; для iOS и macOS — терминал на Mac.
 
 Требования и приёмка: [docs/testing](../docs/testing/README.md). Скрипт является
 инструментом, а не источником критериев PASS; runtime-проверки выполняются отдельным
 заданием. Новое evidence и вспомогательные бинарники размещать в `Temp` вне репозитория.
+
+## Два входа во все сборки
+
+- `build.ps1` — Windows и Android.
+- `build.sh` — iOS и macOS.
+
+Это публичные точки входа для человека, ИИ-агента, локальных Make-обёрток и новых сценариев.
+Специализированные `build_*`, `package_*` и `apple/build.sh` остаются реализацией
+и совместимыми обёртками. Если сборка сломалась, исправляется этот маршрут и его
+тест — обходная ручная команда не становится новой инструкцией.
+
+Все готовые к установке или передаче артефакты публикуются только в:
+
+```text
+out/installers/
+├── android/
+├── win/
+├── ios/
+└── macos/
+```
+
+Каталоги Flutter/Gradle/Xcode `build`, `dist` и временная рабочая копия — только
+промежуточные данные. Их путь нельзя передавать как итог сборки.
+
+### Windows и Android
+
+```powershell
+# Показать все действия, ничего не собирать
+.\scripts\build.ps1 -List
+
+# Windows: распакованная папка приложения
+.\scripts\build.ps1 -Action windows-folder
+
+# Windows: portable ZIP
+.\scripts\build.ps1 -Action windows-portable
+
+# Windows: подписанный EXE-установщик
+.\scripts\build.ps1 -Action windows-exe
+
+# Windows: MSIX
+.\scripts\build.ps1 -Action windows-msix
+
+# Android: универсальный release APK
+.\scripts\build.ps1 -Action android-apk
+
+# Android: универсальный и отдельные ABI APK
+.\scripts\build.ps1 -Action android-apks
+
+# Android: debug APK, установка на единственный подключённый телефон и запуск
+.\scripts\build.ps1 -Action android-debug-install -CleanInstall -Launch
+```
+
+При нескольких Android-устройствах укажите `-DeviceId SERIAL`. Локальный неподписанный
+EXE допускается только для проверки: `-AllowUnsignedExe`; его нельзя распространять.
+Для debug/profile APK можно передать `-Mode debug` или `-Mode profile`.
+Entrypoint проверяет версию Flutter из `pubspec.yaml`; если общий SDK новее, закреплённая
+версия автоматически готовится в `Z:\Zeon-Envelope\Caches\Flutter` из локального Git tag.
+Переопределить SDK можно переменной `ZEON_FLUTTER_ROOT`.
+
+### iOS и macOS
+
+```bash
+./scripts/build.sh doctor
+./scripts/build.sh macos-app
+./scripts/build.sh macos-artifacts
+./scripts/build.sh ios-ipa
+./scripts/build.sh ios-device
+```
+
+`ios-device` требует подключённый и разблокированный iPhone; при необходимости
+передайте `DEVICE_ID=<CoreDevice-UUID>`. App Store upload остаётся явным действием:
+`ios-upload`, `macos-app-store-upload` или `apple-upload`.
 
 ## Точный Android-тест переключения в Auto
 
@@ -32,58 +105,6 @@ HTTPS/MTProto-ответы через VPN из отдельного Android UID.
 Полные UI-деревья и содержимое чатов не сохраняются. После теста приложение
 остаётся в Auto, Telegram — на переднем плане. Результат этого сценария не
 подтверждает доступность API ZEON: она проверяется отдельно.
-
-## Быстрые сценарии
-
-1. Пересобрать Android core после изменений в `hiddify-core`:
-
-   ```powershell
-   .\scripts\rebuild_zeon_core.ps1 -Platform android
-   ```
-
-2. Собрать готовые APK для распространения:
-
-   ```powershell
-   .\scripts\build_android_installation_apks.ps1
-   ```
-
-3. Собрать и установить приложение на подключенный Android-телефон:
-
-   ```powershell
-   .\scripts\build_and_install_android_device.ps1 -CleanInstall -Launch
-   ```
-
-4. Пересобрать Windows core после изменений в `hiddify-core`:
-
-   ```powershell
-   .\scripts\rebuild_zeon_core.ps1 -Platform windows
-   ```
-
-5. Собрать готовый Windows EXE-установщик:
-
-   ```powershell
-   .\scripts\build_windows_installer_exe.ps1
-   ```
-
-6. Собрать только Windows release-папку без установщика:
-
-   ```powershell
-   .\scripts\build_windows_release_folder.ps1
-   ```
-
-## Какие шаги применять
-
-| Задача | Шаги |
-| --- | --- |
-| Полностью новый APK с измененным core, установить на телефон | `1`, затем `3` |
-| Готовые APK-файлы с измененным core для отправки пользователям | `1`, затем `2` |
-| Новый APK после изменений только во Flutter/Kotlin-коде приложения | `2` |
-| Установить свежую локальную версию приложения без изменений core | `3` |
-| Новый Windows-установщик с измененным core | `4`, затем `5` |
-| Новый Windows-установщик после изменений только в приложении | `5` |
-
-APK из шага `2` копируются в `out/installers/android`.
-Windows EXE из шага `5` копируется в `out/installers/win`.
 
 ## Пересборка core
 
@@ -144,9 +165,11 @@ make build-macos-libs
 Если изменялись `.proto`-файлы, перед пересборкой библиотек отдельно выполните
 `make protos` в Linux/macOS-окружении с установленными генераторами protobuf.
 
-## Остальные скрипты
+## Что ещё лежит в папке
 
-- `build_and_install_android.ps1` - расширенная версия шага `3`.
-- `build_and_install_windows.ps1` - расширенная Windows-сборка с запуском.
-- `package_windows.ps1` - совместимый сценарий упаковки Windows.
-- `bootstrap.ps1` и `bootstrap.sh` - базовая подготовка Flutter-проекта.
+- `build/common.ps1` — единая проверка пути и публикация артефактов.
+- `build_*` и `package_*` — реализации и старые совместимые имена; новые инструкции
+  должны ссылаться на `build.ps1`/`build.sh`.
+- `rebuild_hiddify_core.ps1` — пересборка native core, а не приложения.
+- `verify_*`, `validate_*`, `stage2_*`, `diagnostics/` и `tests/` — проверки и диагностика.
+- `bootstrap.ps1`, `bootstrap.sh` и `apple/bootstrap.sh` — подготовка окружения.

@@ -5,6 +5,8 @@ param(
 
     [string]$BuildTarget = "lib/main_prod.dart",
 
+    [string]$SentryDsn = "",
+
     [string]$DeviceId,
 
     [string]$PackageId,
@@ -30,6 +32,7 @@ $params = @{
 }
 
 if ($PackageId) { $params.PackageId = $PackageId }
+if ($SentryDsn) { $params.SentryDsn = $SentryDsn }
 if ($DeviceId) { $params.DeviceId = $DeviceId }
 if ($CleanInstall) { $params.CleanInstall = $true }
 if ($Launch) { $params.Launch = $true }

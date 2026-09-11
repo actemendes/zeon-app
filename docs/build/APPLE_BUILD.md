@@ -10,7 +10,7 @@
 ```bash
 make apple-setup
 source scripts/apple/env.sh
-make apple-doctor
+./scripts/build.sh doctor
 ```
 
 Версии Flutter и Go закреплены в `scripts/apple/bootstrap.sh`. Bootstrap также
@@ -19,7 +19,7 @@ make apple-doctor
 Для загрузки обеих Store-сборок в App Store Connect/TestFlight:
 
 ```bash
-make apple-upload
+./scripts/build.sh apple-upload
 ```
 
 Перед повторной загрузкой той же версии увеличьте build number в `pubspec.yaml`;
@@ -30,29 +30,29 @@ App Store Connect не принимает повторный upload с уже и
 Собрать приложение:
 
 ```bash
-make macos-app
+./scripts/build.sh macos-app
 ```
 
 Собрать приложение, DMG и PKG:
 
 ```bash
-make macos-artifacts
+./scripts/build.sh macos-artifacts
 ```
 
-Результат находится в `out/apple`. Локальные DMG/PKG создаются без Developer ID.
+Результат находится в `out/installers/macos`. Локальные DMG/PKG создаются без Developer ID.
 Для распространения вне своей машины приложение и установщики нужно подписать
 Developer ID Application/Installer и отправить на notarization.
 
 Собрать Mac App Store пакет:
 
 ```bash
-make macos-app-store
+./scripts/build.sh macos-app-store
 ```
 
 Собрать и загрузить Mac App Store пакет в App Store Connect/TestFlight:
 
 ```bash
-make macos-app-store-upload
+./scripts/build.sh macos-app-store-upload
 ```
 
 ## iOS
@@ -60,7 +60,7 @@ make macos-app-store-upload
 Проверить компиляцию без сертификата:
 
 ```bash
-make ios-unsigned
+./scripts/build.sh ios-unsigned
 ```
 
 Для устанавливаемого IPA:
@@ -73,7 +73,7 @@ cp ios/AppleSigning.xcconfig.example ios/AppleSigning.xcconfig
 Xcode и создайте App ID для приложения и Packet Tunnel extension. Затем:
 
 ```bash
-make ios-ipa
+./scripts/build.sh ios-ipa
 ```
 
 Для VPN-приложения Apple Developer Program должен разрешать Network Extension
@@ -83,13 +83,13 @@ entitlement. Без сертификата, provisioning profiles и этого 
 Собрать и загрузить iOS build в App Store Connect/TestFlight:
 
 ```bash
-make ios-upload
+./scripts/build.sh ios-upload
 ```
 
 Если архив уже собран и нужно только повторить upload без пересборки:
 
 ```bash
-IOS_UPLOAD_SKIP_BUILD=1 make ios-upload
+IOS_UPLOAD_SKIP_BUILD=1 ./scripts/build.sh ios-upload
 ```
 
 Для upload через App Store Connect API key можно задать переменные:

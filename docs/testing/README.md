@@ -145,8 +145,11 @@ fixture и среды. Новый SHA после merge с тем же дерев
 В Git — требования, переиспользуемые тесты и инструменты. Исполняемые тесты уже
 живут в `test/`, Android source sets, `hiddify-core/`, `scripts/`, `tool/`;
 не переносить их в эту папку и не создавать новый framework ради требований.
-Новые runtime logs, screenshots, builds и report-файлы — в
+Новые runtime logs, screenshots и report-файлы — в
 `Z:\Zeon-Envelope\Temp\zeon-app-testing\<run-id>`, постоянные кэши — `Caches`.
+Готовые installable/distributable сборки создаются только через `scripts/build.ps1`
+или `scripts/build.sh` и публикуются в `out/installers`; в evidence сохраняются их
+путь и SHA-256, а не ещё одна копия бинарника.
 Не добавлять новые `out/`, `.codex-*`, временные checkout и архивы в корень проекта.
 Старые неизвестные файлы не удалять массово: отдельный аудит владельца и ценности.
 

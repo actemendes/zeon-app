@@ -5,6 +5,8 @@ param(
 
     [string]$BuildTarget = "lib/main_prod.dart",
 
+    [string]$SentryDsn = "",
+
     [string]$DeviceId,
 
     [string]$PackageId,
@@ -212,6 +214,7 @@ function Get-InstalledPackagePath {
 
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
+. (Join-Path $scriptDir "build\common.ps1")
 
 Push-Location $repoRoot
 try {
@@ -256,6 +259,9 @@ try {
     }
 
     $buildArgs = @("build", "apk", "--$BuildMode", "--target", $BuildTarget, "--target-platform", $targetPlatform)
+    if ($SentryDsn) {
+        $buildArgs += @("--dart-define", "sentry_dsn=$SentryDsn")
+    }
     Write-Host ("Running: flutter " + ($buildArgs -join " "))
     & flutter @buildArgs
     if ($LASTEXITCODE -ne 0) {
@@ -263,7 +269,14 @@ try {
     }
 
     $apkPath = Resolve-ApkPath -RepoRoot $repoRoot -Mode $BuildMode
-    Write-Host "APK: $apkPath"
+    $appVersion = ConvertTo-ZeonArtifactVersion -Version (Get-ZeonAppVersion -RepoRoot $repoRoot)
+    $artifactName = "ZEON-$appVersion-$deviceAbi-$BuildMode-device.apk"
+    $apkPath = Publish-ZeonFile `
+        -RepoRoot $repoRoot `
+        -Platform "android" `
+        -SourcePath $apkPath `
+        -DestinationName $artifactName
+    Write-Host "Installable APK: $apkPath"
 
     $apkPackageId = Resolve-ApkPackageId -RepoRoot $repoRoot -ApkPath $apkPath
     Write-Host "APK package id: $apkPackageId"

@@ -7,15 +7,11 @@ param(
 
     [string]$SentryDsn = "",
 
-    [switch]$Launch,
-
     [switch]$SkipSecureStoragePatch,
 
     [switch]$SkipCodeGeneration,
 
     [switch]$SkipClean,
-
-    [switch]$Portable,
 
     [switch]$StartupValidation
 )
@@ -24,45 +20,34 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $scriptDir = Split-Path -Parent $PSCommandPath
-$innerScript = Join-Path $scriptDir "build_and_install_windows.ps1"
 $repoRoot = Split-Path -Parent $scriptDir
 . (Join-Path $scriptDir "build\common.ps1")
 
-if (-not (Test-Path -LiteralPath $innerScript)) {
-    throw "Script not found: $innerScript"
-}
-
 $params = @{
-    BuildMode   = $BuildMode
+    BuildMode = $BuildMode
     BuildTarget = $BuildTarget
+    Portable = $true
 }
-
-if ($Launch) { $params.Launch = $true }
 if ($SentryDsn) { $params.SentryDsn = $SentryDsn }
 if ($SkipSecureStoragePatch) { $params.SkipSecureStoragePatch = $true }
 if ($SkipCodeGeneration) { $params.SkipCodeGeneration = $true }
 if ($SkipClean) { $params.SkipClean = $true }
-if ($Portable) { $params.Portable = $true }
 if ($StartupValidation) { $params.StartupValidation = $true }
 
-Write-Host "Building Windows application folder..."
-Write-Host "Build target: $BuildTarget"
+& (Join-Path $scriptDir "build_windows_release_folder.ps1") @params
 
-& $innerScript @params
-
-$configuration = switch ($BuildMode) {
-    "release" { "Release" }
-    "profile" { "Profile" }
-    "debug" { "Debug" }
-}
-$sourceDirectory = Join-Path $repoRoot "build\windows\x64\runner\$configuration"
 $version = ConvertTo-ZeonArtifactVersion -Version (Get-ZeonAppVersion -RepoRoot $repoRoot)
 $validationSuffix = if ($StartupValidation) { "-startup-validation" } else { "" }
-$destinationName = "ZEON-$version-Windows-$BuildMode-x64$validationSuffix"
-$publishedDirectory = Publish-ZeonDirectory `
-    -RepoRoot $repoRoot `
-    -Platform "win" `
-    -SourcePath $sourceDirectory `
-    -DestinationName $destinationName
+$folderName = "ZEON-$version-Windows-$BuildMode-x64$validationSuffix"
+$sourceDirectory = Join-Path (Get-ZeonInstallerPlatformDirectory -RepoRoot $repoRoot -Platform "win") $folderName
+$zipName = "ZEON-$version-Windows-Portable-$BuildMode-x64$validationSuffix.zip"
+$zipPath = Assert-ZeonInstallerPath -RepoRoot $repoRoot -Path (Join-Path (Split-Path -Parent $sourceDirectory) $zipName)
 
-Write-Host "Windows application folder is ready: $publishedDirectory"
+if (Test-Path -LiteralPath $zipPath) {
+    Remove-Item -LiteralPath $zipPath -Force
+}
+Compress-Archive -Path (Join-Path $sourceDirectory "*") -DestinationPath $zipPath -CompressionLevel Optimal
+
+$hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
+Write-Host "Portable Windows build published: $zipPath"
+Write-Host "SHA-256: $hash"

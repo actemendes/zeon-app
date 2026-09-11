@@ -9,6 +9,8 @@ BUILD_MODE="${BUILD_MODE:-debug}"
 TARGET="${FLUTTER_TARGET:-lib/main.dart}"
 APP_NAME="${APP_NAME:-ZEON.app}"
 APPLE_RELEASE="${APPLE_RELEASE:-app-store}"
+PUBSPEC_VERSION="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | tr -d " '\"")"
+ARTIFACT_VERSION="${PUBSPEC_VERSION//+/-}"
 
 case "${BUILD_MODE}" in
   debug|profile|release) ;;
@@ -50,7 +52,14 @@ fi
 echo "macOS app built:"
 echo "${app_path}"
 
+out_dir="${PROJECT_ROOT}/out/installers/macos"
+published_app="${out_dir}/ZEON-${ARTIFACT_VERSION}-macOS-${BUILD_MODE}.app"
+mkdir -p "${out_dir}"
+rm -rf "${published_app}"
+cp -R "${app_path}" "${published_app}"
+echo "Published: ${published_app}"
+
 if [[ "${OPEN_APP:-0}" == "1" ]]; then
-  echo "Opening ${app_path}..."
-  open "${app_path}"
+  echo "Opening ${published_app}..."
+  open "${published_app}"
 fi

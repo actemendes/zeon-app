@@ -488,10 +488,23 @@ Filename: "{app}\${exeName}"; Parameters: "--recover-system-proxy"; Flags: runhi
     }
 }
 
+function Get-IsolatedWorkspaceRoot {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $repoFullPath = [System.IO.Path]::GetFullPath($RepoRoot)
+    $canonicalProjectsRoot = [System.IO.Path]::GetFullPath("Z:\Zeon-Envelope\Projects")
+    $canonicalPrefix = $canonicalProjectsRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if ($repoFullPath.StartsWith($canonicalPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return [System.IO.Path]::GetFullPath("Z:\Zeon-Envelope\Temp\wz")
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path ([System.IO.Path]::GetTempPath()) "zeon-app-wz"))
+}
+
 function New-IsolatedWorkspace {
     param([Parameter(Mandatory = $true)][string]$RepoRoot)
 
-    $workspaceRoot = "C:\wz"
+    $workspaceRoot = Get-IsolatedWorkspaceRoot -RepoRoot $RepoRoot
     New-Item -ItemType Directory -Force -Path $workspaceRoot | Out-Null
     $workspace = Join-Path $workspaceRoot ("p" + [guid]::NewGuid().ToString("N").Substring(0, 8))
     New-Item -ItemType Directory -Force -Path $workspace | Out-Null
@@ -509,18 +522,36 @@ function New-IsolatedWorkspace {
         "windows\flutter\ephemeral"
     )
 
-    $excludeArgs = @()
+    $robocopyArgs = @($RepoRoot, $workspace, "/MIR", "/R:1", "/W:1", "/NFL", "/NDL", "/NJH", "/NJS", "/NP")
     foreach ($dir in $excludeDirs) {
-        $excludeArgs += '/XD "{0}"' -f (Join-Path $RepoRoot $dir)
+        $robocopyArgs += @("/XD", (Join-Path $RepoRoot $dir))
     }
 
-    $command = 'robocopy "{0}" "{1}" /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NP {2}' -f $RepoRoot, $workspace, ($excludeArgs -join " ")
-    cmd /c $command | Out-Null
-    if ($LASTEXITCODE -gt 7) {
-        throw "Failed to create isolated workspace via robocopy. Exit code: $LASTEXITCODE"
+    & robocopy @robocopyArgs | Out-Null
+    $robocopyExitCode = $LASTEXITCODE
+    if ($robocopyExitCode -gt 7) {
+        throw "Failed to create isolated workspace via robocopy. Exit code: $robocopyExitCode"
     }
 
     return $workspace
+}
+
+function Remove-IsolatedWorkspace {
+    param(
+        [Parameter(Mandatory = $true)][string]$Workspace,
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    $workspaceRoot = Get-IsolatedWorkspaceRoot -RepoRoot $RepoRoot
+    $resolvedWorkspace = [System.IO.Path]::GetFullPath($Workspace)
+    $rootPrefix = $workspaceRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedWorkspace.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove unexpected workspace path: $resolvedWorkspace"
+    }
+    if (Test-Path -LiteralPath $resolvedWorkspace) {
+        Remove-Item -LiteralPath $resolvedWorkspace -Recurse -Force
+        Write-Host "Removed temporary build workspace: $resolvedWorkspace"
+    }
 }
 
 function Set-YamlScalar {
@@ -934,6 +965,7 @@ function Resolve-LatestArtifact {
 
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
+. (Join-Path $scriptDir "build\common.ps1")
 $workingRoot = $repoRoot
 $junctionPath = $null
 $isolatedWorkspace = $null
@@ -1079,22 +1111,12 @@ try {
             }
         }
 
-        $workingOutDir = Join-Path $workingRoot "out\installers\win"
-        $repoOutDir = Join-Path $repoRoot "out\installers\win"
-        New-Item -ItemType Directory -Force -Path $workingOutDir | Out-Null
-        New-Item -ItemType Directory -Force -Path $repoOutDir | Out-Null
-
         if ($targets -contains "exe") {
             $exe = Resolve-LatestArtifact -RootDir (Join-Path $workingRoot "dist") -Extension "exe" -NotOlderThan $startedAt -NamePattern "setup|installer|windows"
             if (-not $exe) {
                 throw "Could not find built Windows setup .exe in dist."
             }
-            $dstExe = Join-Path $workingOutDir "ZEON-Windows-Setup-x64.exe"
-            $repoDstExe = Join-Path $repoOutDir "ZEON-Windows-Setup-x64.exe"
-            Copy-Item -LiteralPath $exe.FullName -Destination $dstExe -Force
-            if (-not [StringComparer]::OrdinalIgnoreCase.Equals([System.IO.Path]::GetFullPath($dstExe), [System.IO.Path]::GetFullPath($repoDstExe))) {
-                Copy-Item -LiteralPath $dstExe -Destination $repoDstExe -Force
-            }
+            Publish-ZeonFile -RepoRoot $repoRoot -Platform "win" -SourcePath $exe.FullName -DestinationName "ZEON-Windows-Setup-x64.exe" | Out-Null
         }
 
         if ($targets -contains "msix") {
@@ -1102,12 +1124,7 @@ try {
             if (-not $msix) {
                 throw "Could not find built .msix in dist."
             }
-            $dstMsix = Join-Path $workingOutDir "ZEON-Windows-Setup-x64.msix"
-            $repoDstMsix = Join-Path $repoOutDir "ZEON-Windows-Setup-x64.msix"
-            Copy-Item -LiteralPath $msix.FullName -Destination $dstMsix -Force
-            if (-not [StringComparer]::OrdinalIgnoreCase.Equals([System.IO.Path]::GetFullPath($dstMsix), [System.IO.Path]::GetFullPath($repoDstMsix))) {
-                Copy-Item -LiteralPath $dstMsix -Destination $repoDstMsix -Force
-            }
+            Publish-ZeonFile -RepoRoot $repoRoot -Platform "win" -SourcePath $msix.FullName -DestinationName "ZEON-Windows-Setup-x64.msix" | Out-Null
         }
     }
     finally {
@@ -1117,7 +1134,7 @@ try {
         Pop-Location
     }
 
-    $finalOut = Join-Path $repoRoot "out\installers\win"
+    $finalOut = Get-ZeonInstallerPlatformDirectory -RepoRoot $repoRoot -Platform "win"
     Write-Host ""
     Write-Host "Windows installer packaging completed successfully."
     if (Test-Path -LiteralPath (Join-Path $finalOut "ZEON-Windows-Setup-x64.exe")) {
@@ -1126,10 +1143,10 @@ try {
     if (Test-Path -LiteralPath (Join-Path $finalOut "ZEON-Windows-Setup-x64.msix")) {
         Write-Host ("MSIX: " + (Join-Path $finalOut "ZEON-Windows-Setup-x64.msix"))
     }
-    if ($isolatedWorkspace) {
-        Write-Host ("Workspace: " + $isolatedWorkspace)
-    }
 }
 finally {
+    if ($isolatedWorkspace) {
+        Remove-IsolatedWorkspace -Workspace $isolatedWorkspace -RepoRoot $repoRoot
+    }
     Pop-Location
 }

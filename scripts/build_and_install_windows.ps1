@@ -5,6 +5,8 @@ param(
 
     [string]$BuildTarget = "lib/main_prod.dart",
 
+    [string]$SentryDsn = "",
+
     [switch]$Launch,
 
     [switch]$SkipSecureStoragePatch,
@@ -12,6 +14,8 @@ param(
     [switch]$SkipCodeGeneration,
 
     [switch]$SkipClean,
+
+    [switch]$Portable,
 
     # Creates an isolated portable UI artifact whose desktop core refuses all
     # VPN start operations. This switch is for startup validation only.
@@ -49,11 +53,19 @@ function Assert-FlutterVersion {
     }
 
     $requiredVersion = $versionLine.Matches[0].Groups[1].Value
-    $versionOutput = & flutter --version --machine 2>$null
-    if (-not $versionOutput) {
+    $previousPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $versionOutput = & flutter --version --machine 2>$null
+        $flutterExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    if ($flutterExitCode -ne 0 -or -not $versionOutput) {
         throw "Flutter is not available in PATH."
     }
-    $actualVersion = ($versionOutput | ConvertFrom-Json).frameworkVersion
+    $actualVersion = (($versionOutput | Out-String) | ConvertFrom-Json).frameworkVersion
     if ($actualVersion -ne $requiredVersion) {
         throw "Flutter version mismatch. Required $requiredVersion, got $actualVersion."
     }
@@ -510,11 +522,14 @@ try {
         Patch-TrayManagerWindowsPlugin -WorkingRoot $workingRoot
 
         $buildArgs = @("build", "windows", "--$BuildMode", "--target", $BuildTarget)
+        if ($SentryDsn) {
+            $buildArgs += @("--dart-define", "sentry_dsn=$SentryDsn")
+        }
+        if ($Portable -or $StartupValidation) {
+            $buildArgs += "--dart-define=portable=true"
+        }
         if ($StartupValidation) {
-            $buildArgs += @(
-                "--dart-define=portable=true",
-                "--dart-define=zeon_windows_startup_validation=true"
-            )
+            $buildArgs += "--dart-define=zeon_windows_startup_validation=true"
             Write-Host "Startup validation guard: enabled (VPN start is blocked)"
         }
         Write-Host "Build target: $BuildTarget"

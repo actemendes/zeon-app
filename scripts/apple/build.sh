@@ -5,7 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/env.sh"
 cd "${PROJECT_ROOT}"
 
-OUT_DIR="${PROJECT_ROOT}/out/apple"
+INSTALLERS_ROOT="${PROJECT_ROOT}/out/installers"
+MACOS_OUT_DIR="${INSTALLERS_ROOT}/macos"
+IOS_OUT_DIR="${INSTALLERS_ROOT}/ios"
 TARGET="${FLUTTER_TARGET:-lib/main.dart}"
 APPLE_RELEASE="${APPLE_RELEASE:-app-store}"
 MACOS_EXPORT_DESTINATION="${MACOS_EXPORT_DESTINATION:-export}"
@@ -110,30 +112,30 @@ build_macos_app() {
   require_file hiddify-core/bin/hiddify-core.dylib
   ensure_generated_sources
   flutter build macos "${BUILD_ARGS[@]}"
-  mkdir -p "${OUT_DIR}"
-  rm -rf "${OUT_DIR}/ZEON.app"
-  cp -R build/macos/Build/Products/Release/ZEON.app "${OUT_DIR}/ZEON.app"
-  codesign --force --deep --sign - "${OUT_DIR}/ZEON.app"
-  codesign --verify --deep --strict --verbose=2 "${OUT_DIR}/ZEON.app"
-  echo "${OUT_DIR}/ZEON.app"
+  mkdir -p "${MACOS_OUT_DIR}"
+  rm -rf "${MACOS_OUT_DIR}/ZEON.app"
+  cp -R build/macos/Build/Products/Release/ZEON.app "${MACOS_OUT_DIR}/ZEON.app"
+  codesign --force --deep --sign - "${MACOS_OUT_DIR}/ZEON.app"
+  codesign --verify --deep --strict --verbose=2 "${MACOS_OUT_DIR}/ZEON.app"
+  echo "${MACOS_OUT_DIR}/ZEON.app"
 }
 
 build_macos_artifacts() {
   build_macos_app
-  rm -f "${OUT_DIR}/ZEON-macOS.dmg" "${OUT_DIR}/ZEON-macOS.pkg"
+  rm -f "${MACOS_OUT_DIR}/ZEON-macOS.dmg" "${MACOS_OUT_DIR}/ZEON-macOS.pkg"
 
   local dmg_root="${PROJECT_ROOT}/.apple-build/dmg"
   rm -rf "${dmg_root}"
   mkdir -p "${dmg_root}"
-  cp -R "${OUT_DIR}/ZEON.app" "${dmg_root}/ZEON.app"
+  cp -R "${MACOS_OUT_DIR}/ZEON.app" "${dmg_root}/ZEON.app"
   ln -s /Applications "${dmg_root}/Applications"
-  hdiutil create -volname ZEON -srcfolder "${dmg_root}" -ov -format UDZO "${OUT_DIR}/ZEON-macOS.dmg"
+  hdiutil create -volname ZEON -srcfolder "${dmg_root}" -ov -format UDZO "${MACOS_OUT_DIR}/ZEON-macOS.dmg"
 
   pkgbuild \
-    --component "${OUT_DIR}/ZEON.app" \
+    --component "${MACOS_OUT_DIR}/ZEON.app" \
     --install-location /Applications \
-    "${OUT_DIR}/ZEON-macOS.pkg"
-  echo "Artifacts: ${OUT_DIR}"
+    "${MACOS_OUT_DIR}/ZEON-macOS.pkg"
+  echo "Artifacts: ${MACOS_OUT_DIR}"
 }
 
 build_macos_app_store() {
@@ -152,9 +154,9 @@ build_macos_app_store() {
 
   flutter build macos "${BUILD_ARGS[@]}" --config-only
 
-  mkdir -p "${OUT_DIR}" "${PROJECT_ROOT}/.apple-build"
+  mkdir -p "${MACOS_OUT_DIR}" "${PROJECT_ROOT}/.apple-build"
   local archive_path="${PROJECT_ROOT}/build/macos/archive/ZEON.xcarchive"
-  local export_path="${OUT_DIR}/ZEON-macOS-app-store"
+  local export_path="${MACOS_OUT_DIR}/ZEON-macOS-app-store"
   local export_options="${PROJECT_ROOT}/.apple-build/macos-exportOptions.plist"
   rm -rf "${archive_path}" "${export_path}"
   cp macos/exportOptions.plist "${export_options}"
@@ -190,10 +192,10 @@ build_ios_unsigned() {
   require_file ios/Frameworks/HiddifyCore.xcframework
   ensure_generated_sources
   flutter build ios "${BUILD_ARGS[@]}" --no-codesign
-  mkdir -p "${OUT_DIR}"
-  rm -rf "${OUT_DIR}/ZEON-iOS-unsigned.app"
-  cp -R build/ios/iphoneos/Runner.app "${OUT_DIR}/ZEON-iOS-unsigned.app"
-  echo "${OUT_DIR}/ZEON-iOS-unsigned.app"
+  mkdir -p "${IOS_OUT_DIR}"
+  rm -rf "${IOS_OUT_DIR}/ZEON-iOS-unsigned.app"
+  cp -R build/ios/iphoneos/Runner.app "${IOS_OUT_DIR}/ZEON-iOS-unsigned.app"
+  echo "${IOS_OUT_DIR}/ZEON-iOS-unsigned.app"
 }
 
 build_ios_ipa() {
@@ -206,10 +208,10 @@ build_ios_ipa() {
   fi
   flutter build ipa "${BUILD_ARGS[@]}" \
     --export-options-plist ios/exportOptions.plist
-  mkdir -p "${OUT_DIR}"
-  find build/ios/ipa -maxdepth 1 -name '*.ipa' -exec cp {} "${OUT_DIR}/ZEON-iOS.ipa" \;
-  require_file "${OUT_DIR}/ZEON-iOS.ipa"
-  echo "${OUT_DIR}/ZEON-iOS.ipa"
+  mkdir -p "${IOS_OUT_DIR}"
+  find build/ios/ipa -maxdepth 1 -name '*.ipa' -exec cp {} "${IOS_OUT_DIR}/ZEON-iOS.ipa" \;
+  require_file "${IOS_OUT_DIR}/ZEON-iOS.ipa"
+  echo "${IOS_OUT_DIR}/ZEON-iOS.ipa"
 }
 
 upload_ios_app_store() {
@@ -230,8 +232,8 @@ upload_ios_app_store() {
   local archive_path="${PROJECT_ROOT}/build/ios/archive/Runner.xcarchive"
   require_file "${archive_path}"
 
-  mkdir -p "${OUT_DIR}" "${PROJECT_ROOT}/.apple-build"
-  local export_path="${OUT_DIR}/ZEON-iOS-upload"
+  mkdir -p "${IOS_OUT_DIR}" "${PROJECT_ROOT}/.apple-build"
+  local export_path="${IOS_OUT_DIR}/ZEON-iOS-upload"
   local export_options="${PROJECT_ROOT}/.apple-build/ios-exportOptions-upload.plist"
   rm -rf "${export_path}"
   cp ios/exportOptions.plist "${export_options}"

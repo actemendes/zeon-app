@@ -76,11 +76,19 @@ if [[ ! -d "${app_path}" ]]; then
   exit 1
 fi
 
+artifact_version="${PUBSPEC_VERSION//+/-}"
+out_dir="${PROJECT_ROOT}/out/installers/ios"
+published_app="${out_dir}/ZEON-${artifact_version}-iOS-${IOS_MODE}-device.app"
+mkdir -p "${out_dir}"
+rm -rf "${published_app}"
+cp -R "${app_path}" "${published_app}"
+echo "Published: ${published_app}"
+
 echo "Installing on iPhone: ${DEVICE_ID}"
-xcrun devicectl device install app --device "${DEVICE_ID}" "${app_path}"
+xcrun devicectl device install app --device "${DEVICE_ID}" "${published_app}"
 
 echo "Installed:"
-echo "${app_path}"
+echo "${published_app}"
 
 if [[ "${LAUNCH_APP:-0}" == "1" ]]; then
   echo "Launching ${BUNDLE_ID} on iPhone..."
