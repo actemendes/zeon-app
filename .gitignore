@@ -89,8 +89,12 @@ out/installers/
 /generated_stable*.json
 
 # Local diagnostics and scratch artifacts
+/.codex-deploy-subscription/
 /.codex-artifacts/
 /.codex_tmp/
+/artifacts/
+/.netlify/
+/*.obj
 /out/
 /tmp*
 /screen*.png
