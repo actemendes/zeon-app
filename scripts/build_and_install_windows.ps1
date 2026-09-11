@@ -30,11 +30,34 @@ function Assert-Command {
 }
 
 function Invoke-FlutterPubGet {
-    Write-Host "Running: flutter pub get"
-    & flutter pub get
+    Write-Host "Running: flutter pub get --enforce-lockfile"
+    & flutter pub get --enforce-lockfile
     if ($LASTEXITCODE -ne 0) {
         throw "flutter pub get failed."
     }
+}
+
+function Assert-FlutterVersion {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $pubspecPath = Join-Path $RepoRoot "pubspec.yaml"
+    $versionLine = Get-Content -LiteralPath $pubspecPath |
+        Select-String -Pattern "^\s*flutter:\s*\^?([0-9]+\.[0-9]+\.[0-9]+)\s*$" |
+        Select-Object -First 1
+    if (-not $versionLine) {
+        throw "Failed to detect required Flutter version from pubspec.yaml."
+    }
+
+    $requiredVersion = $versionLine.Matches[0].Groups[1].Value
+    $versionOutput = & flutter --version --machine 2>$null
+    if (-not $versionOutput) {
+        throw "Flutter is not available in PATH."
+    }
+    $actualVersion = ($versionOutput | ConvertFrom-Json).frameworkVersion
+    if ($actualVersion -ne $requiredVersion) {
+        throw "Flutter version mismatch. Required $requiredVersion, got $actualVersion."
+    }
+    Write-Host "Flutter version OK: $actualVersion"
 }
 
 function Invoke-DartCodeGeneration {
@@ -448,6 +471,7 @@ $shouldRunClean = -not $SkipClean
 Push-Location $repoRoot
 try {
     Assert-Command "flutter"
+    Assert-FlutterVersion -RepoRoot $repoRoot
     if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $BuildTarget))) {
         throw "Build target not found: $BuildTarget"
     }

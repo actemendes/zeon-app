@@ -16,12 +16,14 @@ import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/http_client/mobile_api_proxy_route.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/log/model/log_level.dart' as config_log_level;
 import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
 import 'package:zeon/features/per_app_proxy/data/selected_data_provider.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/features/per_app_proxy/model/pkg_flag.dart';
+import 'package:zeon/features/proxy/data/proxy_selection_persistence.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
@@ -30,11 +32,9 @@ import 'package:zeon/singbox/model/warp_account.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/utils/windows_privilege_utils.dart';
-import 'package:zeon/utils/windows_tun_diagnostics.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface.dart';
 import 'package:zeon/zeoncore/core_interface/core_interface_wrapper_stub.dart'
     if (dart.library.io) 'package:zeon/zeoncore/core_interface/core_interface_wrapper.dart';
-import 'package:zeon/zeoncore/core_start_signal_tracker.dart';
 import 'package:zeon/zeoncore/generated/v2/config/route_rule.pb.dart' as route_rule;
 import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
@@ -47,8 +47,6 @@ import 'package:zeon/zeoncore/vpn_diagnostics.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 enum _CoreLifecycleState { stopped, starting, started, stopping }
-
-enum _PreemptiveStopOutcome { stopped, superseded, timedOut }
 
 enum TransportCloseIntent { none, stop, restartReplacement, foregroundClose }
 
@@ -78,7 +76,6 @@ TransportCloseDisposition classifyTransportClose({
       snapshotMatchesOperation &&
       switch (snapshot.stopSource) {
         VpnStopSource.flutter ||
-        VpnStopSource.system ||
         VpnStopSource.notification ||
         VpnStopSource.tile ||
         VpnStopSource.shortcut ||
@@ -123,17 +120,6 @@ enum LocalControlStatusDecision { publishStarted, publishStopped, preserve }
 
 @visibleForTesting
 bool coreLogStreamingEnabledForPlatform({required bool isAndroid}) => !isAndroid;
-
-@visibleForTesting
-bool coreSessionListenersRequired({required bool singleChannel, required bool requiresAuthoritativeStopConfirmation}) {
-  // Desktop uses one process-owned gRPC channel for foreground and background
-  // work. Stop deliberately cancels that channel's listeners before waiting
-  // for terminal evidence. After the endpoint is re-armed, the next Start must
-  // attach a current-generation listener even though the channel is "single";
-  // otherwise a completed native Start can be mistaken for a transport
-  // timeout and leave Home falsely disconnected while the core is live.
-  return !singleChannel || requiresAuthoritativeStopConfirmation;
-}
 
 @visibleForTesting
 bool coreSetupDebugEnabledForPlatform({
@@ -201,18 +187,11 @@ CloseFrontPublicationDecision classifyCloseFrontPublication({
 }
 
 class ZeonCoreService with InfraLogger {
-  ZeonCoreService(
-    this.ref, {
-    CoreInterface? coreInterface,
-    Future<void> Function(VpnSessionSnapshot snapshot)? platformIntentSyncBarrierForTesting,
-    bool? mobilePlatformOverride,
-  }) : core = coreInterface ?? getCoreInterface(),
-       _platformIntentSyncBarrierForTesting = platformIntentSyncBarrierForTesting,
-       _isMobilePlatform = mobilePlatformOverride ?? (PlatformUtils.isIOS || PlatformUtils.isAndroid) {
+  ZeonCoreService(this.ref, {CoreInterface? coreInterface}) : core = coreInterface ?? getCoreInterface() {
     _platformSnapshotSubscription = core.watchSessionSnapshots().listen(
       _queuePlatformSessionSnapshot,
       onError: (Object error, StackTrace stackTrace) {
-        loggy.warning("platform VPN snapshot bridge failed", error, stackTrace);
+        loggy.warning("Android VPN snapshot bridge failed", error, stackTrace);
       },
     );
     ref.onDispose(() {
@@ -245,16 +224,11 @@ class ZeonCoreService with InfraLogger {
   static const _debugUdpProbeTopN = int.fromEnvironment("debug_udp_probe_top_n", defaultValue: 3);
   static const _listenerBackoffBaseMs = 300;
   static const _listenerBackoffMaxMs = 6000;
-  static const _grpcControlTimeout = Duration(seconds: 6);
-  static const _grpcLifecycleTimeout = Duration(seconds: 15);
-  static const _grpcLateStartConfirmationTimeout = Duration(seconds: 30);
 
   bool get _useMockCore => kIsWeb && kDebugMode && _debugSeedProfileEnabled;
 
   // CoreZeonCoreService() {}
   final CoreInterface core;
-  final Future<void> Function(VpnSessionSnapshot snapshot)? _platformIntentSyncBarrierForTesting;
-  final bool _isMobilePlatform;
 
   CoreStatus currentState = const CoreStatus.stopped();
   final statusController = BehaviorSubject<CoreStatus>();
@@ -264,8 +238,8 @@ class ZeonCoreService with InfraLogger {
   final Map<String, int> _listenerReconnectAttempt = {};
   final Map<String, Future<void>> _statusListenerRecoveryByKey = {};
   int _stoppingStatusWatchdogGeneration = 0;
-  Future<Either<String, Unit>>? _setupInFlight;
   ({int generation, Future<Either<String, Unit>> future})? _stopInFlight;
+  ResponseFuture<CoreInfoResponse>? _startupCall;
   late final SessionGenerationGate _sessionGeneration = SessionGenerationGate(
     onStale: (stale, current, source) {
       loggy.warning(
@@ -274,16 +248,13 @@ class ZeonCoreService with InfraLogger {
     },
   );
   final SerialLifecycleQueue _lifecycleQueue = SerialLifecycleQueue();
-  final CoreStartSignalTracker _coreStartSignals = CoreStartSignalTracker();
   late final StreamSubscription<VpnSessionSnapshot> _platformSnapshotSubscription;
   Future<void> _platformSnapshotTail = Future<void>.value();
   VpnSessionSnapshot? _latestPlatformSnapshot;
-  ({int generation, int previousGeneration})? _provisionalVpnPreparation;
   final BehaviorSubject<VpnSessionSnapshot> _authoritativeSnapshotController = BehaviorSubject<VpnSessionSnapshot>();
   _CoreLifecycleState _lifecycleState = _CoreLifecycleState.stopped;
   int _connectedGeneration = 0;
   int _closeFrontOperationSequence = 0;
-  Future<void>? _closeFrontInFlight;
   int _appResumeSequence = 0;
   int _foregroundLifecycleEpoch = 0;
   final Map<TransportCloseIntent, int> _activeTransportTeardownIntents = {};
@@ -467,37 +438,32 @@ class ZeonCoreService with InfraLogger {
       try {
         await _applyPlatformSessionSnapshot(snapshot);
       } catch (error, stackTrace) {
-        loggy.warning("failed to apply platform VPN snapshot", error, stackTrace);
+        loggy.warning("failed to apply Android VPN snapshot", error, stackTrace);
       }
     }();
   }
 
   Future<void> _applyPlatformSessionSnapshot(VpnSessionSnapshot snapshot) async {
-    if (!_acceptPlatformSnapshotGeneration(snapshot, source: "platform_snapshot_bridge")) {
+    if (snapshot.generation < _sessionGeneration.current) {
       loggy.warning(
         vpnDiagnosticEvent(
           "stale_callback_ignored",
           snapshot.generation,
           details:
-              "current_generation=${_sessionGeneration.current} source=platform_snapshot_bridge "
+              "current_generation=${_sessionGeneration.current} source=android_snapshot_bridge "
               "phase=${snapshot.phase.name}",
         ),
       );
       return;
     }
-    final wasProvenConnected = _latestPlatformSnapshot?.provesConnected ?? false;
     _sessionGeneration.advanceTo(snapshot.generation);
+    _latestPlatformSnapshot = snapshot;
+    _publishAuthoritativeSnapshot(snapshot);
 
     // Synchronize explicit platform stops and platform-owned starts before
     // their status reaches ConnectionNotifier. Persistence is best-effort and
     // can never suppress the authoritative state event.
     await _syncRunningIntentFromPlatformSnapshot(snapshot);
-    if (!_isPlatformSnapshotFresh(snapshot, source: "platform_snapshot_post_intent_sync")) {
-      return;
-    }
-
-    _latestPlatformSnapshot = snapshot;
-    _publishAuthoritativeSnapshot(snapshot);
 
     final authoritative = snapshot.toCoreStatus();
     if (snapshot.provesConnected) {
@@ -508,36 +474,10 @@ class ZeonCoreService with InfraLogger {
     currentState = authoritative;
     _syncLifecycleFromCoreStatus(
       authoritative,
-      reason: "Platform snapshot/${snapshot.phase.name}/${snapshot.stopSource.name}",
+      reason: "Android snapshot/${snapshot.phase.name}/${snapshot.stopSource.name}",
     );
     if (!statusController.isClosed) {
       statusController.add(authoritative);
-    }
-    if (snapshot.provesConnected && !wasProvenConnected) {
-      try {
-        if (!core.isSingleChannel()) {
-          if (!_isPlatformSnapshotFresh(snapshot, source: "platform_snapshot_before_log_listener")) {
-            return;
-          }
-          await startListeningLogs("bg", core.bgClient);
-          if (!_isPlatformSnapshotFresh(snapshot, source: "platform_snapshot_after_log_listener")) {
-            return;
-          }
-          await startListeningStatus("bg", core.bgClient, generation: snapshot.generation);
-          if (!_isPlatformSnapshotFresh(snapshot, source: "platform_snapshot_after_status_listener")) {
-            return;
-          }
-        }
-      } catch (error, stackTrace) {
-        loggy.warning("failed to attach background listeners after platform VPN start", error, stackTrace);
-      }
-      // A VPN started from iOS Settings has no Flutter connect completion to
-      // invalidate the proxy/stats providers. Publish the same restart signal
-      // used by an app-initiated successful start.
-      if (!_isPlatformSnapshotFresh(snapshot, source: "platform_snapshot_before_restart_signal")) {
-        return;
-      }
-      ref.read(coreRestartSignalProvider.notifier).restart();
     }
     loggy.info(
       vpnDiagnosticEvent(
@@ -551,102 +491,8 @@ class ZeonCoreService with InfraLogger {
   }
 
   bool _platformConfirmsStopped(int generation) {
-    final snapshot = authoritativeSessionSnapshot;
+    final snapshot = _latestPlatformSnapshot;
     return snapshot != null && snapshot.generation == generation && snapshot.phase == VpnSessionPhase.disconnected;
-  }
-
-  bool _provenPlatformConnectSupersedesStop(int generation, {required String source}) {
-    final snapshot = authoritativeSessionSnapshot;
-    final superseded =
-        snapshot != null &&
-        snapshot.generation == generation &&
-        snapshot.requestedAction == 'connect' &&
-        snapshot.provesConnected;
-    if (!superseded) return false;
-    // A Settings/Control Center Start is a newer user intent than the Stop
-    // whose asynchronous cleanup is still running. Make that ownership
-    // visible before CoreStarted reaches ConnectionNotifier; otherwise its
-    // stale local desired=false fence would reject the proven external Start.
-    unawaited(_persistPlatformRunningIntent(true, source: "stop_superseded/$source"));
-    _connectedGeneration = generation;
-    _transitionLifecycle(_CoreLifecycleState.started, reason: "platform Connect superseded Stop/$source");
-    if (currentState is! CoreStarted) {
-      statusController.add(currentState = const CoreStatus.started());
-    }
-    loggy.info(
-      vpnDiagnosticEvent(
-        "stale_completion_ignored",
-        generation,
-        details: "source=stop/$source reason=proven_same_generation_platform_connect",
-      ),
-    );
-    return true;
-  }
-
-  Future<_PreemptiveStopOutcome> _awaitPreemptivePlatformStop(int generation) async {
-    final deadline = DateTime.now().add(const Duration(seconds: 12));
-    while (DateTime.now().isBefore(deadline)) {
-      if (!_sessionGeneration.isCurrent(generation, source: "preemptive_stop_wait")) {
-        return _PreemptiveStopOutcome.superseded;
-      }
-      if (_provenPlatformConnectSupersedesStop(generation, source: "preemptive_wait")) {
-        return _PreemptiveStopOutcome.superseded;
-      }
-      if (_platformConfirmsStopped(generation)) return _PreemptiveStopOutcome.stopped;
-      try {
-        await core.resyncSessionStatus().timeout(const Duration(milliseconds: 800), onTimeout: () => null);
-        final observed = core.authoritativeSessionSnapshot;
-        if (observed != null) {
-          _recordObservedAuthoritativeSnapshot(observed, source: "preemptive_stop_wait");
-        }
-      } catch (error, stackTrace) {
-        loggy.debug("preemptive stop snapshot poll failed", error, stackTrace);
-      }
-      if (_provenPlatformConnectSupersedesStop(generation, source: "preemptive_resync")) {
-        return _PreemptiveStopOutcome.superseded;
-      }
-      if (_platformConfirmsStopped(generation)) return _PreemptiveStopOutcome.stopped;
-      await Future<void>.delayed(const Duration(milliseconds: 160));
-    }
-    return _PreemptiveStopOutcome.timedOut;
-  }
-
-  bool _snapshotPrecedes(VpnSessionSnapshot candidate, VpnSessionSnapshot authority) {
-    // Sequence/version ordering is scoped to one native runtime. A cached
-    // snapshot from the previous process cannot supersede the first accepted
-    // snapshot of a restarted runtime merely because the epoch differs.
-    if (candidate.runtimeEpoch != authority.runtimeEpoch) return false;
-    if (candidate.generation != authority.generation) {
-      return candidate.generation < authority.generation;
-    }
-    if (candidate.snapshotVersion != authority.snapshotVersion) {
-      return candidate.snapshotVersion < authority.snapshotVersion;
-    }
-    return candidate.sequenceNumber < authority.sequenceNumber;
-  }
-
-  bool _isPlatformSnapshotFresh(VpnSessionSnapshot snapshot, {required String source}) {
-    if (!_sessionGeneration.isCurrent(snapshot.generation, source: source)) return false;
-    final native = core.authoritativeSessionSnapshot;
-    final cached = _latestPlatformSnapshot;
-    final superseding = switch ((native, cached)) {
-      (final VpnSessionSnapshot native, _)
-          when native.runtimeEpoch != snapshot.runtimeEpoch || _snapshotPrecedes(snapshot, native) =>
-        native,
-      (_, final VpnSessionSnapshot cached) when _snapshotPrecedes(snapshot, cached) => cached,
-      _ => null,
-    };
-    if (superseding == null) return true;
-    loggy.warning(
-      vpnDiagnosticEvent(
-        "stale_callback_ignored",
-        snapshot.generation,
-        details:
-            "source=$source sequence=${snapshot.sequenceNumber} version=${snapshot.snapshotVersion} "
-            "current_sequence=${superseding.sequenceNumber} current_version=${superseding.snapshotVersion}",
-      ),
-    );
-    return false;
   }
 
   Future<void> _syncRunningIntentFromPlatformSnapshot(VpnSessionSnapshot snapshot) async {
@@ -657,60 +503,33 @@ class ZeonCoreService with InfraLogger {
         : null;
     if (running == null) return;
     try {
-      await _platformIntentSyncBarrierForTesting?.call(snapshot);
-      if (!_isPlatformSnapshotFresh(snapshot, source: "platform_intent_preference_write")) {
-        return;
-      }
-      await _persistPlatformRunningIntent(
-        running,
-        source: "snapshot/${snapshot.phase.name}",
-      ).timeout(const Duration(seconds: 1));
+      await ref.read(Preferences.startedByUser.notifier).update(running).timeout(const Duration(seconds: 1));
     } catch (error, stackTrace) {
       loggy.warning("failed to persist platform running intent", error, stackTrace);
     }
-  }
-
-  Future<void> _persistPlatformRunningIntent(bool running, {required String source}) {
-    // Avoid turning an otherwise fast native resync into a preference-write
-    // wait on every tap. More importantly, update Riverpod synchronously when
-    // the platform proves a new external intent so status consumers observe
-    // the owner before the status itself.
-    final notifier = ref.read(Preferences.startedByUser.notifier);
-    if (ref.read(Preferences.startedByUser) == running && notifier.latestRequestedValue == running) {
-      return Future<void>.value();
-    }
-    loggy.debug("adopting platform running intent=$running source=$source");
-    return notifier.updateOptimistically(running);
   }
 
   Future<CoreStatus?> resyncFromPlatform(String source, {bool publish = false}) async {
     var authoritative = await core.resyncSessionStatus();
     final snapshot = core.authoritativeSessionSnapshot;
     if (snapshot != null) {
-      if (!_acceptPlatformSnapshotGeneration(snapshot, source: "platform_resync/$source")) {
-        loggy.warning(
-          vpnDiagnosticEvent(
-            "stale_callback_ignored",
-            snapshot.generation,
-            details:
-                "current_generation=${_sessionGeneration.current} source=platform_resync/$source "
-                "phase=${snapshot.phase.name}",
-          ),
-        );
-        return null;
-      }
       _sessionGeneration.advanceTo(snapshot.generation);
-      await _syncRunningIntentFromPlatformSnapshot(snapshot);
-      if (!_isPlatformSnapshotFresh(snapshot, source: "platform_resync_post_intent_sync/$source")) {
-        return null;
-      }
       _latestPlatformSnapshot = snapshot;
       _publishAuthoritativeSnapshot(snapshot);
-      authoritative = snapshot.toCoreStatus();
+      await _syncRunningIntentFromPlatformSnapshot(snapshot);
     } else {
       _sessionGeneration.advanceTo(core.authoritativeSessionGeneration);
     }
     if (authoritative == null) return null;
+    if (authoritative is CoreStopped &&
+        _lifecycleState == _CoreLifecycleState.starting &&
+        core.isInitialized() &&
+        core.isSingleChannel()) {
+      // The daemon's initial STOPPED describes the previous session while
+      // configuration/start is still being dispatched. The start operation
+      // owns failure publication; an initial stream sample cannot cancel it.
+      authoritative = const CoreStatus.starting();
+    }
     if (publish) {
       currentState = authoritative;
       _syncLifecycleFromCoreStatus(authoritative, reason: "platform resync/$source");
@@ -726,19 +545,7 @@ class ZeonCoreService with InfraLogger {
     return authoritative;
   }
 
-  VpnSessionSnapshot? get authoritativeSessionSnapshot {
-    final cached = _latestPlatformSnapshot;
-    final native = core.authoritativeSessionSnapshot;
-    final candidate = cached == null
-        ? native
-        : native == null
-        ? cached
-        : cached.runtimeEpoch != native.runtimeEpoch || _snapshotPrecedes(cached, native)
-        ? native
-        : cached;
-    if (candidate == null || candidate.generation < _sessionGeneration.current) return null;
-    return candidate;
-  }
+  VpnSessionSnapshot? get authoritativeSessionSnapshot => _latestPlatformSnapshot ?? core.authoritativeSessionSnapshot;
 
   /// Refreshes the native snapshot cache without publishing [CoreStatus] or
   /// synchronizing persisted running intent. Telemetry classification must be
@@ -746,22 +553,7 @@ class ZeonCoreService with InfraLogger {
   /// authoritative evidence.
   Future<VpnSessionSnapshot?> readAuthoritativeSessionSnapshot() async {
     await core.resyncSessionStatus();
-    final snapshot = core.authoritativeSessionSnapshot;
-    if (snapshot == null || !_acceptPlatformSnapshotGeneration(snapshot, source: "observational_read")) return null;
-    // Keep the long-lived BehaviorSubject at least as fresh as this direct
-    // read. Otherwise a provider can yield the fresh initial snapshot and
-    // immediately replay an older cached value when it subscribes to watch().
-    _recordObservedAuthoritativeSnapshot(snapshot, source: "observational_read");
-    return authoritativeSessionSnapshot;
-  }
-
-  bool _recordObservedAuthoritativeSnapshot(VpnSessionSnapshot snapshot, {required String source}) {
-    if (!_acceptPlatformSnapshotGeneration(snapshot, source: "observed_snapshot/$source")) return false;
-    _sessionGeneration.advanceTo(snapshot.generation);
-    if (!_isPlatformSnapshotFresh(snapshot, source: "observed_snapshot/$source")) return false;
-    _latestPlatformSnapshot = snapshot;
-    _publishAuthoritativeSnapshot(snapshot);
-    return true;
+    return core.authoritativeSessionSnapshot;
   }
 
   Stream<VpnSessionSnapshot> watchAuthoritativeSessionSnapshots() => _authoritativeSnapshotController.stream;
@@ -787,7 +579,6 @@ class ZeonCoreService with InfraLogger {
 
   int beginVpnOperation(String source) {
     final generation = _sessionGeneration.next();
-    _provisionalVpnPreparation = null;
     _connectedGeneration = 0;
     _transitionLifecycle(_CoreLifecycleState.starting, reason: "$source requested");
     statusController.add(currentState = const CoreStatus.starting());
@@ -804,101 +595,6 @@ class ZeonCoreService with InfraLogger {
       loggy.info(operationEvent);
     }
     return generation;
-  }
-
-  /// Reserves ordering for background permission/configuration preparation.
-  /// Preparation is not a user Connect intent and must not publish Starting or
-  /// replace the current stopped UI state.
-  int beginVpnPreparation(String source) {
-    final previousGeneration = _sessionGeneration.current;
-    final generation = _sessionGeneration.next();
-    _provisionalVpnPreparation = (generation: generation, previousGeneration: previousGeneration);
-    loggy.info(
-      vpnDiagnosticEvent(
-        "vpn_session_prepare",
-        generation,
-        details:
-            "operation_generation=$generation current_generation=${_sessionGeneration.current} "
-            "session_state=${_lifecycleState.name} source=$source reason=requested",
-      ),
-    );
-    return generation;
-  }
-
-  bool _releaseProvisionalVpnPreparation(int generation, int replacementGeneration, {required String source}) {
-    final provisional = _provisionalVpnPreparation;
-    if (provisional == null || provisional.generation != generation) return false;
-    final released = _sessionGeneration.replaceCurrentIf(generation, replacementGeneration);
-    if (!released) return false;
-    _provisionalVpnPreparation = null;
-    loggy.info(
-      vpnDiagnosticEvent(
-        "vpn_session_prepare_released",
-        generation,
-        details:
-            "replacement_generation=$replacementGeneration previous_generation=${provisional.previousGeneration} "
-            "source=$source",
-      ),
-    );
-    return true;
-  }
-
-  bool _acceptPlatformSnapshotGeneration(VpnSessionSnapshot snapshot, {required String source}) {
-    if (snapshot.generation >= _sessionGeneration.current) {
-      final provisional = _provisionalVpnPreparation;
-      if (provisional?.generation == snapshot.generation &&
-          (snapshot.provesConnected || snapshot.isTerminalStop || snapshot.phase == VpnSessionPhase.failed)) {
-        _provisionalVpnPreparation = null;
-      }
-      return true;
-    }
-    final provisional = _provisionalVpnPreparation;
-    final platformConnectOwnsSession =
-        snapshot.requestedAction == 'connect' &&
-        (snapshot.isPendingConnectWhileInactive ||
-            snapshot.provesConnected ||
-            switch (snapshot.phase) {
-              VpnSessionPhase.startRequested ||
-              VpnSessionPhase.startingPlatform ||
-              VpnSessionPhase.startingCore ||
-              VpnSessionPhase.waitingTun ||
-              VpnSessionPhase.verifying ||
-              VpnSessionPhase.connected => true,
-              _ => false,
-            });
-    if (provisional == null || provisional.generation != _sessionGeneration.current || !platformConnectOwnsSession) {
-      return false;
-    }
-    // Bootstrap preparation is optional and carries no user Start intent. A
-    // live provider that won the resync->prepare TOCTOU must replace that
-    // provisional generation even when it belongs to the previous process.
-    return _releaseProvisionalVpnPreparation(
-      provisional.generation,
-      snapshot.generation,
-      source: "platform_connect/$source",
-    );
-  }
-
-  int get currentVpnGeneration => _sessionGeneration.current;
-
-  /// Atomically reserves bootstrap preparation only if no local lifecycle
-  /// intent won while the caller was awaiting native resync/config I/O.
-  int? tryBeginVpnPreparation(String source, {required int expectedGeneration}) {
-    if (_sessionGeneration.current != expectedGeneration ||
-        _lifecycleState != _CoreLifecycleState.stopped ||
-        currentState is! CoreStopped) {
-      loggy.info(
-        vpnDiagnosticEvent(
-          "vpn_session_prepare_skipped",
-          _sessionGeneration.current,
-          details:
-              "expected_generation=$expectedGeneration current_generation=${_sessionGeneration.current} "
-              "session_state=${_lifecycleState.name} source=$source reason=local_intent_won",
-        ),
-      );
-      return null;
-    }
-    return beginVpnPreparation(source);
   }
 
   bool isVpnOperationCurrent(int generation, {String source = "external_operation_guard"}) =>
@@ -939,13 +635,10 @@ class ZeonCoreService with InfraLogger {
     if (!_sessionGeneration.isCurrent(generation, source: "coreInfoListener[$key]")) {
       return currentState;
     }
-    _coreStartSignals.observe(generation, next);
-    var gatedNext = _gateTerminalStatus(next, generation, "coreInfoListener[$key]");
-    // The core may emit STOPPED/ALREADY_STOPPED while an explicit local stop
-    // is already in progress. That is a successful terminal acknowledgement,
-    // not a create-service failure that should replace DISCONNECTED in UI.
-    if (gatedNext is CoreStopped && _lifecycleState == _CoreLifecycleState.stopping) {
-      gatedNext = const CoreStatus.stopped();
+    final gatedNext = _gateTerminalStatus(next, generation, "coreInfoListener[$key]");
+    if (core.isSingleChannel() && gatedNext is CoreStopped && _lifecycleState == _CoreLifecycleState.starting) {
+      loggy.debug("ignore pre-start daemon stopped sample [generation=$generation]");
+      return currentState;
     }
     // A local control listener cannot declare the platform VPN stopped unless
     // the background endpoint or authoritative native session confirms it.
@@ -1077,14 +770,9 @@ class ZeonCoreService with InfraLogger {
       return;
     }
 
-    final effectiveTeardownIntent = teardownIntent != TransportCloseIntent.none
-        ? teardownIntent
-        : (_lifecycleState == _CoreLifecycleState.stopping || _lifecycleState == _CoreLifecycleState.stopped)
-        ? TransportCloseIntent.stop
-        : TransportCloseIntent.none;
-    if (effectiveTeardownIntent != TransportCloseIntent.none) {
+    if (teardownIntent != TransportCloseIntent.none) {
       final disposition = classifyTransportClose(
-        intent: effectiveTeardownIntent,
+        intent: teardownIntent,
         stage: TransportCloseStage.teardown,
         operationGeneration: generation,
         operationCurrent: _sessionGeneration.isCurrent(generation, source: "${key}_teardown_close"),
@@ -1179,7 +867,6 @@ class ZeonCoreService with InfraLogger {
     }
 
     loggy.warning("$reason: background or native session is still active, forcing started", error);
-    _connectedGeneration = _sessionGeneration.current;
     _transitionLifecycle(_CoreLifecycleState.started, reason: reason);
     statusController.add(currentState = const CoreStatus.started());
     if (listenerKey != null && core.isInitialized()) {
@@ -1266,7 +953,7 @@ class ZeonCoreService with InfraLogger {
       if (_useMockCore) {
         return right("{}");
       }
-      final response = await core.fgClient.parse(ParseRequest(content: content, debug: false));
+      final response = await core.foregroundCommandClient.parse(ParseRequest(content: content, debug: false));
       if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
       return right(response.content);
     });
@@ -1300,113 +987,77 @@ class ZeonCoreService with InfraLogger {
   }
 
   TaskEither<String, Unit> setup() {
-    return TaskEither(() {
-      final existing = _setupInFlight;
-      if (existing != null) return existing;
-
-      final operation = _performSetup();
-      _setupInFlight = operation;
-      return operation.whenComplete(() {
-        if (identical(_setupInFlight, operation)) {
-          _setupInFlight = null;
+    return TaskEither(() async {
+      _foregroundLifecycleEpoch++;
+      if (_useMockCore) {
+        if (_lifecycleState != _CoreLifecycleState.starting && _lifecycleState != _CoreLifecycleState.stopping) {
+          currentState = const CoreStatus.stopped();
+          _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock setup");
+          statusController.add(currentState);
         }
-      });
-    });
-  }
-
-  Future<Either<String, Unit>> _performSetup() async {
-    if (_useMockCore) {
-      if (_lifecycleState != _CoreLifecycleState.starting && _lifecycleState != _CoreLifecycleState.stopping) {
-        currentState = const CoreStatus.stopped();
-        _transitionLifecycle(_CoreLifecycleState.stopped, reason: "mock setup");
-        statusController.add(currentState);
+        return right(unit);
       }
-      return right(unit);
-    }
-
-    final closeFrontOperation = _closeFrontInFlight;
-    if (closeFrontOperation != null) {
-      loggy.debug("waiting for foreground close before rebuilding control channel");
-      await closeFrontOperation;
-    }
-
-    // Bootstrap already owns the live foreground core on mobile. Opening a
-    // second hello channel to the single native server can wait indefinitely
-    // behind the existing channel and prevents Connect from reaching TUN setup.
-    // Reuse the proven live channel; a closed/unhealthy channel still falls
-    // through to the normal reconstruction path used on app resume.
-    if (core.isInitialized()) {
       try {
-        if (await core.isActiveFg()) {
-          loggy.debug("foreground core is already initialized; reusing control channel");
-          return right(unit);
-        }
-      } catch (e) {
-        loggy.debug("foreground core reuse probe failed; rebuilding control channel", e);
-      }
-    }
-
-    _foregroundLifecycleEpoch++;
-    try {
-      await _deleteCoreCurrentConfigSnapshot();
-      final directories = ref.read(appDirectoriesProvider).requireValue;
-      // hcore's Android debug bridge re-emits sing-box records through the
-      // same logger that writes data/box.log. A single Smart Active record can
-      // therefore feed itself back indefinitely, grow the file by gigabytes,
-      // and starve Mobile.start before the TUN callback. Android retains
-      // bounded lifecycle/logcat diagnostics, but the affected native bridge
-      // must stay disabled until hcore separates its source and sink.
-      final debug = coreSetupDebugEnabledForPlatform(
-        isAndroid: Platform.isAndroid,
-        userDebugEnabled: ref.read(debugModeNotifierProvider),
-        isDebugBuild: kDebugMode,
-      );
-      final setupResponse = await core.setup(directories, debug, 3);
-
-      if (setupResponse.isNotEmpty) return left(setupResponse);
-
-      await startListeningLogs("fg", core.fgClient);
-      // await startListeningStatus("fg", core.fgClient);
-      final backgroundState = await _probeBackgroundCoreState(attempts: PlatformUtils.isIOS ? 8 : 1);
-      final bgActive = backgroundState == CloseFrontBackgroundState.active;
-      if (bgActive && !core.isSingleChannel()) {
-        await startListeningLogs("bg", core.bgClient);
-      }
-      final lifecycleIntentReserved =
-          _lifecycleState == _CoreLifecycleState.starting || _lifecycleState == _CoreLifecycleState.stopping;
-      var publishSetupStatus = core.isSingleChannel();
-      if (!core.isSingleChannel() && !lifecycleIntentReserved) {
-        final decision = classifyLocalControlStatus(
-          backgroundState: backgroundState,
-          nativeProvesConnected: _nativeSnapshotProvesCurrentConnected(),
-          nativeProvesStopped: _nativeSnapshotProvesCurrentStopped(),
+        await _deleteCoreCurrentConfigSnapshot();
+        final directories = ref.read(appDirectoriesProvider).requireValue;
+        // hcore's Android debug bridge re-emits sing-box records through the
+        // same logger that writes data/box.log. A single Smart Active record can
+        // therefore feed itself back indefinitely, grow the file by gigabytes,
+        // and starve Mobile.start before the TUN callback. Android retains
+        // bounded lifecycle/logcat diagnostics, but the affected native bridge
+        // must stay disabled until hcore separates its source and sink.
+        final debug = coreSetupDebugEnabledForPlatform(
+          isAndroid: Platform.isAndroid,
+          userDebugEnabled: ref.read(debugModeNotifierProvider),
+          isDebugBuild: kDebugMode,
         );
-        switch (decision) {
-          case LocalControlStatusDecision.publishStarted:
-            currentState = const CoreStatus.started();
-            _transitionLifecycle(_CoreLifecycleState.started, reason: "setup background/native state");
-            publishSetupStatus = true;
-          case LocalControlStatusDecision.publishStopped:
-            currentState = const CoreStatus.stopped();
-            _transitionLifecycle(_CoreLifecycleState.stopped, reason: "setup background/native state");
-            publishSetupStatus = true;
-          case LocalControlStatusDecision.preserve:
-            loggy.warning("setup background probe was inconclusive; preserving current VPN status");
+        final setupResponse = await core.setup(directories, debug, 3);
+
+        if (setupResponse.isNotEmpty) return left(setupResponse);
+
+        await startListeningLogs("fg", core.fgClient);
+        // await startListeningStatus("fg", core.fgClient);
+        final backgroundState = await _probeBackgroundCoreState(attempts: PlatformUtils.isIOS ? 8 : 1);
+        final bgActive = backgroundState == CloseFrontBackgroundState.active;
+        if (bgActive && !core.isSingleChannel()) {
+          await startListeningLogs("bg", core.bgClient);
         }
+        final lifecycleIntentReserved =
+            _lifecycleState == _CoreLifecycleState.starting || _lifecycleState == _CoreLifecycleState.stopping;
+        var publishSetupStatus = core.isSingleChannel();
+        if (!core.isSingleChannel() && !lifecycleIntentReserved) {
+          final decision = classifyLocalControlStatus(
+            backgroundState: backgroundState,
+            nativeProvesConnected: _nativeSnapshotProvesCurrentConnected(),
+            nativeProvesStopped: _nativeSnapshotProvesCurrentStopped(),
+          );
+          switch (decision) {
+            case LocalControlStatusDecision.publishStarted:
+              currentState = const CoreStatus.started();
+              _transitionLifecycle(_CoreLifecycleState.started, reason: "setup background/native state");
+              publishSetupStatus = true;
+            case LocalControlStatusDecision.publishStopped:
+              currentState = const CoreStatus.stopped();
+              _transitionLifecycle(_CoreLifecycleState.stopped, reason: "setup background/native state");
+              publishSetupStatus = true;
+            case LocalControlStatusDecision.preserve:
+              loggy.warning("setup background probe was inconclusive; preserving current VPN status");
+          }
+        }
+        if (!lifecycleIntentReserved && publishSetupStatus) {
+          statusController.add(currentState);
+        } else {
+          loggy.debug("setup background probe preserved reserved lifecycle=${_lifecycleState.name}");
+        }
+        if (bgActive) {
+          await startListeningStatus("bg", core.bgClient);
+        }
+        // ref.read(coreRestartSignalProvider.notifier).restart();
+        return right(unit);
+      } catch (e) {
+        return left(e.toString());
       }
-      if (!lifecycleIntentReserved && publishSetupStatus) {
-        statusController.add(currentState);
-      } else {
-        loggy.debug("setup background probe preserved reserved lifecycle=${_lifecycleState.name}");
-      }
-      if (bgActive) {
-        await startListeningStatus("bg", core.bgClient);
-      }
-      // ref.read(coreRestartSignalProvider.notifier).restart();
-      return right(unit);
-    } catch (e) {
-      return left(e.toString());
-    }
+    });
   }
 
   TaskEither<String, Unit> changeOptions(SingboxConfigOption options) {
@@ -1417,6 +1068,11 @@ class ZeonCoreService with InfraLogger {
       loggy.debug("changing options");
       // latestOptions = options;
       final payload = await _buildCoreOptionsPayload(options);
+      final preferences = ref.read(sharedPreferencesProvider).valueOrNull;
+      final selection = preferences == null ? null : ProxySelectionPersistence(preferences).readPending();
+      // Native BuildConfig creates the selector and Auto group from profile
+      // leaves. Apply intent there, after composition and before cache restore.
+      payload['preferred-selector-outbound'] = selection?.groupTag == 'select' ? selection!.outboundTag : '';
       loggy.info("core payload (safe): ${_safeCorePayload(payload)}");
       final request = ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(payload));
       _latestCoreOptionsRequest = request;
@@ -1431,32 +1087,26 @@ class ZeonCoreService with InfraLogger {
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           final client = await _clientForForegroundOperation("change options");
-          final res = await client.ChangeHiddifySettings(
-            request,
-            options: CallOptions(timeout: _grpcControlTimeout),
-          ).timeout(_grpcControlTimeout);
+          final res = await client.ChangeHiddifySettings(request);
           if (res.messageType != MessageType.EMPTY) {
             return left("${res.messageType} ${res.message}");
           }
           try {
-            await core.bgClient
-                .ChangeHiddifySettings(request, options: CallOptions(timeout: _grpcControlTimeout))
-                .timeout(_grpcControlTimeout);
-          } catch (e) {
-            if (_isTransientCoreFailure(e)) {
+            await core.backgroundCommandClient.ChangeHiddifySettings(request);
+          } on GrpcError catch (e) {
+            if (e.code == StatusCode.unavailable || _isTransientGrpcTransportClose(e)) {
               loggy.debug("background core is not started yet! $e");
             } else {
               rethrow;
             }
           }
           return right(unit);
-        } catch (e, st) {
-          if (!_isTransientCoreFailure(e)) {
+        } on GrpcError catch (e, st) {
+          if (!_isTransientGrpcFailure(e)) {
             rethrow;
           }
           lastTransientError = e;
           loggy.warning("change options grpc unavailable [$attempt/$maxAttempts]", e, st);
-          await core.invalidateForegroundControlChannel();
           await setup().run();
           await Future<void>.delayed(const Duration(milliseconds: 200));
         }
@@ -1465,7 +1115,7 @@ class ZeonCoreService with InfraLogger {
       if (core.isInitialized() && !core.isSingleChannel()) {
         try {
           if (await core.isActiveBg()) {
-            return await _applyCoreOptionsToClient(request, core.bgClient, "background");
+            return await _applyCoreOptionsToClient(request, core.backgroundCommandClient, "background");
           }
         } catch (e, st) {
           if (!_isTransientCoreFailure(e)) rethrow;
@@ -1502,7 +1152,7 @@ class ZeonCoreService with InfraLogger {
   Future<Either<String, Unit>> _applyLatestCoreOptionsToBackground(String reason) async {
     final request = _latestCoreOptionsRequest;
     if (request == null || _useMockCore) return right(unit);
-    return _applyCoreOptionsToClient(request, core.bgClient, "background/$reason");
+    return _applyCoreOptionsToClient(request, core.backgroundCommandClient, "background/$reason");
   }
 
   Future<Either<String, Unit>> _applyCoreOptionsToClient(
@@ -1514,7 +1164,7 @@ class ZeonCoreService with InfraLogger {
     Object? lastTransientError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        final res = await client.ChangeHiddifySettings(request, options: CallOptions(timeout: _grpcControlTimeout));
+        final res = await client.ChangeHiddifySettings(request);
         if (res.messageType != MessageType.EMPTY) {
           return left("${res.messageType} ${res.message}");
         }
@@ -1537,7 +1187,7 @@ class ZeonCoreService with InfraLogger {
   Future<CoreClient> _clientForForegroundOperation(String operation) async {
     try {
       if (await core.isActiveFg()) {
-        return core.fgClient;
+        return core.foregroundCommandClient;
       }
     } catch (e) {
       loggy.debug("$operation: failed checking foreground core", e);
@@ -1546,7 +1196,7 @@ class ZeonCoreService with InfraLogger {
     try {
       await setup().run();
       if (await core.isActiveFg()) {
-        return core.fgClient;
+        return core.foregroundCommandClient;
       }
     } catch (e) {
       loggy.debug("$operation: foreground setup retry failed", e);
@@ -1556,14 +1206,14 @@ class ZeonCoreService with InfraLogger {
       try {
         if (await core.isActiveBg()) {
           loggy.warning("$operation: foreground core unavailable, using background core");
-          return core.bgClient;
+          return core.backgroundCommandClient;
         }
       } catch (e) {
         loggy.debug("$operation: failed checking background core", e);
       }
     }
 
-    return core.fgClient;
+    return core.foregroundCommandClient;
   }
 
   Future<bool> _ensureCoreInitializedForStream(String operation) async {
@@ -1582,16 +1232,6 @@ class ZeonCoreService with InfraLogger {
   }) async {
     return await _probeBackgroundCoreState(attempts: attempts, retryDelay: retryDelay) ==
         CloseFrontBackgroundState.active;
-  }
-
-  Future<bool> _waitForConfirmedCoreStart(int generation) async {
-    final deadline = DateTime.now().add(_grpcLateStartConfirmationTimeout);
-    while (_sessionGeneration.isCurrent(generation, source: "late_core_start_confirmation") &&
-        DateTime.now().isBefore(deadline)) {
-      if (_coreStartSignals.confirmsStarted(generation)) return true;
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    }
-    return _coreStartSignals.confirmsStarted(generation);
   }
 
   Future<CloseFrontBackgroundState> _probeBackgroundCoreState({
@@ -1632,6 +1272,7 @@ class ZeonCoreService with InfraLogger {
   }
 
   Future<VpnSessionSnapshot?> _refreshStartupSnapshot(int generation, String source) async {
+    if (!PlatformUtils.isAndroid) return authoritativeSessionSnapshot;
     try {
       return await readAuthoritativeSessionSnapshot();
     } catch (error, stackTrace) {
@@ -1683,8 +1324,7 @@ class ZeonCoreService with InfraLogger {
             "background_setup=${backgroundSetupFailure.name} "
             "native_generation=${nativeSnapshot?.generation ?? 0} "
             "native_phase=${nativeSnapshot?.phase.name ?? "none"} "
-            "failure_code=${nativeSnapshot?.failureCode.isNotEmpty == true ? nativeSnapshot!.failureCode : "none"} "
-            "failure_detail=${nativeSnapshot?.failureDetail.isNotEmpty == true ? nativeSnapshot!.failureDetail : "none"}",
+            "failure_code=${nativeSnapshot?.failureCode.isNotEmpty == true ? nativeSnapshot!.failureCode : "none"}",
       ),
     );
   }
@@ -1700,8 +1340,7 @@ class ZeonCoreService with InfraLogger {
         "category=${disposition.name} signal=${signal.name} generation=$generation "
         "background_setup=${backgroundSetupFailure.name} "
         "native_phase=${nativeSnapshot?.phase.name ?? "none"} "
-        "native_failure=${nativeSnapshot?.failureCode.isNotEmpty == true ? nativeSnapshot!.failureCode : "none"} "
-        "native_detail=${nativeSnapshot?.failureDetail.isNotEmpty == true ? nativeSnapshot!.failureDetail : "none"}";
+        "native_failure=${nativeSnapshot?.failureCode.isNotEmpty == true ? nativeSnapshot!.failureCode : "none"}";
     if (disposition == StartupOutcomeDisposition.controlChannelFailure) {
       return ConnectionFailure.backgroundCoreNotAvailable("background control startup failed [$detail]");
     }
@@ -1748,7 +1387,6 @@ class ZeonCoreService with InfraLogger {
   }
 
   bool _isTransientCoreFailure(Object error) {
-    if (error is TimeoutException) return true;
     if (error is GrpcError) return _isTransientGrpcFailure(error);
     final message = error.toString().toLowerCase();
     return message.contains("core unavailable") ||
@@ -1989,9 +1627,7 @@ class ZeonCoreService with InfraLogger {
         }
 
         if (_isMissingWindowsTunPrivilege()) {
-          loggy.warning(
-            jsonEncode(windowsTunFailureDiagnostic(stage: 'elevation_preflight', elevated: isWindowsProcessElevated())),
-          );
+          loggy.warning("VPN mode on Windows requires administrator privileges");
           return left(const ConnectionFailure.missingPrivilege());
         }
 
@@ -2001,7 +1637,6 @@ class ZeonCoreService with InfraLogger {
         }
 
         _clearRuntimeOutboundSnapshot("start requested");
-        _coreStartSignals.reset(generation);
         _transitionLifecycle(_CoreLifecycleState.starting, reason: "start requested");
         statusController.add(currentState = const CoreStatus.starting());
         loggy.debug("starting");
@@ -2071,10 +1706,7 @@ class ZeonCoreService with InfraLogger {
           );
         }
 
-        if (coreSessionListenersRequired(
-          singleChannel: core.isSingleChannel(),
-          requiresAuthoritativeStopConfirmation: core.requiresAuthoritativeStopConfirmation,
-        )) {
+        if (!core.isSingleChannel()) {
           await startListeningLogs("bg", core.bgClient);
           await startListeningStatus("bg", core.bgClient, generation: generation);
         }
@@ -2110,37 +1742,27 @@ class ZeonCoreService with InfraLogger {
 
         try {
           loggy.info(vpnDiagnosticEvent("core_start_requested", generation, details: "owner=flutter"));
-          final res = await core.bgClient.start(
+          if (_isStaleOperation(generation, "before_native_start")) return right(unit);
+          final startupCall = core.backgroundCommandClient.start(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
-            options: CallOptions(timeout: _grpcLifecycleTimeout),
           );
-          if (_isStaleOperation(generation, "core_start_result")) return right(unit);
-          final macOSPacketTunnelAlreadyStarted =
-              PlatformUtils.isMacOS && res.messageType == MessageType.ALREADY_STARTED;
-          if (macOSPacketTunnelAlreadyStarted) {
-            loggy.info(vpnDiagnosticEvent("core_start_adopted", generation, details: "owner=macos_packet_tunnel"));
-          } else {
-            ref.read(coreRestartSignalProvider.notifier).restart();
+          _startupCall = startupCall;
+          final CoreInfoResponse res;
+          try {
+            res = await startupCall;
+          } finally {
+            if (identical(_startupCall, startupCall)) _startupCall = null;
           }
-          if (res.messageType == MessageType.ALREADY_STARTED && !macOSPacketTunnelAlreadyStarted) {
+          if (_isStaleOperation(generation, "core_start_result")) return right(unit);
+          ref.read(coreRestartSignalProvider.notifier).restart();
+          if (res.messageType == MessageType.ALREADY_STARTED) {
             loggy.warning(vpnDiagnosticEvent("core_already_started_conflict", generation));
             await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "duplicate native core");
             statusController.add(currentState = const CoreStatus.stopped());
             return left(const ConnectionFailure.unexpected("core is already started by another session"));
           }
-          if (res.messageType != MessageType.EMPTY && !macOSPacketTunnelAlreadyStarted) {
-            if (PlatformUtils.isWindows && ref.read(ConfigOptions.serviceMode) == ServiceMode.tun) {
-              loggy.warning(
-                jsonEncode(
-                  windowsTunFailureDiagnostic(
-                    stage: 'core_start_response',
-                    elevated: isWindowsProcessElevated(),
-                    error: res.message,
-                  ),
-                ),
-              );
-            }
+          if (res.messageType != MessageType.EMPTY) {
             final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_start_response");
             final disposition = _classifyStartupFailure(
               generation: generation,
@@ -2209,17 +1831,9 @@ class ZeonCoreService with InfraLogger {
             return left(ConnectionFailure.missingVpnPermission(message));
           }
           final transientTransportClose = _isTransientGrpcTransportClose(e);
-          final startDeadlineExceeded = e.code == StatusCode.deadlineExceeded;
-          if ((transientTransportClose || startDeadlineExceeded) &&
+          if (transientTransportClose &&
               _sessionGeneration.isCurrent(generation, source: "core_start_transport_close")) {
-            // The desktop management endpoint exists before the data plane has
-            // finished starting, so an open loopback port cannot prove that a
-            // timed-out Start committed.  Require the current listener to have
-            // observed STARTING -> STARTED.  Existing transport-close recovery
-            // keeps its platform/background probe for non-deadline failures.
-            final listenerConfirmedStart = startDeadlineExceeded && await _waitForConfirmedCoreStart(generation);
-            final backgroundCoreActive =
-                listenerConfirmedStart || (!startDeadlineExceeded && await _isBackgroundCoreReachable(attempts: 3));
+            final backgroundCoreActive = await _isBackgroundCoreReachable(attempts: 3);
             if (backgroundCoreActive) {
               try {
                 await core.markCoreStarted(generation);
@@ -2363,7 +1977,6 @@ class ZeonCoreService with InfraLogger {
         if (_isStaleOperation(generation, "start_terminal_publication")) return right(unit);
         _transitionLifecycle(_CoreLifecycleState.started, reason: "start complete");
         statusController.add(currentState = const CoreStatus.started());
-        ref.read(coreRestartSignalProvider.notifier).restart();
         return right(unit);
       });
     });
@@ -2374,10 +1987,9 @@ class ZeonCoreService with InfraLogger {
     String name,
     bool disableMemoryLimit, {
     required int generation,
-    bool bootstrapOnly = false,
   }) {
     return TaskEither(() async {
-      if (!_isMobilePlatform ||
+      if ((!PlatformUtils.isIOS && !PlatformUtils.isAndroid) ||
           (PlatformUtils.isAndroid && ref.read(ConfigOptions.serviceMode) != ServiceMode.tun) ||
           _useMockCore) {
         return right(unit);
@@ -2393,25 +2005,7 @@ class ZeonCoreService with InfraLogger {
                 "session_state=${_lifecycleState.name} source=flutter reason=prepare_vpn",
           ),
         );
-        try {
-          if (bootstrapOnly) {
-            await core.setPreparationGeneration(generation);
-          } else {
-            // This preparation belongs to an already accepted user Start.
-            // Publish Connect ownership before permission/configuration work;
-            // only background bootstrap uses the weaker `prepare` intent.
-            await core.setSessionGeneration(generation);
-          }
-        } on SessionGenerationRejectedException catch (error) {
-          if (bootstrapOnly &&
-              _releaseProvisionalVpnPreparation(generation, error.accepted, source: "native_deferred")) {
-            // Native observed an active/cold owner after Dart's last resync.
-            // Preparation is optional, so preserve that owner without
-            // publishing a false terminal status or poisoning the Dart gate.
-            return right(unit);
-          }
-          rethrow;
-        }
+        await core.setSessionGeneration(generation);
         final prepared = await core.prepareVpn(path, name, disableMemoryLimit, generation: generation);
         if (_isStaleOperation(generation, "permission_result")) return right(unit);
         loggy.info(
@@ -2430,20 +2024,6 @@ class ZeonCoreService with InfraLogger {
         }
         return right(unit);
       } catch (e) {
-        if (bootstrapOnly && _provisionalVpnPreparation?.generation != generation) {
-          // A deferred native owner already released this optional
-          // preparation. Its authoritative stream/resync owns UI state.
-          return right(unit);
-        }
-        if (bootstrapOnly) {
-          // A timeout cannot tell whether native accepted the optional
-          // preparation. Keep it provisional: a later proven platform Connect
-          // may adopt its older generation, while any local user action will
-          // allocate above the retained high-watermark. Never publish a false
-          // terminal lifecycle event for this background-only work.
-          loggy.warning("bootstrap VPN preparation did not complete", e);
-          return left(e.toString());
-        }
         if (_isStaleOperation(generation, "permission_exception", error: e)) return right(unit);
         _transitionLifecycle(_CoreLifecycleState.stopped, reason: "VPN permission failure");
         statusController.add(currentState = const CoreStatus.stopped(alert: CoreAlert.requestVPNPermission));
@@ -2477,6 +2057,11 @@ class ZeonCoreService with InfraLogger {
       // wait. This makes Stop immediately supersede an older start/restart.
       final generation = _sessionGeneration.next();
       _connectedGeneration = 0;
+      // Cancel the exact in-flight RPC before waiting for the lifecycle queue.
+      // Native startup observes this request cancellation and releases its
+      // resources before the serialized Stop acknowledges terminal state.
+      final startupCall = _startupCall;
+      if (startupCall != null) unawaited(startupCall.cancel());
       final operation = _stopInternal(force: force, generation: generation);
       if (force) return operation;
       _stopInFlight = (generation: generation, future: operation);
@@ -2490,7 +2075,6 @@ class ZeonCoreService with InfraLogger {
 
   Future<Either<String, Unit>> _stopInternal({required bool force, required int generation}) async {
     var operationGeneration = generation;
-    var preemptiveStopAccepted = false;
     var requireNativeStopDespiteLocalState =
         force || _lifecycleState != _CoreLifecycleState.stopped || currentState != const CoreStatus.stopped();
     if (!requireNativeStopDespiteLocalState && !core.supportsPreemptivePlatformStop) {
@@ -2519,7 +2103,7 @@ class ZeonCoreService with InfraLogger {
       return right(unit);
     }
     if (!_useMockCore && core.supportsPreemptivePlatformStop) {
-      _transitionLifecycle(_CoreLifecycleState.stopping, reason: "preemptive mobile stop requested");
+      _transitionLifecycle(_CoreLifecycleState.stopping, reason: "preemptive Android stop requested");
       statusController.add(currentState = const CoreStatus.stopping());
       try {
         final acceptedGeneration = await core
@@ -2533,25 +2117,20 @@ class ZeonCoreService with InfraLogger {
           operationGeneration = acceptedGeneration;
           _sessionGeneration.advanceTo(acceptedGeneration);
         }
-        preemptiveStopAccepted = true;
         requireNativeStopDespiteLocalState = true;
       } catch (error, stackTrace) {
         // The serialized cleanup below retries the idempotent native stop.
-        loggy.warning("preemptive mobile VPN stop request failed; queued cleanup will retry", error, stackTrace);
+        loggy.warning("preemptive Android VPN stop request failed; queued cleanup will retry", error, stackTrace);
       }
     }
     return await _enqueueLifecycle("stop", () async {
       if (_isStaleOperation(operationGeneration, "stop_queue_entry")) return right(unit);
-      if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "queue_entry")) return right(unit);
       try {
         await core.setSessionGeneration(operationGeneration);
       } catch (error) {
         if (_isStaleOperation(operationGeneration, "stop_set_generation", error: error)) return right(unit);
         loggy.error("failed to synchronize native stop generation", error);
         return left("failed to synchronize VPN stop generation (${error.runtimeType})");
-      }
-      if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "post_generation_sync")) {
-        return right(unit);
       }
       if (_useMockCore) {
         _transitionLifecycle(_CoreLifecycleState.stopping, reason: "mock stop");
@@ -2570,21 +2149,6 @@ class ZeonCoreService with InfraLogger {
       }
 
       var platformStopped = _platformConfirmsStopped(operationGeneration);
-      if (preemptiveStopAccepted && !platformStopped) {
-        final outcome = await _awaitPreemptivePlatformStop(operationGeneration);
-        switch (outcome) {
-          case _PreemptiveStopOutcome.stopped:
-            platformStopped = true;
-          case _PreemptiveStopOutcome.superseded:
-            return right(unit);
-          case _PreemptiveStopOutcome.timedOut:
-            loggy.warning("preemptive native VPN stop did not reach a terminal snapshot");
-            return left("native VPN service did not confirm stop");
-        }
-      }
-      if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_stopping_publication")) {
-        return right(unit);
-      }
       if (!platformStopped) {
         _transitionLifecycle(_CoreLifecycleState.stopping, reason: "stop requested");
         statusController.add(currentState = const CoreStatus.stopping());
@@ -2593,27 +2157,13 @@ class ZeonCoreService with InfraLogger {
 
       var errMsg = "";
       GrpcError? grpcStopError;
-      var grpcStopConfirmed = false;
-      final authoritativeStopEvidence = core.requiresAuthoritativeStopConfirmation && !platformStopped
-          ? core.waitForAuthoritativeStop(timeout: const Duration(seconds: 14))
-          : null;
       try {
         await _withinExpectedTransportTeardown(TransportCloseIntent.stop, () async {
-          if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_listener_cleanup")) return;
-          if (!preemptiveStopAccepted) {
-            await _logRuntimeIndicators(operationGeneration, "before_stop");
-          }
-          if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "after_runtime_probe")) return;
+          await _logRuntimeIndicators(operationGeneration, "before_stop");
           await _closeSessionListeners(operationGeneration);
-          if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "after_listener_cleanup")) return;
           platformStopped = _platformConfirmsStopped(operationGeneration);
-          if (!platformStopped && !preemptiveStopAccepted) {
-            if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_grpc_stop")) return;
-            final response = await core.bgClient.stop(
-              Empty(),
-              options: CallOptions(timeout: const Duration(seconds: 3)),
-            );
-            grpcStopConfirmed = CoreStatus.fromCoreInfo(response) is CoreStopped;
+          if (!platformStopped) {
+            await core.backgroundCommandClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
           }
         });
       } on GrpcError catch (e) {
@@ -2640,18 +2190,9 @@ class ZeonCoreService with InfraLogger {
       } catch (e) {
         loggy.error("failed to stop bg core: $e");
       }
-      if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "after_transport_cleanup")) {
-        return right(unit);
-      }
-      var nativeStopped = platformStopped || _platformConfirmsStopped(operationGeneration) || grpcStopConfirmed;
+      var nativeStopped = platformStopped || _platformConfirmsStopped(operationGeneration);
       try {
-        if (!nativeStopped && core.requiresAuthoritativeStopConfirmation) {
-          nativeStopped = await authoritativeStopEvidence!;
-        }
-        if (!nativeStopped && !core.requiresAuthoritativeStopConfirmation) {
-          if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_native_stop")) {
-            return right(unit);
-          }
+        if (!nativeStopped) {
           nativeStopped = await core
               .stop(generation: operationGeneration)
               .timeout(const Duration(seconds: 14), onTimeout: () => false);
@@ -2662,42 +2203,18 @@ class ZeonCoreService with InfraLogger {
           errMsg = "native VPN service stop failed (${error.runtimeType})";
         }
         loggy.error("native VPN service stop failed", error, stackTrace);
-      }
-      if (nativeStopped && core.requiresAuthoritativeStopConfirmation) {
-        nativeStopped = await core
-            .stop(generation: operationGeneration)
-            .timeout(const Duration(seconds: 2), onTimeout: () => false);
-        if (nativeStopped) {
-          final nextSessionReady = await core.prepareNextSessionAfterStop();
-          if (!nextSessionReady) {
-            loggy.warning(
-              vpnDiagnosticEvent("desktop_control_rearm", operationGeneration, details: "outcome=deferred_retry"),
-            );
-          }
-        }
+      } finally {
+        await _deleteCoreCurrentConfigSnapshot();
       }
       if (_isStaleOperation(operationGeneration, "stop_native_result")) return right(unit);
-      if (_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_terminal_publication")) {
-        return right(unit);
-      }
       if (!nativeStopped && grpcStopError != null && errMsg.isEmpty) {
         errMsg = grpcStopError.message ?? "failed to stop background core";
       }
       if (!nativeStopped) {
+        loggy.warning("native core stop timed out; forcing local stopped state");
         if (errMsg.isEmpty) {
           errMsg = "native VPN service did not confirm stop";
         }
-        if (core.requiresAuthoritativeStopConfirmation) {
-          loggy.warning(
-            "native core stop did not produce authoritative terminal evidence; preserving the live session",
-          );
-          await _recoverStuckStoppingStatus("stop terminal confirmation", grpcStopError);
-          return left(errMsg);
-        }
-        loggy.warning("native core stop timed out; forcing local stopped state");
-      }
-      if (!_provenPlatformConnectSupersedesStop(operationGeneration, source: "before_config_cleanup")) {
-        await _deleteCoreCurrentConfigSnapshot();
       }
 
       _transitionLifecycle(_CoreLifecycleState.stopped, reason: "stop complete");
@@ -2752,7 +2269,10 @@ class ZeonCoreService with InfraLogger {
           final oldClosed = await _withinExpectedTransportTeardown(TransportCloseIntent.restartReplacement, () async {
             await _closeSessionListeners(generation);
             try {
-              await core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 3)));
+              await core.backgroundCommandClient.stop(
+                Empty(),
+                options: CallOptions(timeout: const Duration(seconds: 3)),
+              );
             } on GrpcError catch (error) {
               if (!_isTransientGrpcTransportClose(error)) rethrow;
               _recordTransportCloseOutcome(
@@ -2839,23 +2359,26 @@ class ZeonCoreService with InfraLogger {
           }
 
           loggy.info(vpnDiagnosticEvent("core_start_requested", generation, details: "owner=flutter source=$source"));
-          final res = await core.bgClient.start(
+          if (_isStaleOperation(generation, "before_native_restart")) return right(unit);
+          final startupCall = core.backgroundCommandClient.start(
             StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
           );
-          if (_isStaleOperation(generation, "core_restart_start_result")) return right(unit);
-          final macOSPacketTunnelAlreadyStarted =
-              PlatformUtils.isMacOS && res.messageType == MessageType.ALREADY_STARTED;
-          if (macOSPacketTunnelAlreadyStarted) {
-            loggy.info(vpnDiagnosticEvent("core_start_adopted", generation, details: "owner=macos_packet_tunnel"));
+          _startupCall = startupCall;
+          final CoreInfoResponse res;
+          try {
+            res = await startupCall;
+          } finally {
+            if (identical(_startupCall, startupCall)) _startupCall = null;
           }
-          if (res.messageType == MessageType.ALREADY_STARTED && !macOSPacketTunnelAlreadyStarted) {
+          if (_isStaleOperation(generation, "core_restart_start_result")) return right(unit);
+          if (res.messageType == MessageType.ALREADY_STARTED) {
             loggy.warning(vpnDiagnosticEvent("core_already_started_conflict", generation));
             await core.stop(generation: generation);
             _transitionLifecycle(_CoreLifecycleState.stopped, reason: "duplicate native core on restart");
             statusController.add(currentState = const CoreStatus.stopped());
             return left("core is already started by another session");
           }
-          if (res.messageType != MessageType.EMPTY && !macOSPacketTunnelAlreadyStarted) {
+          if (res.messageType != MessageType.EMPTY) {
             final nativeSnapshot = await _refreshStartupSnapshot(generation, "core_restart_response");
             final disposition = _classifyStartupFailure(
               generation: generation,
@@ -3167,7 +2690,7 @@ class ZeonCoreService with InfraLogger {
 
     while (_lifecycleState != _CoreLifecycleState.stopped) {
       try {
-        final snapshot = await core.bgClient
+        final snapshot = await core.backgroundCommandClient
             .outboundsInfo(Empty())
             .map((event) {
               _rememberOutboundGroups(event.items, "outboundsInfo initial");
@@ -3266,7 +2789,7 @@ class ZeonCoreService with InfraLogger {
     loggy.debug("watching stats");
     try {
       try {
-        yield await core.bgClient.getSystemInfo(Empty());
+        yield await core.backgroundCommandClient.getSystemInfo(Empty());
       } catch (e, st) {
         loggy.debug("failed to read initial stats snapshot", e, st);
       }
@@ -3318,7 +2841,7 @@ class ZeonCoreService with InfraLogger {
       }
       loggy.debug("selecting outbound");
       try {
-        final res = await core.bgClient.selectOutbound(
+        final res = await core.backgroundCommandClient.selectOutbound(
           SelectOutboundRequest(groupTag: groupTag, outboundTag: outboundTag),
           options: CallOptions(timeout: const Duration(seconds: 1)),
         );
@@ -3330,6 +2853,27 @@ class ZeonCoreService with InfraLogger {
         return right(unit);
       } catch (e) {
         loggy.error("error selecting outbound: $e");
+        // A lost acknowledgement does not undo the native selector swap. Read
+        // the live group once before rejecting the user's committed choice.
+        // Do not repeat the mutation or infer acceptance from UI/cache state.
+        if (e is GrpcError &&
+            (e.code == StatusCode.deadlineExceeded || e.code == StatusCode.unavailable) &&
+            _sessionGeneration.isCurrent(generation, source: "select_outbound_confirmation_request")) {
+          try {
+            final snapshot = await core.backgroundCommandClient
+                .outboundsInfo(Empty(), options: CallOptions(timeout: const Duration(seconds: 5)))
+                .first;
+            if (!_sessionGeneration.isCurrent(generation, source: "select_outbound_confirmation_result")) {
+              return left("stale VPN session");
+            }
+            if (snapshot.items.any((group) => group.tag == groupTag && group.selected == outboundTag)) {
+              loggy.info("outbound selection confirmed by native snapshot after lost acknowledgement");
+              return right(unit);
+            }
+          } catch (confirmationError) {
+            loggy.warning("outbound selection confirmation unavailable", confirmationError);
+          }
+        }
         rethrow;
       }
     });
@@ -3366,7 +2910,7 @@ class ZeonCoreService with InfraLogger {
       }
       loggy.debug("url test");
       try {
-        final res = await core.bgClient.urlTest(UrlTestRequest(tag: tag));
+        final res = await core.backgroundCommandClient.urlTest(UrlTestRequest(tag: tag));
         if (!_sessionGeneration.isCurrent(generation, source: "url_test_result")) {
           return left("stale VPN session");
         }
@@ -3433,7 +2977,7 @@ class ZeonCoreService with InfraLogger {
   }) {
     return TaskEither(() async {
       loggy.debug("generating warp config");
-      final warpConfig = await core.fgClient.generateWarpConfig(
+      final warpConfig = await core.foregroundCommandClient.generateWarpConfig(
         GenerateWarpConfigRequest(
           licenseKey: licenseKey,
           accountId: previousAccountId,
@@ -3689,7 +3233,7 @@ class ZeonCoreService with InfraLogger {
 
   Future<void> _logRuntimeIndicators(int generation, String source) async {
     try {
-      final info = await core.bgClient.getSystemInfo(Empty()).timeout(const Duration(milliseconds: 800));
+      final info = await core.backgroundCommandClient.getSystemInfo(Empty()).timeout(const Duration(milliseconds: 800));
       loggy.info(
         vpnDiagnosticEvent(
           "runtime_indicators",
@@ -3798,20 +3342,7 @@ class ZeonCoreService with InfraLogger {
     }
   }
 
-  Future<void> closeFront() {
-    final existing = _closeFrontInFlight;
-    if (existing != null) return existing;
-
-    final operation = _performCloseFront();
-    _closeFrontInFlight = operation;
-    return operation.whenComplete(() {
-      if (identical(_closeFrontInFlight, operation)) {
-        _closeFrontInFlight = null;
-      }
-    });
-  }
-
-  Future<void> _performCloseFront() async {
+  Future<void> closeFront() async {
     final operationSequence = ++_closeFrontOperationSequence;
     final capturedGeneration = _sessionGeneration.current;
     final capturedRuntimeEpoch = _currentRuntimeEpoch();

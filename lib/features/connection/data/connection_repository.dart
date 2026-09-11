@@ -5,20 +5,17 @@ import 'package:fpdart/fpdart.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:meta/meta.dart';
 import 'package:zeon/core/model/directories.dart';
-import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/utils/exception_handler.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/profile/data/profile_config_store.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
-import 'package:zeon/features/proxy/data/proxy_selection_persistence.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/features/settings/notifier/warp_option/warp_option_notifier.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/singbox/model/singbox_config_option.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 import 'package:zeon/zeoncore/zeon_core_service.dart';
 
 abstract interface class ConnectionRepository {
@@ -29,25 +26,12 @@ abstract interface class ConnectionRepository {
   Stream<ConnectionStatus> watchConnectionStatus();
   Future<ConnectionStatus?> resyncConnectionStatus(String source);
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit);
-  TaskEither<ConnectionFailure, Unit> disconnect({bool force = false});
+  TaskEither<ConnectionFailure, Unit> disconnect();
   TaskEither<ConnectionFailure, Unit> reconnect(
     ProfileEntity activeProfile,
     bool disableMemoryLimit, {
     String source = "reconnect",
   });
-}
-
-@visibleForTesting
-bool shouldPrepareSystemVpnForSnapshot(VpnSessionSnapshot? snapshot) {
-  // Bootstrap preparation is optional. Unknown native state may belong to a
-  // tunnel that survived a cold Runner relaunch, so it must fail closed.
-  if (snapshot == null) return false;
-  return switch (snapshot.phase) {
-    VpnSessionPhase.idle => true,
-    VpnSessionPhase.disconnected when snapshot.requestedAction != 'connect' => true,
-    VpnSessionPhase.failed => true,
-    _ => false,
-  };
 }
 
 class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements ConnectionRepository {
@@ -71,22 +55,28 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   final ConfigOptionRepository configOptionRepository;
   final ProfileConfigStore profileConfigStore;
   final Map<String, Future<File>> _runtimeConfigRepairByProfile = {};
-  Future<Either<ConnectionFailure, Unit>>? _systemVpnPreparationInFlight;
   DateTime? _lastTunRecoveryAttemptAt;
 
   SingboxConfigOption? _configOptionsSnapshot;
   @override
   SingboxConfigOption? get configOptionsSnapshot => _configOptionsSnapshot;
 
+  bool _initialized = false;
+
   @override
   TaskEither<ConnectionFailure, Unit> setup() {
+    if (_initialized) return TaskEither.of(unit);
     return exceptionHandler(() {
       loggy.debug("setting up singbox");
 
-      // ZeonCoreService owns idempotence and foreground-channel health. A
-      // repository-local permanent latch becomes stale after Android closes or
-      // wedges the foreground gRPC transport during repeated VPN lifecycles.
-      return singbox.setup().mapLeft(UnexpectedConnectionFailure.new).run();
+      return singbox
+          .setup()
+          .map((r) {
+            _initialized = true;
+            return r;
+          })
+          .mapLeft(UnexpectedConnectionFailure.new)
+          .run();
     }, UnexpectedConnectionFailure.new);
   }
 
@@ -115,71 +105,20 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   }
 
   @override
-  TaskEither<ConnectionFailure, Unit> prepareSystemVpn(ProfileEntity activeProfile, bool disableMemoryLimit) {
-    return TaskEither(() {
-      final existing = _systemVpnPreparationInFlight;
-      if (existing != null) return existing;
-
-      final operation = _prepareSystemVpn(activeProfile, disableMemoryLimit);
-      _systemVpnPreparationInFlight = operation;
-      return operation.whenComplete(() {
-        if (identical(_systemVpnPreparationInFlight, operation)) {
-          _systemVpnPreparationInFlight = null;
-        }
-      });
-    });
-  }
-
-  Future<Either<ConnectionFailure, Unit>> _prepareSystemVpn(
-    ProfileEntity activeProfile,
-    bool disableMemoryLimit,
-  ) async {
-    try {
-      if (!await _systemVpnPreparationAllowed("before_config")) return right(unit);
-      final runtimeFile = await _createRuntimeConfigFile(activeProfile);
-      // Creating/repairing the runtime config can take long enough for a user
-      // start (or a system start) to win the race. Check again immediately
-      // before reserving a generation; preparation must never supersede a
-      // running tunnel.
-      final expectedGeneration = singbox.currentVpnGeneration;
-      if (!await _systemVpnPreparationAllowed("before_generation")) return right(unit);
-      final generation = singbox.tryBeginVpnPreparation("prepare_system_vpn", expectedGeneration: expectedGeneration);
-      if (generation == null) return right(unit);
-      return (await singbox
-              .prepareVpnConfiguration(
-                runtimeFile.path,
-                activeProfile.name,
-                disableMemoryLimit,
-                generation: generation,
-                bootstrapOnly: true,
-              )
-              .run())
-          .mapLeft(_vpnPreparationFailure);
-    } catch (err, st) {
-      return left(err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st));
-    }
-  }
-
-  Future<bool> _systemVpnPreparationAllowed(String stage) async {
-    VpnSessionSnapshot? snapshot;
-    try {
-      snapshot = await singbox.resyncSessionSnapshot("prepare_system_vpn_$stage");
-    } catch (error, stackTrace) {
-      // This is best-effort bootstrap work. Unknown native state must not
-      // supersede a live tunnel owned by a previous Runner process.
-      loggy.warning("could not guard iOS system VPN preparation [$stage]", error, stackTrace);
-      return false;
-    }
-    final allowed = shouldPrepareSystemVpnForSnapshot(snapshot);
-    if (!allowed) {
-      loggy.info(
-        "event=system_vpn_prepare_skipped stage=$stage "
-        "generation=${snapshot?.generation ?? 0} phase=${snapshot?.phase.name ?? "none"} "
-        "requested_action=${snapshot?.requestedAction ?? ""}",
-      );
-    }
-    return allowed;
-  }
+  TaskEither<ConnectionFailure, Unit> prepareSystemVpn(ProfileEntity activeProfile, bool disableMemoryLimit) =>
+      TaskEither.tryCatch(() async {
+        final runtimeFile = await _createRuntimeConfigFile(activeProfile);
+        final generation = singbox.beginVpnOperation("prepare_system_vpn");
+        return (await singbox
+                .prepareVpnConfiguration(
+                  runtimeFile.path,
+                  activeProfile.name,
+                  disableMemoryLimit,
+                  generation: generation,
+                )
+                .run())
+            .match((failure) => throw _vpnPreparationFailure(failure), (_) => unit);
+      }, (err, st) => err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st));
 
   @override
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit) =>
@@ -214,8 +153,7 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
       });
 
   @override
-  TaskEither<ConnectionFailure, Unit> disconnect({bool force = false}) =>
-      singbox.stop(force: force).mapLeft(UnexpectedConnectionFailure.new);
+  TaskEither<ConnectionFailure, Unit> disconnect() => singbox.stop().mapLeft(UnexpectedConnectionFailure.new);
 
   @override
   TaskEither<ConnectionFailure, Unit> reconnect(
@@ -345,7 +283,7 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   Future<File> _createRuntimeConfigFile(ProfileEntity activeProfile) async {
     final content = await profileConfigStore.read(activeProfile.id);
     if (_looksLikeGeneratedJsonConfig(content)) {
-      return _createSelectedRuntimeConfigFile(activeProfile.id, content);
+      return profileConfigStore.createRuntimeConnectionFile(activeProfile.id, content: content);
     }
 
     final repair = _runtimeConfigRepairByProfile.putIfAbsent(
@@ -364,40 +302,14 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   Future<File> _repairRuntimeConfig(ProfileEntity activeProfile) async {
     final content = await profileConfigStore.read(activeProfile.id);
     if (_looksLikeGeneratedJsonConfig(content)) {
-      return _createSelectedRuntimeConfigFile(activeProfile.id, content);
+      return profileConfigStore.createRuntimeConnectionFile(activeProfile.id, content: content);
     }
 
     loggy.warning("stored profile config is not generated JSON; trying to regenerate it before core start");
     final regenerated = await _regenerateStoredConfig(activeProfile, content);
     await profileConfigStore.write(activeProfile.id, regenerated);
-    final file = await _createSelectedRuntimeConfigFile(activeProfile.id, regenerated);
+    final file = await profileConfigStore.createRuntimeConnectionFile(activeProfile.id, content: regenerated);
     loggy.info("stored profile config repaired and runtime config refreshed");
-    return file;
-  }
-
-  Future<File> _createSelectedRuntimeConfigFile(String profileId, String content) async {
-    final selectionStore = ProxySelectionPersistence(ref.read(sharedPreferencesProvider).requireValue);
-    final selection = selectionStore.readPending();
-    if (selection == null) {
-      await selectionStore.clearPrepared();
-      return profileConfigStore.createRuntimeConnectionFile(profileId, content: content);
-    }
-
-    final selectedContent = applyProxySelectionToRuntimeConfig(content, selection);
-    if (selectedContent == null) {
-      // A profile update can remove an old server or selector. Do not carry an
-      // invalid choice into native startup forever.
-      await selectionStore.clearPending();
-      await selectionStore.clearPrepared();
-      loggy.warning('staged outbound selection is absent from the active profile; using generated default');
-      return profileConfigStore.createRuntimeConnectionFile(profileId, content: content);
-    }
-
-    final file = await profileConfigStore.createRuntimeConnectionFile(profileId, content: selectedContent);
-    if (!await selectionStore.writePrepared(selection)) {
-      throw const ConnectionFailure.unexpected('failed to persist prepared outbound selection');
-    }
-    loggy.info('staged outbound selection embedded into ephemeral runtime config');
     return file;
   }
 

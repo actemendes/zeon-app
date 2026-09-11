@@ -78,6 +78,9 @@ func New(
 }
 
 func (l *Listener) Start() error {
+	if err := l.ctx.Err(); err != nil {
+		return err
+	}
 	if common.Contains(l.network, N.NetworkTCP) {
 		_, err := l.ListenTCP()
 		if err != nil {
@@ -98,6 +101,9 @@ func (l *Listener) Start() error {
 		}
 	}
 	if l.setSystemProxy {
+		if err := l.ctx.Err(); err != nil {
+			return err
+		}
 		listenPort := M.SocksaddrFromNet(l.tcpListener.Addr()).Port
 		var listenAddrString string
 		listenAddr := l.listenOptions.Listen.Build(netip.IPv4Unspecified())
@@ -109,6 +115,9 @@ func (l *Listener) Start() error {
 		systemProxy, err := settings.NewSystemProxy(l.ctx, M.ParseSocksaddrHostPort(listenAddrString, listenPort), l.systemProxySOCKS)
 		if err != nil {
 			return E.Cause(err, "initialize system proxy")
+		}
+		if err := l.ctx.Err(); err != nil {
+			return err
 		}
 		err = systemProxy.Enable()
 		if err != nil {

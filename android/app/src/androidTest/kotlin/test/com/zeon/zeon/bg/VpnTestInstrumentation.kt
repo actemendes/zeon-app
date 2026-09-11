@@ -185,32 +185,11 @@ class VpnTestInstrumentation : Instrumentation() {
             TestCase(activeSessionTests.javaClass.name, "teardownOrderIsStableAndCloseIsIdempotent") {
                 activeSessionTests.teardownOrderIsStableAndCloseIsIdempotent()
             },
-            TestCase(activeSessionTests.javaClass.name, "dataPlaneRevalidationIsRevisionedAndSingleFlight") {
-                activeSessionTests.dataPlaneRevalidationIsRevisionedAndSingleFlight()
-            },
-            TestCase(activeSessionTests.javaClass.name, "selectedOutboundRevalidationStartsWithoutPublishedInvalidation") {
-                activeSessionTests.selectedOutboundRevalidationStartsWithoutPublishedInvalidation()
-            },
             TestCase(snapshotTests.javaClass.name, "connectedRequiresLocalStartupEvidence") {
                 snapshotTests.connectedRequiresLocalStartupEvidence()
             },
             TestCase(snapshotTests.javaClass.name, "nonConnectedPhaseCannotPassTheGate") {
                 snapshotTests.nonConnectedPhaseCannotPassTheGate()
-            },
-            TestCase(snapshotTests.javaClass.name, "selectedOutboundChangeInvalidatesConnectedProof") {
-                snapshotTests.selectedOutboundChangeInvalidatesConnectedProof()
-            },
-            TestCase(snapshotTests.javaClass.name, "healthySelectedOutboundChangeKeepsConnectedProof") {
-                snapshotTests.healthySelectedOutboundChangeKeepsConnectedProof()
-            },
-            TestCase(snapshotTests.javaClass.name, "failedSelectedOutboundProbeInvalidatesConnectedProof") {
-                snapshotTests.failedSelectedOutboundProbeInvalidatesConnectedProof()
-            },
-            TestCase(snapshotTests.javaClass.name, "supersededSelectedOutboundProbeRetriesNewestLeaf") {
-                snapshotTests.supersededSelectedOutboundProbeRetriesNewestLeaf()
-            },
-            TestCase(snapshotTests.javaClass.name, "returnedToSameLeafStillRetriesNewestSelectorRevision") {
-                snapshotTests.returnedToSameLeafStillRetriesNewestSelectorRevision()
             },
             TestCase(snapshotTests.javaClass.name, "commandEndpointReadinessCannotRegressAnOpenedTun") {
                 snapshotTests.commandEndpointReadinessCannotRegressAnOpenedTun()
@@ -280,23 +259,9 @@ class VpnTestInstrumentation : Instrumentation() {
             "duplicatePermissionCallbackCompletesOnlyOnce" to permissionTests::duplicatePermissionCallbackCompletesOnlyOnce,
             "stalePermissionResultCannotCompleteNewGeneration" to permissionTests::stalePermissionResultCannotCompleteNewGeneration,
             "commandEndpointWithoutTunCannotPublishStarted" to permissionTests::commandEndpointWithoutTunCannotPublishStarted,
+            "proxyRequiresCoreAndCurrentSessionWithoutTun" to permissionTests::proxyRequiresCoreAndCurrentSessionWithoutTun,
             "tunWithoutMobileStartCannotPublishStarted" to permissionTests::tunWithoutMobileStartCannotPublishStarted,
             "oldGenerationCoreSuccessCannotPublishStarted" to permissionTests::oldGenerationCoreSuccessCannotPublishStarted,
-            "missingDataPlaneProofCannotPublishStarted" to permissionTests::missingDataPlaneProofCannotPublishStarted,
-            "oneRealHttpsTargetProvesDataPlane" to permissionTests::oneRealHttpsTargetProvesDataPlane,
-            "noRealHttpsTargetCannotProveDataPlane" to permissionTests::noRealHttpsTargetCannotProveDataPlane,
-            "stableTransientVpnDnsFailureGetsBoundedRetry" to
-                permissionTests::stableTransientVpnDnsFailureGetsBoundedRetry,
-            "transientVpnDnsRetryNeverAuthorizesConnectedAndRemainsBounded" to
-                permissionTests::transientVpnDnsRetryNeverAuthorizesConnectedAndRemainsBounded,
-            "stableNonTransientDataPlaneFailureIsNotRetried" to
-                permissionTests::stableNonTransientDataPlaneFailureIsNotRetried,
-            "changedAutoselectLeafStillRequiresFreshProof" to
-                permissionTests::changedAutoselectLeafStillRequiresFreshProof,
-            "pendingOutboundSelectionAcceptsOnlyBoundedValidTags" to
-                permissionTests::pendingOutboundSelectionAcceptsOnlyBoundedValidTags,
-            "pendingSelectionGetsOneFreshProofWithoutAuthorizingConnected" to
-                permissionTests::pendingSelectionGetsOneFreshProofWithoutAuthorizingConnected,
             "reconnectAfterPermissionFailureNeedsNoProcessRestart" to permissionTests::reconnectAfterPermissionFailureNeedsNoProcessRestart,
         ).forEach { (name, body) ->
             tests += TestCase(permissionTests.javaClass.name, name) { body() }

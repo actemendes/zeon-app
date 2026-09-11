@@ -123,7 +123,6 @@ VpnSessionSnapshot _snapshot({
   commandEndpointReady: connected,
   tunnelReady: connected,
   protectSucceeded: connected,
-  dataPlaneReady: connected,
   platformVpnValidated: connected,
   selectedOutboundId: connected ? 'opaque' : '',
   failureCode: failureCode,

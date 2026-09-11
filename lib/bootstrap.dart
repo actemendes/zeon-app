@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -38,26 +39,18 @@ import 'package:zeon/utils/utils.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
 Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async {
+  _writeWindowsStartupMarker("dart_lazy_bootstrap_entered");
   final shouldPreserveNativeSplash = await _shouldShowNativeSplashOnThisRun();
+  _writeWindowsStartupMarker("dart_native_splash_decided");
   if (shouldPreserveNativeSplash) {
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   }
   LoggerController.preInit();
-  FlutterError.onError = (details) {
-    Logger.logFlutterError(details);
-    if (!details.silent && Sentry.isEnabled) {
-      unawaited(Sentry.captureException(details.exception, stackTrace: details.stack));
-    }
-  };
-  WidgetsBinding.instance.platformDispatcher.onError = (error, stackTrace) {
-    final handled = Logger.logPlatformDispatcherError(error, stackTrace);
-    if (Sentry.isEnabled) {
-      unawaited(Sentry.captureException(error, stackTrace: stackTrace));
-    }
-    return handled;
-  };
+  FlutterError.onError = Logger.logFlutterError;
+  WidgetsBinding.instance.platformDispatcher.onError = Logger.logPlatformDispatcherError;
 
   runApp(_BootstrapHost(environment: env, shouldRemoveNativeSplash: shouldPreserveNativeSplash));
+  _writeWindowsStartupMarker("dart_run_app_returned");
 }
 
 class _BootstrapHost extends StatefulWidget {
@@ -77,6 +70,7 @@ class _BootstrapHostState extends State<_BootstrapHost> {
   @override
   void initState() {
     super.initState();
+    _writeWindowsStartupMarker("dart_bootstrap_host_init_state");
     _bootstrapFuture = _bootstrapAfterFirstFrame();
     unawaited(_loadInitialThemeMode());
     if (widget.shouldRemoveNativeSplash) {
@@ -87,8 +81,20 @@ class _BootstrapHostState extends State<_BootstrapHost> {
   }
 
   Future<ProviderContainer> _bootstrapAfterFirstFrame() async {
+    _writeWindowsStartupMarker("dart_waiting_for_end_of_frame");
     await WidgetsBinding.instance.endOfFrame;
-    return _bootstrapContainer(widget.environment, isFirstLaunch: widget.shouldRemoveNativeSplash);
+    _writeWindowsStartupMarker("dart_end_of_frame_completed");
+    try {
+      final container = await _bootstrapContainer(
+        widget.environment,
+        isFirstLaunch: widget.shouldRemoveNativeSplash,
+      );
+      _writeWindowsStartupMarker("dart_bootstrap_completed");
+      return container;
+    } catch (_) {
+      _writeWindowsStartupMarker("dart_bootstrap_failed");
+      rethrow;
+    }
   }
 
   Future<void> _loadInitialThemeMode() async {
@@ -111,6 +117,7 @@ class _BootstrapHostState extends State<_BootstrapHost> {
 
   @override
   Widget build(BuildContext context) {
+    _writeWindowsStartupMarker("dart_bootstrap_host_build");
     return FutureBuilder<ProviderContainer>(
       future: _bootstrapFuture,
       builder: (context, snapshot) {
@@ -129,6 +136,21 @@ class _BootstrapHostState extends State<_BootstrapHost> {
         return _BootstrapSplashApp(themeMode: _initialThemeMode);
       },
     );
+  }
+}
+
+void _writeWindowsStartupMarker(String marker) {
+  if (!PlatformUtils.isWindows) return;
+  final path = Platform.environment["ZEON_STARTUP_DIAGNOSTICS_FILE"]?.trim();
+  if (path == null || path.isEmpty) return;
+  try {
+    File(path).writeAsStringSync(
+      "${DateTime.now().toUtc().toIso8601String()} pid=$pid marker=$marker\n",
+      mode: FileMode.append,
+      flush: true,
+    );
+  } catch (_) {
+    // Startup diagnostics must never affect application startup.
   }
 }
 

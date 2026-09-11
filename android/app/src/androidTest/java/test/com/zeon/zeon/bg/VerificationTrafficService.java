@@ -19,6 +19,11 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
+import java.io.DataInputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -100,7 +105,7 @@ public final class VerificationTrafficService extends Service {
         final Network selectedVpn = vpn;
 
         ExecutorService executor = Executors.newFixedThreadPool(
-                PROBE_TARGETS.size() + USER_TRAFFIC_TARGETS.size()
+                PROBE_TARGETS.size() + USER_TRAFFIC_TARGETS.size() + 2
         );
         for (Map.Entry<String, String> target : PROBE_TARGETS.entrySet()) {
             executor.execute(() -> probeStages(run, target.getKey(), target.getValue(), selectedVpn, evidence));
@@ -108,6 +113,8 @@ public final class VerificationTrafficService extends Service {
         for (Map.Entry<String, String> target : USER_TRAFFIC_TARGETS.entrySet()) {
             executor.execute(() -> probeHttp(run, target.getKey(), target.getValue(), selectedVpn, evidence, "real_http"));
         }
+        executor.execute(() -> probeTelegram(run, "telegram_dc1", "149.154.175.50", selectedVpn, evidence));
+        executor.execute(() -> probeTelegram(run, "telegram_dc2", "149.154.167.51", selectedVpn, evidence));
         executor.shutdown();
         try {
             executor.awaitTermination(35, TimeUnit.SECONDS);
@@ -127,6 +134,43 @@ public final class VerificationTrafficService extends Service {
             }
         }
         return null;
+    }
+
+    // Read-only unauthenticated MTProto handshake. No account, auth key or user
+    // message is accessed. Addresses: official Telegram Android bootstrap list.
+    // Framing: https://core.telegram.org/mtproto/samples-auth_key
+    private static void probeTelegram(String run, String id, String address, Network network, String evidence) {
+        long started = SystemClock.elapsedRealtime();
+        try (Socket socket = network.getSocketFactory().createSocket()) {
+            socket.connect(new InetSocketAddress(address, 443), CONNECT_TIMEOUT_MS);
+            socket.setSoTimeout(READ_TIMEOUT_MS);
+            byte[] nonce = new byte[16];
+            new SecureRandom().nextBytes(nonce);
+            long messageId = ((System.currentTimeMillis() / 1000) << 32)
+                    | ((System.currentTimeMillis() % 1000) << 20) | 4;
+            ByteBuffer packet = ByteBuffer.allocate(42).order(ByteOrder.LITTLE_ENDIAN);
+            packet.put((byte) 0xef).put((byte) 10); // abridged, 40-byte payload
+            packet.putLong(0).putLong(messageId).putInt(20).putInt(0xbe7e8ef1).put(nonce);
+            socket.getOutputStream().write(packet.array());
+            DataInputStream input = new DataInputStream(socket.getInputStream());
+            int words = input.readUnsignedByte();
+            if (words == 0x7f) {
+                words = input.readUnsignedByte() | (input.readUnsignedByte() << 8)
+                        | (input.readUnsignedByte() << 16);
+            }
+            if (words < 10 || words > 1024) throw new java.io.IOException("Unexpected MTProto frame size");
+            byte[] response = new byte[words * 4];
+            input.readFully(response);
+            ByteBuffer body = ByteBuffer.wrap(response).order(ByteOrder.LITTLE_ENDIAN);
+            if (body.getLong(0) != 0 || body.getInt(16) != response.length - 20
+                    || body.getInt(20) != 0x05162463
+                    || !Arrays.equals(nonce, Arrays.copyOfRange(response, 24, 40))) {
+                throw new java.io.IOException("MTProto resPQ or nonce mismatch");
+            }
+            log(run, id, "mtproto_pass", "response=resPQ latency_ms=" + elapsed(started) + " " + evidence);
+        } catch (Exception error) {
+            logFailure(run, id, "mtproto_fail", error, elapsed(started), evidence);
+        }
     }
 
     private static void probeStages(String run, String id, String endpoint, Network network, String evidence) {
@@ -207,6 +251,7 @@ public final class VerificationTrafficService extends Service {
             SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
             try (SSLSocket tls = (SSLSocket) factory.createSocket(transport, host, port, true)) {
                 SSLParameters parameters = tls.getSSLParameters();
+                parameters.setEndpointIdentificationAlgorithm("HTTPS");
                 parameters.setServerNames(java.util.Collections.singletonList(new SNIHostName(host)));
                 tls.setSSLParameters(parameters);
                 tls.startHandshake();
@@ -241,6 +286,10 @@ public final class VerificationTrafficService extends Service {
             connection.setRequestProperty("User-Agent", "ZEON-verification-traffic/1");
             connection.setRequestProperty("Connection", "close");
             int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) {
+                log(run, id, eventPrefix + "_fail", "status=" + status + " " + evidence);
+                return;
+            }
             log(
                     run,
                     id,

@@ -149,7 +149,7 @@ void main() {
 
 class _RecordingDioHttpClient extends DioHttpClient {
   _RecordingDioHttpClient({required this.failDownload, required this.invalidMetadata})
-    : super(timeout: const Duration(seconds: 1), userAgent: 'ZEON-test', debug: false, isWindows: false) {
+    : super(timeout: const Duration(seconds: 1), userAgent: 'ZEON-test', debug: false) {
     lastCreated = this;
   }
 

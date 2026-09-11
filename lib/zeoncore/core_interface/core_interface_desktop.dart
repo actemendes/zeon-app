@@ -23,6 +23,19 @@ typedef StopFunc = Pointer<Utf8> Function();
 typedef StopFuncDart = Pointer<Utf8> Function();
 
 class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
+  CoreInterfaceDesktop({CoreClient? commandClient, ClientChannel Function()? lifecycleChannelFactory})
+    : _commandClient = commandClient,
+      _lifecycleChannelFactory = lifecycleChannelFactory;
+
+  CoreClient? _commandClient;
+  final ClientChannel Function()? _lifecycleChannelFactory;
+
+  @override
+  CoreClient get foregroundCommandClient => _commandClient ?? fgClient;
+
+  @override
+  CoreClient get backgroundCommandClient => _commandClient ?? bgClient;
+
   static const managementHost = "127.0.0.1";
   static const _startupValidationGuard = bool.fromEnvironment("zeon_windows_startup_validation");
   static final ZeonCoreNativeLibrary _box = _gen();
@@ -60,12 +73,8 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
 
   int? _port;
   Future<String>? _setupOperation;
-  Directories? _setupDirectories;
-  bool _setupDebug = false;
-  int _setupMode = SetupMode.GRPC_NORMAL_INSECURE.value;
-  bool _initialized = false;
   int _sessionGeneration = 0;
-  bool _coreStarted = false;
+  int? _confirmedStoppedGeneration;
   static String generateRandomPassword(int length) {
     const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random();
@@ -140,10 +149,16 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
       ),
     );
 
-    _setupDirectories = directories;
-    _setupDebug = debug;
-    _setupMode = mode;
-    _initialized = true;
+    // A stalled telemetry connection must not hold Start/Stop or terminal
+    // confirmation behind its streams. This endpoint still belongs to the
+    // same native process; only its HTTP/2 transport is independent.
+    _commandClient = CoreClient(
+      ClientChannel(
+        managementHost,
+        port: port,
+        options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+      ),
+    );
 
     return "";
   }
@@ -176,7 +191,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   @override
   Future<BackgroundSetupResult> setupBackground(String path, String name, {int generation = 0}) async {
     await setSessionGeneration(generation);
-    _coreStarted = false;
+    _confirmedStoppedGeneration = null;
     if (_startupValidationGuard) {
       loggy.warning("Windows startup validation guard blocked an explicit VPN start");
       return BackgroundSetupResult(
@@ -184,7 +199,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
         status: const CoreStatus.stopped(message: "VPN disabled by startup validation artifact"),
       );
     }
-    if ((!isInitialized() || _port == null) && !await _restoreManagementEndpoint()) {
+    if (!isInitialized() || _port == null) {
       return BackgroundSetupResult(
         generation: generation,
         status: const CoreStatus.stopped(message: "desktop core management endpoint is unavailable"),
@@ -200,6 +215,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
       throw StateError("stale desktop VPN generation");
     }
     _sessionGeneration = generation;
+    _confirmedStoppedGeneration = null;
   }
 
   @override
@@ -207,7 +223,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     if (generation != _sessionGeneration) {
       throw StateError("cannot mark stale desktop VPN generation ready");
     }
-    _coreStarted = true;
+    _confirmedStoppedGeneration = null;
   }
 
   @override
@@ -218,107 +234,67 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   @override
   Future<bool> stop({int generation = 0}) async {
     if (generation > 0) await setSessionGeneration(generation);
-    _coreStarted = false;
-    // The shared lifecycle already stops the service over gRPC. The desktop
-    // management endpoint is process-owned and remains ready for a later
-    // explicit user start.
-    return true;
+    final stopGeneration = _sessionGeneration;
+    // A timed-out Stop RPC is not terminal proof. The idempotent native call
+    // acknowledges only after the cancelled startup and its resources drain.
+    final result = await _withLifecycleClient(
+      (client) => client.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 14))),
+    );
+    if (stopGeneration == _sessionGeneration) {
+      _confirmedStoppedGeneration = result.coreState == CoreStates.STOPPED ? stopGeneration : null;
+    }
+    return result.coreState == CoreStates.STOPPED;
   }
 
-  @override
-  bool get requiresAuthoritativeStopConfirmation => true;
-
-  @override
-  Future<bool> waitForAuthoritativeStop({required Duration timeout}) async {
-    if (!isInitialized()) return false;
-    final terminal = Completer<bool>();
-    StreamSubscription<CoreInfoResponse>? subscription;
+  Future<T> _withLifecycleClient<T>(Future<T> Function(CoreClient) operation) async {
+    final port = _port;
+    final factory = _lifecycleChannelFactory;
+    if (port == null && factory == null) return operation(backgroundCommandClient);
+    // A pooled HTTP/2 connection may fail while native Stop is already draining
+    // resources. Deliver/confirm lifecycle commands on their own connection to
+    // the same process-owned daemon, without inheriting that connection's ACK
+    // failure or terminating another session's telemetry/configuration calls.
+    final channel =
+        factory?.call() ??
+        ClientChannel(
+          managementHost,
+          port: port!,
+          options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+        );
     try {
-      subscription = bgClient
-          .coreInfoListener(Empty(), options: CallOptions(timeout: timeout + const Duration(seconds: 1)))
-          .listen(
-            (event) {
-              if (CoreStatus.fromCoreInfo(event) is CoreStopped && !terminal.isCompleted) {
-                terminal.complete(true);
-              }
-            },
-            onError: (_) {
-              if (!terminal.isCompleted) terminal.complete(false);
-            },
-            onDone: () {
-              if (!terminal.isCompleted) terminal.complete(false);
-            },
-          );
-      return await terminal.future.timeout(timeout, onTimeout: () => false);
-    } catch (error, stackTrace) {
-      loggy.warning('desktop authoritative stop observation failed', error, stackTrace);
-      return false;
+      return await operation(CoreClient(channel));
     } finally {
-      try {
-        await subscription?.cancel();
-      } catch (_) {
-        // A closing gRPC channel is expected during terminal teardown.
-      }
+      // The native acknowledgement is already authoritative. Closing its
+      // HTTP/2 socket must not consume the caller's readiness/stop budget.
+      unawaited(
+        channel.terminate().catchError((Object error, StackTrace stackTrace) {
+          loggy.debug('lifecycle transport shutdown failed', error, stackTrace);
+        }),
+      );
     }
   }
 
   @override
-  Future<bool> prepareNextSessionAfterStop() async {
-    final directories = _setupDirectories;
-    final previousPort = _port;
-    if (directories == null || previousPort == null || !_initialized) return false;
-
-    // A CoreStopped response proves that the data plane reached terminal
-    // state, but the long-lived in-process gRPC runtime can retain completed
-    // service resources that make the next Start wait forever. Close that
-    // runtime out-of-band through FFI, then create a fresh process-owned
-    // loopback endpoint. This is deterministic lifecycle ownership, not a
-    // larger Start timeout.
+  Future<CoreStatus?> resyncSessionStatus() async {
+    if (!isInitialized()) return null;
+    // This is an acknowledged native Stop, not an optimistic local status.
+    // A new generation/start invalidates it before resources can be created.
+    // Requiring another network round trip here can discard the user's retry
+    // despite the previous generation already being fully drained.
+    if (_confirmedStoppedGeneration == _sessionGeneration) return const CoreStatus.stopped();
     try {
-      _box.closeGrpc(_setupMode);
-    } catch (error, stackTrace) {
-      loggy.warning('desktop core management reset failed', error, stackTrace);
-      return false;
-    } finally {
-      _initialized = false;
-      _port = null;
-      _setupOperation = null;
-      _coreStarted = false;
-    }
-
-    await _waitForPortClosed(previousPort);
-    return _restoreManagementEndpoint();
-  }
-
-  Future<bool> _restoreManagementEndpoint() async {
-    final directories = _setupDirectories;
-    if (directories == null) return false;
-    try {
-      final result = await setup(directories, _setupDebug, _setupMode).timeout(const Duration(seconds: 20));
-      return result.isEmpty && isInitialized();
-    } catch (error, stackTrace) {
-      _initialized = false;
-      _port = null;
-      _setupOperation = null;
-      loggy.warning('desktop core management endpoint restore failed', error, stackTrace);
-      return false;
+      // Desktop resource ownership stays in the native core. A local start
+      // acknowledgement cannot describe an in-flight start or a later stop.
+      final state = await _withLifecycleClient(
+        (client) => client.coreInfoListener(Empty(), options: CallOptions(timeout: const Duration(seconds: 2))).first,
+      );
+      return CoreStatus.fromCoreInfo(state);
+    } catch (error) {
+      // An unavailable management endpoint is not proof of either terminal state.
+      loggy.warning('desktop native state unavailable: $error');
+      return null;
     }
   }
-
-  Future<void> _waitForPortClosed(int port) async {
-    for (var attempt = 0; attempt < 40; attempt++) {
-      if (!await isPortOpen(managementHost, port)) return;
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
-    loggy.warning('desktop core management endpoint did not close within the bounded reset window');
-  }
-
-  @override
-  Future<CoreStatus?> resyncSessionStatus() async =>
-      _coreStarted ? const CoreStatus.started() : const CoreStatus.stopped();
-
-  @override
-  bool isInitialized() => _initialized;
 
   @override
   Future<bool> isActiveFg() async {

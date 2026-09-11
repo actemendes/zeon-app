@@ -1,4 +1,3 @@
 MACOS_DEVELOPMENT_TEAM = YOUR_TEAM_ID
 MACOS_BUNDLE_IDENTIFIER = app.zeon.ios
-
-// SERVICE_IDENTIFIER is fixed in AppInfo.xcconfig and is not a signing setting.
+MACOS_SERVICE_IDENTIFIER = com.yourcompany.zeon

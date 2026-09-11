@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zeon/features/connection/data/connection_repository.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
@@ -25,57 +24,41 @@ VpnSessionSnapshot snapshot({
   commandEndpointReady: ready,
   tunnelReady: ready,
   protectSucceeded: ready,
-  dataPlaneReady: ready,
   platformVpnValidated: ready,
   selectedOutboundId: ready ? 'opaque-outbound' : '',
 );
 
 void main() {
-  group('iOS system VPN preparation guard', () {
-    test('fails closed for unknown state and allows preparation after an explicit stop', () {
-      expect(
-        shouldPrepareSystemVpnForSnapshot(null),
-        isFalse,
-        reason: 'unknown bootstrap state may belong to a live tunnel from the previous host process',
-      );
-      expect(shouldPrepareSystemVpnForSnapshot(snapshot(generation: 0, phase: VpnSessionPhase.disconnected)), isTrue);
-      expect(
-        shouldPrepareSystemVpnForSnapshot(
-          snapshot(generation: 10, phase: VpnSessionPhase.disconnected, requestedAction: 'prepare'),
-        ),
-        isTrue,
-      );
-      expect(
-        shouldPrepareSystemVpnForSnapshot(
-          snapshot(generation: 10, phase: VpnSessionPhase.disconnected, requestedAction: 'stop'),
-        ),
-        isTrue,
-      );
-    });
-
-    test('cannot supersede an active or already prepared connection generation', () {
-      for (final phase in [VpnSessionPhase.startingPlatform, VpnSessionPhase.verifying, VpnSessionPhase.connected]) {
-        expect(
-          shouldPrepareSystemVpnForSnapshot(snapshot(generation: 11, phase: phase, requestedAction: 'connect')),
-          isFalse,
-        );
-      }
-      expect(
-        shouldPrepareSystemVpnForSnapshot(
-          snapshot(generation: 11, phase: VpnSessionPhase.disconnected, requestedAction: 'connect'),
-        ),
-        isFalse,
-      );
-      for (final phase in [VpnSessionPhase.startingPlatform, VpnSessionPhase.verifying, VpnSessionPhase.connected]) {
-        expect(
-          shouldPrepareSystemVpnForSnapshot(snapshot(generation: 0, phase: phase, requestedAction: 'connect')),
-          isFalse,
-          reason: 'cold-host adoption must win even before its provider generation is known',
-        );
-      }
-    });
+  test('proxy service confirms its core without claiming VPN ownership', () {
+    final event = <String, Object>{
+      'generation': 1,
+      'runtimeEpoch': 'proxy-process',
+      'sequenceNumber': 1,
+      'snapshotVersion': 1,
+      'phase': 'connected',
+      'coreReady': true,
+      'coreStarted': true,
+      'commandEndpointReady': true,
+      'tunnelRequired': false,
+      'tunnelReady': false,
+      'protectSucceeded': false,
+      'selectedOutboundId': 'confirmed-outbound',
+    };
+    final proxy = VpnSessionSnapshot.fromEvent(event);
+    expect(proxy.provesConnected, isTrue);
+    expect(proxy.toCoreStatus(), isA<CoreStarted>());
+    expect(proxy.tunnelReady, isFalse);
+    expect(proxy.protectSucceeded, isFalse);
+    for (final field in ['coreReady', 'coreStarted', 'commandEndpointReady']) {
+      expect(VpnSessionSnapshot.fromEvent({...event, field: false}).provesConnected, isFalse);
+    }
+    expect(VpnSessionSnapshot.fromEvent({...event, 'selectedOutboundId': ''}).provesConnected, isFalse);
+    for (final value in [true, null, 'invalid']) {
+      expect(VpnSessionSnapshot.fromEvent({...event, 'tunnelRequired': value}).provesConnected, isFalse);
+    }
+    event.remove('tunnelRequired');
+    expect(VpnSessionSnapshot.fromEvent(event).provesConnected, isFalse);
   });
-
   group('VpnSessionSnapshotGate', () {
     test('rejects stale and duplicate events', () {
       final gate = VpnSessionSnapshotGate();
@@ -114,30 +97,6 @@ void main() {
       final gate = VpnSessionSnapshotGate()
         ..accept(snapshot(phase: VpnSessionPhase.connected, ready: true, sequence: 5, version: 5));
       expect(gate.classify(snapshot(sequence: 6, version: 6)), VpnSnapshotDisposition.stale);
-    });
-
-    test('Connected may enter explicit data-plane revalidation', () {
-      final gate = VpnSessionSnapshotGate()
-        ..accept(snapshot(phase: VpnSessionPhase.connected, ready: true, sequence: 5, version: 5));
-      final verifying = snapshot(phase: VpnSessionPhase.verifying, ready: true, sequence: 6, version: 6);
-      final withoutProof = VpnSessionSnapshot(
-        generation: verifying.generation,
-        runtimeEpoch: verifying.runtimeEpoch,
-        sequenceNumber: verifying.sequenceNumber,
-        snapshotVersion: verifying.snapshotVersion,
-        phase: verifying.phase,
-        requestedAction: verifying.requestedAction,
-        coreReady: verifying.coreReady,
-        coreStarted: verifying.coreStarted,
-        commandEndpointReady: verifying.commandEndpointReady,
-        tunnelReady: verifying.tunnelReady,
-        protectSucceeded: verifying.protectSucceeded,
-        dataPlaneReady: false,
-        selectedOutboundId: verifying.selectedOutboundId,
-      );
-
-      expect(gate.accept(withoutProof), isTrue);
-      expect(gate.current?.toCoreStatus(), isA<CoreStarting>());
     });
 
     test('stop progression after Connected is accepted', () {
@@ -206,7 +165,6 @@ void main() {
       'commandEndpointReady': () => completeSnapshot(commandEndpointReady: false),
       'tunnelReady': () => completeSnapshot(tunnelReady: false),
       'protectSucceeded': () => completeSnapshot(protectSucceeded: false),
-      'dataPlaneReady': () => completeSnapshot(dataPlaneReady: false),
       'selectedOutbound': () => completeSnapshot(selectedOutboundId: ''),
     }.entries) {
       test('Connected is blocked without ${missingGate.key}', () {
@@ -244,12 +202,10 @@ void main() {
         'sequenceNumber': 8,
         'snapshotVersion': 9,
         'phase': 'stop_requested',
-        'failureDetail': 'VPN data plane readiness validation failed (zeon_204:dns)',
         'recoverable': 'true',
       });
       expect(parsed.generation, 7);
       expect(parsed.phase, VpnSessionPhase.stopRequested);
-      expect(parsed.failureDetail, 'VPN data plane readiness validation failed (zeon_204:dns)');
       expect(parsed.recoverable, isTrue);
     });
 
@@ -267,18 +223,6 @@ void main() {
       expect(parsed.stopSource, VpnStopSource.notification);
       expect(parsed.isTerminalStop, isTrue);
       expect(parsed.isExternalIntentionalStop, isTrue);
-
-      final systemStop = VpnSessionSnapshot.fromEvent(const {
-        'generation': 12,
-        'runtimeEpoch': 'ios-host-process',
-        'sequenceNumber': 13,
-        'snapshotVersion': 13,
-        'phase': 'disconnected',
-        'requestedAction': 'stop',
-        'stopSource': 'system',
-      });
-      expect(systemStop.stopSource, VpnStopSource.system);
-      expect(systemStop.isExternalIntentionalStop, isTrue);
       expect(
         snapshot(
           phase: VpnSessionPhase.disconnected,
@@ -326,7 +270,6 @@ VpnSessionSnapshot completeSnapshot({
   bool commandEndpointReady = true,
   bool tunnelReady = true,
   bool protectSucceeded = true,
-  bool dataPlaneReady = true,
   bool platformVpnValidated = true,
   String selectedOutboundId = 'opaque-outbound',
 }) => VpnSessionSnapshot(
@@ -340,7 +283,6 @@ VpnSessionSnapshot completeSnapshot({
   commandEndpointReady: commandEndpointReady,
   tunnelReady: tunnelReady,
   protectSucceeded: protectSucceeded,
-  dataPlaneReady: dataPlaneReady,
   platformVpnValidated: platformVpnValidated,
   selectedOutboundId: selectedOutboundId,
 );

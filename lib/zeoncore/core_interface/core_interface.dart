@@ -13,16 +13,6 @@ class PortProbeObservation {
 
 typedef PortProbeObserver = void Function(PortProbeObservation observation);
 
-class SessionGenerationRejectedException implements Exception {
-  const SessionGenerationRejectedException({required this.requested, required this.accepted});
-
-  final int requested;
-  final int accepted;
-
-  @override
-  String toString() => 'VPN session generation rejected: requested=$requested accepted=$accepted';
-}
-
 enum BackgroundSetupFailure {
   none,
   replacementTeardown,
@@ -55,6 +45,11 @@ class CoreInterface {
   late CoreClient fgClient;
   late CoreClient bgClient;
 
+  // Platforms may isolate commands from long-lived telemetry streams while
+  // retaining the same foreground/background native service ownership.
+  CoreClient get foregroundCommandClient => fgClient;
+  CoreClient get backgroundCommandClient => bgClient;
+
   Future<String> setup(Directories directories, bool debug, int mode) async {
     return "";
   }
@@ -75,23 +70,6 @@ class CoreInterface {
     return false;
   }
 
-  /// Whether a successful [stop] result is only local bookkeeping and the
-  /// shared lifecycle must first observe an authoritative terminal core
-  /// status. Desktop keeps its process-owned management endpoint alive, so an
-  /// open port or a local boolean cannot prove that the data plane stopped.
-  bool get requiresAuthoritativeStopConfirmation => false;
-
-  /// Starts a bounded terminal-status observation. Callers intentionally
-  /// create this future before sending Stop so a fast STOPPED transition
-  /// cannot be missed.
-  Future<bool> waitForAuthoritativeStop({required Duration timeout}) async => false;
-
-  /// Re-arms any process-owned control plane after the active data plane has
-  /// reached an authoritative terminal state. Mobile keeps its platform
-  /// service alive and needs no extra work; desktop may replace a completed
-  /// in-process gRPC runtime before the next explicit Start.
-  Future<bool> prepareNextSessionAfterStop() async => true;
-
   /// Closes the previous platform owner without making the replacement
   /// generation terminal. Android Start/restart calls this before installing
   /// the new owner for the same generation.
@@ -102,10 +80,6 @@ class CoreInterface {
   }
 
   Future<void> setSessionGeneration(int generation) async {}
-
-  /// Reserves a generation for permission/configuration preparation without
-  /// declaring that the user has requested a live VPN connection.
-  Future<void> setPreparationGeneration(int generation) => setSessionGeneration(generation);
 
   /// Sends the platform-owned VPN service a lightweight stop request. The
   /// caller performs slower gRPC/listener cleanup separately.
@@ -140,11 +114,6 @@ class CoreInterface {
   Future<bool> isActiveFg() async {
     return true;
   }
-
-  /// Drops a poisoned foreground transport before the owner rebuilds it.
-  /// Mobile keeps the background data plane separate, while desktop recovery
-  /// owns its process/channel lifecycle internally.
-  Future<void> invalidateForegroundControlChannel() async {}
 
   Future<bool> isActiveBg({PortProbeObserver? onPortProbe}) async {
     return true;

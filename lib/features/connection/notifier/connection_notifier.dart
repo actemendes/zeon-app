@@ -18,7 +18,6 @@ import 'package:zeon/features/connection/data/connection_repository.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/diagnostics/data/diagnostics_providers.dart';
-import 'package:zeon/features/diagnostics/data/error_report_controller.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
 import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
 import 'package:zeon/features/mobile/data/mobile_bootstrap_import_service.dart';
@@ -35,9 +34,7 @@ part 'connection_notifier.g.dart';
 class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   static const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enabled");
   static const _disconnectingResyncDelay = Duration(seconds: 2);
-  static const _connectingProofExtension = Duration(seconds: 48);
   static const _platformResyncTimeout = Duration(seconds: 2);
-  static const _mainButtonResyncTimeout = Duration(milliseconds: 800);
   static const _disconnectingResyncAttempts = 3;
   static const _missingProfileRecheckDelay = Duration(milliseconds: 500);
   static const _missingProfileRecheckAttempts = 6;
@@ -71,27 +68,21 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   bool? _desiredRunning;
   int? _timedOutConnectingIntentEpoch;
   int? _timedOutDisconnectingIntentEpoch;
-  int _mainButtonStartAttemptSequence = 0;
-  int? _mainButtonStartInFlightToken;
-  int? _mainButtonStartIntentEpoch;
-  int _mainButtonStopAttemptSequence = 0;
-  int? _mainButtonStopInFlightToken;
-  int? _mainButtonStopIntentEpoch;
+  Object? _mainButtonStartOwner;
+  bool _mainButtonStopInFlight = false;
 
   @override
   Stream<ConnectionStatus> build() async* {
-    // Keep stable handles before the first asynchronous gap. Reading `ref`
-    // from the status loop can race a Riverpod dependency invalidation and
-    // trigger "Cannot use ref functions after the dependency changed".
+    // Capture owners for stream callbacks, preserving the DB-audit fix.
     final connectionRepo = ref.read(connectionRepositoryProvider);
     final startedByUserNotifier = ref.read(Preferences.startedByUser.notifier);
     final snapshotSource = ref.read(vpnSessionSnapshotSourceProvider);
-    // Diagnostics depend on bootstrap metadata that may still be loading.
-    // VPN ownership must never fail merely because reporting is not ready.
-    final ErrorReportController? errorReportController = ref.read(appInfoProvider).hasValue
-        ? ref.read(errorReportControllerProvider)
-        : null;
-
+    final errorReportController = ref.read(appInfoProvider).hasValue ? ref.read(errorReportControllerProvider) : null;
+    var disposed = false;
+    ref.onDispose(() => disposed = true);
+    // watchStatus owns a persistent controller across native generations.
+    // Rebuilding this notifier on a core restart invalidates the ref while
+    // reconnect completion still needs it and interrupts the status stream.
     _appLifecycleListener ??= AppLifecycleListener(onResume: () => unawaited(_resyncFromPlatform("app_resume")));
     ref.onDispose(() {
       _appLifecycleListener?.dispose();
@@ -144,9 +135,8 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       return;
     }
     await for (final event in connectionRepo.watchConnectionStatus()) {
-      final startedByUser = startedByUserNotifier.latestRequestedValue;
-      final nativeSnapshot = snapshotSource.current;
-      if (!_acceptPlatformStatus(event, nativeSnapshot: nativeSnapshot, startedByUser: startedByUser)) {
+      if (disposed) break;
+      if (!_acceptPlatformStatus(event)) {
         loggy.info(
           "event=stale_ui_status_ignored status=${event.runtimeType} "
           "intent=$_connectionIntentEpoch desired_running=$_desiredRunning",
@@ -154,21 +144,9 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         continue;
       }
 
-      if (event is Connected || event is Disconnected) {
-        // The command has reached a terminal platform observation. Do not let
-        // unrelated trailing work in the original Connect Future keep the
-        // button's duplicate-start latch closed for the rest of the process.
-        _releaseMainButtonStart();
-      }
-      if (event is Disconnected) {
-        // Native has reached a terminal Stop even if the original Dart Future
-        // is still cleaning streams/resources. A later session must not be
-        // blocked by that old Future's duplicate-stop latch.
-        _releaseMainButtonStop();
-      }
-
       final previousStatus = _lastObservedConnectionStatus;
       final wasUpBefore = _connectionWasUp;
+      final startedByUser = startedByUserNotifier.raw();
 
       if (event case Connected()) {
         _connectionWasUp = true;
@@ -176,6 +154,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         // A platform-owned notification/tile Stop clears the shared intent
         // before publishing DISCONNECTED, so it is not an unexpected outage.
         final expectedRunning = startedByUser;
+        final nativeSnapshot = snapshotSource.current;
         if (errorReportController != null &&
             _shouldCaptureUnexpectedDisconnect(
               event,
@@ -231,11 +210,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }
   }
 
-  bool _acceptPlatformStatus(
-    ConnectionStatus status, {
-    required VpnSessionSnapshot? nativeSnapshot,
-    required bool startedByUser,
-  }) {
+  bool _acceptPlatformStatus(ConnectionStatus status) {
     // Once Stop is the newest intent, callbacks from an older connect/restart
     // must not revive the UI. Core generations perform the primary filtering;
     // this is the final UI-side guard for already queued stream callbacks.
@@ -245,17 +220,10 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     if (status is Disconnecting && _timedOutDisconnectingIntentEpoch == _connectionIntentEpoch) {
       return false;
     }
-    if (shouldIgnoreTransientStopDuringStart(
-      desiredRunning: _desiredRunning,
-      status: status,
-      nativeSnapshot: nativeSnapshot,
-    )) {
-      return false;
-    }
     if (_desiredRunning == false && (status is Connecting || status is Connected)) {
       // A platform-owned tile/shortcut start is authoritative and updates the
       // shared Riverpod intent before publishing its proven Connected snapshot.
-      if (status is Connected && startedByUser) {
+      if (status is Connected && ref.read(Preferences.startedByUser)) {
         _beginConnectionIntent(running: true);
         return true;
       }
@@ -271,8 +239,6 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   }) async {
     if (_useMockConnectionFlow) return null;
     final requestedAtIntent = intentEpoch ?? _connectionIntentEpoch;
-    final startedByUserNotifier = ref.read(Preferences.startedByUser.notifier);
-    final snapshotSource = ref.read(vpnSessionSnapshotSourceProvider);
     try {
       final authoritative = await _connectionRepo
           .resyncConnectionStatus(source)
@@ -286,13 +252,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
         return authoritative;
       }
       if (shouldApply != null && !shouldApply(authoritative)) return authoritative;
-      if (!_acceptPlatformStatus(
-        authoritative,
-        nativeSnapshot: snapshotSource.current,
-        startedByUser: startedByUserNotifier.latestRequestedValue,
-      )) {
-        return authoritative;
-      }
+      if (!_acceptPlatformStatus(authoritative)) return authoritative;
       final current = state.asData?.value;
       if (current != authoritative) {
         loggy.info("event=vpn_ui_resync source=$source from=${current?.runtimeType} to=${authoritative.runtimeType}");
@@ -313,25 +273,12 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       intentEpoch: intentEpoch,
       shouldApply: (_) => _isCurrentIntent(intentEpoch, running: true) && state.asData?.value is Connecting,
     );
-    if (_isCurrentIntent(intentEpoch, running: true) &&
-        state.asData?.value is Connecting &&
-        nativeSnapshotIndicatesStartupProgress(ref.read(vpnSessionSnapshotSourceProvider).current)) {
-      loggy.info("event=vpn_ui_connecting_proof_extension intent=$intentEpoch");
-      await Future<void>.delayed(_connectingProofExtension);
-      if (!_isCurrentIntent(intentEpoch, running: true) || state.asData?.value is! Connecting) return;
-      await _resyncFromPlatform(
-        "connecting_proof_timeout",
-        intentEpoch: intentEpoch,
-        shouldApply: (_) => _isCurrentIntent(intentEpoch, running: true) && state.asData?.value is Connecting,
-      );
-    }
     if (_isCurrentIntent(intentEpoch, running: true) && state.asData?.value is Connecting) {
       const failure = ConnectionFailure.unexpected(
         "VPN start status could not be confirmed within the recovery deadline",
       );
       loggy.warning("event=vpn_ui_connecting_timeout intent=$intentEpoch");
       _timedOutConnectingIntentEpoch = intentEpoch;
-      _releaseMainButtonStart(intentEpoch: intentEpoch);
       state = AsyncError(failure, StackTrace.current);
     }
   }
@@ -353,7 +300,6 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     );
     loggy.warning("event=vpn_ui_disconnecting_timeout intent=$intentEpoch");
     _timedOutDisconnectingIntentEpoch = intentEpoch;
-    _releaseMainButtonStop(intentEpoch: intentEpoch);
     state = AsyncError(failure, StackTrace.current);
     try {
       unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(failure, StackTrace.current));
@@ -367,32 +313,27 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     _desiredRunning = running;
     _timedOutConnectingIntentEpoch = null;
     _timedOutDisconnectingIntentEpoch = null;
-    _releaseSupersededMainButtonAttempts();
     return _connectionIntentEpoch;
   }
 
-  int _beginStartIntent() {
-    final intentEpoch = _beginConnectionIntent(running: true);
-    state = const AsyncData(Connecting());
-    unawaited(_boundedConnectingResync(intentEpoch));
-    return intentEpoch;
-  }
-
   int _beginStopIntent() {
+    // A cancelled start must not retain the button while its asynchronous
+    // completion drains. Its finally block may only release its own claim.
+    _mainButtonStartOwner = null;
     final intentEpoch = _beginConnectionIntent(running: false);
     state = const AsyncData(Disconnecting());
     unawaited(_boundedDisconnectingResync(intentEpoch));
     return intentEpoch;
   }
 
-  Future<void> _dispatchStopIntent(int intentEpoch, {Future<void> Function()? haptic, bool force = false}) async {
+  Future<void> _dispatchStopIntent(int intentEpoch, {Future<void> Function()? haptic}) async {
     // Native Stop is dispatched before haptics or preference I/O. In
     // particular, it never waits behind a hung automatic reconnect.
-    final stop = _disconnect(intentEpoch, force: force);
+    final stop = _disconnect(intentEpoch);
     if (haptic != null) {
-      unawaited(_runLifecycleSideEffect(haptic, "stop haptic"));
+      unawaited(_runStopSideEffect(haptic, "stop haptic"));
     }
-    final persistStoppedIntent = _runLifecycleSideEffect(
+    final persistStoppedIntent = _runStopSideEffect(
       () => ref.read(Preferences.startedByUser.notifier).update(false),
       "persist stopped intent",
     );
@@ -403,11 +344,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }
   }
 
-  Future<void> _runLifecycleSideEffect(Future<void> Function() action, String name) async {
+  Future<void> _runStopSideEffect(Future<void> Function() action, String name) async {
     try {
       await action().timeout(const Duration(seconds: 1));
     } catch (error, stackTrace) {
-      loggy.warning("$name failed; continuing with the VPN lifecycle command", error, stackTrace);
+      loggy.warning("$name failed; continuing with VPN stop", error, stackTrace);
     }
   }
 
@@ -415,24 +356,13 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     return intentEpoch == _connectionIntentEpoch && _desiredRunning == running;
   }
 
-  bool _isActiveStartIntent(int intentEpoch) {
-    return _isCurrentIntent(intentEpoch, running: true) && _timedOutConnectingIntentEpoch != intentEpoch;
-  }
-
   bool get hasPendingStopIntent => _desiredRunning == false;
-
-  bool? get desiredRunning => _desiredRunning;
-
-  bool get hasRetryableStopError => state.hasError && _timedOutDisconnectingIntentEpoch == _connectionIntentEpoch;
 
   @visibleForTesting
   int get connectionIntentEpochForTesting => _connectionIntentEpoch;
 
   @visibleForTesting
-  bool? get desiredRunningForTesting => desiredRunning;
-
-  @visibleForTesting
-  bool get mainButtonStopInFlightForTesting => _mainButtonStopInFlightToken != null;
+  bool? get desiredRunningForTesting => _desiredRunning;
 
   ConnectionRepository get _connectionRepo => ref.read(connectionRepositoryProvider);
 
@@ -452,7 +382,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   Future<void> mayConnect() async {
     if (state case AsyncData(:final value)) {
       if (value case Disconnected()) {
-        final intentEpoch = _beginStartIntent();
+        final intentEpoch = _beginConnectionIntent(running: true);
         return _connect(intentEpoch);
       }
     }
@@ -464,25 +394,17 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     if (state.asData?.value case Connected() || Connecting()) return true;
     if (state.asData?.value case Disconnecting()) return false;
 
-    final intentEpoch = _beginStartIntent();
+    final intentEpoch = _beginConnectionIntent(running: true);
     final activeProfile = ref.read(activeProfileProvider).valueOrNull;
     if (!_isCurrentIntent(intentEpoch, running: true)) return false;
     if (activeProfile == null) {
       loggy.warning("API VPN recovery skipped: no active profile");
-      if (_isCurrentIntent(intentEpoch, running: true)) {
-        _desiredRunning = false;
-        _releaseMainButtonStart();
-        state = const AsyncData(Disconnected());
-      }
       await ref.read(dialogNotifierProvider.notifier).showNoActiveProfile();
       return false;
     }
 
     _markUserAction('api_recovery_connect');
-    await _runLifecycleSideEffect(
-      () => ref.read(Preferences.startedByUser.notifier).update(true),
-      "persist API recovery start intent",
-    );
+    await ref.read(Preferences.startedByUser.notifier).update(true);
     if (!_isCurrentIntent(intentEpoch, running: true)) return false;
     await _connect(intentEpoch);
     return true;
@@ -492,26 +414,22 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     final haptic = ref.read(hapticServiceProvider.notifier);
     if (state case AsyncError()) {
       if (_desiredRunning == false) {
-        final force = _timedOutDisconnectingIntentEpoch != null;
         final intentEpoch = _beginStopIntent();
         _markUserAction('retry_disconnect_after_error', expectsStop: true);
-        return _dispatchStopIntent(intentEpoch, haptic: haptic.mediumImpact, force: force);
+        return _dispatchStopIntent(intentEpoch, haptic: haptic.mediumImpact);
       }
-      final intentEpoch = _beginStartIntent();
-      unawaited(_runLifecycleSideEffect(haptic.lightImpact, "start haptic"));
+      final intentEpoch = _beginConnectionIntent(running: true);
+      await haptic.lightImpact();
       if (!_isCurrentIntent(intentEpoch, running: true)) return;
       await _connect(intentEpoch);
     } else if (state case AsyncData(:final value)) {
       switch (value) {
         case Disconnected():
-          final intentEpoch = _beginStartIntent();
-          unawaited(_runLifecycleSideEffect(haptic.lightImpact, "start haptic"));
+          final intentEpoch = _beginConnectionIntent(running: true);
+          await haptic.lightImpact();
           if (!_isCurrentIntent(intentEpoch, running: true)) return;
           _markUserAction('manual_connect');
-          await _runLifecycleSideEffect(
-            () => ref.read(Preferences.startedByUser.notifier).update(true),
-            "persist started intent",
-          );
+          await ref.read(Preferences.startedByUser.notifier).update(true);
           if (!_isCurrentIntent(intentEpoch, running: true)) return;
           await _connect(intentEpoch);
         case Connected():
@@ -535,6 +453,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     MainVpnButtonState displayedState, {
     Future<bool> Function()? confirmStart,
   }) async {
+    // Stop is an idempotent user intent. It must reach the owner even while
+    // startup/readiness RPCs are blocked; only a new Start needs a state query.
+    if (displayedState.action == MainVpnButtonAction.stop) {
+      return _stopFromMainButton(displayedState);
+    }
     final authoritative = await _authoritativeMainButtonState('main_button_tap');
     if (authoritative == null) return;
     if (authoritative != displayedState) {
@@ -547,148 +470,66 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
     switch (authoritative.action) {
       case MainVpnButtonAction.start:
-        if (authoritative.blocksStart || _mainButtonStartInFlightToken != null) return;
-        final startAttemptToken = ++_mainButtonStartAttemptSequence;
-        _mainButtonStartInFlightToken = startAttemptToken;
-        _mainButtonStartIntentEpoch = null;
+        if (authoritative.blocksStart || _mainButtonStartOwner != null) return;
+        final startOwner = Object();
+        _mainButtonStartOwner = startOwner;
         try {
-          if (confirmStart != null) {
-            final confirmed = await confirmStart();
-            if (_mainButtonStartInFlightToken != startAttemptToken || !confirmed) return;
-            // Dialogs/profile selection are asynchronous. Re-read the native
-            // owner after them so an external start cannot be followed by a
-            // stale second START from this tap. Normal one-tap starts reuse
-            // the first fence and avoid another potential 800 ms wait.
-            final afterConfirmation = await _authoritativeMainButtonState('main_button_before_start');
-            if (_mainButtonStartInFlightToken != startAttemptToken ||
-                afterConfirmation == null ||
-                afterConfirmation.action != MainVpnButtonAction.start ||
-                afterConfirmation.blocksStart) {
-              return;
-            }
+          if (confirmStart != null && !await confirmStart()) return;
+          if (!identical(_mainButtonStartOwner, startOwner)) return;
+          // Dialogs/profile selection are asynchronous. Re-read Android after
+          // them so a notification/tile start cannot be followed by a stale
+          // second START from this tap.
+          final afterConfirmation = await _authoritativeMainButtonState('main_button_before_start');
+          if (!identical(_mainButtonStartOwner, startOwner) ||
+              afterConfirmation == null ||
+              afterConfirmation.action != MainVpnButtonAction.start ||
+              afterConfirmation.blocksStart) {
+            return;
           }
-          if (_mainButtonStartInFlightToken != startAttemptToken) return;
-          final intentEpoch = _beginStartIntent();
-          if (_mainButtonStartInFlightToken == startAttemptToken) {
-            _mainButtonStartIntentEpoch = intentEpoch;
-          }
-          unawaited(_runLifecycleSideEffect(ref.read(hapticServiceProvider.notifier).lightImpact, "start haptic"));
+          final intentEpoch = _beginConnectionIntent(running: true);
+          await ref.read(hapticServiceProvider.notifier).lightImpact();
           if (!_isCurrentIntent(intentEpoch, running: true)) return;
           _markUserAction('manual_connect');
-          await _runLifecycleSideEffect(
-            () => ref.read(Preferences.startedByUser.notifier).update(true),
-            "persist started intent",
-          );
+          await ref.read(Preferences.startedByUser.notifier).update(true);
           if (!_isCurrentIntent(intentEpoch, running: true)) return;
           await _connect(intentEpoch);
         } finally {
-          // A watchdog or terminal platform event may already have released
-          // this attempt and allowed a retry. The old Future must never unlock
-          // that newer retry when it eventually completes.
-          if (_mainButtonStartInFlightToken == startAttemptToken) {
-            _releaseMainButtonStart();
-          }
+          if (identical(_mainButtonStartOwner, startOwner)) _mainButtonStartOwner = null;
         }
         return;
       case MainVpnButtonAction.stop:
-        if (_mainButtonStopInFlightToken != null) return;
-        final force = state.hasError && _desiredRunning == false && _timedOutDisconnectingIntentEpoch != null;
-        final stopAttemptToken = ++_mainButtonStopAttemptSequence;
-        _mainButtonStopInFlightToken = stopAttemptToken;
-        _mainButtonStopIntentEpoch = null;
-        try {
-          final intentEpoch = _beginStopIntent();
-          if (_mainButtonStopInFlightToken == stopAttemptToken) {
-            _mainButtonStopIntentEpoch = intentEpoch;
-          }
-          _markUserAction(authoritative.isStarting ? 'cancel_pending_connect' : 'manual_disconnect', expectsStop: true);
-          await _dispatchStopIntent(
-            intentEpoch,
-            haptic: ref.read(hapticServiceProvider.notifier).mediumImpact,
-            force: force,
-          );
-        } finally {
-          if (_mainButtonStopInFlightToken == stopAttemptToken) {
-            _releaseMainButtonStop();
-          }
-        }
-        return;
+        return _stopFromMainButton(authoritative);
       case MainVpnButtonAction.none:
         return;
+    }
+  }
+
+  Future<void> _stopFromMainButton(MainVpnButtonState displayedState) async {
+    if (_mainButtonStopInFlight) return;
+    _mainButtonStopInFlight = true;
+    try {
+      final intentEpoch = _beginStopIntent();
+      _markUserAction(displayedState.isStarting ? 'cancel_pending_connect' : 'manual_disconnect', expectsStop: true);
+      await _dispatchStopIntent(intentEpoch, haptic: ref.read(hapticServiceProvider.notifier).mediumImpact);
+    } finally {
+      _mainButtonStopInFlight = false;
     }
   }
 
   Future<MainVpnButtonState?> _authoritativeMainButtonState(String source) async {
     final snapshotSource = ref.read(vpnSessionSnapshotSourceProvider);
     try {
-      final snapshot = await snapshotSource.resync(source).timeout(_mainButtonResyncTimeout);
-      if (snapshot != null) {
-        return _reconcileMainButtonState(snapshot);
-      }
-      if (!shouldFailClosedMainButtonSnapshotResync(isMobile: PlatformUtils.isMobile)) {
-        return _reconcileMainButtonState(snapshotSource.current);
+      final snapshot = await snapshotSource.resync(source).timeout(_platformResyncTimeout);
+      if (snapshot != null) return MainVpnButtonState.fromSnapshot(snapshot);
+      if (!PlatformUtils.isAndroid) {
+        return MainVpnButtonState.fromLegacyConnectionStatus(state.valueOrNull);
       }
       return null;
     } catch (error, stackTrace) {
       loggy.warning('main VPN button snapshot resync failed [$source]', error, stackTrace);
-      // Fail closed on both mobile snapshot platforms. A cached value may be
-      // the opposite of the current Settings/Control Center state after the
-      // Runner was suspended, so it cannot authorize either START or STOP.
-      if (shouldFailClosedMainButtonSnapshotResync(isMobile: PlatformUtils.isMobile)) return null;
-      return _reconcileMainButtonState(snapshotSource.current);
-    }
-  }
-
-  MainVpnButtonState _reconcileMainButtonState(VpnSessionSnapshot? snapshot) {
-    final buttonState = MainVpnButtonState.fromSources(
-      snapshot: snapshot,
-      localStatus: state.valueOrNull,
-      localDesiredRunning: _desiredRunning,
-      localStopRetry: hasRetryableStopError,
-      localLoading: state.isLoading,
-      localHasError: state.hasError,
-    );
-    final startIntentEpoch = _mainButtonStartIntentEpoch;
-    if (startIntentEpoch != null &&
-        (startIntentEpoch != _connectionIntentEpoch ||
-            buttonState.isConnected ||
-            buttonState.phase == VpnSessionPhase.failed ||
-            (buttonState.action == MainVpnButtonAction.start && !buttonState.isStarting))) {
-      // A direct snapshot read can observe the terminal platform state even
-      // if the legacy status stream was suspended in the background. Release
-      // the old START latch before deciding this tap.
-      _releaseMainButtonStart(intentEpoch: startIntentEpoch);
-    }
-    final stopIntentEpoch = _mainButtonStopIntentEpoch;
-    if (stopIntentEpoch != null &&
-        (stopIntentEpoch != _connectionIntentEpoch ||
-            buttonState.phase == VpnSessionPhase.failed ||
-            (buttonState.action == MainVpnButtonAction.start && !buttonState.isStarting))) {
-      _releaseMainButtonStop(intentEpoch: stopIntentEpoch);
-    }
-    return buttonState;
-  }
-
-  void _releaseMainButtonStart({int? intentEpoch}) {
-    if (intentEpoch != null && _mainButtonStartIntentEpoch != intentEpoch) return;
-    _mainButtonStartInFlightToken = null;
-    _mainButtonStartIntentEpoch = null;
-  }
-
-  void _releaseMainButtonStop({int? intentEpoch}) {
-    if (intentEpoch != null && _mainButtonStopIntentEpoch != intentEpoch) return;
-    _mainButtonStopInFlightToken = null;
-    _mainButtonStopIntentEpoch = null;
-  }
-
-  void _releaseSupersededMainButtonAttempts() {
-    final startIntentEpoch = _mainButtonStartIntentEpoch;
-    if (startIntentEpoch != null && startIntentEpoch != _connectionIntentEpoch) {
-      _releaseMainButtonStart(intentEpoch: startIntentEpoch);
-    }
-    final stopIntentEpoch = _mainButtonStopIntentEpoch;
-    if (stopIntentEpoch != null && stopIntentEpoch != _connectionIntentEpoch) {
-      _releaseMainButtonStop(intentEpoch: stopIntentEpoch);
+      // Fail closed. A cached DISCONNECTED value is not sufficient proof that
+      // Android may accept a new generation after a failed authoritative read.
+      return null;
     }
   }
 
@@ -931,18 +772,18 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   }
 
   Future<void> _connect([int? requestedIntentEpoch]) async {
-    final intentEpoch = requestedIntentEpoch ?? _beginStartIntent();
+    final intentEpoch = requestedIntentEpoch ?? _beginConnectionIntent(running: true);
     await _connectThrottled(intentEpoch);
   }
 
   Future<void> _connectThrottled(int intentEpoch) async {
-    if (!_isActiveStartIntent(intentEpoch)) return;
+    if (!_isCurrentIntent(intentEpoch, running: true)) return;
     if (_useMockConnectionFlow) {
       await _mockConnectFlow();
       return;
     }
     final activeProfile = await ref.read(activeProfileProvider.future);
-    if (!_isActiveStartIntent(intentEpoch)) return;
+    if (!_isCurrentIntent(intentEpoch, running: true)) return;
     if (activeProfile == null) {
       loggy.info("no active profile, not connecting");
       if (_isCurrentIntent(intentEpoch, running: true)) {
@@ -953,8 +794,9 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       return;
     }
     _connectedProfileId = activeProfile.id;
+    unawaited(_boundedConnectingResync(intentEpoch));
     final result = await _connectionRepo.connect(activeProfile, ref.read(Preferences.disableMemoryLimit)).run();
-    if (!_isActiveStartIntent(intentEpoch)) return;
+    if (!_isCurrentIntent(intentEpoch, running: true)) return;
     await result.match<Future<void>>(
       (err) async {
         _connectedProfileId = null;
@@ -973,14 +815,14 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     );
   }
 
-  Future<void> _disconnect(int intentEpoch, {bool force = false}) async {
+  Future<void> _disconnect(int intentEpoch) async {
     if (_useMockConnectionFlow) {
       await _mockDisconnectFlow();
       return;
     }
     if (!_isCurrentIntent(intentEpoch, running: false)) return;
     state = const AsyncData(Disconnecting());
-    final result = await _connectionRepo.disconnect(force: force).run();
+    final result = await _connectionRepo.disconnect().run();
     if (!_isCurrentIntent(intentEpoch, running: false)) return;
     final failure = result.getLeft().toNullable();
     if (failure != null) {
@@ -1002,7 +844,6 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 
   void _publishConnectionFailure(ConnectionFailure failure, {required String source}) {
     loggy.warning("connection lifecycle failure [$source]", failure);
-    _releaseMainButtonStart();
     unawaited(ref.read(errorReportControllerProvider).captureConnectionFailure(failure, StackTrace.current));
     state = AsyncError(failure, StackTrace.current);
 
@@ -1092,44 +933,6 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
   }
 }
 
-@visibleForTesting
-bool nativeSnapshotIndicatesStartupProgress(VpnSessionSnapshot? snapshot) {
-  if (snapshot == null || snapshot.requestedAction != 'connect') return false;
-  return switch (snapshot.phase) {
-    VpnSessionPhase.startRequested ||
-    VpnSessionPhase.startingPlatform ||
-    VpnSessionPhase.startingCore ||
-    VpnSessionPhase.waitingTun ||
-    VpnSessionPhase.verifying => true,
-    _ => false,
-  };
-}
-
-/// Returns true only for a non-terminal stop-looking callback that belongs to
-/// the preparation/replacement work of the currently desired Start.
-///
-/// Real failures and explicit system stops remain authoritative. A Flutter
-/// stop cannot be newer while [desiredRunning] is true: dispatching a newer
-/// local Stop flips that intent synchronously before the platform callback can
-/// arrive.
-@visibleForTesting
-bool shouldIgnoreTransientStopDuringStart({
-  required bool? desiredRunning,
-  required ConnectionStatus status,
-  required VpnSessionSnapshot? nativeSnapshot,
-}) {
-  if (desiredRunning != true || (status is! Disconnecting && status is! Disconnected)) return false;
-  if (status case Disconnected(connectionFailure: final _?)) return false;
-  if (nativeSnapshot == null || nativeSnapshot.phase == VpnSessionPhase.failed) return false;
-  return nativeSnapshot.requestedAction == 'connect' ||
-      nativeSnapshot.requestedAction == 'prepare' ||
-      nativeSnapshot.stopSource == VpnStopSource.replacement ||
-      nativeSnapshot.stopSource == VpnStopSource.flutter;
-}
-
-@visibleForTesting
-bool shouldFailClosedMainButtonSnapshotResync({required bool isMobile}) => isMobile;
-
 /// Decides whether reaching [Disconnected] is an outage worth reporting.
 ///
 /// An expected stop must be backed by an explicit notifier intent or by the
@@ -1165,7 +968,6 @@ bool nativeSnapshotIndicatesExplicitStop(VpnSessionSnapshot? snapshot) {
   if (!stopInProgressOrComplete) return false;
   return switch (snapshot.stopSource) {
     VpnStopSource.flutter ||
-    VpnStopSource.system ||
     VpnStopSource.notification ||
     VpnStopSource.tile ||
     VpnStopSource.shortcut ||

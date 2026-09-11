@@ -11,7 +11,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Android-side owner for resources whose lifetime must not outlive a VPN generation.
@@ -23,6 +22,7 @@ class ActiveSession(
     val generation: Long,
     val platformInterface: PlatformInterface,
     val tunOwner: TunDescriptorOwner,
+    val tunnelRequired: Boolean = true,
 ) {
     companion object {
         private const val ALREADY_CLOSING_TIMEOUT_MILLIS = 11_500L
@@ -38,10 +38,6 @@ class ActiveSession(
 
     private val closing = AtomicBoolean(false)
     private val closed = CompletableDeferred<Unit>()
-    private val dataPlaneInvalidated = AtomicBoolean(false)
-    private val dataPlaneRevalidationRunning = AtomicBoolean(false)
-    private val defaultNetworkRevision = AtomicLong(0L)
-    private val selectedOutboundRevision = AtomicLong(0L)
 
     @Volatile
     private var commandEndpointReady = false
@@ -54,31 +50,6 @@ class ActiveSession(
 
     fun acceptsOperations(): Boolean = !closing.get() && !closed.isCompleted
 
-    fun recordDefaultNetworkChange(): Long = defaultNetworkRevision.incrementAndGet()
-
-    fun currentDefaultNetworkRevision(): Long = defaultNetworkRevision.get()
-
-    fun recordSelectedOutboundChange(): Long = selectedOutboundRevision.incrementAndGet()
-
-    fun currentSelectedOutboundRevision(): Long = selectedOutboundRevision.get()
-
-    fun invalidateDataPlane() {
-        dataPlaneInvalidated.set(true)
-    }
-
-    fun clearDataPlaneInvalidation() {
-        dataPlaneInvalidated.set(false)
-    }
-
-    fun needsDataPlaneRevalidation(): Boolean = dataPlaneInvalidated.get()
-
-    fun beginDataPlaneRevalidation(): Boolean =
-        dataPlaneRevalidationRunning.compareAndSet(false, true)
-
-    fun finishDataPlaneRevalidation() {
-        dataPlaneRevalidationRunning.set(false)
-    }
-
     fun markCommandEndpointReady() {
         commandEndpointReady = true
     }
@@ -88,19 +59,15 @@ class ActiveSession(
         postTunProtectSucceeded = protectSucceeded
     }
 
-    internal fun startEvidence(
-        permissionGranted: Boolean,
-        mobileStartSucceeded: Boolean,
-        dataPlaneReady: Boolean = false,
-    ) = VpnConnectedGate.Evidence(
+    internal fun startEvidence(permissionGranted: Boolean, mobileStartSucceeded: Boolean) = VpnConnectedGate.Evidence(
         permissionGranted = permissionGranted,
         mobileStartSucceeded = mobileStartSucceeded,
         commandEndpointReady = commandEndpointReady,
         tunOpened = tunOpened && tunOwner.hasOpenDescriptor(generation),
         postTunProtectSucceeded = postTunProtectSucceeded,
-        dataPlaneReady = dataPlaneReady,
         generationCurrent = VpnSessionCoordinator.isCurrent(generation),
         sessionAcceptingOperations = acceptsOperations(),
+        tunnelRequired = tunnelRequired,
     )
 
     suspend fun close(

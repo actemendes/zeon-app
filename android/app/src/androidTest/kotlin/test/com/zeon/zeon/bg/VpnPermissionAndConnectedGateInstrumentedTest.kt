@@ -1,13 +1,7 @@
 package test.com.zeon.zeon.bg
 
 import com.zeon.zeon.bg.VpnConnectedGate
-import com.zeon.zeon.bg.VpnDataPlaneProbe
-import com.zeon.zeon.bg.VpnDataPlaneTargetResult
 import com.zeon.zeon.bg.VpnPermissionRequestCoordinator
-import com.zeon.zeon.bg.StartupDataPlaneProbeAction
-import com.zeon.zeon.bg.startupDataPlaneProbeAction
-import com.zeon.zeon.bg.startupDataPlaneProofReady
-import com.zeon.zeon.bg.parsePendingOutboundSelection
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -100,130 +94,24 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
         check(result is VpnConnectedGate.Result.Rejected && "mobile_start" in result.missing)
     }
 
+    fun proxyRequiresCoreAndCurrentSessionWithoutTun() {
+        val proxy = readyEvidence().copy(tunnelRequired = false, tunOpened = false, postTunProtectSucceeded = false)
+        check(VpnConnectedGate.evaluate(proxy) == VpnConnectedGate.Result.Ready)
+        for (incomplete in listOf(
+            proxy.copy(mobileStartSucceeded = false),
+            proxy.copy(commandEndpointReady = false),
+            proxy.copy(generationCurrent = false),
+            proxy.copy(sessionAcceptingOperations = false),
+            proxy.copy(tunnelRequired = true),
+        )) {
+            check(VpnConnectedGate.evaluate(incomplete) is VpnConnectedGate.Result.Rejected)
+        }
+        check(VpnConnectedGate.evaluate(readyEvidence().copy(postTunProtectSucceeded = false)) is VpnConnectedGate.Result.Rejected)
+    }
+
     fun oldGenerationCoreSuccessCannotPublishStarted() {
         val result = VpnConnectedGate.evaluate(readyEvidence().copy(generationCurrent = false))
         check(result is VpnConnectedGate.Result.Rejected && "generation" in result.missing)
-    }
-
-    fun missingDataPlaneProofCannotPublishStarted() {
-        val result = VpnConnectedGate.evaluate(readyEvidence().copy(dataPlaneReady = false))
-        check(result is VpnConnectedGate.Result.Rejected && "data_plane" in result.missing)
-    }
-
-    fun oneRealHttpsTargetProvesDataPlane() {
-        val results = listOf(
-            VpnDataPlaneTargetResult("zeon_204", ready = false, failureCategory = "timeout"),
-            VpnDataPlaneTargetResult("gstatic_204", ready = true),
-            VpnDataPlaneTargetResult("cloudflare_byte", ready = false, failureCategory = "dns"),
-        )
-        check(VpnDataPlaneProbe.hasReadyTarget(results))
-        check(startupDataPlaneProofReady(true, "leaf-a", "leaf-a"))
-        check(!startupDataPlaneProofReady(true, "leaf-a", "leaf-b"))
-    }
-
-    fun noRealHttpsTargetCannotProveDataPlane() {
-        val results = listOf(
-            VpnDataPlaneTargetResult("zeon_204", ready = false, failureCategory = "dns"),
-            VpnDataPlaneTargetResult("gstatic_204", ready = false, failureCategory = "timeout"),
-            VpnDataPlaneTargetResult("cloudflare_byte", ready = false, failureCategory = "connect"),
-        )
-        check(!VpnDataPlaneProbe.hasReadyTarget(results))
-        check(!startupDataPlaneProofReady(false, "leaf-a", "leaf-a"))
-    }
-
-    fun stableTransientVpnDnsFailureGetsBoundedRetry() {
-        check(
-            startupDataPlaneProbeAction(
-                proofReady = false,
-                selectedBeforeProbe = "leaf-a",
-                selectedAfterProbe = "leaf-a",
-                failureCategories = listOf("dns", "dns", "dns"),
-                attempt = 1,
-                maxAttempts = 3,
-            ) == StartupDataPlaneProbeAction.RETRY_TRANSIENT_VPN_NETWORK,
-        )
-    }
-
-    fun transientVpnDnsRetryNeverAuthorizesConnectedAndRemainsBounded() {
-        check(
-            startupDataPlaneProbeAction(
-                proofReady = false,
-                selectedBeforeProbe = "leaf-a",
-                selectedAfterProbe = "leaf-a",
-                failureCategories = listOf("dns", "dns_empty", "vpn_network_missing"),
-                attempt = 3,
-                maxAttempts = 3,
-            ) == StartupDataPlaneProbeAction.COMPLETE,
-        )
-        check(!startupDataPlaneProofReady(false, "leaf-a", "leaf-a"))
-    }
-
-    fun stableNonTransientDataPlaneFailureIsNotRetried() {
-        check(
-            startupDataPlaneProbeAction(
-                proofReady = false,
-                selectedBeforeProbe = "leaf-a",
-                selectedAfterProbe = "leaf-a",
-                failureCategories = listOf("timeout", "connect", "tls"),
-                attempt = 1,
-                maxAttempts = 3,
-            ) == StartupDataPlaneProbeAction.COMPLETE,
-        )
-    }
-
-    fun changedAutoselectLeafStillRequiresFreshProof() {
-        check(
-            startupDataPlaneProbeAction(
-                proofReady = false,
-                selectedBeforeProbe = "leaf-a",
-                selectedAfterProbe = "leaf-b",
-                failureCategories = listOf("timeout"),
-                attempt = 1,
-                maxAttempts = 3,
-            ) == StartupDataPlaneProbeAction.RETRY_SELECTED_OUTBOUND,
-        )
-    }
-
-    fun pendingSelectionGetsOneFreshProofWithoutAuthorizingConnected() {
-        check(
-            startupDataPlaneProbeAction(
-                proofReady = false,
-                selectedBeforeProbe = "balance",
-                selectedAfterProbe = "balance",
-                failureCategories = listOf("timeout", "dns", "dns"),
-                attempt = 1,
-                maxAttempts = 4,
-                pendingSelectionApplied = true,
-            ) == StartupDataPlaneProbeAction.RETRY_PENDING_SELECTION,
-        )
-        check(
-            startupDataPlaneProbeAction(
-                proofReady = false,
-                selectedBeforeProbe = "balance",
-                selectedAfterProbe = "balance",
-                failureCategories = listOf("timeout", "dns", "dns"),
-                attempt = 2,
-                maxAttempts = 4,
-                pendingSelectionApplied = true,
-            ) == StartupDataPlaneProbeAction.COMPLETE,
-        )
-        check(!startupDataPlaneProofReady(false, "balance", "balance"))
-    }
-
-    fun pendingOutboundSelectionAcceptsOnlyBoundedValidTags() {
-        val parsed = parsePendingOutboundSelection(
-            """{"group_tag":"select","outbound_tag":"balance"}""",
-        )
-        check(parsed?.groupTag == "select")
-        check(parsed?.outboundTag == "balance")
-        check(parsePendingOutboundSelection("""{"group_tag":"","outbound_tag":"balance"}""") == null)
-        check(parsePendingOutboundSelection("""{"group_tag":"select","outbound_tag":"bad\nvalue"}""") == null)
-        check(parsePendingOutboundSelection("not-json") == null)
-        check(
-            parsePendingOutboundSelection(
-                """{"group_tag":"select","outbound_tag":"${"x".repeat(513)}"}""",
-            ) == null,
-        )
     }
 
     fun reconnectAfterPermissionFailureNeedsNoProcessRestart() {
@@ -247,7 +135,6 @@ class VpnPermissionAndConnectedGateInstrumentedTest {
         commandEndpointReady = true,
         tunOpened = true,
         postTunProtectSucceeded = true,
-        dataPlaneReady = true,
         generationCurrent = true,
         sessionAcceptingOperations = true,
     )

@@ -2,6 +2,31 @@
 
 Все команды ниже запускаются из корня репозитория в PowerShell.
 
+## Точный Android-тест переключения в Auto
+
+`verify_android_exact_auto.py` проверяет последовательность: выбран ручной сервер
+при включённом VPN → выключить VPN → включить VPN → выбрать «Автовыбор» →
+проверить Telegram. Нужны физическое ADB-устройство, русская локализация,
+подключённый VPN validation-сборки, её `androidTest` APK с
+`VerificationTrafficService` и установленный Telegram.
+
+```powershell
+New-Item -ItemType Directory -Force .codex-artifacts | Out-Null
+dart compile exe tool/runtime_core_snapshot.dart -o .codex-artifacts/runtime_core_snapshot.exe
+python scripts/verify_android_exact_auto.py --serial DEVICE_SERIAL --manual-label 'ОАЭ | БЫСТРЫЙ⚡' --snapshot-exe .codex-artifacts/runtime_core_snapshot.exe --evidence-dir .codex-artifacts/exact-auto
+```
+
+Если ADB отсутствует в `PATH`, передайте `--adb` с путём к нему. Название ручного
+сервера передаётся без флага и должно присутствовать в текущем списке.
+Скрипт сначала выводит validation-приложение на передний план и готовит ручной
+выбор; затем выполняет указанные нажатия. Проверки требуют конкретный сервер
+от native core, отсутствие индикатора подключения Telegram и подтверждённые
+HTTPS/MTProto-ответы через VPN из отдельного Android UID. Каждому запуску
+присваивается уникальный идентификатор; старые записи logcat не засчитываются.
+Полные UI-деревья и содержимое чатов не сохраняются. После теста приложение
+остаётся в Auto, Telegram — на переднем плане. Результат этого сценария не
+подтверждает доступность API ZEON: она проверяется отдельно.
+
 ## Быстрые сценарии
 
 1. Пересобрать Android core после изменений в `hiddify-core`:

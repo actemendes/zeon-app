@@ -12,9 +12,7 @@ import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
-  const ActiveProxyFooter({required this.activeProxy, super.key});
-
-  final AsyncValue<OutboundInfo> activeProxy;
+  const ActiveProxyFooter({super.key});
 
   static const _panelRadius = 16.0;
 
@@ -23,7 +21,8 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
     final connectionState = ref.watch(
       connectionNotifierProvider.select((value) => value.valueOrNull ?? const Disconnected()),
     );
-    final proxy = activeProxy.valueOrNull;
+    final activeProxy = ref.watch(activeProxyNotifierProvider);
+    final proxy = connectionState == const Connected() ? activeProxy.valueOrNull : null;
     final t = ref.watch(translationsProvider).requireValue;
 
     final theme = Theme.of(context);

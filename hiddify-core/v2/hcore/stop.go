@@ -13,6 +13,14 @@ func (s *CoreService) Stop(ctx context.Context, empty *hcommon.Empty) (*CoreInfo
 }
 
 func Stop() (coreResponse *CoreInfoResponse, err error) {
+	// Startup holds static.lock while constructing the core. Invalidate its
+	// context before waiting for that lock, so it cannot activate resources late.
+	static.startupAccess.Lock()
+	if static.startupCancel != nil {
+		static.startupCancel()
+		static.startupCancel = nil
+	}
+	static.startupAccess.Unlock()
 	defer config.DeferPanicToError("stop", func(recovered_err error) {
 		coreResponse, err = errorWrapper(MessageType_UNEXPECTED_ERROR, recovered_err)
 	})

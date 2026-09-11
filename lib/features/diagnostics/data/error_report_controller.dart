@@ -264,7 +264,6 @@ class ErrorReportController {
         'native_requested_action': nativeSnapshot.requestedAction,
         'native_failure_code': nativeSnapshot.failureCode,
         'native_failure_owner': nativeSnapshot.failureOwner,
-        'native_failure_detail': nativeSnapshot.failureDetail,
       },
     );
   }

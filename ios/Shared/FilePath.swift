@@ -9,46 +9,16 @@ import Foundation
 
 public enum FilePath {
     public static let packageName = {
-        if let configuredIdentifier = Bundle.main.infoDictionary?["BASE_BUNDLE_IDENTIFIER"] as? String,
-           !configuredIdentifier.isEmpty
-        {
-            return configuredIdentifier
-        }
-        if let bundleIdentifier = Bundle.main.bundleIdentifier {
-            let extensionSuffix = ".ZeonPacketTunnel"
-            if bundleIdentifier.hasSuffix(extensionSuffix) {
-                return String(bundleIdentifier.dropLast(extensionSuffix.count))
-            }
-            return bundleIdentifier
-        }
-        return "app.zeon.ios"
+        Bundle.main.infoDictionary?["BASE_BUNDLE_IDENTIFIER"] as? String ?? "unknown"
     }()
 }
 
 public extension FilePath {
     static let groupName = "group.\(packageName)"
 
-    private static let fallbackSharedDirectory: URL = {
-        let baseDirectory = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first ?? FileManager.default.temporaryDirectory
-        return baseDirectory.appendingPathComponent(packageName, isDirectory: true)
-    }()
+    private static let defaultSharedDirectory: URL! = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: FilePath.groupName)
 
-    static let sharedDirectory: URL = {
-        guard let sharedDirectory = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: FilePath.groupName
-        ) else {
-            NSLog(
-                "[FilePath] App Group container %@ is unavailable; using sandbox fallback %@",
-                FilePath.groupName,
-                fallbackSharedDirectory.path
-            )
-            return fallbackSharedDirectory
-        }
-        return sharedDirectory
-    }()
+    static let sharedDirectory = defaultSharedDirectory!
 
     static let cacheDirectory = sharedDirectory
         .appendingPathComponent("Library", isDirectory: true)

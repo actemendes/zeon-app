@@ -22,12 +22,12 @@ enum class VpnSessionPhase {
     FAILED,
 }
 
-internal fun phaseAfterCommandEndpointReady(current: VpnSessionPhase): VpnSessionPhase =
+internal fun phaseAfterCommandEndpointReady(current: VpnSessionPhase, tunnelRequired: Boolean = true): VpnSessionPhase =
     when (current) {
         VpnSessionPhase.VERIFYING,
         VpnSessionPhase.CONNECTED,
         -> current
-        else -> VpnSessionPhase.WAITING_TUN
+        else -> if (tunnelRequired) VpnSessionPhase.WAITING_TUN else VpnSessionPhase.VERIFYING
     }
 
 enum class VpnStopSource(
@@ -62,15 +62,14 @@ data class VpnSessionSnapshot(
     val coreReady: Boolean = false,
     val coreStarted: Boolean = false,
     val commandEndpointReady: Boolean = false,
+    val tunnelRequired: Boolean = true,
     val tunnelReady: Boolean = false,
     val protectSucceeded: Boolean = false,
-    val dataPlaneReady: Boolean = false,
     val platformVpnValidated: Boolean = false,
     val selectedOutboundId: String = "",
     val selectedOutboundLabel: String = "",
     val strategy: String = "",
     val failureCode: String = "",
-    val failureDetail: String = "",
     val failureOwner: String = "",
     val recoverable: Boolean = false,
 ) {
@@ -80,9 +79,7 @@ data class VpnSessionSnapshot(
             coreReady &&
             coreStarted &&
             commandEndpointReady &&
-            tunnelReady &&
-            protectSucceeded &&
-            dataPlaneReady &&
+            (!tunnelRequired || (tunnelReady && protectSucceeded)) &&
             selectedOutboundId.isNotBlank()
 
     fun toEvent(): Map<String, Any> = mapOf(
@@ -96,15 +93,14 @@ data class VpnSessionSnapshot(
         "coreReady" to coreReady,
         "coreStarted" to coreStarted,
         "commandEndpointReady" to commandEndpointReady,
+        "tunnelRequired" to tunnelRequired,
         "tunnelReady" to tunnelReady,
         "protectSucceeded" to protectSucceeded,
-        "dataPlaneReady" to dataPlaneReady,
         "platformVpnValidated" to platformVpnValidated,
         "selectedOutboundId" to selectedOutboundId,
         "selectedOutboundLabel" to selectedOutboundLabel,
         "strategy" to strategy,
         "failureCode" to failureCode,
-        "failureDetail" to failureDetail,
         "failureOwner" to failureOwner,
         "recoverable" to recoverable,
     )
@@ -134,7 +130,7 @@ object VpnSessionSnapshotCoordinator {
 
     fun current(): VpnSessionSnapshot = authoritative.get()
 
-    fun begin(generation: Long, action: String): VpnSessionSnapshot = update(generation) {
+    fun begin(generation: Long, action: String, tunnelRequired: Boolean = true): VpnSessionSnapshot = update(generation) {
         VpnSessionSnapshot(
             generation = generation,
             runtimeEpoch = runtimeEpoch,
@@ -142,6 +138,7 @@ object VpnSessionSnapshotCoordinator {
             snapshotVersion = 0L,
             phase = VpnSessionPhase.START_REQUESTED,
             requestedAction = action,
+            tunnelRequired = tunnelRequired,
         )
     }
 
@@ -175,11 +172,9 @@ object VpnSessionSnapshotCoordinator {
         code: String,
         owner: String,
         recoverable: Boolean,
-        detail: String = "",
     ): VpnSessionSnapshot = transition(generation, VpnSessionPhase.FAILED) {
         it.copy(
             failureCode = code.take(96),
-            failureDetail = detail.replace(Regex("\\s+"), " ").trim().take(256),
             failureOwner = owner.take(48),
             recoverable = recoverable,
         )
@@ -212,13 +207,11 @@ object VpnSessionSnapshotCoordinator {
             commandEndpointReady = false,
             tunnelReady = false,
             protectSucceeded = false,
-            dataPlaneReady = false,
             platformVpnValidated = false,
             selectedOutboundId = "",
             selectedOutboundLabel = "",
             strategy = "",
             failureCode = "",
-            failureDetail = "",
             failureOwner = "",
             recoverable = false,
         )

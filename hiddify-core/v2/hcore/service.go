@@ -41,6 +41,7 @@ func NewService(ctx context.Context, options option.Options) (*daemon.StartedSer
 	// }
 
 	if err := instance.StartOrReloadServiceOptions(options); err != nil {
+		instance.Close()
 		return nil, err
 	}
 

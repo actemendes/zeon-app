@@ -35,26 +35,11 @@ public class MethodHandler: NSObject, FlutterPlugin {
         case "get_vpn_session_snapshot":
             result(VPNManager.shared.sessionSnapshot())
         case "set_session_generation":
-            guard
-                let args = call.arguments as? [String: Any?],
-                let generation = generation(from: args)
-            else {
+            guard let generation = generation(from: call.arguments) else {
                 result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
                 return
             }
-            let requestedAction = args["requestedAction"] as? String ?? "connect"
-            guard requestedAction == "connect" || requestedAction == "prepare" else {
-                result(FlutterError(code: "INVALID_ARGS", message: "unsupported requestedAction", details: nil))
-                return
-            }
-            result(
-                NSNumber(
-                    value: VPNManager.shared.setSessionGeneration(
-                        generation,
-                        requestedAction: requestedAction
-                    )
-                )
-            )
+            result(NSNumber(value: VPNManager.shared.setSessionGeneration(generation)))
         case "mark_core_started":
             guard let generation = generation(from: call.arguments) else {
                 result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
@@ -127,7 +112,7 @@ public class MethodHandler: NSObject, FlutterPlugin {
                     opts.listen = "127.0.0.1:\(grpcPort)"
                     opts.secret = ""
                     opts.debug = false
-                    opts.mode = mode
+                    opts.mode = 4
                     opts.fixAndroidStack = false
                     MobileSetup(opts,
                         nil,
@@ -213,14 +198,12 @@ public class MethodHandler: NSObject, FlutterPlugin {
                         await mainResult(true)
                         return
                     }
-                    let bootstrapPreparation = VPNManager.shared.isBootstrapPreparationRequest(generation)
                     try await VPNManager.shared.setup()
                     try await VPNManager.shared.prepare(
                         with: path,
                         grpcServiceModePort: grpcPort,
                         disableMemoryLimit: disableMemoryLimit,
-                        generation: generation,
-                        bootstrapPreparation: bootstrapPreparation
+                        generation: generation
                     )
                 } catch {
                     if !VPNManager.shared.isCurrentGeneration(generation) {
@@ -262,82 +245,17 @@ public class MethodHandler: NSObject, FlutterPlugin {
 //                await mainResult(true)
 //            }
         case "stop":
-            guard
-                let args = call.arguments as? [String: Any?],
-                let generation = generation(from: args)
-            else {
-                result(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
-                return
-            }
-            let replacement = (args["replacement"] as? Bool) ?? false
-            let preemptive = ((args["preemptive"] as? Bool) ?? false) && !replacement
-            let stopSource = replacement ? "replacement" : "flutter"
-            let acceptedGeneration = preemptive
-                ? VPNManager.shared.reservePreemptiveStopGeneration(
-                    generation,
-                    source: stopSource
-                )
-                : generation
-            if preemptive {
-                // Reservation is the synchronization point. Return it before
-                // the transport teardown (which may legitimately take longer
-                // than Dart's short control-call timeout), then finish the
-                // idempotent Stop in the background. The serialized cleanup on
-                // Dart will retry if this teardown cannot settle.
-                result(NSNumber(value: acceptedGeneration))
-                Task {
-                    guard VPNManager.shared.isCurrentGeneration(acceptedGeneration) else {
-                        NSLog("event=stale_completion_ignored source=ios_preemptive_stop")
-                        return
-                    }
-                    do {
-                        try await VPNManager.shared.disconnectAsync(
-                            generation: acceptedGeneration,
-                            source: stopSource
-                        )
-                    } catch {
-                        if VPNManager.shared.isCurrentGeneration(acceptedGeneration) {
-                            NSLog(
-                                "event=ios_preemptive_stop_async_failed generation=%lld error=%@",
-                                acceptedGeneration,
-                                error.localizedDescription
-                            )
-                        } else {
-                            NSLog("event=stale_exception_ignored source=ios_preemptive_stop")
-                        }
-                    }
-                }
-                return
-            }
             Task {
-                if VPNManager.shared.isCurrentGeneration(acceptedGeneration) {
-                    do {
-                        try await VPNManager.shared.disconnectAsync(
-                            generation: acceptedGeneration,
-                            source: stopSource
-                        )
-                    } catch {
-                        if !VPNManager.shared.isCurrentGeneration(acceptedGeneration) {
-                            NSLog("event=stale_exception_ignored source=ios_stop")
-                        } else {
-                            await mainResult(
-                                FlutterError(code: "STOP_TIMEOUT", message: error.localizedDescription, details: nil)
-                            )
-                            return
-                        }
-                    }
+                guard let generation = generation(from: call.arguments) else {
+                    await mainResult(FlutterError(code: "INVALID_ARGS", message: nil, details: nil))
+                    return
+                }
+                if VPNManager.shared.isCurrentGeneration(generation) {
+                    await VPNManager.shared.disconnectAsync(generation: generation)
                 } else {
                     NSLog("event=stale_completion_ignored source=ios_stop")
                 }
-                // The Dart side uses the returned generation to fence a
-                // replacement stop from a newer VPN session. Returning Bool
-                // here violates invokeMethod<int>'s runtime contract and makes
-                // every iOS startup fail before the tunnel can be launched.
-                // Return the generation atomically reserved for this Stop, not
-                // a newer generation that may have accepted Connect while the
-                // asynchronous teardown was finishing. Dart uses this value to
-                // fence its queued cleanup from that newer session.
-                await mainResult(NSNumber(value: acceptedGeneration))
+                await mainResult(true)
             }
         case "reset":
             VPNManager.shared.reset()

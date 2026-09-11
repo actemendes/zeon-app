@@ -8,9 +8,9 @@ internal object VpnConnectedGate {
         val commandEndpointReady: Boolean,
         val tunOpened: Boolean,
         val postTunProtectSucceeded: Boolean,
-        val dataPlaneReady: Boolean,
         val generationCurrent: Boolean,
         val sessionAcceptingOperations: Boolean,
+        val tunnelRequired: Boolean = true,
     )
 
     sealed interface Result {
@@ -23,15 +23,11 @@ internal object VpnConnectedGate {
             if (!evidence.permissionGranted) add("permission")
             if (!evidence.mobileStartSucceeded) add("mobile_start")
             if (!evidence.commandEndpointReady) add("command_endpoint")
-            if (!evidence.tunOpened) add("tun")
-            if (!evidence.postTunProtectSucceeded) add("post_tun_protect")
-            if (!evidence.dataPlaneReady) add("data_plane")
+            if (evidence.tunnelRequired && !evidence.tunOpened) add("tun")
+            if (evidence.tunnelRequired && !evidence.postTunProtectSucceeded) add("post_tun_protect")
             if (!evidence.generationCurrent) add("generation")
             if (!evidence.sessionAcceptingOperations) add("session_closing")
         }
         return if (missing.isEmpty()) Result.Ready else Result.Rejected(missing)
     }
-
-    fun evaluateInfrastructure(evidence: Evidence): Result =
-        evaluate(evidence.copy(dataPlaneReady = true))
 }

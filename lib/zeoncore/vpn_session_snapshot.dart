@@ -37,7 +37,6 @@ enum VpnSessionPhase {
 enum VpnStopSource {
   none,
   flutter,
-  system,
   notification,
   tile,
   shortcut,
@@ -52,7 +51,6 @@ enum VpnStopSource {
     return switch (normalized) {
       '' => none,
       'flutter' => flutter,
-      'system' => system,
       'notification' => notification,
       'tile' => tile,
       'shortcut' => shortcut,
@@ -65,7 +63,7 @@ enum VpnStopSource {
   }
 
   bool get isExternalIntentional => switch (this) {
-    system || notification || tile || shortcut || revoke => true,
+    notification || tile || shortcut || revoke => true,
     _ => false,
   };
 }
@@ -83,18 +81,14 @@ class VpnSessionSnapshot {
     this.coreReady = false,
     this.coreStarted = false,
     this.commandEndpointReady = false,
+    this.tunnelRequired = true,
     this.tunnelReady = false,
     this.protectSucceeded = false,
-    // Non-Android providers do not yet emit this Android-specific proof.
-    // Android always sends the field; true preserves the existing contract
-    // for other platform snapshot producers.
-    this.dataPlaneReady = true,
     this.platformVpnValidated = false,
     this.selectedOutboundId = '',
     this.selectedOutboundLabel = '',
     this.strategy = '',
     this.failureCode = '',
-    this.failureDetail = '',
     this.failureOwner = '',
     this.recoverable = false,
   });
@@ -124,15 +118,16 @@ class VpnSessionSnapshot {
       coreReady: boolean('coreReady'),
       coreStarted: boolean('coreStarted'),
       commandEndpointReady: boolean('commandEndpointReady'),
+      // Only an explicit native false identifies a service without VPN ownership.
+      // Older or malformed events retain the strict VPN requirements.
+      tunnelRequired: map['tunnelRequired'] != false,
       tunnelReady: boolean('tunnelReady'),
       protectSucceeded: boolean('protectSucceeded'),
-      dataPlaneReady: map.containsKey('dataPlaneReady') ? boolean('dataPlaneReady') : true,
       platformVpnValidated: boolean('platformVpnValidated'),
       selectedOutboundId: text('selectedOutboundId'),
       selectedOutboundLabel: text('selectedOutboundLabel'),
       strategy: text('strategy'),
       failureCode: text('failureCode'),
-      failureDetail: text('failureDetail'),
       failureOwner: text('failureOwner'),
       recoverable: boolean('recoverable'),
     );
@@ -148,15 +143,14 @@ class VpnSessionSnapshot {
   final bool coreReady;
   final bool coreStarted;
   final bool commandEndpointReady;
+  final bool tunnelRequired;
   final bool tunnelReady;
   final bool protectSucceeded;
-  final bool dataPlaneReady;
   final bool platformVpnValidated;
   final String selectedOutboundId;
   final String selectedOutboundLabel;
   final String strategy;
   final String failureCode;
-  final String failureDetail;
   final String failureOwner;
   final bool recoverable;
 
@@ -164,34 +158,13 @@ class VpnSessionSnapshot {
 
   bool get isExternalIntentionalStop => isTerminalStop && stopSource.isExternalIntentional;
 
-  /// A platform teardown that belongs to a still-active Connect operation.
-  ///
-  /// Android and iOS may have to release an older packet-tunnel owner before
-  /// starting the new owner for the same generation. That transient
-  /// DISCONNECTED snapshot is authoritative transport state, but it is not a
-  /// terminal user intent and must not make the main button look idle.
-  bool get isReplacementTransition =>
-      stopSource == VpnStopSource.replacement &&
-      (phase == VpnSessionPhase.stopRequested ||
-          phase == VpnSessionPhase.stopping ||
-          phase == VpnSessionPhase.disconnected);
-
-  /// The native owner has accepted Connect but the packet tunnel is still
-  /// inactive (for example while preferences or permission are prepared).
-  bool get isPendingConnectWhileInactive =>
-      generation > 0 &&
-      requestedAction == 'connect' &&
-      (phase == VpnSessionPhase.idle || phase == VpnSessionPhase.disconnected);
-
   bool get provesConnected =>
       generation > 0 &&
       phase == VpnSessionPhase.connected &&
       coreReady &&
       coreStarted &&
       commandEndpointReady &&
-      tunnelReady &&
-      protectSucceeded &&
-      dataPlaneReady &&
+      (!tunnelRequired || (tunnelReady && protectSucceeded)) &&
       selectedOutboundId.isNotEmpty;
 
   CoreStatus toCoreStatus() => switch (phase) {
@@ -231,17 +204,10 @@ class VpnSessionSnapshotGate {
         _phaseRank(next.phase) >= _phaseRank(VpnSessionPhase.startRequested) &&
         _phaseRank(next.phase) <= _phaseRank(VpnSessionPhase.connected) &&
         next.requestedAction == 'connect';
-    final sameGenerationDataPlaneRevalidation =
-        next.generation == _generation &&
-        _current?.phase == VpnSessionPhase.connected &&
-        _current?.dataPlaneReady == true &&
-        next.phase == VpnSessionPhase.verifying &&
-        !next.dataPlaneReady;
     if (next.generation == _generation &&
         _current != null &&
         _phaseRank(next.phase) < _phaseRank(_current!.phase) &&
-        !sameGenerationConnectAfterPreparationStop &&
-        !sameGenerationDataPlaneRevalidation) {
+        !sameGenerationConnectAfterPreparationStop) {
       return VpnSnapshotDisposition.stale;
     }
     if (next.sequenceNumber == _sequence && next.snapshotVersion == _snapshotVersion) {

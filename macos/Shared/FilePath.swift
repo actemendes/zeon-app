@@ -2,19 +2,9 @@ import Foundation
 
 public enum FilePath {
   public static let packageName = {
-    if let configuredIdentifier = Bundle.main.infoDictionary?["BASE_BUNDLE_IDENTIFIER"] as? String,
-      !configuredIdentifier.isEmpty
-    {
-      return configuredIdentifier
-    }
-    if let bundleIdentifier = Bundle.main.bundleIdentifier {
-      let extensionSuffix = ".ZeonPacketTunnel"
-      if bundleIdentifier.hasSuffix(extensionSuffix) {
-        return String(bundleIdentifier.dropLast(extensionSuffix.count))
-      }
-      return bundleIdentifier
-    }
-    return "app.zeon.ios"
+    Bundle.main.infoDictionary?["BASE_BUNDLE_IDENTIFIER"] as? String
+      ?? Bundle.main.bundleIdentifier
+      ?? "app.zeon.ios"
   }()
 }
 
@@ -22,8 +12,7 @@ public extension FilePath {
   static let groupName = "group.\(packageName)"
 
   private static let fallbackSharedDirectory: URL = {
-    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-      ?? FileManager.default.temporaryDirectory
+    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
     return base.appendingPathComponent(packageName, isDirectory: true)
   }()
 

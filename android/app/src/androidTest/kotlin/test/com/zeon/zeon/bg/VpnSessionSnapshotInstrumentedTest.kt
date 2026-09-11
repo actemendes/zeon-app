@@ -11,9 +11,6 @@ import com.zeon.zeon.bg.CoreProcessOwnerCoordinator
 import com.zeon.zeon.bg.TunDescriptorOwner
 import com.zeon.zeon.Settings
 import com.zeon.zeon.bg.BoxService
-import com.zeon.zeon.bg.selectedOutboundRequiresDataPlaneRevalidation
-import com.zeon.zeon.bg.selectedOutboundRevalidationAction
-import com.zeon.zeon.bg.SelectedOutboundRevalidationAction
 import kotlinx.coroutines.delay
 
 class VpnSessionSnapshotInstrumentedTest {
@@ -22,7 +19,6 @@ class VpnSessionSnapshotInstrumentedTest {
         ready: Boolean,
         outbound: String = if (ready) "opaque" else "",
         platformValidated: Boolean = ready,
-        dataPlaneReady: Boolean = ready,
     ) = VpnSessionSnapshot(
         generation = 10L,
         runtimeEpoch = "test",
@@ -34,7 +30,6 @@ class VpnSessionSnapshotInstrumentedTest {
         commandEndpointReady = ready,
         tunnelReady = ready,
         protectSucceeded = ready,
-        dataPlaneReady = dataPlaneReady,
         platformVpnValidated = platformValidated,
         selectedOutboundId = outbound,
     )
@@ -42,9 +37,17 @@ class VpnSessionSnapshotInstrumentedTest {
     fun connectedRequiresLocalStartupEvidence() {
         check(!snapshot(VpnSessionPhase.CONNECTED, ready = false).provesConnected())
         check(!snapshot(VpnSessionPhase.CONNECTED, ready = true, outbound = "").provesConnected())
-        check(!snapshot(VpnSessionPhase.CONNECTED, ready = true, dataPlaneReady = false).provesConnected())
         check(snapshot(VpnSessionPhase.CONNECTED, ready = true, platformValidated = false).provesConnected())
         check(snapshot(VpnSessionPhase.CONNECTED, ready = true).provesConnected())
+        val proxy = snapshot(VpnSessionPhase.CONNECTED, ready = true).copy(
+            tunnelRequired = false, tunnelReady = false, protectSucceeded = false, platformVpnValidated = false,
+        )
+        check(proxy.provesConnected())
+        check(proxy.toEvent()["tunnelRequired"] == false)
+        check(!proxy.copy(coreStarted = false).provesConnected())
+        check(!proxy.copy(commandEndpointReady = false).provesConnected())
+        check(!proxy.copy(selectedOutboundId = "").provesConnected())
+        check(!proxy.copy(tunnelRequired = true).provesConnected())
     }
 
     fun nonConnectedPhaseCannotPassTheGate() {
@@ -52,73 +55,8 @@ class VpnSessionSnapshotInstrumentedTest {
         check(!snapshot(VpnSessionPhase.STOPPING, ready = true).provesConnected())
     }
 
-    fun selectedOutboundChangeInvalidatesConnectedProof() {
-        val before = snapshot(VpnSessionPhase.CONNECTED, ready = true)
-        val after = before.copy(selectedOutboundId = "different-opaque")
-        check(selectedOutboundRequiresDataPlaneRevalidation(before.generation, before, after))
-        check(!selectedOutboundRequiresDataPlaneRevalidation(before.generation, before, before))
-        check(
-            !selectedOutboundRequiresDataPlaneRevalidation(
-                before.generation,
-                before.copy(phase = VpnSessionPhase.VERIFYING),
-                after,
-            ),
-        )
-    }
-
-    fun healthySelectedOutboundChangeKeepsConnectedProof() {
-        check(
-            selectedOutboundRevalidationAction(
-                ready = true,
-                sameNetwork = true,
-                expectedSelectedRevision = 1L,
-                currentSelectedRevision = 1L,
-                expectedSelectedOutboundId = "new-leaf",
-                currentSelectedOutboundId = "new-leaf",
-            ) == SelectedOutboundRevalidationAction.KEEP_CONNECTED,
-        )
-    }
-
-    fun failedSelectedOutboundProbeInvalidatesConnectedProof() {
-        check(
-            selectedOutboundRevalidationAction(
-                ready = false,
-                sameNetwork = true,
-                expectedSelectedRevision = 1L,
-                currentSelectedRevision = 1L,
-                expectedSelectedOutboundId = "new-leaf",
-                currentSelectedOutboundId = "new-leaf",
-            ) == SelectedOutboundRevalidationAction.INVALIDATE,
-        )
-    }
-
-    fun supersededSelectedOutboundProbeRetriesNewestLeaf() {
-        check(
-            selectedOutboundRevalidationAction(
-                ready = true,
-                sameNetwork = true,
-                expectedSelectedRevision = 1L,
-                currentSelectedRevision = 2L,
-                expectedSelectedOutboundId = "old-leaf",
-                currentSelectedOutboundId = "new-leaf",
-            ) == SelectedOutboundRevalidationAction.RETRY_CURRENT,
-        )
-    }
-
-    fun returnedToSameLeafStillRetriesNewestSelectorRevision() {
-        check(
-            selectedOutboundRevalidationAction(
-                ready = true,
-                sameNetwork = true,
-                expectedSelectedRevision = 1L,
-                currentSelectedRevision = 3L,
-                expectedSelectedOutboundId = "same-leaf",
-                currentSelectedOutboundId = "same-leaf",
-            ) == SelectedOutboundRevalidationAction.RETRY_CURRENT,
-        )
-    }
-
     fun commandEndpointReadinessCannotRegressAnOpenedTun() {
+        check(phaseAfterCommandEndpointReady(VpnSessionPhase.STARTING_CORE, false) == VpnSessionPhase.VERIFYING)
         check(phaseAfterCommandEndpointReady(VpnSessionPhase.STARTING_CORE) == VpnSessionPhase.WAITING_TUN)
         check(phaseAfterCommandEndpointReady(VpnSessionPhase.WAITING_TUN) == VpnSessionPhase.WAITING_TUN)
         check(phaseAfterCommandEndpointReady(VpnSessionPhase.VERIFYING) == VpnSessionPhase.VERIFYING)
@@ -127,7 +65,10 @@ class VpnSessionSnapshotInstrumentedTest {
 
     fun duplicateSelectedOutboundDoesNotPublishANewSnapshot() {
         val generation = VpnSessionCoordinator.next("snapshot_duplicate_outbound_test")
+        VpnSessionSnapshotCoordinator.begin(generation, "connect", false)
+        check(!VpnSessionSnapshotCoordinator.current().tunnelRequired)
         VpnSessionSnapshotCoordinator.begin(generation, "connect")
+        check(VpnSessionSnapshotCoordinator.current().tunnelRequired)
         val first = VpnSessionSnapshotCoordinator.selectedOutbound(generation, "opaque-test-name", "selector")
         val second = VpnSessionSnapshotCoordinator.selectedOutbound(generation, "opaque-test-name", "selector")
         check(second.sequenceNumber == first.sequenceNumber) {
@@ -161,8 +102,7 @@ class VpnSessionSnapshotInstrumentedTest {
         check(first.stopSource == VpnStopSource.NOTIFICATION)
         check(first.toEvent()["stopSource"] == "notification")
         check(!first.coreReady && !first.coreStarted && !first.commandEndpointReady)
-        check(!first.tunnelReady && !first.protectSucceeded && !first.dataPlaneReady)
-        check(!first.platformVpnValidated)
+        check(!first.tunnelReady && !first.protectSucceeded && !first.platformVpnValidated)
         check(first.selectedOutboundId.isEmpty() && first.selectedOutboundLabel.isEmpty())
         check(second.sequenceNumber == first.sequenceNumber)
         check(second.snapshotVersion == first.snapshotVersion)

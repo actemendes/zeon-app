@@ -286,6 +286,9 @@ func (t *Inbound) Tag() string {
 }
 
 func (t *Inbound) Start(stage adapter.StartStage) error {
+	if err := t.ctx.Err(); err != nil {
+		return err
+	}
 	switch stage {
 	case adapter.StartStateStart:
 		if C.IsAndroid && t.platformInterface == nil {

@@ -11,6 +11,7 @@
 #include <thread>
 
 #include "flutter_window.h"
+#include "startup_diagnostics.h"
 #include "system_proxy_recovery.h"
 #include "utils.h"
 #include "app_links/app_links_plugin_c_api.h"
@@ -211,6 +212,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
   flutter::DartProject project(L"data");
+  WriteStartupMarker("dart_project_created");
 
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
@@ -220,6 +222,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
+  WriteStartupMarker("window_create_begin");
   if (!window.Create(L"ZEON", origin, size))
   {
     WriteStartupMarker("window_create_failed");

@@ -8,7 +8,6 @@ import 'package:zeon/core/model/failures.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
-import 'package:zeon/features/app_update/app_update_policy.dart';
 import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/features/app_update/notifier/app_update_state.dart';
 import 'package:zeon/features/settings/notifier/config_option/config_option_notifier.dart';
@@ -41,10 +40,7 @@ class SettingsPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final appInfo = ref.watch(appInfoProvider).requireValue;
-    final appUpdateChecksEnabled = ref.watch(appUpdateChecksEnabledProvider);
-    final appUpdateState = appUpdateChecksEnabled
-        ? ref.watch(appUpdateNotifierProvider)
-        : const AppUpdateState.disabled();
+    final appUpdateState = ref.watch(appUpdateNotifierProvider);
     // final scrollController = useScrollController();
 
     // useMemoized(
@@ -184,7 +180,7 @@ class SettingsPage extends HookConsumerWidget {
               namedLocation: context.namedLocation('about'),
             ),
           ],
-          if (appUpdateChecksEnabled && appInfo.release.allowCustomUpdateChecker)
+          if (appInfo.release.allowCustomUpdateChecker && !PlatformUtils.isIOS)
             Material(
               child: ListTile(
                 leading: const Icon(Icons.system_update_alt_rounded),

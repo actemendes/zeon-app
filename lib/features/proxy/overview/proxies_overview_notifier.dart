@@ -268,21 +268,26 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
   Future<void> changeProxy(String groupTag, String outboundTag) async {
     loggy.debug("changing proxy, group: [$groupTag] - outbound: [$outboundTag]");
     if (!state.hasValue) return;
-    final outbounds = state.value!;
+    final current = state.value;
+    if (current == null || current.tag != groupTag || !current.items.any((item) => item.tag == outboundTag)) return;
+    // combineLatest retains this snapshot for subsequent statistics ticks.
+    // Update it only after native acknowledgement and successful persistence,
+    // so those ticks cannot restore the pre-selection value.
+    final outbounds = current;
     await ref.read(hapticServiceProvider.notifier).lightImpact();
     final pending = PendingProxySelection(groupTag: groupTag, outboundTag: outboundTag);
-    if (!await _selectionPersistence.stage(pending)) {
-      throw StateError('failed to persist pending outbound selection');
-    }
-
     final serviceRunning = await ref.read(serviceRunningProvider.future);
     if (serviceRunning) {
       final result = await ref.read(proxyRepositoryProvider).selectProxy(groupTag, outboundTag).run();
-      if (result.isLeft()) {
-        loggy.warning("live outbound selection deferred until startup", result.getLeft().toNullable());
-      }
+      result.match((failure) => throw failure, (_) {});
     } else {
       loggy.info('outbound selection staged for the next VPN startup');
+    }
+    // An explicit offline choice is intent for the next start. A live choice
+    // becomes persistent only after the core accepts it; rejection changes
+    // neither the visible selection nor the next-start preference.
+    if (!await _selectionPersistence.stage(pending)) {
+      throw StateError('failed to persist outbound selection');
     }
     final newselected = outbounds.items.where((e) => e.tag == outboundTag).firstOrNull;
     if (newselected != null) {

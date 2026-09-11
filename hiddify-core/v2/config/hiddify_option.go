@@ -11,17 +11,18 @@ import (
 )
 
 type HiddifyOptions struct {
-	EnableFullConfig        bool   `json:"enable-full-config,omitempty" overridable:"true"`
-	ExecuteConfigAsIs       bool   `json:"execute-config-as-is,omitempty"`
-	LogLevel                string `json:"log-level,omitempty"`
-	LogFile                 string `json:"log-file,omitempty"`
-	EnableClashApi          bool   `json:"enable-clash-api,omitempty"`
-	ClashApiPort            uint16 `json:"clash-api-port,omitempty"`
-	ClashApiSecret          string `json:"web-secret,omitempty"`
-	Region                  string `json:"region,omitempty"`
-	BlockAds                bool   `json:"block-ads,omitempty" overridable:"true"`
-	UseXrayCoreWhenPossible bool   `json:"use-xray-core-when-possible,omitempty" overridable:"true"`
-	BalancerStrategy        string `json:"balancer-strategy,omitempty" overridable:"true"`
+	PreferredSelectorOutbound string `json:"preferred-selector-outbound,omitempty"`
+	EnableFullConfig          bool   `json:"enable-full-config,omitempty" overridable:"true"`
+	ExecuteConfigAsIs         bool   `json:"execute-config-as-is,omitempty"`
+	LogLevel                  string `json:"log-level,omitempty"`
+	LogFile                   string `json:"log-file,omitempty"`
+	EnableClashApi            bool   `json:"enable-clash-api,omitempty"`
+	ClashApiPort              uint16 `json:"clash-api-port,omitempty"`
+	ClashApiSecret            string `json:"web-secret,omitempty"`
+	Region                    string `json:"region,omitempty"`
+	BlockAds                  bool   `json:"block-ads,omitempty" overridable:"true"`
+	UseXrayCoreWhenPossible   bool   `json:"use-xray-core-when-possible,omitempty" overridable:"true"`
+	BalancerStrategy          string `json:"balancer-strategy,omitempty" overridable:"true"`
 	// These fields are consumed only by a core built with -tags smart_active_debug.
 	// They are deliberately not exposed by the application UI.
 	SmartActiveDebugForceStatus      string `json:"smart_active_debug_force_status,omitempty"`

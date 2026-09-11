@@ -88,6 +88,9 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     var systemProxyAvailable = false
     var systemProxyEnabled = false
     fun addIncludePackage(builder: Builder, packageName: String) {
+        if (packageName == this.packageName) { 
+            return
+        }
         try {     
             builder.addAllowedApplication(packageName)
         } catch (e: NameNotFoundException) {
@@ -211,15 +214,12 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
                     appList.forEach {
                         addIncludePackage(builder,it)
                     }
-                    // The readiness probe must exercise Android -> TUN. Core
-                    // underlay sockets are individually protected before the
-                    // connected gate can pass, so including ZEON does not loop
-                    // the tunnel transport back into itself.
-                    addIncludePackage(builder, packageName)
+//                    addIncludePackage(builder,packageName)
                 } else {
                     appList.forEach {
                         addExcludePackage(builder,it)
                     }
+                    addExcludePackage(builder,packageName)
                 }
             } else {
                 val includePackage = options.includePackage
@@ -227,7 +227,7 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
                     while (includePackage.hasNext()) {
                         addIncludePackage(builder,includePackage.next())
                     }
-                    addIncludePackage(builder, packageName)
+                    //                    addIncludePackage(builder,packageName)
                 }else {
                     val excludePackage = options.excludePackage
                     if (excludePackage.hasNext()) {
@@ -236,6 +236,7 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
                         }
                     }
 
+                    addExcludePackage(builder, packageName)
                 }
                 
             }

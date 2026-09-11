@@ -469,6 +469,14 @@ func (m *OutboundMonitoring) SignalChange(outboundTag string) error {
 
 }
 func (m *OutboundMonitoring) TestNow(outboundTag string) error {
+	if _, group := m.groups[outboundTag]; !group && m.getState(outboundTag) != nil {
+		go func() {
+			if err := m.testSingleOutbound(outboundTag, 0); err != nil {
+				m.logger.Warn("single outbound refresh failed: ", outboundTag, ": ", err)
+			}
+		}()
+		return nil
+	}
 	tags := m.collectManualRefreshTargets(outboundTag)
 	if len(tags) == 0 {
 		return errors.New("outbound not registered")
@@ -482,6 +490,9 @@ func (m *OutboundMonitoring) TestNow(outboundTag string) error {
 }
 
 func (m *OutboundMonitoring) TestNowAndWait(outboundTag string, timeout time.Duration) error {
+	if _, group := m.groups[outboundTag]; !group && m.getState(outboundTag) != nil {
+		return m.testSingleOutbound(outboundTag, timeout)
+	}
 	m.manualRefreshRun.Lock()
 	defer m.manualRefreshRun.Unlock()
 

@@ -1,7 +1,5 @@
 import 'package:dartx/dartx.dart';
 import 'package:flutter/material.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:humanizer/humanizer.dart';
 import 'package:zeon/core/haptic/haptic_service.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
@@ -13,6 +11,8 @@ import 'package:zeon/features/notifications/data/notification_data_providers.dar
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/features/settings/widget/preference_tile.dart';
 import 'package:zeon/utils/utils.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:humanizer/humanizer.dart';
 
 class GeneralPage extends HookConsumerWidget {
   const GeneralPage({super.key});
@@ -58,19 +58,18 @@ class GeneralPage extends HookConsumerWidget {
               onChanged: ref.read(Preferences.silentStart.notifier).update,
             ),
           ],
-          if (notificationPollingSupported)
-            SwitchListTile.adaptive(
-              title: const Text('Уведомления'),
-              secondary: const Icon(Icons.notifications_active_rounded),
-              value: ref.watch(Preferences.remoteNotifications),
-              onChanged: (value) async {
-                await ref.read(Preferences.remoteNotifications.notifier).update(value);
-                if (value) {
-                  await ref.read(systemNotificationServiceProvider).requestPermission();
-                }
-                await ref.read(notificationPollingServiceProvider).configurePlatformSchedulers();
-              },
-            ),
+          SwitchListTile.adaptive(
+            title: const Text('Уведомления'),
+            secondary: const Icon(Icons.notifications_active_rounded),
+            value: ref.watch(Preferences.remoteNotifications),
+            onChanged: (value) async {
+              await ref.read(Preferences.remoteNotifications.notifier).update(value);
+              if (value) {
+                await ref.read(systemNotificationServiceProvider).requestPermission();
+              }
+              await ref.read(notificationPollingServiceProvider).configurePlatformSchedulers();
+            },
+          ),
           if (PlatformUtils.isAndroid) const BatteryOptimizationWidget(),
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.general.memoryLimit),

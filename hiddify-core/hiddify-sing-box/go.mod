@@ -255,6 +255,8 @@ replace github.com/ameshkov/dnscrypt/v2 => github.com/shtorm-7/dnscrypt/v2 v2.4.
 
 replace github.com/sagernet/wireguard-go => ./replace/wireguard-go
 
+replace github.com/sagernet/sing-tun => ./replace/sing-tun
+
 replace github.com/sagernet/tailscale => ./replace/tailscale
 
 replace github.com/Psiphon-Labs/quic-go => ./replace/psiphon-quic-go
