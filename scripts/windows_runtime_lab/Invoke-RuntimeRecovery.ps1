@@ -41,7 +41,7 @@ $report = [ordered]@{
 }
 try {
     $arming.consumed = $true
-    $arming.consumed_at = (Get-Date).ToUniversalTime().ToString('o')
+    $arming | Add-Member -NotePropertyName consumed_at -NotePropertyValue ((Get-Date).ToUniversalTime().ToString('o')) -Force
     Write-RuntimeAtomicJson -Value $arming -Path $ArmingPath
     $report.arming_consumed = $true
 
