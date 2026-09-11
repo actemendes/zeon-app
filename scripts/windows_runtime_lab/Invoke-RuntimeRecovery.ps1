@@ -45,7 +45,12 @@ try {
     Write-RuntimeAtomicJson -Value $arming -Path $ArmingPath
     $report.arming_consumed = $true
 
-    $owned = Stop-RuntimeOwnedProcesses -ProcessIds @($active.test_process_ids | ForEach-Object { [int]$_ }) -ApplicationRoot ([string]$active.application_root)
+    $recordedProcessIds = @($active.test_process_ids | ForEach-Object { [int]$_ })
+    $owned = if ($recordedProcessIds.Count -eq 0) {
+        [ordered]@{ stopped = @(); skipped = @() }
+    } else {
+        Stop-RuntimeOwnedProcesses -ProcessIds $recordedProcessIds -ApplicationRoot ([string]$active.application_root)
+    }
     $report.stopped_processes = @($owned.stopped)
     $report.skipped_processes = @($owned.skipped)
 
