@@ -23,7 +23,7 @@ Baseline используется для сравнения поведения �
 
 Toolchain кандидата: Flutter **3.38.5**, Dart **3.10.4**, совместимый `pubspec.lock`;
 Go **1.25.6** использовался при проверке консолидации. Начало сборки —
-[BUILD_REPRODUCIBLE.md](../BUILD_REPRODUCIBLE.md), но команды и paths перед запуском
+[BUILD_REPRODUCIBLE.md](../build/BUILD_REPRODUCIBLE.md), но команды и paths перед запуском
 сверять с текущими скриптами. Примеры старого SDK в CONTRIBUTING не являются pin.
 
 ## Что уже есть и чего это не доказывает

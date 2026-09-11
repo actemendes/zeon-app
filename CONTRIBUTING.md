@@ -1,6 +1,8 @@
 # Contributing
 
-Current ZEON recovery and testing workflow: [docs/testing](docs/testing/README.md).
+Start with the [documentation map](docs/README.md); archived audits and plans are
+historical evidence, not current instructions. Current ZEON recovery and testing
+workflow: [docs/testing](docs/testing/README.md).
 Use its pinned toolchain and acceptance requirements; historical SDK examples below
 are not the current version pin. Runtime acceptance is a separate testing assignment.
 

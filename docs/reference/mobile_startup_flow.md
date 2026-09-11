@@ -1,0 +1,333 @@
+# Mobile startup and account import flow
+
+> **Статус: REFERENCE / NOT REVALIDATED.** Справочное описание, перенесённое без нового аудита реализации. Утверждения «текущее», версии, пути и параметры ниже требуют проверки по коду и canonical Knowledge Base. Не заменяет тестовый контракт или очередь задач. [Навигация](../README.md).
+
+Живой документ по бизнес-цепочке мобильного приложения `com.zeon.zeon`.
+
+Цель: фиксировать общие термины, пользовательские сценарии, внутренние алгоритмы и бэкенд-вызовы. После изменений в запуске, Intro, импорте профиля, привязке аккаунта или хранении managed-профиля этот файл нужно обновлять в той же правке.
+
+## Термины
+
+- Пользователь: человек, который запускает приложение и должен получить рабочий VPN-профиль.
+- Профиль: запись `ProfileEntries` и соответствующий файл конфигурации, который импортируется через `ProfileRepository.upsertRemote(...)`.
+- Активный профиль: профиль, который сейчас выбран в приложении. Технически это запись `ProfileEntries` с `active = true`; приложение ожидает один такой профиль.
+- Managed-профиль: профиль, который приложение получило через мобильную цепочку `bootstrap`, ручной импорт `conn_link` или bind confirm и дальше считает управляемым. Приложение может заменить этот профиль новым импортом, удалить старый managed-профиль, удалить лишние профили и сохранить id текущего managed-профиля в `mobile_managed_profile_id`.
+- Embedded bootstrap-профиль: временный active remote-профиль из зашитого в приложение anonymus subscription. Используется только когда сетевой bootstrap не смог создать/импортировать профиль до входа в UI. Не выставляет `mobile_auto_import_done`, помечается через `mobile_embedded_bootstrap_profile_id`, хранится как текущий `mobile_managed_profile_id` и должен быть заменен реальным managed-профилем при следующем успешном API/import.
+- `api_link`: базовый адрес мобильного API из `mobile_api_base_url`. Используется и для backend API (`/api/v1/...`, `/bind/...`), и как host основного импортируемого `conn_link`.
+- `conn_link`: основной импортируемый URL профиля в формате `api_link/open/$openId`. Пример: `https://api.zeon-vps.online/open/649669380`. В API рядом могут встречаться поля `connection_link`, `raw_url`, `conn_link` или технический `subscriptionUrl`; входные `/open/$openId` и публичные ссылки нормализуются к основному `conn_link`.
+- Публичная open-ссылка: `https://zeon-vps.link/open/$openId`. Это публичный alias для ввода; в open-сценарии сервис канонизирует его в primary `https://api.zeon-vps.online/open/$openId` до сетевого импорта.
+- Режимы импорта `conn_link`:
+  - `fast`: короткий путь без long-tail ретраев/резолвов; используется при ручном импорте в Intro.
+  - `standard`: расширенный путь с resolve/no-validate fallback; используется в фоновых повторах и при явном вызове.
+  - `postConnection`: короткий повтор после успешного подключения VPN для замены embedded-профиля реальным.
+- `subscriptionUrl`: технический URL из `<script id="zeon-data">`, который может указывать на фактическую подписку. Это не бизнес-термин и не заменяет `conn_link`.
+- `user_id`: id пользователя в мобильном API. Хранится в `mobile_auto_import_user_id`, если был получен через авто-импорт или bind confirm.
+- Каноническое правило (обновлено 11 мая 2026): при импорте `open/<id>` `MobileConnLinkImportService` извлекает numeric `openId` и сохраняет его в `mobile_auto_import_user_id`; далее этот же ключ должен использоваться в оплате.
+- `device_id`: стабильный id устройства. Берется из SharedPreferences, Android/iOS native id, secure storage или генерируется как UUID.
+- Manual rebind sync: best-effort POST `/api/v1/devices/rebind` после успешного ручного импорта в Intro, чтобы зафиксировать серверную привязку `device_id -> owner_user_id` для восстановления после `pm clear`/переустановки.
+- Intro completed: флаг `Preferences.introCompleted`; отвечает только за то, показывать Intro или сразу Home. Не равен факту наличия профиля.
+
+## Блок-схема первого запуска
+
+```mermaid
+flowchart TD
+    A[Запуск приложения] --> B[Native splash только на первом мобильном запуске]
+    B --> C[Flutter BootstrapSplashScreen]
+    C --> D[_bootstrapContainer]
+    D --> E[Инициализация БД, prefs, логов, core, переводов]
+    E --> F[MobileBootstrapImportService.run]
+    F --> G{Активный профиль есть?}
+    G -- да --> H[Быстрый выход; metadata refresh по saved conn_link в фоне]
+    G -- нет --> I{Есть saved conn_link?}
+    I -- да --> J[MobileConnLinkImportService импортирует saved conn_link]
+    I -- нет --> K[API lookup/create/reuse пользователя]
+    K --> L[Получить raw_url/connection_link]
+    L --> M[MobileConnLinkImportService импортирует conn_link]
+    J --> N[Managed cleanup, single profile, prefs, metadata]
+    M --> N
+    H --> O[Ждать активный профиль до 3 сек]
+    N --> O
+    O --> P{Активный профиль есть?}
+    P -- нет --> P1[Установить embedded bootstrap-профиль]
+    P -- да --> Q[Построить App]
+    P1 --> Q
+    Q --> R{introCompleted?}
+    R -- нет --> S[IntroPage]
+    R -- да --> T[HomePage]
+```
+
+## 1. Запуск приложения
+
+Точка входа: `lib/main.dart` / `lib/main_prod.dart` вызывают `lazyBootstrap(...)`.
+
+`lazyBootstrap(...)`:
+
+1. Проверяет, нужно ли сохранить native splash.
+2. Показывает `_BootstrapHost`.
+3. `_BootstrapHost` после первого frame запускает `_bootstrapContainer(...)`.
+4. Пока `_bootstrapContainer` не завершился, пользователь видит `BootstrapSplashScreen`.
+5. После bootstrap создается основной `App`, GoRouter решает: `/intro` или `/home`.
+
+Важно: GoRouter стартует с `/home`, но redirect отправляет на `/intro`, если `Preferences.introCompleted == false`.
+
+## 2. Прелоадер и timeout
+
+Видимый прелоадер: `BootstrapSplashScreen`.
+
+Что происходит внутри:
+
+1. Инициализируются директории, логгер, SharedPreferences, миграции prefs.
+2. Инициализируются defaults, профильный репозиторий, переводы, hiddify-core.
+3. На mobile вызывается `MobileBootstrapImportService.enforceSingleProfile()`.
+4. Вызывается `MobileBootstrapImportService.run(mode: MobileConnLinkImportMode.standard)` с timeout 18 секунд на чистом старте без профиля. Пока VPN выключен, API и импорт профиля используют обычную сеть.
+5. Если после сетевого bootstrap на mobile активного профиля нет, `MobileEmbeddedBootstrapProfileService` ставит временный embedded bootstrap-профиль.
+6. После успешного сетевого импорта bootstrap ждёт активный профиль до 3 секунд; после embedded fallback ждёт активный embedded-профиль до 3 секунд.
+7. После первого UI-frame запускается ещё один `standard`-повтор. Если обычная сеть не достигает API, пользователь получает предложение включить VPN; после успешного подключения исходный запрос автоматически повторяется через VPN.
+
+Жесткая верхняя граница ожидания mobile auto import в прелоадере: 18 секунд. Ручной импорт в Intro ограничен 25 секундами. HTTP-клиент использует timeout 15 секунд. Для control-plane скрытые interceptor-retry отключены: вместо них выполняется одна попытка по текущему каналу и, при подтверждённом пользователем запуске VPN, один прозрачный повтор через VPN.
+
+### 2.1 Адаптивный транспорт API
+
+Общий `DioHttpClient` применяет единое правило к control-plane API, ценам, уведомлениям, bind-запросам и основному `conn_link`:
+
+1. `Disconnected` — запрос идёт только через `DIRECT`.
+2. `Connecting`, `Connected` или `Disconnecting` — запрос идёт только через локальный VPN proxy; `DIRECT` fallback запрещён.
+3. Если обычный запрос завершился сетевой ошибкой (connect/send/receive timeout, socket/TLS connection error), один общий диалог предлагает включить VPN. Ошибки HTTP 4xx/5xx не показывают этот диалог.
+4. После согласия приложение подключает текущий active-профиль, ждёт состояния `Connected` и готовности локального proxy, затем повторяет исходный запрос один раз.
+5. Одновременные ошибки объединяются в один диалог/одну попытку подключения. После отказа действует короткий cooldown, чтобы фоновые запросы не создавали каскад диалогов.
+6. Во время раннего bootstrap, когда Navigator ещё отсутствует, запрос просто завершается обычной ошибкой. Повтор после первого UI-frame уже может показать диалог.
+
+Внутри sing-box правило для host `mobile_api_base_url` остаётся первым и направляет такой трафик в proxy outbound. Поэтому при активном VPN пользовательские geo/direct rules не могут вывести control-plane запрос наружу. Смешанный режим `PROXY; DIRECT` не используется.
+
+Если `mobile_auto_import_done = true` и активный профиль есть, `MobileBootstrapImportService` быстро выходит без blocking API/import. Metadata refresh по сохраненному `conn_link` запускается best-effort в фоне с коротким timeout и не держит старт приложения.
+
+Если активный профиль уже есть, приложение также быстро выходит из mobile bootstrap без blocking API/import даже при отсутствующем done-флаге. Для уже подготовленного пользователя цель старта - просто открыть приложение, а не повторять создание/импорт профиля.
+
+Исключение: если активный профиль является embedded bootstrap-профилем, `MobileBootstrapImportService` не считает его финальным и продолжает обычную сетевую цепочку create/lookup/import. При успешном импорте новый remote-профиль становится active, а предыдущий embedded managed-профиль удаляется cleanup-логикой `MobileConnLinkImportService`.
+
+## 3. MobileConnLinkImportService
+
+Файл: `lib/features/mobile/data/mobile_conn_link_import_service.dart`.
+
+Это единый владелец импорта `conn_link`. `MobileBootstrapImportService`, `IntroPage` и bind confirm не должны дублировать `_importFromConnLink`, `resolveImportUrl`, cleanup managed-профиля или metadata sync.
+
+Ответственность сервиса:
+
+1. Нормализовать raw input, open id или URL.
+2. Для `/open/$openId` строить primary `conn_link = api_link/open/$openId`.
+3. Для того же `$openId` добавлять fallback `https://zeon-vps.link/open/$openId` только при `mobile_enable_public_open_fallback=true`.
+4. Переписывать входные публичные/blocked host на primary:
+   - `zeon-vps.link/*` -> `api.zeon-vps.online/*`
+   - `ok24-server.com/*`, `www.ok24-server.com/*` -> `api.zeon-vps.online/*`
+5. Импортировать через `ProfileRepository.upsertRemote(...)`.
+6. В `fast`-режиме:
+   - candidates: только primary;
+   - попытки: `default -> directOnly -> no-validate -> directOnly/no-validate`;
+   - все попытки идут с `disableRetry=true`.
+7. В `standard`-режиме:
+   - candidates: `primary`, затем `fallback` (если включен);
+   - validate-проход: `default -> resolved/default -> directOnly -> resolved/directOnly`;
+   - для каждого candidate также вариант с `platform=zeon`.
+8. Только в `standard`-режиме, если validate-проход неуспешен, запускается второй no-validate-проход (`validateConfigOnImport: false`) в том же порядке.
+9. При провале primary и наличии fallback логируется предупреждение о переключении на fallback (на практике open-host fallback также канонизируется в primary).
+10. Заменять предыдущий managed-профиль на активный импортированный профиль.
+11. Удалять лишние профили, оставляя один активный.
+12. Синхронизировать metadata: name/login, status, expires_at, webPageUrl, supportUrl.
+13. Сохранять prefs:
+    - `mobile_auto_import_done`
+    - `mobile_auto_import_conn_link`
+    - `mobile_managed_profile_id`
+    - `mobile_auto_import_user_id`, если он известен.
+
+Порядок для open-ссылки:
+
+1. Нормализовать open-ввод в `primary = api_link/open/$openId`; fallback добавить только при `mobile_enable_public_open_fallback=true`.
+2. Если вызов идет в `fast`-режиме, использовать только `primary` и короткий набор попыток (`default -> directOnly -> no-validate -> directOnly/no-validate`) без network retry.
+3. Если вызов идет в `standard`-режиме, пройти `primary` (и fallback при наличии) по validate-пайплайну (`default -> resolved/default -> directOnly -> resolved/directOnly`), включая вариант `platform=zeon`; для open-host fallback-кандидат перед сетевым вызовом также переписывается в primary.
+4. Если `standard` validate-пайплайн неуспешен, запустить no-validate-проход в том же порядке.
+5. При сохранении `mobile_auto_import_user_id` приоритет источников такой:
+   - сначала явный `userId` из аргумента `importConnectionLink(...)`;
+   - если его нет, используется numeric `openId` из `/open/<id>`;
+   - если оба отсутствуют и `clearUserIdWhenMissing=true`, ключ `mobile_auto_import_user_id` удаляется.
+
+В `mobile_auto_import_conn_link` сохраняется основной `conn_link` (`api_link/open/$openId`), даже если конкретный импорт прошел через public fallback.
+Важно: bootstrap после запуска использует `standard`, post-connect promotion — `postConnection`, а ручной импорт в Intro сохраняет короткий `fast`-путь.
+
+## 3.1 MobileDeviceRebindService
+
+Файл: `lib/features/mobile/data/mobile_device_rebind_service.dart`.
+
+После успешного ручного импорта в Intro приложение делает best-effort синхронизацию серверной привязки устройства:
+
+- endpoint: `POST {mobile_api_base_url}/api/v1/devices/rebind`
+- headers:
+  - `x-api-key: {mobile_api_key}`
+  - `Content-Type: application/json`
+- body:
+  - `device_id`: стабильный id из `StableDeviceIdService`
+  - `owner_user_id`: numeric `user_id` (или numeric `openId`, если явного `user_id` нет)
+  - `conn_link`: primary `api_link/open/$openId`
+  - `source`: `manual_import`
+  - `platform`: `android|ios|windows|macos|linux|unknown`
+
+Поведение:
+
+1. Если из ручного ввода нельзя получить numeric `user_id/openId`, rebind пропускается.
+2. Таймаут rebind: 15 секунд.
+3. Ошибка endpoint, timeout или отсутствие backend не откатывают локальный импорт профиля: это warning и best-effort.
+4. При успехе сохраняются prefs:
+   - `mobile_manual_rebind_done`
+   - `mobile_manual_rebind_user_id`
+   - `mobile_manual_rebind_conn_link`
+
+## 4. MobileBootstrapImportService
+
+Файл: `lib/features/mobile/data/mobile_bootstrap_import_service.dart`.
+
+Ответственность сервиса: подготовить managed-профиль до входа пользователя в основное приложение и сохранить белый старт с созданием пользователя через API.
+
+Алгоритм `runOrThrow()`:
+
+1. Если web - сразу `false`.
+2. Если активный профиль есть и это не embedded bootstrap-профиль:
+   - запускает metadata refresh по saved `conn_link` в фоне, если активный профиль выглядит managed;
+   - возвращает `false`, без blocking API/import.
+3. Если активный профиль есть, но это embedded bootstrap-профиль, продолжает реальный API/import, потому что временный профиль не является завершенным bootstrap.
+4. Если done-флаг есть, но активного профиля нет, считает состояние сломанным и пробует импорт заново.
+5. Если есть saved `mobile_auto_import_conn_link`, импортирует его через `MobileConnLinkImportService`.
+6. Если есть saved `mobile_auto_import_user_id`, делает lookup:
+   - `GET /api/v1/subscriptions/lookup?user_id=<id>`
+   - headers: `x-api-key`.
+7. Если `conn_link` еще нет, создает или переиспользует пользователя:
+   - `POST /api/v1/users/create`
+   - body: `device_id`, `platform`, `subscription.create_if_missing = true`, опционально `user.user_id`.
+8. Если после create есть `user_id`, но `conn_link` нет, повторяет lookup.
+9. Передает `raw_url`/`connection_link` в `MobileConnLinkImportService`, который нормализует open-ссылку в primary `api_link/open/$openId`.
+
+На абсолютном белом старте пользователя всё ещё нужно создавать через API, чтобы новый пользователь автоматически получил профиль.
+После `pm clear`/переустановки bootstrap остается прежним: сервер по `device_id` должен вернуть актуальную серверную привязку. Если backend применил `devices/rebind`, вернется последний вручную выбранный `owner_user_id`.
+
+### 4.1 MobileEmbeddedBootstrapProfileService
+
+Файл: `lib/features/mobile/data/mobile_embedded_bootstrap_profile_service.dart`.
+
+Ответственность сервиса: дать пользователю рабочий active-профиль даже при операторском ограничении сети, чтобы он мог поднять VPN и затем пройти обычный API/bootstrap.
+
+Поведение:
+
+1. Используется только на mobile, если после сетевого bootstrap нет активного профиля.
+2. Восстанавливает зашитый anonymus subscription `open/7697542005` из gzip+xor+base64 payload, прогоняет через `ProfileParser.normalizeContentForCoreImport(...)` и пишет файл `configs/mobile-embedded-bootstrap-anonymous-v1.json`.
+3. Вставляет/обновляет remote-профиль:
+   - `id = mobile-embedded-bootstrap-anonymous-v1`
+   - `url = embedded://mobile-bootstrap/open/7697542005?v=5`
+   - `name = anonimous`
+   - `subInfo` с `expire = 3000-12-31 09:00:00 UTC`
+4. Сохраняет:
+   - `mobile_embedded_bootstrap_profile_id`
+   - `mobile_embedded_bootstrap_profile_version`
+   - `mobile_managed_profile_id = mobile-embedded-bootstrap-anonymous-v1`
+5. Не сохраняет:
+   - `mobile_auto_import_done`
+   - `mobile_auto_import_conn_link`
+   - `mobile_auto_import_user_id`
+
+После перехода подключения в `Connected` `ConnectionNotifier` вызывает `MobileBootstrapImportService.run(skipIfAlreadyDone: false)` для немедленной замены embedded-профиля реальным managed-профилем. Фоновые повторы bootstrap также продолжают работать; если active-профиль embedded, они не делают быстрый выход.
+
+## 5. MobileBindService
+
+Файл: `lib/features/mobile/data/mobile_bind_service.dart`.
+
+Сервис оставлен для bind-session API:
+
+- `createSession()` -> `POST /bind/session/create`
+- `confirmCode(bindCode)` -> `POST /bind/session/confirm`
+- `getStatus(bindSessionId)` -> `GET /bind/session/status`
+- `cancelSession(bindSessionId)` -> `POST /bind/session/cancel`
+- `connectSessionEvents(bindSessionId)` -> WebSocket `/ws/bind`
+
+Для этих методов нужен JWT. JWT берется из prefs/env или обновляется через:
+
+- `POST /api/v1/bind/token`
+- при необходимости устройство регистрируется через `POST /api/v1/users/create`.
+
+`MobileBindService` больше не владеет импортом профиля. Если `confirmCode(...)` когда-либо используется и получает `conn_link`, он делегирует импорт в `MobileConnLinkImportService`.
+
+TODO: текущая Intro-цепочка не вызывает bind-session методы. Если bind-session сценарий не вернется в UI, сервис можно изолировать или архивировать отдельно.
+
+## 6. IntroPage
+
+Файл: `lib/features/intro/widget/intro_page.dart`.
+
+Intro открывается, когда `Preferences.introCompleted == false`.
+
+При построении страницы:
+
+1. Регион ставится в `Region.other`. Автоугадывание региона по timezone/IP отключено.
+2. Профиль в самой IntroPage явно не запрашивается.
+3. Предполагается, что bootstrap уже попытался подготовить активный профиль.
+
+### 6.1 Кнопка "Стартуем"
+
+Фактическое действие:
+
+1. Ставит `Preferences.introCompleted = true`.
+2. Делает `context.goNamed('home')`.
+
+Кнопка не запускает импорт профиля. Если bootstrap не успел получить профиль или импорт упал, Home может открыться без активного профиля.
+
+### 6.2 "Я уже имею аккаунт"
+
+Фактическое действие:
+
+1. Открывается `_BindAccountCodeDialog`.
+2. Пользователь вводит `conn_link`, public open-ссылку или open id.
+3. Dialog валидирует ввод как ссылку/код.
+4. Вызывает `MobileConnLinkImportService.importConnectionLink(rawInput, mode: MobileConnLinkImportMode.fast).timeout(25 секунд)`. Для ввода вида `/open/<id>` этот шаг дополнительно записывает канонический `mobile_auto_import_user_id` из numeric `openId`.
+5. При успехе:
+   - делает best-effort `MobileDeviceRebindService.syncManualImportRebind(...).timeout(15 секунд)`; ошибка rebind не ломает импорт;
+   - показывает success toast;
+   - ставит `Preferences.introCompleted = true`;
+   - закрывает dialog;
+   - переходит на Home.
+6. При ошибке показывает toast с mapped error.
+
+Пример `https://zeon-vps.link/open/649669380`:
+
+1. Dialog распознает `/open/649669380`.
+2. `MobileConnLinkImportService` строит primary `https://api.zeon-vps.online/open/649669380`.
+3. В `fast`-режиме пытается импортировать только primary (короткий набор попыток).
+4. Если импорт успешен, профиль становится активным и сохраняется как managed-профиль.
+5. Для open-ссылок прямой сетевой вызов `zeon-vps.link` в текущей реализации обычно не происходит: URL канонизируется в primary до импорта.
+
+### 6.3 Итоговая цепочка восстановления после переустановки
+
+1. Пользователь вручную импортирует новую ссылку в Intro (`MobileConnLinkImportService`).
+2. После успешного локального импорта запускается best-effort rebind в backend (`MobileDeviceRebindService`, `POST /api/v1/devices/rebind`).
+3. При `pm clear`/переустановке новый локальный профиль отсутствует, и bootstrap снова идет через `/api/v1/users/create` с тем же `stable device_id`.
+4. Если серверный rebind ранее зафиксирован, backend возвращает уже нового владельца устройства, а `MobileConnLinkImportService` снова поднимает его профиль как активный.
+5. Активный профиль сохраняется в репозитории профилей и используется для запуска background core/VPN (не только для отображения в UI).
+
+## 7. Открытые вопросы и риски
+
+- Нужно решить, является ли ввод `/open/<id>` бизнес-сценарием "импорт ссылки" или "bind confirm по коду". Сейчас это импорт ссылки, не `/bind/session/confirm`.
+- Нужно решить, должен ли Home блокироваться, если после bootstrap нет активного профиля. Сейчас блокировки нет.
+- `getByUrl` ищет через `LIKE '%url%'`, поэтому совпадения URL могут быть нестрогими.
+- `_safeInit(... timeout ...)` не отменяет исходный Future. При timeout bootstrap продолжит, а исходный импорт может завершиться позже.
+- Если `fast`-режим системно не проходит на плохой сети, пользователь увидит ошибку быстрее (что ожидаемо), но без долгого зависания; fallback к public open в этом режиме не выполняется.
+- Даже если включен `mobile_enable_public_open_fallback`, для open-хостов импортный URL канонизируется в primary; сохраненный `conn_link` в любом случае остается primary.
+- Если backend еще не реализовал `/api/v1/devices/rebind`, переустановка может вернуть старую server-side привязку `device_id -> user`, даже при успешном локальном ручном импорте.
+
+## Ключевые файлы
+
+- `lib/bootstrap.dart`
+- `lib/features/bootstrap/widget/bootstrap_splash_screen.dart`
+- `lib/features/intro/widget/intro_page.dart`
+- `lib/features/mobile/data/mobile_conn_link_import_service.dart`
+- `lib/features/mobile/data/mobile_device_rebind_service.dart`
+- `lib/features/mobile/data/mobile_bootstrap_import_service.dart`
+- `lib/features/mobile/data/mobile_bind_service.dart`
+- `lib/features/mobile/data/stable_device_id_service.dart`
+- `lib/features/profile/data/profile_repository.dart`
+- `lib/features/profile/data/profile_data_source.dart`
+- `lib/core/router/go_router/routing_config_notifier.dart`
+- `lib/core/preferences/general_preferences.dart`
