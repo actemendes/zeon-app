@@ -233,12 +233,14 @@ void main() {
     final source = await File('tool/windows_recovery_runtime.dart').readAsString();
     expect(source, contains('HarnessMode.systemProxy => await _fetchWithSystemProxy(target)'));
     expect(source, contains('[Net.WebRequest]::DefaultWebProxy.GetProxy'));
-    expect(source, contains("Invoke-WebRequest -Uri \$target -UseBasicParsing -TimeoutSec 15"));
+    expect(source, contains('[Net.HttpWebRequest]::Create'));
+    expect(source, contains('Proxy=[Net.WebRequest]::DefaultWebProxy'));
     expect(source, isNot(contains("'--proxy',")));
     expect(source, contains("reporter.event('outbound_selected'"));
     expect(source, contains("RuntimeFailure.deadline('concrete outbound readiness'"));
     expect(source, contains("'runtime_leaf_id':"));
     expect(source, contains("'exit_code': error.errorCode"));
+    expect(source, contains("43 => 'system_proxy_web_request'"));
     expect(source, contains("'signal': 'product-health'"));
     expect(source, contains("'win32_code': error.win32Code"));
   });

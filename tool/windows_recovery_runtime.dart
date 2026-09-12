@@ -948,8 +948,29 @@ $target=[Uri]$args[0]
 $expectedPort=[int]$args[1]
 $resolved=[Net.WebRequest]::DefaultWebProxy.GetProxy($target)
 if($null -eq $resolved -or $resolved.Host -notin @('127.0.0.1','localhost') -or $resolved.Port -ne $expectedPort){exit 42}
-$response=Invoke-WebRequest -Uri $target -UseBasicParsing -TimeoutSec 15
-[Console]::Out.Write([string][int]$response.StatusCode)''';
+[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
+try {
+  $request=[Net.HttpWebRequest]::Create($target)
+  $request.Method='GET'
+  $request.Proxy=[Net.WebRequest]::DefaultWebProxy
+  $request.AllowAutoRedirect=$true
+  $request.Timeout=15000
+  $request.ReadWriteTimeout=15000
+  $response=[Net.HttpWebResponse]$request.GetResponse()
+  try {
+    $stream=$response.GetResponseStream()
+    try {
+      $buffer=New-Object byte[] 8192
+      while($stream.Read($buffer,0,$buffer.Length) -gt 0){}
+    } finally {
+      if($null -ne $stream){$stream.Dispose()}
+    }
+    [Console]::Out.Write([string][int]$response.StatusCode)
+  } finally {
+    $response.Dispose()
+  }
+} catch [Net.WebException] { exit 43 }
+catch { exit 44 }''';
     final process = await Process.start('powershell.exe', [
       '-NoLogo',
       '-NoProfile',
@@ -966,7 +987,7 @@ $response=Invoke-WebRequest -Uri $target -UseBasicParsing -TimeoutSec 15
       exitCode = await process.exitCode.timeout(const Duration(seconds: 20));
     } on TimeoutException {
       process.kill();
-      throw TimeoutException('curl_process');
+      throw TimeoutException('system_proxy_process');
     } finally {
       await stderr.timeout(const Duration(seconds: 2), onTimeout: () {});
     }
@@ -988,7 +1009,16 @@ $response=Invoke-WebRequest -Uri $target -UseBasicParsing -TimeoutSec 15
       'secure_failures': error.secureFailures,
     },
     TimeoutException() => {'error_type': error.runtimeType.toString(), 'stage': error.message},
-    ProcessException() => {'error_type': error.runtimeType.toString(), 'exit_code': error.errorCode},
+    ProcessException() => {
+      'error_type': error.runtimeType.toString(),
+      'exit_code': error.errorCode,
+      'stage': switch (error.errorCode) {
+        42 => 'system_proxy_resolution',
+        43 => 'system_proxy_web_request',
+        44 => 'system_proxy_probe',
+        _ => 'system_proxy_process',
+      },
+    },
     _ => {'error_type': error.runtimeType.toString()},
   };
 
