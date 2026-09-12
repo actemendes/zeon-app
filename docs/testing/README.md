@@ -176,6 +176,14 @@ secret-scan. Delta-recovery меняет только совпавшее run-own
 baseline и никогда не перезагружает машину. Результат Windows Server 2022 не является
 Windows 10 compatibility evidence и не доказывает профиль Administrator.
 
+Android lifecycle harness собирается действием `android-runtime` в изолированный
+application ID и использует отдельный compile-time guarded entrypoint
+`tool/android_recovery_runtime.dart`. Он без кликов вызывает production
+`connectionNotifierProvider`: проверяет S02 и обе фазы S06, держит каждое окно
+late activation 150 секунд, выполняет retry/реальный HTTPS/stop и сохраняет JSON
+в private app support. Это TARGETED evidence lifecycle; UI-ветки S01/S03/S04
+по-прежнему требуют отдельного SHORT и не становятся PASS из результата harness.
+
 Фактическая приёмка прямого контура 12.09.2026 завершена статусом
 `TEST_CONTOUR_READY_WITH_PRODUCT_FAILURES`: выполнены local/system proxy, S02,
 обе фазы S06 с полным 150-секундным наблюдением, manual→Auto, bounded TUN,
