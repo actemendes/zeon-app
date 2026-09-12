@@ -176,6 +176,18 @@ secret-scan. Delta-recovery меняет только совпавшее run-own
 baseline и никогда не перезагружает машину. Результат Windows Server 2022 не является
 Windows 10 compatibility evidence и не доказывает профиль Administrator.
 
+Фактическая приёмка прямого контура 12.09.2026 завершена статусом
+`TEST_CONTOUR_READY_WITH_PRODUCT_FAILURES`: выполнены local/system proxy, S02,
+обе фазы S06 с полным 150-секундным наблюдением, manual→Auto, bounded TUN,
+timeout reconciliation и финальный повторный connect. Канонический подробный
+результат вне Git: `C:\ZEON-LAB\evidence\test-contour-readiness.json`, локальная
+hash-verified копия —
+`Z:\Zeon-Envelope\Temp\ZEON-W10-LAB\readiness\test-contour-readiness.json`.
+Product FAIL доменного health отдельного balanced leaf и несогласованности Auto с
+native selector не скрыты; они привязаны к TickTick `6a9fbc7c8f0852d54c2e2311` и
+`6a9fbc798f08ecb120d25c30`. Каждый terminal run завершил cleanup/secret-scan, и
+следующий запуск не требовал ручного ремонта машины.
+
 На запуск достаточно `report.json`, краткого `report.md` и необходимого evidence.
 Не создавать новый план, матрицу и десяток summary-файлов для каждого повтора.
 Минимальные поля отчёта:
