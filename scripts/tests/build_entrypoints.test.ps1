@@ -22,6 +22,7 @@ $powershellFiles = @(
     "build\common.ps1",
     "build_windows_portable.ps1",
     "build_windows_runtime.ps1",
+    "build_android_runtime.ps1",
     "windows_runtime_lab.ps1",
     "build_windows_release_folder.ps1",
     "build_windows_installer_exe.ps1",
@@ -48,6 +49,7 @@ foreach ($action in @(
     "windows-runtime",
     "android-apk",
     "android-apks",
+    "android-runtime",
     "android-debug-install"
 )) {
     Assert-True -Condition $help.Contains($action) -Message "Build action is missing from help: $action"
@@ -97,6 +99,11 @@ Assert-True -Condition $windowsBuilder.Contains('zeon_source_sha=') -Message "Wi
 $runtimeBuilder = Get-Content -LiteralPath (Join-Path $scriptDir "build_windows_runtime.ps1") -Raw
 Assert-True -Condition $runtimeBuilder.Contains('build-registry.jsonl') -Message "Runtime builds must record their version/SHA mapping"
 Assert-True -Condition $runtimeBuilder.Contains('Runtime artifacts must be built from a clean committed working tree') -Message "Runtime builds must reject dirty source"
+
+$androidRuntimeBuilder = Get-Content -LiteralPath (Join-Path $scriptDir "build_android_runtime.ps1") -Raw
+Assert-True -Condition $androidRuntimeBuilder.Contains(':app:assembleValidationAndroidTest') -Message "Android runtime build must publish the isolated instrumentation APK"
+Assert-True -Condition $androidRuntimeBuilder.Contains('Runtime artifacts must be built from a clean committed working tree') -Message "Android runtime builds must reject dirty source"
+Assert-True -Condition $androidRuntimeBuilder.Contains('zeon.android-runtime-build.v1') -Message "Android runtime builds must write provenance"
 
 $runtimeLab = Get-Content -LiteralPath (Join-Path $scriptDir "windows_runtime_lab.ps1") -Raw
 Assert-True -Condition $runtimeLab.Contains('BatchMode=yes') -Message "Runtime lab must use non-interactive key-only SSH"

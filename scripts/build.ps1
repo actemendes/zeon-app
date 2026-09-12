@@ -10,6 +10,7 @@ param(
         "windows-runtime",
         "android-apk",
         "android-apks",
+        "android-runtime",
         "android-debug-install",
         "android-release-install"
     )]
@@ -62,6 +63,7 @@ $actions = @(
     [pscustomobject]@{ Action = "windows-runtime"; Result = "Headless Windows runtime harness ZIP and provenance manifest" },
     [pscustomobject]@{ Action = "android-apk"; Result = "Universal APK in out/installers/android" },
     [pscustomobject]@{ Action = "android-apks"; Result = "Universal and per-ABI APKs in out/installers/android" },
+    [pscustomobject]@{ Action = "android-runtime"; Result = "Isolated Android validation APKs and provenance manifest" },
     [pscustomobject]@{ Action = "android-debug-install"; Result = "Debug APK in out/installers/android and install via ADB" },
     [pscustomobject]@{ Action = "android-release-install"; Result = "Release APK in out/installers/android and install via ADB" }
 )
@@ -147,6 +149,9 @@ try {
             if ($SentryDsn) { $params.SentryDsn = $SentryDsn }
             if ($SkipCodeGeneration) { $params.SkipCodeGeneration = $true }
             & (Join-Path $scriptDir "build_android_installation_apks.ps1") @params
+        }
+        "android-runtime" {
+            & (Join-Path $scriptDir "build_android_runtime.ps1")
         }
         "android-debug-install" {
             $params = @{ BuildMode = "debug"; BuildTarget = $BuildTarget }
