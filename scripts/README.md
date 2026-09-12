@@ -112,7 +112,7 @@ override в WinINet-профиле именно `ZEONRuntime`. Это не до�
 # Показать все действия, ничего не собирать
 .\scripts\build.ps1 -List
 
-# Android: изолированные validation APK + androidTest для физического стенда
+# Android: изолированный UI-free lifecycle harness + androidTest для физического стенда
 .\scripts\build.ps1 -Action android-runtime
 
 # Windows: распакованная папка приложения

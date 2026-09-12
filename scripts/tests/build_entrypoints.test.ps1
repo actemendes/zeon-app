@@ -104,6 +104,8 @@ $androidRuntimeBuilder = Get-Content -LiteralPath (Join-Path $scriptDir "build_a
 Assert-True -Condition $androidRuntimeBuilder.Contains(':app:assembleValidationAndroidTest') -Message "Android runtime build must publish the isolated instrumentation APK"
 Assert-True -Condition $androidRuntimeBuilder.Contains('Runtime artifacts must be built from a clean committed working tree') -Message "Android runtime builds must reject dirty source"
 Assert-True -Condition $androidRuntimeBuilder.Contains('zeon.android-runtime-build.v1') -Message "Android runtime builds must write provenance"
+Assert-True -Condition $androidRuntimeBuilder.Contains('tool\android_recovery_runtime.dart') -Message "Android runtime builds must use the UI-free lifecycle harness"
+Assert-True -Condition $androidRuntimeBuilder.Contains('zeon_android_runtime_validation=true') -Message "Android runtime builds must enable the compile-time harness guard"
 
 $runtimeLab = Get-Content -LiteralPath (Join-Path $scriptDir "windows_runtime_lab.ps1") -Raw
 Assert-True -Condition $runtimeLab.Contains('BatchMode=yes') -Message "Runtime lab must use non-interactive key-only SSH"

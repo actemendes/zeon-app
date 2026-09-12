@@ -23,6 +23,16 @@ $sourceSha = (& git -C $repoRoot rev-parse HEAD).Trim().ToLowerInvariant()
 if ($LASTEXITCODE -ne 0 -or $sourceSha -notmatch '^[0-9a-f]{40}$') {
     throw "Unable to resolve the source commit SHA."
 }
+$buildUtc = [DateTime]::UtcNow.ToString("o", [Globalization.CultureInfo]::InvariantCulture)
+function ConvertTo-DartDefine([string]$Value) {
+    return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Value))
+}
+$dartDefines = @(
+    ConvertTo-DartDefine "zeon_android_runtime_validation=true"
+    ConvertTo-DartDefine "zeon_source_sha=$sourceSha"
+    ConvertTo-DartDefine "zeon_build_type=android-runtime-validation"
+    ConvertTo-DartDefine "zeon_build_utc=$buildUtc"
+) -join ','
 
 $safeVersion = ConvertTo-ZeonArtifactVersion -Version $version
 $platformRoot = Get-ZeonInstallerPlatformDirectory -RepoRoot $repoRoot -Platform "android"
@@ -50,13 +60,14 @@ try {
 
     $gradle = Join-Path $repoRoot "android\gradlew.bat"
     $androidProject = Join-Path $repoRoot "android"
-    $targetPath = Join-Path $repoRoot "lib\main_prod.dart"
+    $targetPath = Join-Path $repoRoot "tool\android_recovery_runtime.dart"
     $gradleArgs = @(
         "--project-dir",
         $androidProject,
         ":app:assembleValidation",
         ":app:assembleValidationAndroidTest",
         "-Ptarget=$targetPath",
+        "-Pdart-defines=$dartDefines",
         "--no-daemon"
     )
     Write-Host ("Running: android\gradlew.bat " + ($gradleArgs -join " "))
@@ -83,10 +94,10 @@ $manifest = [ordered]@{
     version = $version
     source_sha = $sourceSha
     build_type = "android-runtime-validation"
-    built_utc = [DateTime]::UtcNow.ToString("o", [Globalization.CultureInfo]::InvariantCulture)
+    built_utc = $buildUtc
     flutter_version = $flutterMachine.frameworkVersion
     dart_version = $flutterMachine.dartSdkVersion
-    target = "lib/main_prod.dart"
+    target = "tool/android_recovery_runtime.dart"
     application_id = "com.zeon.hiddify.validation"
     test_application_id = "com.zeon.hiddify.validation.test"
     artifact_path = $appPath

@@ -71,6 +71,25 @@ Future<ProviderContainer> bootstrapWindowsRuntimeHarness(Environment env) {
   return _bootstrapContainer(env, isFirstLaunch: false, initializeDesktopUi: false);
 }
 
+/// Initializes the production dependency graph for the dedicated Android
+/// runtime harness without driving the application through UI automation.
+///
+/// The validation APK is built from a separate entrypoint and application ID.
+/// Lifecycle operations still go through [connectionNotifierProvider], so the
+/// physical-device acceptance exercises the same Riverpod owner as the main
+/// VPN button.
+Future<ProviderContainer> bootstrapAndroidRuntimeHarness(Environment env) {
+  if (!PlatformUtils.isAndroid || !const bool.fromEnvironment('zeon_android_runtime_validation')) {
+    throw StateError('Android runtime harness build guards are not enabled');
+  }
+
+  WidgetsFlutterBinding.ensureInitialized();
+  LoggerController.preInit();
+  FlutterError.onError = Logger.logFlutterError;
+  WidgetsBinding.instance.platformDispatcher.onError = Logger.logPlatformDispatcherError;
+  return _bootstrapContainer(env, isFirstLaunch: false, initializeDesktopUi: false);
+}
+
 class _BootstrapHost extends StatefulWidget {
   const _BootstrapHost({required this.environment, required this.shouldRemoveNativeSplash});
 
