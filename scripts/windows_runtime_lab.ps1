@@ -8,6 +8,7 @@ param(
     [string]$EvidenceRoot = 'Z:\Zeon-Envelope\Temp\zeon-app-testing',
     [string]$RemoteHost = 'Administrator@89.111.171.67',
     [string]$IdentityFile = 'C:\Users\ZEON\.ssh\id_ed25519_zeon_ai',
+    [string]$TrafficUrl = 'https://api.zeon-vps.online/health',
     [ValidateRange(1, 45)][int]$ConnectTimeoutSeconds = 45,
     [ValidateRange(30, 600)][int]$BootstrapTimeoutSeconds = 240,
     [ValidateRange(15, 300)][int]$CleanupTimeoutSeconds = 90,
@@ -42,6 +43,13 @@ function Assert-PathWithin {
 
 function Assert-RunId([string]$Value) {
     if ($Value -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$') { throw 'RunId must contain 3-80 safe filename characters.' }
+}
+
+function Assert-HttpsUrl([string]$Value) {
+    $uri = $null
+    if (-not [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -cne 'https' -or -not $uri.Host) {
+        throw 'TrafficUrl must be an absolute HTTPS URL.'
+    }
 }
 
 function Get-SshArguments {
@@ -207,7 +215,7 @@ function New-RuntimeRequest {
         cleanup_timeout_seconds = $CleanupTimeoutSeconds
         scenario_timeout_seconds = $ScenarioTimeoutSeconds
         execution_timeout_seconds = $BootstrapTimeoutSeconds + $ScenarioTimeoutSeconds + $CleanupTimeoutSeconds + 120
-        traffic_url = 'https://api.zeon-vps.online/health'
+        traffic_url = $TrafficUrl
         fixture_id = $FixtureId
         fixture_sha256 = $FixtureSha256
         queued_at = [DateTime]::UtcNow.ToString('o')
@@ -257,6 +265,7 @@ function Collect-RemoteRun {
 }
 
 Assert-RunId $RunId
+Assert-HttpsUrl $TrafficUrl
 if (-not (Test-Path -LiteralPath $IdentityFile -PathType Leaf)) { throw 'Dedicated SSH identity file is missing.' }
 $EvidenceRoot = Assert-PathWithin -Path $EvidenceRoot -Root $allowedEvidenceRoot -Label 'EvidenceRoot'
 $requiredRemoteFiles = @(

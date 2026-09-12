@@ -105,6 +105,7 @@ Assert-True -Condition $runtimeLab.Contains('validated immutable JSON') -Message
 Assert-True -Condition $runtimeLab.Contains('ZEON-LAB Runtime Validation') -Message "Runtime lab must target the detached product Scheduled Task"
 Assert-True -Condition $runtimeLab.Contains('CollectOnly') -Message "Runtime lab must support collection after controller disconnect"
 Assert-True -Condition $runtimeLab.Contains('controller_sha = [string]$request.controller_sha') -Message "Runtime result must preserve the controller SHA frozen in the immutable request"
+Assert-True -Condition $runtimeLab.Contains('TrafficUrl must be an absolute HTTPS URL.') -Message "Runtime traffic override must reject non-HTTPS targets"
 Assert-True -Condition $runtimeLab.Contains("if (Test-Path -LiteralPath '`$remoteFixtureTransfer')") -Message "Fixture transfer cleanup must be idempotent after DPAPI protection"
 Assert-True -Condition (-not $runtimeLab.Contains('vm_cmd.ps1')) -Message "Remote runtime controller must not use the historical guest command bridge"
 Assert-True -Condition (-not $runtimeLab.Contains('restore-clean.ps1')) -Message "Remote runtime controller must not restore a historical VM snapshot"
