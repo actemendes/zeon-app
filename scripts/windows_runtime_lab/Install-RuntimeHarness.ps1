@@ -61,7 +61,7 @@ $securePassword = ConvertTo-SecureString $passwordText -AsPlainText -Force
 if ($testUser) {
     Set-LocalUser -Name $testUserName -Password $securePassword -PasswordNeverExpires $true -UserMayChangePassword $false
 } else {
-    $testUser = New-LocalUser -Name $testUserName -Password $securePassword -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword -Description 'ZEON non-interactive runtime validation principal'
+    $testUser = New-LocalUser -Name $testUserName -Password $securePassword -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword -Description 'ZEON runtime test principal'
 }
 if (-not (Get-LocalGroupMember -Group 'Administrators' -ErrorAction Stop | Where-Object { $_.SID -eq $testUser.SID })) {
     Add-LocalGroupMember -Group 'Administrators' -Member $testUserName
