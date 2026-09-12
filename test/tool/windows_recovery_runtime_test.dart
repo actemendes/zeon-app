@@ -221,4 +221,10 @@ void main() {
     expect(source, contains('await reporter.writeResult()'));
     expect(source.indexOf('await reporter.writeResult()'), lessThan(source.lastIndexOf('exit(verdict.exitCode)')));
   });
+
+  test('runtime result converts protobuf int64 values before JSON encoding', () async {
+    final source = await File('tool/windows_recovery_runtime.dart').readAsString();
+    expect(source, contains("'memory_bytes': info.memory.toInt()"));
+    expect(source, isNot(contains("'memory_bytes': info.memory,")));
+  });
 }

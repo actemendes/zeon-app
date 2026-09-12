@@ -1112,7 +1112,7 @@ Future<Map<String, Object?>> _nativeStateJson(ZeonCoreService service) async {
     final info = await service.core.backgroundCommandClient.getSystemInfo(Empty()).timeout(const Duration(seconds: 5));
     result.addAll({
       'current_outbound_id': await safeId(info.currentOutbound),
-      'memory_bytes': info.memory,
+      'memory_bytes': info.memory.toInt(),
       'goroutines': info.goroutines,
       'connections_out': info.connectionsOut,
     });
