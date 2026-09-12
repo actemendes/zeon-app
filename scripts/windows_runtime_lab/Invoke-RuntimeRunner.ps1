@@ -4,6 +4,7 @@ param([string]$LabRoot = 'C:\ZEON-LAB')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'RuntimeLab.Common.ps1')
+Add-Type -AssemblyName System.Security
 
 $lockPath = Join-Path $LabRoot 'state\runtime\runner.lock'
 $lockStream = $null

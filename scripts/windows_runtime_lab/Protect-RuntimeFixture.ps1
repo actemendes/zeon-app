@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'RuntimeLab.Common.ps1')
+Add-Type -AssemblyName System.Security
 Assert-RuntimeSafeId -Value $FixtureId -Label 'fixture_id'
 if ($ExpectedSha256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'Invalid fixture SHA-256.' }
 if (-not (Test-Path -LiteralPath $SourcePath -PathType Leaf)) { throw 'Fixture transfer file is missing.' }
@@ -32,4 +33,3 @@ try {
     Remove-Item -LiteralPath $SourcePath -Force -ErrorAction SilentlyContinue
 }
 [ordered]@{ fixture_id = $FixtureId; sha256 = $ExpectedSha256.ToLowerInvariant(); storage = 'DPAPI LocalMachine'; plaintext_retained = $false } | ConvertTo-Json
-

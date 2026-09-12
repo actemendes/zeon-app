@@ -121,6 +121,8 @@ Assert-True -Condition $runtimeWatchdog.Contains('arming_valid') -Message "Watch
 Assert-True -Condition $runtimeRecovery.Contains('Stop-RuntimeOwnedProcesses') -Message "Recovery must stop only explicitly recorded lab-owned processes"
 Assert-True -Condition (-not ($runtimeRecovery -match '(?i)shutdown\.exe|Restart-Computer')) -Message "Runtime recovery must never reboot automatically"
 Assert-True -Condition $runtimeFixture.Contains('DataProtectionScope]::LocalMachine') -Message "Fixture must be encrypted outside evidence with machine DPAPI"
+Assert-True -Condition $runtimeFixture.Contains('Add-Type -AssemblyName System.Security') -Message "Fixture protection must load the Windows DPAPI assembly"
+Assert-True -Condition $runtimeRunner.Contains('Add-Type -AssemblyName System.Security') -Message "Fixture unprotection must load the Windows DPAPI assembly"
 
 $runtimeHarness = Get-Content -LiteralPath (Join-Path $repoRoot "tool\windows_recovery_runtime.dart") -Raw
 Assert-True -Condition $runtimeHarness.Contains('connectionNotifierProvider.notifier') -Message "Runtime harness must use the application lifecycle owner"
