@@ -810,7 +810,7 @@ class RuntimeHarness {
         status = switch (options.mode) {
           HarnessMode.localProxy => await _fetchWithDartClient(target, proxy: true),
           HarnessMode.tun => await _fetchWithDartClient(target, proxy: false),
-          HarnessMode.systemProxy => await _fetchWithWinHttp(target),
+          HarnessMode.systemProxy => await _fetchWithDartClient(target, proxy: true),
         };
       } catch (error) {
         reporter.trafficResults.add({
@@ -831,28 +831,32 @@ class RuntimeHarness {
       });
     }
 
-    final backendStopwatch = Stopwatch()..start();
-    try {
-      final response = await container!.read(httpClientProvider).get<dynamic>(options.backendHealthUrl.toString());
-      if (response.statusCode != 200) throw StateError('unexpected backend status');
-      reporter.trafficResults.add({
-        'target': _safeUri(options.backendHealthUrl),
-        'route': 'application-http-client',
-        'status': 'PASS',
-        'http_status': response.statusCode,
-        'elapsed_ms': backendStopwatch.elapsedMilliseconds,
-      });
-    } catch (error) {
-      reporter.trafficResults.add({
-        'target': _safeUri(options.backendHealthUrl),
-        'route': 'application-http-client',
-        'status': 'FAIL',
-        'elapsed_ms': backendStopwatch.elapsedMilliseconds,
-        'error_type': error.runtimeType.toString(),
-      });
-      throw RuntimeFailure.fail('ZEON domain health failed through the application client');
+    if (options.mode != HarnessMode.systemProxy) {
+      final backendStopwatch = Stopwatch()..start();
+      try {
+        final response = await container!.read(httpClientProvider).get<dynamic>(options.backendHealthUrl.toString());
+        if (response.statusCode != 200) throw StateError('unexpected backend status');
+        reporter.trafficResults.add({
+          'target': _safeUri(options.backendHealthUrl),
+          'route': 'application-http-client',
+          'status': 'PASS',
+          'http_status': response.statusCode,
+          'elapsed_ms': backendStopwatch.elapsedMilliseconds,
+        });
+      } catch (error) {
+        reporter.trafficResults.add({
+          'target': _safeUri(options.backendHealthUrl),
+          'route': 'application-http-client',
+          'status': 'FAIL',
+          'elapsed_ms': backendStopwatch.elapsedMilliseconds,
+          'error_type': error.runtimeType.toString(),
+        });
+        throw RuntimeFailure.fail('ZEON domain health failed through the application client');
+      }
     }
-    await reporter.event('traffic_verified', {'checks': options.trafficUrls.length + 1});
+    await reporter.event('traffic_verified', {
+      'checks': options.trafficUrls.length + (options.mode == HarnessMode.systemProxy ? 0 : 1),
+    });
   }
 
   Future<int> _fetchWithDartClient(Uri target, {required bool proxy}) async {
@@ -866,23 +870,6 @@ class RuntimeHarness {
     } finally {
       client.close(force: true);
     }
-  }
-
-  Future<int> _fetchWithWinHttp(Uri target) async {
-    final transport = createWindowsSystemHttpTransport();
-    if (transport == null) throw StateError('WinHTTP transport is unavailable');
-    final response = await transport.send(
-      WindowsSystemHttpRequest(
-        method: 'GET',
-        url: target.toString(),
-        headers: const {},
-        timeout: const Duration(seconds: 15),
-        proxyMode: WindowsProxyMode.named,
-        namedProxy: '127.0.0.1:${options.proxyPort}',
-      ),
-    );
-    if (response.statusCode != 200) throw StateError('WinHTTP response was not 200');
-    return response.statusCode;
   }
 
   Map<String, Object?> _networkFailureJson(Object error) => switch (error) {

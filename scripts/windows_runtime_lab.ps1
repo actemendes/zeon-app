@@ -207,7 +207,7 @@ function New-RuntimeRequest {
         cleanup_timeout_seconds = $CleanupTimeoutSeconds
         scenario_timeout_seconds = $ScenarioTimeoutSeconds
         execution_timeout_seconds = $BootstrapTimeoutSeconds + $ScenarioTimeoutSeconds + $CleanupTimeoutSeconds + 120
-        traffic_url = 'https://speed.cloudflare.com/__down?bytes=4096'
+        traffic_url = 'https://api.zeon-vps.online/health'
         fixture_id = $FixtureId
         fixture_sha256 = $FixtureSha256
         queued_at = [DateTime]::UtcNow.ToString('o')
