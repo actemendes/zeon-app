@@ -473,6 +473,8 @@ class RuntimeHarness {
   String? originalProxySelection;
   ProviderSubscription<AsyncValue<ConnectionStatus>>? appSubscription;
   ProviderSubscription<AsyncValue<OutboundGroup?>>? proxyKeepAlive;
+  // Process-bound by design; see prepareForProcessExit.
+  // ignore: cancel_subscriptions
   StreamSubscription<CoreStatus>? coreSubscription;
 
   ZeonCoreService get coreService => container!.read(zeonCoreServiceProvider);
@@ -1063,34 +1065,16 @@ class RuntimeHarness {
     return reporter.cleanupAttempts.last['verified'] == true;
   }
 
-  Future<void> dispose() async {
-    final errors = <String>[];
-    final subscription = coreSubscription;
-    if (subscription != null) {
-      try {
-        await subscription.cancel().timeout(const Duration(seconds: 10));
-      } catch (error) {
-        errors.add('core_subscription:${error.runtimeType}');
-      }
-    }
-    try {
-      appSubscription?.close();
-    } catch (error) {
-      errors.add('app_subscription:${error.runtimeType}');
-    }
-    try {
-      proxyKeepAlive?.close();
-    } catch (error) {
-      errors.add('proxy_subscription:${error.runtimeType}');
-    }
-    try {
-      container?.dispose();
-    } catch (error) {
-      errors.add('provider_container:${error.runtimeType}');
-    }
-    if (errors.isNotEmpty) {
-      throw RuntimeFailure.harness('Harness disposal failed: ${errors.join(',')}');
-    }
+  void prepareForProcessExit() {
+    // Strict cleanup above already owns disconnect/core-stop/listener closure.
+    // Riverpod subscription/container disposal can synchronously block inside
+    // native provider teardown, so a one-shot runtime process must not wait on
+    // it after the verified lifecycle cleanup. The immediate dart:io exit below
+    // is the final boundary for these in-process-only objects.
+    proxyKeepAlive = null;
+    coreSubscription = null;
+    appSubscription = null;
+    container = null;
   }
 }
 
@@ -1187,15 +1171,12 @@ Future<void> main(List<String> args) async {
           reason = 'Cleanup verification failed';
         }
       }
-      try {
-        await harness.dispose();
-      } on RuntimeFailure catch (error) {
-        await reporter.event('runtime_dispose_failed', {'reason': error.reason});
-        if (verdict == RuntimeVerdict.pass) {
-          verdict = RuntimeVerdict.harnessError;
-          reason = error.reason;
-        }
-      }
+      harness.prepareForProcessExit();
+      await reporter.event('process_exit_prepared', {
+        'strict_cleanup_verified':
+            reporter.cleanupAttempts.isNotEmpty && reporter.cleanupAttempts.last['verified'] == true,
+        'provider_teardown': 'process_exit',
+      });
     }
     if (reporter != null) {
       reporter.verdict = verdict;

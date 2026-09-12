@@ -182,9 +182,14 @@ void main() {
     expect(event, containsPair('run_id', 'schema-001'));
   });
 
-  test('runtime source bounds subscription disposal before terminal result', () async {
+  test('runtime source cannot block on provider disposal after strict cleanup', () async {
     final source = await File('tool/windows_recovery_runtime.dart').readAsString();
-    expect(source, contains('subscription.cancel().timeout(const Duration(seconds: 10))'));
-    expect(source.indexOf('await harness.dispose()'), lessThan(source.indexOf('await reporter.writeResult()')));
+    expect(source, contains("'provider_teardown': 'process_exit'"));
+    expect(source, isNot(contains('await harness.dispose()')));
+    expect(source, isNot(contains('coreSubscription?.cancel()')));
+    expect(source, isNot(contains('appSubscription?.close()')));
+    expect(source, isNot(contains('proxyKeepAlive?.close()')));
+    expect(source, isNot(contains('container?.dispose()')));
+    expect(source.indexOf('await reporter.writeResult()'), lessThan(source.lastIndexOf('exit(verdict.exitCode)')));
   });
 }
