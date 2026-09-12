@@ -123,6 +123,8 @@ $runtimeRecovery = Get-Content -LiteralPath (Join-Path $runtimeRemoteRoot 'Invok
 $runtimeFixture = Get-Content -LiteralPath (Join-Path $runtimeRemoteRoot 'Protect-RuntimeFixture.ps1') -Raw
 Assert-True -Condition $runtimeInstaller.Contains("`$testUserName = 'ZEONRuntime'") -Message "Runtime task must use the dedicated test principal"
 Assert-True -Condition $runtimeInstaller.Contains("-User `$qualifiedTestUser -Password `$passwordText -RunLevel Highest") -Message "Runtime task must use Password logon with the dedicated principal"
+Assert-True -Condition $runtimeInstaller.Contains('refuse credential replacement because it would invalidate CurrentUser DPAPI') -Message "Runtime redeployment must reuse a matching Password task without replacing its credential"
+Assert-True -Condition (-not $runtimeInstaller.Contains("Set-ScheduledTask -TaskName 'ZEON-LAB Runtime Validation'")) -Message "Runtime redeployment must not rewrite the Password task without its retained credential"
 Assert-True -Condition $runtimeInstaller.Contains('SeDenyInteractiveLogonRight') -Message "Runtime principal must be denied local interactive logon"
 Assert-True -Condition $runtimeInstaller.Contains('SeDenyRemoteInteractiveLogonRight') -Message "Runtime principal must be denied remote interactive logon"
 Assert-True -Condition $runtimeInstaller.Contains("New-ScheduledTaskPrincipal -UserId 'SYSTEM'") -Message "Watchdog task must remain under SYSTEM"

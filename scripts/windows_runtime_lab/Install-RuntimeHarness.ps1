@@ -128,7 +128,8 @@ Set-RuntimeRestrictedAcl -Path $secretRoot -AdditionalFullControlSids @($testUse
 Set-RuntimeRestrictedAcl -Path (Join-Path $LabRoot 'artifacts') -AdditionalReadExecuteSids @($testUserSid)
 
 $powerShell = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-$runnerAction = New-ScheduledTaskAction -Execute $powerShell -Argument '-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File C:\ZEON-LAB\scripts\runtime\Invoke-RuntimeRunner.ps1'
+$runnerArgument = '-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File C:\ZEON-LAB\scripts\runtime\Invoke-RuntimeRunner.ps1'
+$runnerAction = New-ScheduledTaskAction -Execute $powerShell -Argument $runnerArgument
 $runnerSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -MultipleInstances IgnoreNew
 $qualifiedTestUser = "$env:COMPUTERNAME\$testUserName"
 if ($newPrincipal) {
@@ -140,7 +141,12 @@ if ($newPrincipal) {
         $securePassword.Dispose()
     }
 } else {
-    Set-ScheduledTask -TaskName 'ZEON-LAB Runtime Validation' -TaskPath '\ZEON-LAB\' -Action $runnerAction -Settings $runnerSettings | Out-Null
+    $existingActions = @($existingRunnerTask.Actions)
+    if ($existingActions.Count -ne 1 -or
+        -not ([string]$existingActions[0].Execute).Equals($powerShell, [StringComparison]::OrdinalIgnoreCase) -or
+        [string]$existingActions[0].Arguments -cne $runnerArgument) {
+        throw 'Existing Password task action drifted; refuse credential replacement because it would invalidate CurrentUser DPAPI.'
+    }
 }
 
 $watchdogPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
