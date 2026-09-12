@@ -29,6 +29,7 @@ $timedOut = $false
 $recoveryOk = $false
 $rawBaselinePath = $null
 $ownedStatePath = $null
+$runtimeUserDataPath = $null
 
 try {
     $queueDirectory = Join-Path $LabRoot 'state\runtime\queue'
@@ -67,6 +68,10 @@ try {
     $status.deadline = $deadline.ToString('o')
     Write-RuntimeAtomicJson -Value $status -Path $statusPath
     Add-RuntimeEvent -EventsPath $eventsPath -RunId $runId -Event 'running'
+
+    $profilePath = [Environment]::ExpandEnvironmentVariables([string](Get-ItemProperty -LiteralPath "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$currentSid" -ErrorAction Stop).ProfileImagePath)
+    $runtimeUserDataPath = Assert-RuntimePathWithin -Path (Join-Path $profilePath 'AppData\Roaming\zeon') -Root $profilePath -Label 'runtime user data path'
+    if (Test-Path -LiteralPath $runtimeUserDataPath) { Remove-Item -LiteralPath $runtimeUserDataPath -Force -Recurse }
 
     $artifactDirectory = Join-Path $LabRoot ("artifacts\{0}\{1}" -f $request.version, [int]$request.build_number)
     $zipPath = Join-Path $artifactDirectory ([string]$request.artifact_file)
@@ -110,7 +115,8 @@ try {
         test_process_ids = @()
         fixture_plaintext_path = $null
         fixture_encrypted_path = $null
-        recovery_actions = @('stop_lab_owned_processes', 'restore_owned_wininet', 'restore_owned_winhttp', 'restore_owned_routes', 'restore_owned_dns', 'start_sshd_if_stopped', 'remove_runtime_plaintext')
+        runtime_user_data_path = $runtimeUserDataPath
+        recovery_actions = @('stop_lab_owned_processes', 'restore_owned_wininet', 'restore_owned_winhttp', 'restore_owned_routes', 'restore_owned_dns', 'start_sshd_if_stopped', 'remove_runtime_plaintext', 'remove_runtime_user_data')
         reboot_allowed = $false
     }
     Write-RuntimeAtomicJson -Value $active -Path $activePath

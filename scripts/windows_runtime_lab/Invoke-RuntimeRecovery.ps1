@@ -164,7 +164,7 @@ if ([string]$active.user_sid -cne [string]$arming.user_sid) { throw 'Recovery pr
 if ([string]$active.baseline_sha256 -cne [string]$arming.baseline_sha256) { throw 'Recovery baseline hash declaration mismatch.' }
 if ((Get-RuntimeFileHash -Path ([string]$active.baseline_path)) -cne [string]$active.baseline_sha256) { throw 'Recovery baseline content hash mismatch.' }
 if ((ConvertTo-RuntimeComparable @($active.test_process_ids)) -cne (ConvertTo-RuntimeComparable @($arming.pid_allowlist))) { throw 'Recovery PID allowlist mismatch.' }
-$requiredActions = @('stop_lab_owned_processes', 'restore_owned_wininet', 'restore_owned_winhttp', 'restore_owned_routes', 'restore_owned_dns', 'start_sshd_if_stopped', 'remove_runtime_plaintext')
+$requiredActions = @('stop_lab_owned_processes', 'restore_owned_wininet', 'restore_owned_winhttp', 'restore_owned_routes', 'restore_owned_dns', 'start_sshd_if_stopped', 'remove_runtime_plaintext', 'remove_runtime_user_data')
 if ((ConvertTo-RuntimeComparable @($arming.recovery_actions)) -cne (ConvertTo-RuntimeComparable $requiredActions)) { throw 'Recovery action allowlist mismatch.' }
 
 $runDirectory = Assert-RuntimePathWithin -Path ([string]$active.run_directory) -Root (Join-Path $LabRoot 'evidence\runs') -Label 'run directory'
@@ -179,6 +179,7 @@ $report = [ordered]@{
     skipped_processes = @()
     plaintext_removed = $false
     encrypted_fixture_removed = $false
+    runtime_user_data_removed = $false
     secret_scan_clean = $false
     wininet_restored = $false
     winhttp_restored = $false
@@ -223,6 +224,14 @@ try {
         Remove-Item -LiteralPath $encryptedPath -Force -ErrorAction SilentlyContinue
         $report.encrypted_fixture_removed = -not (Test-Path -LiteralPath $encryptedPath)
     } else { $report.encrypted_fixture_removed = $true }
+    if ([string]$active.runtime_user_data_path) {
+        $profilePath = [Environment]::ExpandEnvironmentVariables([string](Get-ItemProperty -LiteralPath "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$([string]$active.user_sid)" -ErrorAction Stop).ProfileImagePath)
+        $expectedUserDataPath = [IO.Path]::GetFullPath((Join-Path $profilePath 'AppData\Roaming\zeon'))
+        $userDataPath = Assert-RuntimePathWithin -Path ([string]$active.runtime_user_data_path) -Root $profilePath -Label 'runtime user data path'
+        if ($userDataPath -cne $expectedUserDataPath) { throw 'Runtime user data path differs from the dedicated profile contract.' }
+        if (Test-Path -LiteralPath $userDataPath) { Remove-Item -LiteralPath $userDataPath -Force -Recurse }
+        $report.runtime_user_data_removed = -not (Test-Path -LiteralPath $userDataPath)
+    } else { $report.runtime_user_data_removed = $true }
 
     $baseline = Get-Content -LiteralPath ([string]$active.baseline_path) -Raw | ConvertFrom-Json
     $ownedState = if (Test-Path -LiteralPath ([string]$active.owned_state_path)) { Get-Content -LiteralPath ([string]$active.owned_state_path) -Raw | ConvertFrom-Json } else { $baseline }
@@ -243,7 +252,7 @@ try {
         Start-Service -Name sshd
         $report.sshd_restarted = $true
     }
-    $report.success = $report.proxy_equal -and $report.routes_equal -and $report.dns_equal -and $report.skipped_processes.Count -eq 0 -and $report.conflicts_preserved.Count -eq 0 -and $report.plaintext_removed -and $report.encrypted_fixture_removed -and $report.secret_scan_clean
+    $report.success = $report.proxy_equal -and $report.routes_equal -and $report.dns_equal -and $report.skipped_processes.Count -eq 0 -and $report.conflicts_preserved.Count -eq 0 -and $report.plaintext_removed -and $report.encrypted_fixture_removed -and $report.runtime_user_data_removed -and $report.secret_scan_clean
 } catch {
     $report.error = $_.Exception.Message
 } finally {

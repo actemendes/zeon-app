@@ -166,7 +166,9 @@ portable data, 45-секундный connect contract, отдельный cleanu
 VM: он публикует version/build неизменяемо, запускает продуктовую Scheduled Task
 под выделенным `ZEONRuntime` и передаёт immutable JSON v2 через SSH/SCP. Пользователю
 разрешён только batch logon, интерактивный и RDP logon запрещены; elevated token
-нужен для TUN, а watchdog/recovery остаются под `SYSTEM`. Controller поддерживает
+нужен для TUN, а watchdog/recovery остаются под `SYSTEM`. Пароль principal не
+сбрасывается при redeploy; dedicated roaming-состояние ZEON очищается на границах
+каждого run, поэтому CurrentUser DPAPI не переносит повреждённое состояние. Controller поддерживает
 bounded `preflight`, `connect`, S02, фазовый S06, ручной/Auto selector и все три
 Windows network mode. Fixture хранится локально под CurrentUser DPAPI, на lab — под
 LocalMachine DPAPI вне evidence; plaintext короткоживущий и удаляется после

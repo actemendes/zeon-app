@@ -60,16 +60,26 @@ $stateRoot = Join-Path $LabRoot 'state\runtime'
 $secretRoot = Join-Path $env:ProgramData 'ZEON-LAB-Secrets'
 $runtimeEvidenceRoot = Join-Path $LabRoot 'evidence\runs'
 $runtimeTempRoot = Join-Path $LabRoot 'temp\runtime'
+if (Test-Path -LiteralPath (Join-Path $stateRoot 'active-run.json')) { throw 'Cannot deploy the runtime harness while a run is active.' }
+if (@(Get-ChildItem -LiteralPath (Join-Path $stateRoot 'queue') -Filter '*.request.json' -File -ErrorAction SilentlyContinue).Count -gt 0) { throw 'Cannot deploy the runtime harness while a run is queued.' }
 $testUserName = 'ZEONRuntime'
 $testUser = Get-LocalUser -Name $testUserName -ErrorAction SilentlyContinue
-$passwordBytes = New-Object byte[] 36
-$random = [Security.Cryptography.RandomNumberGenerator]::Create()
-try { $random.GetBytes($passwordBytes) } finally { $random.Dispose() }
-$passwordText = ([Convert]::ToBase64String($passwordBytes) + 'aA1!')
-$securePassword = ConvertTo-SecureString $passwordText -AsPlainText -Force
+$existingRunnerTask = Get-ScheduledTask -TaskPath '\ZEON-LAB\' -TaskName 'ZEON-LAB Runtime Validation' -ErrorAction SilentlyContinue
+$newPrincipal = $null -eq $testUser
+$passwordBytes = $null
+$passwordText = $null
+$securePassword = $null
 if ($testUser) {
-    Set-LocalUser -Name $testUserName -Password $securePassword -PasswordNeverExpires $true -UserMayChangePassword $false
+    if (-not $existingRunnerTask -or $existingRunnerTask.Principal.UserId -notin @($testUserName, "$env:COMPUTERNAME\$testUserName") -or $existingRunnerTask.Principal.LogonType -ne 'Password') {
+        throw 'Existing runtime principal has no reusable Password scheduled task; refuse a password reset that would invalidate CurrentUser DPAPI.'
+    }
+    Set-LocalUser -Name $testUserName -PasswordNeverExpires $true -UserMayChangePassword $false
 } else {
+    $passwordBytes = New-Object byte[] 36
+    $random = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $random.GetBytes($passwordBytes) } finally { $random.Dispose() }
+    $passwordText = ([Convert]::ToBase64String($passwordBytes) + 'aA1!')
+    $securePassword = ConvertTo-SecureString $passwordText -AsPlainText -Force
     $testUser = New-LocalUser -Name $testUserName -Password $securePassword -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword -Description 'ZEON runtime test principal'
 }
 if (-not (Get-LocalGroupMember -Group 'Administrators' -ErrorAction Stop | Where-Object { $_.SID -eq $testUser.SID })) {
@@ -121,12 +131,16 @@ $powerShell = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
 $runnerAction = New-ScheduledTaskAction -Execute $powerShell -Argument '-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File C:\ZEON-LAB\scripts\runtime\Invoke-RuntimeRunner.ps1'
 $runnerSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -MultipleInstances IgnoreNew
 $qualifiedTestUser = "$env:COMPUTERNAME\$testUserName"
-try {
-    Register-ScheduledTask -TaskName 'ZEON-LAB Runtime Validation' -TaskPath '\ZEON-LAB\' -Action $runnerAction -User $qualifiedTestUser -Password $passwordText -RunLevel Highest -Settings $runnerSettings -Description 'Detached ZEON product runtime validation under a permanent denied-interactive profile. Requests are immutable JSON.' -Force | Out-Null
-} finally {
-    [Array]::Clear($passwordBytes, 0, $passwordBytes.Length)
-    $passwordText = $null
-    $securePassword.Dispose()
+if ($newPrincipal) {
+    try {
+        Register-ScheduledTask -TaskName 'ZEON-LAB Runtime Validation' -TaskPath '\ZEON-LAB\' -Action $runnerAction -User $qualifiedTestUser -Password $passwordText -RunLevel Highest -Settings $runnerSettings -Description 'Detached ZEON product runtime validation under a permanent denied-interactive profile. Requests are immutable JSON.' -Force | Out-Null
+    } finally {
+        [Array]::Clear($passwordBytes, 0, $passwordBytes.Length)
+        $passwordText = $null
+        $securePassword.Dispose()
+    }
+} else {
+    Set-ScheduledTask -TaskName 'ZEON-LAB Runtime Validation' -TaskPath '\ZEON-LAB\' -Action $runnerAction -Settings $runnerSettings | Out-Null
 }
 
 $watchdogPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
@@ -147,6 +161,8 @@ do {
 if ($taskState -eq 'Running') { throw 'Runtime principal profile initialization did not finish.' }
 $profilePath = [Environment]::ExpandEnvironmentVariables([string](Get-ItemProperty -LiteralPath "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$testUserSid" -ErrorAction Stop).ProfileImagePath)
 if (-not (Test-Path -LiteralPath (Join-Path $profilePath 'NTUSER.DAT') -PathType Leaf)) { throw 'Runtime principal profile was not created.' }
+$runtimeUserDataPath = Join-Path $profilePath 'AppData\Roaming\zeon'
+if (Test-Path -LiteralPath $runtimeUserDataPath) { Remove-Item -LiteralPath $runtimeUserDataPath -Force -Recurse }
 
 $installed = [ordered]@{
     schema_version = 2
@@ -164,6 +180,8 @@ $installed = [ordered]@{
         remote_interactive_logon = 'denied'
         local_administrator = $true
         administrator_reason = 'Windows TUN and route ownership require an elevated token; interactive and RDP logon remain denied.'
+        password_lifecycle = 'generated only at first provisioning; retained only by Task Scheduler and never reset during deployment'
+        product_state = 'dedicated roaming ZEON state is reset at run boundaries'
         action = 'C:\ZEON-LAB\scripts\runtime\Invoke-RuntimeRunner.ps1'
     }
     watchdog = [ordered]@{

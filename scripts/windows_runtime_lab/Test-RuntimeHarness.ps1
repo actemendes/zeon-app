@@ -92,7 +92,7 @@ if ($ApplyNoOpRecovery) {
         Write-RuntimeAtomicJson -Value $baseline -Path $baselinePath
         Copy-Item -LiteralPath $baselinePath -Destination $ownedPath
         $baselineHash = Get-RuntimeFileHash -Path $baselinePath
-        $recoveryActions = @('stop_lab_owned_processes', 'restore_owned_wininet', 'restore_owned_winhttp', 'restore_owned_routes', 'restore_owned_dns', 'start_sshd_if_stopped', 'remove_runtime_plaintext')
+        $recoveryActions = @('stop_lab_owned_processes', 'restore_owned_wininet', 'restore_owned_winhttp', 'restore_owned_routes', 'restore_owned_dns', 'start_sshd_if_stopped', 'remove_runtime_plaintext', 'remove_runtime_user_data')
         $active = [ordered]@{
             schema_version = 2
             run_id = $selfTestId
@@ -108,6 +108,7 @@ if ($ApplyNoOpRecovery) {
             test_process_ids = @()
             fixture_plaintext_path = $null
             fixture_encrypted_path = $null
+            runtime_user_data_path = (Join-Path ([Environment]::ExpandEnvironmentVariables([string](Get-ItemProperty -LiteralPath "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$testUserSid" -ErrorAction Stop).ProfileImagePath)) 'AppData\Roaming\zeon')
             recovery_actions = $recoveryActions
             reboot_allowed = $false
         }

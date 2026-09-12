@@ -41,6 +41,7 @@ try {
                 'restore only the run-recorded dedicated-user WinINet and global WinHTTP delta',
                 'verify routes and DNS exactly match the run baseline without touching foreign state',
                 'start sshd only if stopped',
+                'remove only the dedicated runtime principal ZEON roaming state',
                 'never reboot automatically'
             )
             $armingPath = Join-Path $LabRoot ("state\runtime\arming\{0}.json" -f $runId)

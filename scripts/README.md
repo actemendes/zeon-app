@@ -47,7 +47,10 @@ SHA-256 ZIP, EXE и native core. Повторная сборка с уже за�
 Windows 10. Controller использует только key-only SSH/SCP и отдельную Scheduled
 Task `\ZEON-LAB\ZEON-LAB Runtime Validation` от выделенного локального пользователя
 `ZEONRuntime`. Пользователю разрешён batch logon, запрещены локальный интерактивный
-и RDP logon; watchdog остаётся под `SYSTEM`. Сначала локально
+и RDP logon; watchdog остаётся под `SYSTEM`. Пароль генерируется только при первом
+provisioning и при обновлении harness не сбрасывается, чтобы не инвалидировать
+CurrentUser DPAPI. Выделенное roaming-состояние ZEON очищается на границах run.
+Сначала локально
 проверьте controller, затем неизменяемо опубликуйте артефакт и установите harness:
 
 ```powershell
