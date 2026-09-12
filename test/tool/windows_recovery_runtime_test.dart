@@ -255,7 +255,7 @@ void main() {
     expect(observation, greaterThan(0));
     expect(retry, greaterThan(observation));
     expect(source.substring(observation, retry), contains('await _connectAndProveReady()'));
-    expect(source.substring(observation, retry), contains('await _verifyTraffic()'));
+    expect(source.substring(observation, retry), contains('await _verifyTraffic(verifyProductHealth: false)'));
     expect(source.substring(observation, retry), contains("await _disconnectAndVerify('s06-retry')"));
   });
 
@@ -266,11 +266,11 @@ void main() {
     final scenario = source.substring(scenarioStart, scenarioEnd);
     final ready = scenario.indexOf('await _connectAndProveReady()');
     final outbound = scenario.indexOf('await _reportSelectedOutbound()');
-    final traffic = scenario.indexOf('await _verifyTraffic()');
+    final traffic = scenario.indexOf('await _verifyTraffic(verifyProductHealth: false)');
     final firstStop = scenario.indexOf("await _disconnectAndVerify('s02-cycle-\$cycle-first-stop')");
     final direct = scenario.indexOf('await _verifyDirectTraffic(cycle)');
     final reconnect = scenario.indexOf('await _connectAndProveReady()', direct);
-    final secondTraffic = scenario.indexOf('await _verifyTraffic()', reconnect);
+    final secondTraffic = scenario.indexOf('await _verifyTraffic(verifyProductHealth: false)', reconnect);
     final finalStop = scenario.indexOf("await _disconnectAndVerify('s02-cycle-\$cycle-final-stop')");
     expect(ready, greaterThanOrEqualTo(0));
     expect(outbound, greaterThan(ready));
@@ -282,5 +282,6 @@ void main() {
     expect(finalStop, greaterThan(secondTraffic));
     expect(source, contains("reporter.event('s02_direct_internet_verified'"));
     expect(source, contains("'route': 'direct-after-disconnect'"));
+    expect(source, contains("'product_health_checked': verifyProductHealth"));
   });
 }

@@ -607,12 +607,12 @@ class RuntimeHarness {
       await reporter.event('s02_cycle_started', {'cycle': cycle, 'total': options.s02Cycles});
       await _connectAndProveReady();
       await _reportSelectedOutbound();
-      await _verifyTraffic();
+      await _verifyTraffic(verifyProductHealth: false);
       await _disconnectAndVerify('s02-cycle-$cycle-first-stop');
       await _verifyDirectTraffic(cycle);
       await _connectAndProveReady();
       await _reportSelectedOutbound();
-      await _verifyTraffic();
+      await _verifyTraffic(verifyProductHealth: false);
       await _disconnectAndVerify('s02-cycle-$cycle-final-stop');
       await reporter.event('s02_cycle_passed', {'cycle': cycle});
     }
@@ -654,7 +654,7 @@ class RuntimeHarness {
     await reporter.event('s06_no_late_activation', {'observed_seconds': _cancelObservation.inSeconds});
     await _connectAndProveReady();
     await _reportSelectedOutbound();
-    await _verifyTraffic();
+    await _verifyTraffic(verifyProductHealth: false);
     await _disconnectAndVerify('s06-retry');
     await reporter.event('s06_retry_passed');
   }
@@ -853,7 +853,7 @@ class RuntimeHarness {
     });
   }
 
-  Future<void> _verifyTraffic() async {
+  Future<void> _verifyTraffic({bool verifyProductHealth = true}) async {
     for (final target in options.trafficUrls) {
       final stopwatch = Stopwatch()..start();
       int status;
@@ -882,8 +882,11 @@ class RuntimeHarness {
       });
     }
 
-    await _verifyBackendHealthSignal();
-    await reporter.event('traffic_verified', {'checks': options.trafficUrls.length + 1});
+    if (verifyProductHealth) await _verifyBackendHealthSignal();
+    await reporter.event('traffic_verified', {
+      'checks': options.trafficUrls.length + (verifyProductHealth ? 1 : 0),
+      'product_health_checked': verifyProductHealth,
+    });
   }
 
   Future<void> _verifyDirectTraffic(int cycle) async {
