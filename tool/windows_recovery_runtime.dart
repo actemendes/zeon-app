@@ -818,7 +818,7 @@ class RuntimeHarness {
           'route': options.mode.cliName,
           'status': 'FAIL',
           'elapsed_ms': stopwatch.elapsedMilliseconds,
-          'error_type': error.runtimeType.toString(),
+          ..._networkFailureJson(error),
         });
         throw RuntimeFailure.fail('HTTPS traffic failed through ${options.mode.cliName}');
       }
@@ -877,11 +877,25 @@ class RuntimeHarness {
         url: target.toString(),
         headers: const {},
         timeout: const Duration(seconds: 15),
+        proxyMode: WindowsProxyMode.named,
+        namedProxy: '127.0.0.1:${options.proxyPort}',
       ),
     );
     if (response.statusCode != 200) throw StateError('WinHTTP response was not 200');
     return response.statusCode;
   }
+
+  Map<String, Object?> _networkFailureJson(Object error) => switch (error) {
+    WindowsSystemNetworkException() => {
+      'error_type': error.runtimeType.toString(),
+      'operation': error.operation,
+      'stage': error.stage.name,
+      'win32_code': error.win32Code,
+      'hresult': '0x${error.hresult.toUnsigned(32).toRadixString(16).padLeft(8, '0')}',
+      'secure_failures': error.secureFailures,
+    },
+    _ => {'error_type': error.runtimeType.toString()},
+  };
 
   Future<bool> _proxyListening() async {
     try {

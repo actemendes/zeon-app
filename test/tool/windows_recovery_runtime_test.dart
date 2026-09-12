@@ -227,4 +227,11 @@ void main() {
     expect(source, contains("'memory_bytes': info.memory.toInt()"));
     expect(source, isNot(contains("'memory_bytes': info.memory,")));
   });
+
+  test('system-proxy verification targets the owned ZEON listener explicitly', () async {
+    final source = await File('tool/windows_recovery_runtime.dart').readAsString();
+    expect(source, contains('proxyMode: WindowsProxyMode.named'));
+    expect(source, contains("namedProxy: '127.0.0.1:\${options.proxyPort}'"));
+    expect(source, contains("'win32_code': error.win32Code"));
+  });
 }
