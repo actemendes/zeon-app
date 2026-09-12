@@ -606,6 +606,7 @@ class RuntimeHarness {
     for (var cycle = 1; cycle <= options.s02Cycles; cycle++) {
       await reporter.event('s02_cycle_started', {'cycle': cycle, 'total': options.s02Cycles});
       await _connectAndProveReady();
+      await _reportSelectedOutbound();
       await _verifyTraffic();
       await _disconnectAndVerify('s02-cycle-$cycle');
       await reporter.event('s02_cycle_passed', {'cycle': cycle});

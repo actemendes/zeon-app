@@ -258,4 +258,17 @@ void main() {
     expect(source.substring(observation, retry), contains('await _verifyTraffic()'));
     expect(source.substring(observation, retry), contains("await _disconnectAndVerify('s06-retry')"));
   });
+
+  test('S02 waits for a concrete outbound before probing traffic', () async {
+    final source = await File('tool/windows_recovery_runtime.dart').readAsString();
+    final scenarioStart = source.indexOf('Future<void> _scenarioS02()');
+    final scenarioEnd = source.indexOf('Future<void> _scenarioS06()', scenarioStart);
+    final scenario = source.substring(scenarioStart, scenarioEnd);
+    final ready = scenario.indexOf('await _connectAndProveReady()');
+    final outbound = scenario.indexOf('await _reportSelectedOutbound()');
+    final traffic = scenario.indexOf('await _verifyTraffic()');
+    expect(ready, greaterThanOrEqualTo(0));
+    expect(outbound, greaterThan(ready));
+    expect(traffic, greaterThan(outbound));
+  });
 }
