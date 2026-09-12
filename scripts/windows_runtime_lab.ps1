@@ -372,8 +372,8 @@ function Get-RemoteRunStatus([string]$TargetRunId) {
 
 function Collect-RemoteRun {
     param([Parameter(Mandatory = $true)][string]$TargetRunId)
-    $status = Get-RemoteRunStatus -TargetRunId $TargetRunId
-    if (-not [bool]$status.safe_to_collect) { throw 'Remote evidence did not pass the fixture/profile secret scan.' }
+    $remoteStatus = Get-RemoteRunStatus -TargetRunId $TargetRunId
+    if (-not [bool]$remoteStatus.safe_to_collect) { throw 'Remote evidence did not pass the fixture/profile secret scan.' }
     $runDirectory = "$remoteLabRoot\evidence\runs\$TargetRunId"
     $remoteArchive = "$remoteLabRoot\temp\exports\$TargetRunId.zip"
     $archiveHash = Invoke-RemotePowerShell -Script "New-Item -ItemType Directory -Path '$remoteLabRoot\temp\exports' -Force | Out-Null; if (Test-Path -LiteralPath '$remoteArchive') { Remove-Item -LiteralPath '$remoteArchive' -Force }; Compress-Archive -Path '$runDirectory\*' -DestinationPath '$remoteArchive' -CompressionLevel Optimal; (Get-FileHash -LiteralPath '$remoteArchive' -Algorithm SHA256).Hash.ToLowerInvariant()"
@@ -391,7 +391,7 @@ function Collect-RemoteRun {
         foreach ($file in @(Get-ChildItem -LiteralPath $expanded -File -Recurse | Where-Object Extension -In @('.json','.jsonl','.log','.txt','.fixture'))) {
             if ([IO.File]::ReadAllText($file.FullName) -match $secretPattern) { throw 'Local evidence contains a profile/source secret pattern and must not be used.' }
         }
-        return [ordered]@{ status = $status; local_root = $targetRoot; archive = $localArchive; archive_sha256 = $localHash; evidence = $expanded }
+        return [ordered]@{ status = $remoteStatus; local_root = $targetRoot; archive = $localArchive; archive_sha256 = $localHash; evidence = $expanded }
     } finally {
         Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$remoteArchive' -Force -ErrorAction SilentlyContinue" | Out-Null
     }
@@ -555,14 +555,14 @@ if ($Detach) {
 $freshSessionObserved = $false
 $terminal = @('completed', 'failed', 'timed_out', 'recovered')
 $controllerDeadline = [DateTime]::UtcNow.AddMinutes($ControllerTimeoutMinutes)
-$status = $null
+$runStatus = $null
 do {
-    $status = Get-RemoteRunStatus -TargetRunId $RunId
+    $runStatus = Get-RemoteRunStatus -TargetRunId $RunId
     $freshSessionObserved = $true
-    if ([string]$status.status -in $terminal) { break }
+    if ([string]$runStatus.status -in $terminal) { break }
     Start-Sleep -Seconds 5
 } while ([DateTime]::UtcNow -lt $controllerDeadline)
-if (-not $status -or [string]$status.status -notin $terminal) { throw "Runtime did not reach a terminal state within $ControllerTimeoutMinutes minutes; the detached task/watchdog remain authoritative." }
+if (-not $runStatus -or [string]$runStatus.status -notin $terminal) { throw "Runtime did not reach a terminal state within $ControllerTimeoutMinutes minutes; the detached task/watchdog remain authoritative." }
 
 $collected = Collect-RemoteRun -TargetRunId $RunId
 $postCheck = Invoke-RemotePowerShell -Script "`$p=@(Get-Process -ErrorAction SilentlyContinue | Where-Object ProcessName -Match '^(ZEON|ZEONCli)$'); [ordered]@{hostname=`$env:COMPUTERNAME;sshd=(Get-Service sshd).Status.ToString();zeon_process_count=`$p.Count} | ConvertTo-Json -Compress" | ConvertFrom-Json
