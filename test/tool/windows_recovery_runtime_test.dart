@@ -156,7 +156,7 @@ void main() {
     reporter.cleanupAttempts.add({'verified': true});
     reporter.addEvidence(reporter.eventsFile.path);
     await reporter.event('schema_probe');
-    reporter.writeResultSync();
+    await reporter.writeResult();
 
     final result = jsonDecode(await reporter.resultFile.readAsString()) as Map<String, dynamic>;
     expect(result['schema'], 'zeon.windows-runtime.v1');
@@ -182,7 +182,7 @@ void main() {
     expect(event, containsPair('run_id', 'schema-001'));
   });
 
-  test('seals terminal events before the synchronous result write', () async {
+  test('seals terminal events before the awaited result write', () async {
     final directory = await Directory.systemTemp.createTemp('zeon-runtime-seal-');
     addTearDown(() => directory.delete(recursive: true));
     final options = RuntimeOptions.parse([
@@ -200,7 +200,7 @@ void main() {
     await reporter.event('before_seal');
     await reporter.sealEvents();
     await reporter.event('must_be_ignored');
-    reporter.writeResultSync();
+    await reporter.writeResult();
 
     final events = await reporter.eventsFile.readAsLines();
     expect(events, hasLength(2));
@@ -218,7 +218,7 @@ void main() {
     expect(source, isNot(contains('proxyKeepAlive?.close()')));
     expect(source, isNot(contains('container?.dispose()')));
     expect(source, contains('await reporter.sealEvents()'));
-    expect(source, contains('reporter.writeResultSync()'));
-    expect(source.indexOf('reporter.writeResultSync()'), lessThan(source.lastIndexOf('exit(verdict.exitCode)')));
+    expect(source, contains('await reporter.writeResult()'));
+    expect(source.indexOf('await reporter.writeResult()'), lessThan(source.lastIndexOf('exit(verdict.exitCode)')));
   });
 }

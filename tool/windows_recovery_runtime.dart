@@ -373,7 +373,7 @@ class HarnessReporter {
     if (!evidencePaths.contains(path)) evidencePaths.add(path);
   }
 
-  void writeResultSync() {
+  Future<void> writeResult() async {
     final endedUtc = DateTime.now().toUtc();
     final result = {
       'schema': 'zeon.windows-runtime.v1',
@@ -404,7 +404,7 @@ class HarnessReporter {
       },
       'evidence_paths': evidencePaths,
     };
-    resultFile.writeAsStringSync('${const JsonEncoder.withIndent('  ').convert(result)}\n', flush: true);
+    await resultFile.writeAsString('${const JsonEncoder.withIndent('  ').convert(result)}\n', flush: true);
   }
 }
 
@@ -1185,7 +1185,7 @@ Future<void> main(List<String> args) async {
     if (reporter != null) {
       reporter.verdict = verdict;
       reporter.reason = reason;
-      reporter.writeResultSync();
+      await reporter.writeResult();
     } else {
       stderr.writeln(reason);
     }
