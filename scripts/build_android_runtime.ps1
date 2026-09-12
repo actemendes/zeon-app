@@ -67,7 +67,7 @@ finally {
     Pop-Location
 }
 
-$builtApp = Join-Path $repoRoot "build\app\outputs\flutter-apk\app-validation.apk"
+$builtApp = Join-Path $repoRoot "build\app\outputs\apk\validation\app-universal-validation.apk"
 $builtTest = Join-Path $repoRoot "build\app\outputs\apk\androidTest\validation\app-validation-androidTest.apk"
 foreach ($required in @($builtApp, $builtTest)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
