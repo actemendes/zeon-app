@@ -545,6 +545,9 @@ if ($Scenario -ne 'preflight') {
     try {
         Copy-ToRemote -Source $fixtureTransfer.path -RemotePath (($remoteFixtureTransfer) -replace '\\', '/')
         Invoke-RemotePowerShell -Script "& '$remoteLabRoot\scripts\runtime\Protect-RuntimeFixture.ps1' -SourcePath '$remoteFixtureTransfer' -FixtureId '$remoteFixtureId' -ExpectedSha256 '$fixtureHash' | Out-Null" | Out-Null
+    } catch {
+        Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$env:ProgramData\ZEON-LAB-Secrets\$remoteFixtureId.dpapi' -Force -ErrorAction SilentlyContinue" | Out-Null
+        throw
     } finally {
         Remove-Item -LiteralPath $fixtureTransfer.path -Force -ErrorAction SilentlyContinue
         Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$remoteFixtureTransfer' -Force -ErrorAction SilentlyContinue" | Out-Null

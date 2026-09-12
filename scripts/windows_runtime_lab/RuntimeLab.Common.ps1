@@ -256,6 +256,18 @@ function Set-RuntimeRestrictedAcl {
         [string[]]$AdditionalReadExecuteSids = @()
     )
     $item = Get-Item -LiteralPath $Path
+    $fullSids = @(@('S-1-5-18', 'S-1-5-32-544') + @($AdditionalFullControlSids) | Sort-Object -Unique)
+    $readSids = @($AdditionalReadExecuteSids | Where-Object { $_ -notin $fullSids } | Sort-Object -Unique)
+    $currentAcl = Get-Acl -LiteralPath $Path
+    $currentRules = @($currentAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+    $unexpectedRules = @($currentRules | Where-Object {
+        $sid = $_.IdentityReference.Value
+        $required = if ($sid -in $fullSids) { [Security.AccessControl.FileSystemRights]::FullControl } elseif ($sid -in $readSids) { [Security.AccessControl.FileSystemRights]::ReadAndExecute } else { $null }
+        $null -eq $required -or $_.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or ($_.FileSystemRights -band $required) -ne $required
+    })
+    $missingFull = @($fullSids | Where-Object { $sid = $_; -not @($currentRules | Where-Object { $_.IdentityReference.Value -eq $sid -and $_.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and ($_.FileSystemRights -band [Security.AccessControl.FileSystemRights]::FullControl) -eq [Security.AccessControl.FileSystemRights]::FullControl }) })
+    $missingRead = @($readSids | Where-Object { $sid = $_; -not @($currentRules | Where-Object { $_.IdentityReference.Value -eq $sid -and $_.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and ($_.FileSystemRights -band [Security.AccessControl.FileSystemRights]::ReadAndExecute) -eq [Security.AccessControl.FileSystemRights]::ReadAndExecute }) })
+    if ($unexpectedRules.Count -eq 0 -and $missingFull.Count -eq 0 -and $missingRead.Count -eq 0) { return }
     $acl = if ($item.PSIsContainer) {
         New-Object System.Security.AccessControl.DirectorySecurity
     } else {
@@ -269,13 +281,13 @@ function Set-RuntimeRestrictedAcl {
     }
     $allow = [System.Security.AccessControl.AccessControlType]::Allow
     $full = [System.Security.AccessControl.FileSystemRights]::FullControl
-    foreach ($sidValue in @('S-1-5-18', 'S-1-5-32-544') + @($AdditionalFullControlSids)) {
+    foreach ($sidValue in $fullSids) {
         $sid = New-Object System.Security.Principal.SecurityIdentifier($sidValue)
         $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $full, $inheritance, [System.Security.AccessControl.PropagationFlags]::None, $allow)
         $acl.AddAccessRule($rule)
     }
     $readExecute = [System.Security.AccessControl.FileSystemRights]'ReadAndExecute, Synchronize'
-    foreach ($sidValue in @($AdditionalReadExecuteSids)) {
+    foreach ($sidValue in $readSids) {
         $sid = New-Object System.Security.Principal.SecurityIdentifier($sidValue)
         $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $readExecute, $inheritance, [System.Security.AccessControl.PropagationFlags]::None, $allow)
         $acl.AddAccessRule($rule)

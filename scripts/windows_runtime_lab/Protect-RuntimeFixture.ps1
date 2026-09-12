@@ -22,6 +22,7 @@ if ($testUserSid -notmatch '^S-1-5-21-(?:\d+-){3}\d+$') { throw 'Runtime test pr
 Set-RuntimeRestrictedAcl -Path $SecretRoot -AdditionalFullControlSids @($testUserSid)
 $destination = Join-Path $SecretRoot ("{0}.dpapi" -f $FixtureId)
 if (Test-Path -LiteralPath $destination) { throw 'Encrypted fixture id already exists.' }
+$completed = $false
 try {
     $actual = Get-RuntimeFileHash -Path $SourcePath
     if ($actual -cne $ExpectedSha256.ToLowerInvariant()) { throw 'Fixture transfer SHA-256 mismatch.' }
@@ -30,10 +31,12 @@ try {
         $protected = [Security.Cryptography.ProtectedData]::Protect($plain, $null, [Security.Cryptography.DataProtectionScope]::LocalMachine)
         [IO.File]::WriteAllBytes($destination, $protected)
         Set-RuntimeRestrictedAcl -Path $destination -AdditionalFullControlSids @($testUserSid)
+        $completed = $true
     } finally {
         [Array]::Clear($plain, 0, $plain.Length)
     }
 } finally {
     Remove-Item -LiteralPath $SourcePath -Force -ErrorAction SilentlyContinue
+    if (-not $completed) { Remove-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue }
 }
 [ordered]@{ fixture_id = $FixtureId; sha256 = $ExpectedSha256.ToLowerInvariant(); storage = 'DPAPI LocalMachine'; plaintext_retained = $false } | ConvertTo-Json
