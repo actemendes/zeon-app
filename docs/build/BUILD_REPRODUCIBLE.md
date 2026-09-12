@@ -61,12 +61,22 @@ build type/time and artifact/native hashes. The script refuses to overwrite a
 previously recorded build number; increment `+N` in `pubspec.yaml` before the
 next actual compilation.
 
-The `ZEON-W10-LAB` controller is `scripts/windows_runtime_lab.ps1`. It restores
-the clean QEMU/TCG snapshot, waits for WinRM, stages hash-verified inputs, starts
-an elevated hidden Scheduled Task and retrieves `result.json`, `events.jsonl`,
-logs and network evidence. The task survives loss of the controller session;
-`-CollectOnly -RunId <id>` resumes evidence collection. The controller performs
-no UI automation and restores the stopped clean snapshot after ordinary runs.
+The direct `ZEON-W10-LAB` controller is `scripts/windows_runtime_lab.ps1`. The
+laboratory is a standalone Windows Server 2022 Standard Evaluation
+`10.0.20348` (`20348.5622`), x64 host, not the historical QEMU/TCG Windows 10
+VM; evidence from it must not be reported as Windows 10 compatibility. The
+controller validates and publishes hash-verified immutable artifacts over
+key-only SSH/SCP, then queues immutable JSON v2 for an elevated detached
+Scheduled Task under the dedicated non-interactive `ZEONRuntime` principal.
+The `SYSTEM` watchdog owns bounded recovery and never schedules an automatic
+reboot.
+
+The runtime task survives loss of the queueing SSH session. Use `-Status` and
+`-CollectOnly -RunId <id>` from fresh sessions to inspect or retrieve
+`result.json`, `events.jsonl`, logs and network evidence. Per-run evidence stays
+outside Git under `Z:\Zeon-Envelope\Temp\zeon-app-testing`; the detailed
+acceptance status and known product failures are recorded in
+`docs/testing/README.md`. The controller performs no UI automation.
 
 ## 4) Team rules to avoid drift
 
