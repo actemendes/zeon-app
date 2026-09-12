@@ -332,7 +332,7 @@ if ($FixturePath) {
         Copy-ToRemote -Source $FixturePath -RemotePath (($remoteFixtureTransfer) -replace '\\', '/')
         Invoke-RemotePowerShell -Script "& '$remoteLabRoot\scripts\runtime\Protect-RuntimeFixture.ps1' -SourcePath '$remoteFixtureTransfer' -FixtureId '$fixtureId' -ExpectedSha256 '$fixtureHash'" | Out-Null
     } finally {
-        Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$remoteFixtureTransfer' -Force -ErrorAction SilentlyContinue" | Out-Null
+        Invoke-RemotePowerShell -Script "if (Test-Path -LiteralPath '$remoteFixtureTransfer') { Remove-Item -LiteralPath '$remoteFixtureTransfer' -Force }; exit 0" | Out-Null
     }
 }
 
@@ -347,7 +347,7 @@ try {
     Copy-ToRemote -Source $requestPath -RemotePath (($remoteRequest) -replace '\\', '/')
     Invoke-RemotePowerShell -Script "& '$remoteLabRoot\scripts\runtime\Queue-RuntimeRun.ps1' -RequestPath '$remoteRequest' -LabRoot '$remoteLabRoot'" | Out-Null
 } catch {
-    Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$remoteRequest' -Force -ErrorAction SilentlyContinue" | Out-Null
+    Invoke-RemotePowerShell -Script "if (Test-Path -LiteralPath '$remoteRequest') { Remove-Item -LiteralPath '$remoteRequest' -Force }; exit 0" | Out-Null
     throw
 }
 
