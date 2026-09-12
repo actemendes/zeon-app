@@ -156,7 +156,7 @@ void main() {
     reporter.cleanupAttempts.add({'verified': true});
     reporter.addEvidence(reporter.eventsFile.path);
     await reporter.event('schema_probe');
-    await reporter.writeResult();
+    reporter.writeResultSync();
 
     final result = jsonDecode(await reporter.resultFile.readAsString()) as Map<String, dynamic>;
     expect(result['schema'], 'zeon.windows-runtime.v1');
@@ -182,6 +182,33 @@ void main() {
     expect(event, containsPair('run_id', 'schema-001'));
   });
 
+  test('seals terminal events before the synchronous result write', () async {
+    final directory = await Directory.systemTemp.createTemp('zeon-runtime-seal-');
+    addTearDown(() => directory.delete(recursive: true));
+    final options = RuntimeOptions.parse([
+      '--scenario',
+      'preflight',
+      '--mode',
+      'system-proxy',
+      '--evidence-dir',
+      directory.path,
+      '--run-id',
+      'seal-001',
+    ], environment: const {});
+    final reporter = HarnessReporter(options, directory);
+
+    await reporter.event('before_seal');
+    await reporter.sealEvents();
+    await reporter.event('must_be_ignored');
+    reporter.writeResultSync();
+
+    final events = await reporter.eventsFile.readAsLines();
+    expect(events, hasLength(2));
+    expect(jsonDecode(events.first), containsPair('event', 'before_seal'));
+    expect(jsonDecode(events.last), containsPair('event', 'event_stream_sealed'));
+    expect(await reporter.resultFile.exists(), isTrue);
+  });
+
   test('runtime source cannot block on provider disposal after strict cleanup', () async {
     final source = await File('tool/windows_recovery_runtime.dart').readAsString();
     expect(source, contains("'provider_teardown': 'process_exit'"));
@@ -190,6 +217,8 @@ void main() {
     expect(source, isNot(contains('appSubscription?.close()')));
     expect(source, isNot(contains('proxyKeepAlive?.close()')));
     expect(source, isNot(contains('container?.dispose()')));
-    expect(source.indexOf('await reporter.writeResult()'), lessThan(source.lastIndexOf('exit(verdict.exitCode)')));
+    expect(source, contains('await reporter.sealEvents()'));
+    expect(source, contains('reporter.writeResultSync()'));
+    expect(source.indexOf('reporter.writeResultSync()'), lessThan(source.lastIndexOf('exit(verdict.exitCode)')));
   });
 }

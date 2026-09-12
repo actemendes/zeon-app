@@ -314,6 +314,7 @@ class HarnessReporter {
   final List<Map<String, Object?>> cleanupAttempts = [];
   final List<String> evidencePaths = [];
   Future<void> _eventTail = Future<void>.value();
+  bool _eventsSealed = false;
   String phase = 'bootstrap';
   RuntimeVerdict verdict = RuntimeVerdict.harnessError;
   String reason = 'runtime did not reach a terminal result';
@@ -324,6 +325,7 @@ class HarnessReporter {
   String buildNumber = '';
 
   Future<void> event(String name, [Map<String, Object?> details = const {}]) {
+    if (_eventsSealed) return Future<void>.value();
     final payload = jsonEncode({
       'utc': DateTime.now().toUtc().toIso8601String(),
       'run_id': options.runId,
@@ -336,6 +338,21 @@ class HarnessReporter {
     return _eventTail = _eventTail.then(
       (_) => eventsFile.writeAsString('$payload\n', mode: FileMode.append, flush: true),
     );
+  }
+
+  Future<void> sealEvents() async {
+    _eventsSealed = true;
+    final payload = jsonEncode({
+      'utc': DateTime.now().toUtc().toIso8601String(),
+      'run_id': options.runId,
+      'scenario': options.scenario.cliName,
+      'mode': options.mode.cliName,
+      'phase': phase,
+      'event': 'event_stream_sealed',
+    });
+    await (_eventTail = _eventTail.then(
+      (_) => eventsFile.writeAsString('$payload\n', mode: FileMode.append, flush: true),
+    ));
   }
 
   Future<void> startPhase(String name) async {
@@ -356,8 +373,7 @@ class HarnessReporter {
     if (!evidencePaths.contains(path)) evidencePaths.add(path);
   }
 
-  Future<void> writeResult() async {
-    await _eventTail;
+  void writeResultSync() {
     final endedUtc = DateTime.now().toUtc();
     final result = {
       'schema': 'zeon.windows-runtime.v1',
@@ -388,7 +404,7 @@ class HarnessReporter {
       },
       'evidence_paths': evidencePaths,
     };
-    await resultFile.writeAsString('${const JsonEncoder.withIndent('  ').convert(result)}\n', flush: true);
+    resultFile.writeAsStringSync('${const JsonEncoder.withIndent('  ').convert(result)}\n', flush: true);
   }
 }
 
@@ -1064,18 +1080,6 @@ class RuntimeHarness {
     }
     return reporter.cleanupAttempts.last['verified'] == true;
   }
-
-  void prepareForProcessExit() {
-    // Strict cleanup above already owns disconnect/core-stop/listener closure.
-    // Riverpod subscription/container disposal can synchronously block inside
-    // native provider teardown, so a one-shot runtime process must not wait on
-    // it after the verified lifecycle cleanup. The immediate dart:io exit below
-    // is the final boundary for these in-process-only objects.
-    proxyKeepAlive = null;
-    coreSubscription = null;
-    appSubscription = null;
-    container = null;
-  }
 }
 
 Map<String, Object?> _appStateJson(AsyncValue<ConnectionStatus> state) => switch (state) {
@@ -1171,17 +1175,17 @@ Future<void> main(List<String> args) async {
           reason = 'Cleanup verification failed';
         }
       }
-      harness.prepareForProcessExit();
       await reporter.event('process_exit_prepared', {
         'strict_cleanup_verified':
             reporter.cleanupAttempts.isNotEmpty && reporter.cleanupAttempts.last['verified'] == true,
         'provider_teardown': 'process_exit',
       });
+      await reporter.sealEvents();
     }
     if (reporter != null) {
       reporter.verdict = verdict;
       reporter.reason = reason;
-      await reporter.writeResult();
+      reporter.writeResultSync();
     } else {
       stderr.writeln(reason);
     }
