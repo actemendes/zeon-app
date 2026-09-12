@@ -598,6 +598,7 @@ class RuntimeHarness {
 
   Future<void> _scenarioConnect() async {
     await _connectAndProveReady();
+    await _reportSelectedOutbound();
     await _verifyTraffic();
     await _disconnectAndVerify('connect-scenario');
   }
@@ -802,6 +803,23 @@ class RuntimeHarness {
     return group;
   }
 
+  Future<void> _reportSelectedOutbound() async {
+    final group = await _selectorGroup();
+    String? selectedType;
+    for (final item in group.items) {
+      if (item.tag == group.selected) selectedType = item.type;
+    }
+    final systemInfo = await coreService.core.backgroundCommandClient
+        .getSystemInfo(Empty())
+        .timeout(const Duration(seconds: 8));
+    await reporter.event('outbound_selected', {
+      'selector_id': await safeId(group.tag),
+      'selected_id': await safeId(group.selected),
+      'selected_type': selectedType,
+      'runtime_outbound_id': await safeId(systemInfo.currentOutbound),
+    });
+  }
+
   Future<void> _verifyTraffic() async {
     for (final target in options.trafficUrls) {
       final stopwatch = Stopwatch()..start();
@@ -913,7 +931,9 @@ class RuntimeHarness {
       await stderr.timeout(const Duration(seconds: 2), onTimeout: () {});
     }
     final status = int.tryParse((await stdout).trim());
-    if (exitCode != 0 || status == null) throw StateError('HTTPS probe failed with exit code $exitCode');
+    if (exitCode != 0 || status == null) {
+      throw ProcessException('curl.exe', const [], 'HTTPS probe failed', exitCode);
+    }
     if (status != 200) throw StateError('HTTPS response was not 200');
     return status;
   }
@@ -928,6 +948,7 @@ class RuntimeHarness {
       'secure_failures': error.secureFailures,
     },
     TimeoutException() => {'error_type': error.runtimeType.toString(), 'stage': error.message},
+    ProcessException() => {'error_type': error.runtimeType.toString(), 'exit_code': error.errorCode},
     _ => {'error_type': error.runtimeType.toString()},
   };
 

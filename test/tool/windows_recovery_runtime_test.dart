@@ -234,6 +234,8 @@ void main() {
     expect(source, contains("'http://127.0.0.1:\${options.proxyPort}'"));
     expect(source, contains("'--proto',"));
     expect(source, isNot(contains("'--insecure'")));
+    expect(source, contains("reporter.event('outbound_selected'"));
+    expect(source, contains("'exit_code': error.errorCode"));
     expect(source, contains('options.mode != HarnessMode.systemProxy'));
     expect(source, contains("'win32_code': error.win32Code"));
   });
