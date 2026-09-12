@@ -863,8 +863,17 @@ class RuntimeHarness {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
     client.findProxy = (_) => proxy ? 'PROXY 127.0.0.1:${options.proxyPort}' : 'DIRECT';
     try {
-      final response = await (await client.getUrl(target)).close().timeout(const Duration(seconds: 15));
-      await response.drain<void>().timeout(const Duration(seconds: 15));
+      final request = await client
+          .getUrl(target)
+          .timeout(const Duration(seconds: 15), onTimeout: () => throw TimeoutException('get_url'));
+      final response = await request.close().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw TimeoutException('response_headers'),
+      );
+      await response.drain<void>().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw TimeoutException('response_body'),
+      );
       if (response.statusCode != 200) throw StateError('HTTPS response was not 200');
       return response.statusCode;
     } finally {
@@ -881,6 +890,7 @@ class RuntimeHarness {
       'hresult': '0x${error.hresult.toUnsigned(32).toRadixString(16).padLeft(8, '0')}',
       'secure_failures': error.secureFailures,
     },
+    TimeoutException() => {'error_type': error.runtimeType.toString(), 'stage': error.message},
     _ => {'error_type': error.runtimeType.toString()},
   };
 
