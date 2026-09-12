@@ -1,6 +1,6 @@
 package com.zeon.zeon.bg
 
-/** Prevents VPNService and ProxyService from owning the process-global Go core concurrently. */
+/** Prevents overlapping VPN service instances from owning the process-global Go core concurrently. */
 object CoreProcessOwnerCoordinator {
     private data class Owner(val token: Any, val generation: Long)
 

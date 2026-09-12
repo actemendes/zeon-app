@@ -221,7 +221,7 @@ class BoxService(
             // Dispatch directly to every live owner as well as broadcasting.
             // The registry covers FAILED/stopped services whose dynamic receiver
             // is already gone; the package broadcast preserves compatibility
-            // with a service-mode transition already being created by Android.
+            // with a replacement VPN service instance already being created by Android.
             dispatchStopToActiveOwners(acceptedGeneration, source)
             Application.application.sendBroadcast(
                 Intent(Action.SERVICE_CLOSE)

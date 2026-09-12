@@ -2,14 +2,11 @@ package com.zeon.zeon
 
 import android.content.Context
 import android.util.Base64
-import com.zeon.zeon.bg.ProxyService
 import com.zeon.zeon.bg.VPNService
 import com.zeon.zeon.constant.PerAppProxyMode
 import com.zeon.zeon.constant.ServiceMode
 import com.zeon.zeon.constant.SettingsKey
-import org.json.JSONObject
 import java.io.ByteArrayInputStream
-import java.io.File
 import java.io.ObjectInputStream
 
 
@@ -67,8 +64,16 @@ object Settings {
         set(value) = preferences.edit().putString(SettingsKey.ACTIVE_PROFILE_NAME, value).apply()
 
     var serviceMode: String
-        get() = preferences.getString(SettingsKey.SERVICE_MODE, ServiceMode.VPN)!!
-        set(value) = preferences.edit().putString(SettingsKey.SERVICE_MODE, value).apply()
+        get() {
+            val storedMode = preferences.getString(SettingsKey.SERVICE_MODE, ServiceMode.VPN)
+            val canonicalMode = ServiceMode.canonicalize(storedMode)
+            if (storedMode != canonicalMode) {
+                preferences.edit().putString(SettingsKey.SERVICE_MODE, canonicalMode).apply()
+            }
+            return canonicalMode
+        }
+        set(@Suppress("UNUSED_PARAMETER") value) =
+            preferences.edit().putString(SettingsKey.SERVICE_MODE, ServiceMode.VPN).apply()
 
     var configOptions: String
         get() = preferences.getString(SettingsKey.CONFIG_OPTIONS, "")!!
@@ -97,42 +102,17 @@ object Settings {
         get() = preferences.getBoolean(SettingsKey.STARTED_BY_USER, false)
         set(value) = preferences.edit().putBoolean(SettingsKey.STARTED_BY_USER, value).apply()
 
-    fun serviceClass(): Class<*> {
-        return when (serviceMode) {
-            ServiceMode.VPN -> VPNService::class.java
-            else -> ProxyService::class.java
-        }
-    }
+    fun serviceClass(): Class<*> = VPNService::class.java
 
     private var currentServiceMode : String? = null
 
     suspend fun rebuildServiceMode(): Boolean {
-        var newMode = ServiceMode.NORMAL
-        try {
-            if (serviceMode == ServiceMode.VPN) {
-                newMode = ServiceMode.VPN
-            }
-        } catch (_: Exception) {
-        }
+        val newMode = serviceMode
         if (currentServiceMode == newMode) {
             return false
         }
         currentServiceMode = newMode
         return true
-    }
-
-    private suspend fun needVPNService(): Boolean {
-        val filePath = activeConfigPath
-        if (filePath.isBlank()) return false
-        val content = JSONObject(File(filePath).readText())
-        val inbounds = content.getJSONArray("inbounds")
-        for (index in 0 until inbounds.length()) {
-            val inbound = inbounds.getJSONObject(index)
-            if (inbound.getString("type") == "tun") {
-                return true
-            }
-        }
-        return false
     }
 
     var workingDir: String

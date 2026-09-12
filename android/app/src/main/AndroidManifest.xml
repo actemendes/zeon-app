@@ -137,14 +137,6 @@
             <meta-data android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"
                 android:value="true"/>
         </service>
-        <service
-            android:name=".bg.ProxyService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="proxy" />
-        </service>
         <receiver
             android:name=".bg.VpnNotificationActionReceiver"
             android:exported="false" />

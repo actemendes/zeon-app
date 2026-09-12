@@ -194,7 +194,7 @@ void main() {
 
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
-    expect(prefs.getInt(PreferencesMigration.versionKey), 17);
+    expect(prefs.getInt(PreferencesMigration.versionKey), 18);
     expect(prefs.getBool("intro_completed"), true);
     expect(prefs.getString("per_app_proxy_mode"), "exclude");
     expect(prefs.getString("per_app_proxy_exclude_list"), "ru.vk.store");
@@ -226,13 +226,13 @@ void main() {
     expect(prefs.getString("user_explicit_mode"), "custom");
   });
 
-  test("fresh install reaches v17 without creating RU package exclusions", () async {
+  test("fresh install reaches v18 without creating RU package exclusions", () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
 
     await PreferencesMigration(sharedPreferences: prefs).migrate();
 
-    expect(prefs.getInt(PreferencesMigration.versionKey), 17);
+    expect(prefs.getInt(PreferencesMigration.versionKey), 18);
     expect(prefs.getBool("block-ads"), true);
     expect(prefs.containsKey("per_app_proxy_mode"), false);
     expect(prefs.getStringList("per_app_proxy_exclude_list"), isNull);
@@ -240,5 +240,40 @@ void main() {
     expect(prefs.getBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey), false);
     expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingCleanupPackagesKey), false);
     expect(prefs.containsKey(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey), false);
+  });
+
+  test("v18 migrates an Android legacy proxy preference to VPN", () async {
+    SharedPreferences.setMockInitialValues({
+      PreferencesMigration.versionKey: 17,
+      "service-mode": "proxy",
+      "user_explicit_mode": "preserved",
+    });
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs, isAndroid: true).migrate();
+
+    expect(prefs.getInt(PreferencesMigration.versionKey), 18);
+    expect(prefs.getString("service-mode"), "vpn");
+    expect(prefs.getString("user_explicit_mode"), "preserved");
+  });
+
+  test("v18 initializes an Android fresh install in VPN mode", () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs, isAndroid: true).migrate();
+
+    expect(prefs.getInt(PreferencesMigration.versionKey), 18);
+    expect(prefs.getString("service-mode"), "vpn");
+  });
+
+  test("v18 preserves desktop proxy preferences", () async {
+    SharedPreferences.setMockInitialValues({PreferencesMigration.versionKey: 17, "service-mode": "system-proxy"});
+    final prefs = await SharedPreferences.getInstance();
+
+    await PreferencesMigration(sharedPreferences: prefs, isAndroid: false).migrate();
+
+    expect(prefs.getInt(PreferencesMigration.versionKey), 18);
+    expect(prefs.getString("service-mode"), "system-proxy");
   });
 }

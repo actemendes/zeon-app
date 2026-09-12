@@ -19,9 +19,11 @@ Future<PreferencesMigrationFailure?> runPreferencesMigrationPreservingState(
 }
 
 class PreferencesMigration with InfraLogger {
-  PreferencesMigration({required this.sharedPreferences});
+  PreferencesMigration({required this.sharedPreferences, bool? isAndroid})
+    : _isAndroid = isAndroid ?? PlatformUtils.isAndroid;
 
   final SharedPreferences sharedPreferences;
+  final bool _isAndroid;
 
   static const versionKey = "preferences_version";
   static const v16RemovedRoutingPackage = "ru.rutube.app";
@@ -52,6 +54,7 @@ class PreferencesMigration with InfraLogger {
       PreferencesVersion15Migration(sharedPreferences, currentVersion),
       PreferencesVersion16Migration(sharedPreferences),
       PreferencesVersion17Migration(sharedPreferences),
+      PreferencesVersion18Migration(sharedPreferences, isAndroid: _isAndroid),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -506,5 +509,22 @@ class PreferencesVersion17Migration extends PreferencesMigrationStep with InfraL
     await sharedPreferences.setStringList(PreferencesMigration.v17SeededRoutingCleanupPackagesKey, provenCleanup);
     await sharedPreferences.setStringList(PreferencesMigration.v17SeededRoutingExactOwnedPackagesKey, provenCleanup);
     await sharedPreferences.setBool(PreferencesMigration.v17SeededRoutingCleanupPendingKey, true);
+  }
+}
+
+class PreferencesVersion18Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion18Migration(super.sharedPreferences, {required bool isAndroid}) : _isAndroid = isAndroid;
+
+  final bool _isAndroid;
+
+  @override
+  Future<void> migrate() async {
+    if (!_isAndroid) return;
+
+    final serviceMode = sharedPreferences.getString("service-mode");
+    if (serviceMode != "vpn") {
+      loggy.debug("v18: changing Android service-mode from [$serviceMode] to [vpn]");
+      await sharedPreferences.setString("service-mode", "vpn");
+    }
   }
 }

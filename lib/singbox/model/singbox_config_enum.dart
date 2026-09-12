@@ -21,14 +21,26 @@ enum ServiceMode {
       : tun;
 
   /// supported service mode based on platform, use this instead of [values] in UI
-  static List<ServiceMode> get choices {
-    if (PlatformUtils.isApple) {
+  static List<ServiceMode> get choices => choicesForPlatform(
+    isApple: PlatformUtils.isApple,
+    isAndroid: PlatformUtils.isAndroid,
+    isWindows: PlatformUtils.isWindows,
+    isLinux: PlatformUtils.isLinux,
+  );
+
+  static List<ServiceMode> choicesForPlatform({
+    required bool isApple,
+    required bool isAndroid,
+    required bool isWindows,
+    required bool isLinux,
+  }) {
+    if (isApple || isAndroid) {
       return [tun];
     }
-    if (PlatformUtils.isWindows || PlatformUtils.isLinux) {
+    if (isWindows || isLinux) {
       return values;
     }
-    // mobile
+    // Preserve the existing fallback for unsupported/debug platforms.
     return [proxy, tun];
   }
 
