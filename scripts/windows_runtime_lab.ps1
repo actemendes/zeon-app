@@ -1,28 +1,42 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('preflight', 'connect')][string]$Scenario = 'preflight',
-    [ValidateSet('system-proxy')][string]$NetworkMode = 'system-proxy',
+    [ValidateSet('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy')][string]$Scenario = 'preflight',
+    [ValidateSet('system-proxy', 'tun', 'local-proxy')][string]$NetworkMode = 'system-proxy',
     [string]$ArtifactPath,
-    [string]$FixturePath,
+    [string]$FixtureId = 'zeon-authorized',
     [string]$RunId = ("runtime-{0}-{1}" -f $Scenario, [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')),
     [string]$EvidenceRoot = 'Z:\Zeon-Envelope\Temp\zeon-app-testing',
     [string]$RemoteHost = 'Administrator@89.111.171.67',
     [string]$IdentityFile = 'C:\Users\ZEON\.ssh\id_ed25519_zeon_ai',
-    [string]$TrafficUrl = 'https://api.zeon-vps.online/health',
+    [string[]]$TrafficUrls = @('https://speed.cloudflare.com/__down?bytes=4096', 'https://captive.apple.com/hotspot-detect.html'),
+    [string]$BackendHealthUrl = 'https://api.zeon-vps.online/health',
     [ValidateRange(1, 45)][int]$ConnectTimeoutSeconds = 45,
     [ValidateRange(30, 600)][int]$BootstrapTimeoutSeconds = 240,
     [ValidateRange(15, 300)][int]$CleanupTimeoutSeconds = 90,
-    [ValidateRange(60, 900)][int]$ScenarioTimeoutSeconds = 300,
-    [ValidateRange(5, 30)][int]$ControllerTimeoutMinutes = 15,
+    [ValidateRange(0, 7200)][int]$ScenarioTimeoutSeconds = 0,
+    [ValidateRange(1, 10)][int]$S02Cycles = 1,
+    [ValidateSet('app-connecting', 'core-starting')][string]$CancelPhase = 'core-starting',
+    [string]$ManualProxyTag,
+    [ValidateRange(1, 180)][int]$ControllerTimeoutMinutes = 20,
     [switch]$PublishArtifact,
     [switch]$DeployHarness,
     [switch]$ApplyNoOpRecovery,
+    [switch]$EnrollFixture,
+    [switch]$FixtureSelfTest,
+    [switch]$Detach,
     [switch]$CollectOnly,
+    [switch]$Status,
+    [switch]$ListRuns,
+    [ValidateRange(1, 100)][int]$ListLimit = 20,
+    [switch]$Recover,
+    [switch]$TimeoutDrill,
     [switch]$ValidateOnly
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+Add-Type -AssemblyName System.Security
+Add-Type -AssemblyName System.Net.Http
 
 $scriptDirectory = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDirectory
@@ -30,6 +44,9 @@ $runtimeScripts = Join-Path $scriptDirectory 'windows_runtime_lab'
 $allowedArtifactRoot = Join-Path $repoRoot 'out\installers\win'
 $allowedEvidenceRoot = 'Z:\Zeon-Envelope\Temp'
 $remoteLabRoot = 'C:\ZEON-LAB'
+$fixtureVaultRoot = 'Z:\Zeon-Envelope\Temp\ZEON-W10-LAB\fixture-vault'
+$controllerSchema = 'zeon.remote-controller.v2'
+$runtimeSchema = 'zeon.windows-runtime.v1'
 
 function Assert-PathWithin {
     param([string]$Path, [string]$Root, [string]$Label)
@@ -45,10 +62,100 @@ function Assert-RunId([string]$Value) {
     if ($Value -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$') { throw 'RunId must contain 3-80 safe filename characters.' }
 }
 
-function Assert-HttpsUrl([string]$Value) {
+function Assert-HttpsUrl([string]$Value, [string[]]$AllowedHosts) {
     $uri = $null
-    if (-not [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -cne 'https' -or -not $uri.Host) {
+    if (-not [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -cne 'https' -or -not $uri.Host -or $uri.Port -ne 443 -or $uri.UserInfo) {
         throw 'TrafficUrl must be an absolute HTTPS URL.'
+    }
+    if ($uri.Host.ToLowerInvariant() -notin $AllowedHosts) { throw 'HTTPS target host is outside the runtime allowlist.' }
+}
+
+function Set-LocalSecretAcl([string]$Path) {
+    $item = Get-Item -LiteralPath $Path
+    $acl = if ($item.PSIsContainer) { New-Object Security.AccessControl.DirectorySecurity } else { New-Object Security.AccessControl.FileSecurity }
+    $acl.SetAccessRuleProtection($true, $false)
+    $inheritance = if ($item.PSIsContainer) { [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit' } else { [Security.AccessControl.InheritanceFlags]::None }
+    foreach ($identity in @([Security.Principal.WindowsIdentity]::GetCurrent().User, [Security.Principal.SecurityIdentifier]'S-1-5-18', [Security.Principal.SecurityIdentifier]'S-1-5-32-544')) {
+        $rule = New-Object Security.AccessControl.FileSystemAccessRule($identity, [Security.AccessControl.FileSystemRights]::FullControl, $inheritance, [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Allow)
+        $acl.AddAccessRule($rule)
+    }
+    Set-Acl -LiteralPath $Path -AclObject $acl
+}
+
+function Protect-LocalSecretBytes([byte[]]$Bytes) {
+    return [Security.Cryptography.ProtectedData]::Protect($Bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+}
+
+function Unprotect-LocalSecretBytes([byte[]]$Bytes) {
+    return [Security.Cryptography.ProtectedData]::Unprotect($Bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+}
+
+function Initialize-LocalFixtureVault {
+    Assert-RunId $FixtureId
+    New-Item -ItemType Directory -Path $fixtureVaultRoot -Force | Out-Null
+    Set-LocalSecretAcl -Path $fixtureVaultRoot
+    $secureSource = Read-Host 'Fixture source URL (stored only as CurrentUser DPAPI)' -AsSecureString
+    $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureSource)
+    try {
+        $sourceUrl = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+        $sourceUri = $null
+        if (-not [Uri]::TryCreate($sourceUrl, [UriKind]::Absolute, [ref]$sourceUri) -or $sourceUri.Scheme -cne 'https' -or $sourceUri.Host -cne 'zeon-vps.link' -or $sourceUri.AbsolutePath -notmatch '^/open/[0-9]+$' -or $sourceUri.Query -or $sourceUri.Fragment -or $sourceUri.UserInfo) {
+            throw 'Fixture source is outside the approved ZEON open-profile endpoint shape.'
+        }
+        $sourceBytes = [Text.Encoding]::UTF8.GetBytes($sourceUrl)
+        try {
+            $protected = Protect-LocalSecretBytes -Bytes $sourceBytes
+            $sourcePath = Join-Path $fixtureVaultRoot ("{0}.source.dpapi" -f $FixtureId)
+            [IO.File]::WriteAllBytes($sourcePath, $protected)
+            Set-LocalSecretAcl -Path $sourcePath
+        } finally {
+            [Array]::Clear($sourceBytes, 0, $sourceBytes.Length)
+        }
+    } finally {
+        if ($pointer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }
+        if ($secureSource) { $secureSource.Dispose() }
+        $sourceUrl = $null
+    }
+    return [ordered]@{ enrolled = $true; fixture_id = $FixtureId; storage = 'DPAPI CurrentUser'; source = 'approved ZEON open-profile endpoint' }
+}
+
+function New-LocalFixtureTransfer {
+    Assert-RunId $FixtureId
+    $sourcePath = Join-Path $fixtureVaultRoot ("{0}.source.dpapi" -f $FixtureId)
+    if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw 'Fixture source is not enrolled. Run once with -EnrollFixture in an interactive PowerShell.' }
+    $sourceProtected = [IO.File]::ReadAllBytes($sourcePath)
+    $sourceBytes = Unprotect-LocalSecretBytes -Bytes $sourceProtected
+    $sourceUrl = $null
+    $profileBytes = $null
+    $transferPath = $null
+    $transferReady = $false
+    try {
+        $sourceUrl = [Text.Encoding]::UTF8.GetString($sourceBytes)
+        $client = New-Object Net.Http.HttpClient
+        $client.Timeout = [TimeSpan]::FromSeconds(30)
+        try { $profileBytes = $client.GetByteArrayAsync($sourceUrl).GetAwaiter().GetResult() } finally { $client.Dispose() }
+        if (-not $profileBytes -or $profileBytes.Length -lt 16 -or $profileBytes.Length -gt 4MB) { throw 'Downloaded fixture size is outside the bounded range.' }
+        $profilePath = Join-Path $fixtureVaultRoot ("{0}.profile.dpapi" -f $FixtureId)
+        [IO.File]::WriteAllBytes($profilePath, (Protect-LocalSecretBytes -Bytes $profileBytes))
+        Set-LocalSecretAcl -Path $profilePath
+        $transferRoot = 'Z:\Zeon-Envelope\Temp\ZEON-W10-LAB\fixture-transfer'
+        New-Item -ItemType Directory -Path $transferRoot -Force | Out-Null
+        Set-LocalSecretAcl -Path $transferRoot
+        $transferPath = Join-Path $transferRoot ("{0}.tmp" -f [guid]::NewGuid().ToString('N'))
+        [IO.File]::WriteAllBytes($transferPath, $profileBytes)
+        Set-LocalSecretAcl -Path $transferPath
+        $transferReady = $true
+        return [ordered]@{
+            path = $transferPath
+            sha256 = (Get-FileHash -LiteralPath $transferPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            opaque_id = $FixtureId
+            remote_id = 'fixture-' + [guid]::NewGuid().ToString('N')
+        }
+    } finally {
+        if (-not $transferReady -and $transferPath) { Remove-Item -LiteralPath $transferPath -Force -ErrorAction SilentlyContinue }
+        [Array]::Clear($sourceBytes, 0, $sourceBytes.Length)
+        if ($profileBytes) { [Array]::Clear($profileBytes, 0, $profileBytes.Length) }
+        $sourceUrl = $null
     }
 }
 
@@ -146,6 +253,7 @@ function Install-RemoteHarness {
         'Invoke-RuntimeRunner.ps1',
         'Invoke-RuntimeWatchdog.ps1',
         'Invoke-RuntimeRecovery.ps1',
+        'Invoke-RuntimeManualRecovery.ps1',
         'Test-RuntimeHarness.ps1'
     )
     $stage = Join-Path 'Z:\Zeon-Envelope\Temp\ZEON-W10-LAB' ("runtime-harness-{0}" -f [guid]::NewGuid().ToString('N'))
@@ -194,10 +302,27 @@ function Test-RemoteHarness {
     return $output | ConvertFrom-Json
 }
 
+function Get-ScenarioTimeoutSeconds {
+    if ($ScenarioTimeoutSeconds -gt 0) { return $ScenarioTimeoutSeconds }
+    return ([ordered]@{
+        preflight = 120
+        connect = 240
+        s02 = 600
+        s06 = 480
+        'manual-proxy' = 360
+        'auto-proxy' = 360
+    })[$Scenario]
+}
+
 function New-RuntimeRequest {
-    param([Parameter(Mandatory = $true)]$Artifact, [string]$FixtureId, [string]$FixtureSha256)
+    param([Parameter(Mandatory = $true)]$Artifact, [string]$RemoteFixtureId, [string]$FixtureSha256)
+    $scenarioTimeout = Get-ScenarioTimeoutSeconds
+    $executionTimeout = $BootstrapTimeoutSeconds + $scenarioTimeout + $CleanupTimeoutSeconds + 120
+    if ($TimeoutDrill) { $executionTimeout = 3 }
     $request = [ordered]@{
-        schema_version = 1
+        schema_version = 2
+        controller_schema = $controllerSchema
+        runtime_schema = $runtimeSchema
         run_id = $RunId
         scenario = $Scenario
         mode = $NetworkMode
@@ -213,11 +338,19 @@ function New-RuntimeRequest {
         connect_timeout_seconds = $ConnectTimeoutSeconds
         bootstrap_timeout_seconds = $BootstrapTimeoutSeconds
         cleanup_timeout_seconds = $CleanupTimeoutSeconds
-        scenario_timeout_seconds = $ScenarioTimeoutSeconds
-        execution_timeout_seconds = $BootstrapTimeoutSeconds + $ScenarioTimeoutSeconds + $CleanupTimeoutSeconds + 120
-        traffic_url = $TrafficUrl
-        fixture_id = $FixtureId
+        scenario_timeout_seconds = $scenarioTimeout
+        execution_timeout_seconds = $executionTimeout
+        controller_timeout_seconds = $ControllerTimeoutMinutes * 60
+        cleanup_policy = 'strict-restore-and-verify'
+        traffic_urls = @($TrafficUrls)
+        backend_health_url = $BackendHealthUrl
+        fixture_opaque_id = if ($RemoteFixtureId) { $FixtureId } else { $null }
+        fixture_id = $RemoteFixtureId
         fixture_sha256 = $FixtureSha256
+        s02_cycles = $S02Cycles
+        cancel_phase = $CancelPhase
+        manual_proxy_tag = $ManualProxyTag
+        expected_timeout_drill = [bool]$TimeoutDrill
         queued_at = [DateTime]::UtcNow.ToString('o')
         request_sha256 = ('0' * 64)
     }
@@ -231,15 +364,19 @@ function New-RuntimeRequest {
     return $request
 }
 
-function Collect-RemoteRun {
-    param([Parameter(Mandatory = $true)][string]$TargetRunId, [string]$FixtureForScan)
+function Get-RemoteRunStatus([string]$TargetRunId) {
     Assert-RunId $TargetRunId
-    $runDirectory = "$remoteLabRoot\evidence\runs\$TargetRunId"
-    $statusJson = Invoke-RemotePowerShell -Script "Get-Content -LiteralPath '$runDirectory\status.json' -Raw"
-    $status = $statusJson | ConvertFrom-Json
+    $statusPath = "$remoteLabRoot\evidence\runs\$TargetRunId\status.json"
+    return Invoke-RemotePowerShell -Script "if (-not (Test-Path -LiteralPath '$statusPath' -PathType Leaf)) { throw 'Runtime status does not exist.' }; Get-Content -LiteralPath '$statusPath' -Raw" | ConvertFrom-Json
+}
+
+function Collect-RemoteRun {
+    param([Parameter(Mandatory = $true)][string]$TargetRunId)
+    $status = Get-RemoteRunStatus -TargetRunId $TargetRunId
     if (-not [bool]$status.safe_to_collect) { throw 'Remote evidence did not pass the fixture/profile secret scan.' }
+    $runDirectory = "$remoteLabRoot\evidence\runs\$TargetRunId"
     $remoteArchive = "$remoteLabRoot\temp\exports\$TargetRunId.zip"
-    $archiveHash = Invoke-RemotePowerShell -Script "if (Test-Path -LiteralPath '$remoteArchive') { Remove-Item -LiteralPath '$remoteArchive' -Force }; Compress-Archive -Path '$runDirectory\*' -DestinationPath '$remoteArchive' -CompressionLevel Optimal; (Get-FileHash -LiteralPath '$remoteArchive' -Algorithm SHA256).Hash.ToLowerInvariant()"
+    $archiveHash = Invoke-RemotePowerShell -Script "New-Item -ItemType Directory -Path '$remoteLabRoot\temp\exports' -Force | Out-Null; if (Test-Path -LiteralPath '$remoteArchive') { Remove-Item -LiteralPath '$remoteArchive' -Force }; Compress-Archive -Path '$runDirectory\*' -DestinationPath '$remoteArchive' -CompressionLevel Optimal; (Get-FileHash -LiteralPath '$remoteArchive' -Algorithm SHA256).Hash.ToLowerInvariant()"
     $targetRoot = Assert-PathWithin -Path (Join-Path $EvidenceRoot $TargetRunId) -Root $EvidenceRoot -Label 'Run evidence'
     if (Test-Path -LiteralPath $targetRoot) { throw "Local run evidence already exists: $targetRoot" }
     New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
@@ -250,13 +387,9 @@ function Collect-RemoteRun {
         if ($localHash -cne $archiveHash.Trim().ToLowerInvariant()) { throw 'Evidence archive SHA-256 mismatch.' }
         $expanded = Join-Path $targetRoot 'evidence'
         Expand-Archive -LiteralPath $localArchive -DestinationPath $expanded
-        if ($FixtureForScan) {
-            $fixtureText = [IO.File]::ReadAllText($FixtureForScan).Trim()
-            $leak = $false
-            foreach ($file in @(Get-ChildItem -LiteralPath $expanded -File -Recurse | Where-Object Extension -In @('.json','.jsonl','.log','.txt'))) {
-                if ($fixtureText -and [IO.File]::ReadAllText($file.FullName).Contains($fixtureText)) { $leak = $true; break }
-            }
-            if ($leak) { throw 'Local evidence contains the fixture plaintext and must not be used.' }
+        $secretPattern = '(?i)(vless|vmess|trojan|ss|hysteria2|tuic)://|https://zeon-vps\.link/open/[0-9]+'
+        foreach ($file in @(Get-ChildItem -LiteralPath $expanded -File -Recurse | Where-Object Extension -In @('.json','.jsonl','.log','.txt','.fixture'))) {
+            if ([IO.File]::ReadAllText($file.FullName) -match $secretPattern) { throw 'Local evidence contains a profile/source secret pattern and must not be used.' }
         }
         return [ordered]@{ status = $status; local_root = $targetRoot; archive = $localArchive; archive_sha256 = $localHash; evidence = $expanded }
     } finally {
@@ -264,14 +397,53 @@ function Collect-RemoteRun {
     }
 }
 
+function Invoke-FixtureSelfTest {
+    $transfer = New-LocalFixtureTransfer
+    $remoteTransfer = "$env:SystemRoot\Temp\ZEON-LAB-fixture-$([guid]::NewGuid().ToString('N')).tmp"
+    $remoteEncrypted = "$env:ProgramData\ZEON-LAB-Secrets\$($transfer.remote_id).dpapi"
+    try {
+        Copy-ToRemote -Source $transfer.path -RemotePath (($remoteTransfer) -replace '\\', '/')
+        Invoke-RemotePowerShell -Script "& '$remoteLabRoot\scripts\runtime\Protect-RuntimeFixture.ps1' -SourcePath '$remoteTransfer' -FixtureId '$($transfer.remote_id)' -ExpectedSha256 '$($transfer.sha256)' | Out-Null" | Out-Null
+    } finally {
+        Remove-Item -LiteralPath $transfer.path -Force -ErrorAction SilentlyContinue
+        Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$remoteTransfer' -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath '$remoteEncrypted' -Force -ErrorAction SilentlyContinue" | Out-Null
+    }
+    $cleanup = Invoke-RemotePowerShell -Script "[ordered]@{transfer_absent=(-not (Test-Path -LiteralPath '$remoteTransfer')); encrypted_absent=(-not (Test-Path -LiteralPath '$remoteEncrypted'))} | ConvertTo-Json -Compress" | ConvertFrom-Json
+    if (-not [bool]$cleanup.transfer_absent -or -not [bool]$cleanup.encrypted_absent) { throw 'Fixture injection self-test cleanup failed.' }
+    $result = [ordered]@{
+        schema_version = 1
+        generated_at = [DateTime]::UtcNow.ToString('o')
+        fixture_id = $FixtureId
+        injection = 'PASS'
+        cleanup = 'PASS'
+        sha256 = $transfer.sha256
+        plaintext_retained = $false
+        controller_sha = Get-ControllerSha
+    }
+    $readinessRoot = 'Z:\Zeon-Envelope\Temp\ZEON-W10-LAB\readiness'
+    New-Item -ItemType Directory -Path $readinessRoot -Force | Out-Null
+    $localResult = Join-Path $readinessRoot 'fixture-self-test.json'
+    [IO.File]::WriteAllText($localResult, (($result | ConvertTo-Json -Depth 6) + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
+    $encodedResult = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($result | ConvertTo-Json -Depth 6)))
+    Invoke-RemotePowerShell -Script "`$bytes=[Convert]::FromBase64String('$encodedResult'); [IO.File]::WriteAllBytes('$remoteLabRoot\evidence\fixture-self-test.json', `$bytes)" | Out-Null
+    return $result
+}
+
+if ($EnrollFixture) {
+    Initialize-LocalFixtureVault
+    return
+}
+
 Assert-RunId $RunId
-Assert-HttpsUrl $TrafficUrl
+foreach ($trafficUrl in $TrafficUrls) { Assert-HttpsUrl -Value $trafficUrl -AllowedHosts @('speed.cloudflare.com', 'captive.apple.com') }
+Assert-HttpsUrl -Value $BackendHealthUrl -AllowedHosts @('api.zeon-vps.online')
+if ($ManualProxyTag -and $ManualProxyTag -notmatch '^[A-Za-z0-9._-]{1,80}$') { throw 'ManualProxyTag contains unsupported characters.' }
 if (-not (Test-Path -LiteralPath $IdentityFile -PathType Leaf)) { throw 'Dedicated SSH identity file is missing.' }
 $EvidenceRoot = Assert-PathWithin -Path $EvidenceRoot -Root $allowedEvidenceRoot -Label 'EvidenceRoot'
 $requiredRemoteFiles = @(
     'Install-RuntimeHarness.ps1', 'RuntimeLab.Common.ps1', 'Protect-RuntimeFixture.ps1',
     'Queue-RuntimeRun.ps1', 'Invoke-RuntimeRunner.ps1', 'Invoke-RuntimeWatchdog.ps1',
-    'Invoke-RuntimeRecovery.ps1', 'Test-RuntimeHarness.ps1'
+    'Invoke-RuntimeRecovery.ps1', 'Invoke-RuntimeManualRecovery.ps1', 'Test-RuntimeHarness.ps1'
 )
 foreach ($name in $requiredRemoteFiles) {
     $path = Join-Path $runtimeScripts $name
@@ -286,25 +458,37 @@ $artifact = if ($ArtifactPath) { Get-ArtifactMetadata -Path $ArtifactPath } else
 if ($ValidateOnly) {
     [ordered]@{
         valid = $true
+        schema = $controllerSchema
         remote_host = $RemoteHost
         transport = 'key-only SSH and SCP'
-        scenarios = @('preflight', 'connect')
-        modes = @('system-proxy')
+        scenarios = @('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy')
+        modes = @('system-proxy', 'tun', 'local-proxy')
         scheduled_task = '\ZEON-LAB\ZEON-LAB Runtime Validation'
-        task_identity = 'SYSTEM'
-        request_transport = 'validated immutable JSON'
-        watchdog_default = 'dry_run'
-        recovery_apply_gate = 'one-time run-scoped arming manifest'
+        task_identity = 'dedicated non-interactive local test principal'
+        watchdog_identity = 'SYSTEM'
+        request_transport = 'validated immutable JSON v2'
+        watchdog_default = 'observe; apply only with a one-time run-scoped manifest'
+        recovery = 'delta restore with ownership checks; no reboot'
+        operations = @('publish', 'deploy', 'fixture-self-test', 'detach', 'status', 'list-runs', 'collect', 'recover', 'timeout-drill')
         artifact = if ($artifact) { [ordered]@{ version = $artifact.manifest.version; source_sha = $artifact.manifest.source_sha; sha256 = $artifact.artifact_sha256 } } else { $null }
         uses_ui_automation = $false
     }
     return
 }
 
-if ($CollectOnly) {
-    Collect-RemoteRun -TargetRunId $RunId -FixtureForScan $FixturePath
+if ($Status) { Get-RemoteRunStatus -TargetRunId $RunId; return }
+if ($ListRuns) {
+    $listScript = "Get-ChildItem -LiteralPath '$remoteLabRoot\evidence\runs' -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First $ListLimit | ForEach-Object { `$p=Join-Path `$_.FullName 'status.json'; if (Test-Path -LiteralPath `$p) { `$s=Get-Content -LiteralPath `$p -Raw | ConvertFrom-Json; [ordered]@{run_id=[string]`$s.run_id;scenario=[string]`$s.scenario;mode=[string]`$s.mode;status=[string]`$s.status;verdict=[string]`$s.verdict;classification=[string]`$s.classification;completed_at=[string]`$s.completed_at;cleanup_verified=[bool]`$s.cleanup_verified;safe_to_collect=[bool]`$s.safe_to_collect} } } | ConvertTo-Json -Depth 4"
+    $json = Invoke-RemotePowerShell -Script $listScript
+    if ($json) { $json | ConvertFrom-Json } else { @() }
     return
 }
+if ($Recover) {
+    Invoke-RemotePowerShell -Script "& '$remoteLabRoot\scripts\runtime\Invoke-RuntimeManualRecovery.ps1' -RunId '$RunId' -LabRoot '$remoteLabRoot'" | ConvertFrom-Json
+    return
+}
+if ($CollectOnly) { Collect-RemoteRun -TargetRunId $RunId; return }
+if ($FixtureSelfTest) { Invoke-FixtureSelfTest; return }
 
 $publicationResult = $null
 if ($PublishArtifact) {
@@ -327,25 +511,27 @@ if (($PublishArtifact -or $DeployHarness -or $ApplyNoOpRecovery) -and -not $expl
 }
 
 if (-not $artifact) { throw 'ArtifactPath is required to queue a runtime run.' }
-if ($Scenario -eq 'connect' -and -not $FixturePath) { throw 'FixturePath is required for connect.' }
-$fixtureId = $null
-$fixtureHash = $null
+if ($TimeoutDrill -and $Scenario -ne 'preflight') { throw 'TimeoutDrill is intentionally limited to preflight.' }
+
+$fixtureTransfer = $null
 $remoteFixtureTransfer = $null
-if ($FixturePath) {
-    $FixturePath = Assert-PathWithin -Path $FixturePath -Root 'Z:\Zeon-Envelope\Temp' -Label 'FixturePath'
-    if (-not (Test-Path -LiteralPath $FixturePath -PathType Leaf)) { throw 'Fixture file is missing.' }
-    $fixtureHash = (Get-FileHash -LiteralPath $FixturePath -Algorithm SHA256).Hash.ToLowerInvariant()
-    $fixtureId = 'fixture-' + [guid]::NewGuid().ToString('N')
+$remoteFixtureId = $null
+$fixtureHash = $null
+if ($Scenario -ne 'preflight') {
+    $fixtureTransfer = New-LocalFixtureTransfer
+    $remoteFixtureId = [string]$fixtureTransfer.remote_id
+    $fixtureHash = [string]$fixtureTransfer.sha256
     $remoteFixtureTransfer = "$env:SystemRoot\Temp\ZEON-LAB-fixture-$([guid]::NewGuid().ToString('N')).tmp"
     try {
-        Copy-ToRemote -Source $FixturePath -RemotePath (($remoteFixtureTransfer) -replace '\\', '/')
-        Invoke-RemotePowerShell -Script "& '$remoteLabRoot\scripts\runtime\Protect-RuntimeFixture.ps1' -SourcePath '$remoteFixtureTransfer' -FixtureId '$fixtureId' -ExpectedSha256 '$fixtureHash'" | Out-Null
+        Copy-ToRemote -Source $fixtureTransfer.path -RemotePath (($remoteFixtureTransfer) -replace '\\', '/')
+        Invoke-RemotePowerShell -Script "& '$remoteLabRoot\scripts\runtime\Protect-RuntimeFixture.ps1' -SourcePath '$remoteFixtureTransfer' -FixtureId '$remoteFixtureId' -ExpectedSha256 '$fixtureHash' | Out-Null" | Out-Null
     } finally {
-        Invoke-RemotePowerShell -Script "if (Test-Path -LiteralPath '$remoteFixtureTransfer') { Remove-Item -LiteralPath '$remoteFixtureTransfer' -Force }; exit 0" | Out-Null
+        Remove-Item -LiteralPath $fixtureTransfer.path -Force -ErrorAction SilentlyContinue
+        Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$remoteFixtureTransfer' -Force -ErrorAction SilentlyContinue" | Out-Null
     }
 }
 
-$request = New-RuntimeRequest -Artifact $artifact -FixtureId $fixtureId -FixtureSha256 $fixtureHash
+$request = New-RuntimeRequest -Artifact $artifact -RemoteFixtureId $remoteFixtureId -FixtureSha256 $fixtureHash
 $requestRoot = 'Z:\Zeon-Envelope\Temp\ZEON-W10-LAB\requests'
 New-Item -ItemType Directory -Path $requestRoot -Force | Out-Null
 $requestPath = Join-Path $requestRoot ("{0}.request.json" -f $RunId)
@@ -356,30 +542,42 @@ try {
     Copy-ToRemote -Source $requestPath -RemotePath (($remoteRequest) -replace '\\', '/')
     Invoke-RemotePowerShell -Script "& '$remoteLabRoot\scripts\runtime\Queue-RuntimeRun.ps1' -RequestPath '$remoteRequest' -LabRoot '$remoteLabRoot'" | Out-Null
 } catch {
-    Invoke-RemotePowerShell -Script "if (Test-Path -LiteralPath '$remoteRequest') { Remove-Item -LiteralPath '$remoteRequest' -Force }; exit 0" | Out-Null
+    Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$remoteRequest' -Force -ErrorAction SilentlyContinue; if ('$remoteFixtureId') { Remove-Item -LiteralPath '$env:ProgramData\ZEON-LAB-Secrets\$remoteFixtureId.dpapi' -Force -ErrorAction SilentlyContinue }" | Out-Null
     throw
 }
 
 $queueSessionClosedAt = [DateTime]::UtcNow
+if ($Detach) {
+    [ordered]@{ schema_version = 2; run_id = $RunId; status = 'queued'; detached = $true; queue_session_closed_at = $queueSessionClosedAt.ToString('o'); fixture_sha256 = $fixtureHash }
+    return
+}
+
 $freshSessionObserved = $false
 $terminal = @('completed', 'failed', 'timed_out', 'recovered')
 $controllerDeadline = [DateTime]::UtcNow.AddMinutes($ControllerTimeoutMinutes)
+$status = $null
 do {
-    $statusJson = Invoke-RemotePowerShell -Script "Get-Content -LiteralPath '$remoteLabRoot\evidence\runs\$RunId\status.json' -Raw"
-    $status = $statusJson | ConvertFrom-Json
+    $status = Get-RemoteRunStatus -TargetRunId $RunId
     $freshSessionObserved = $true
     if ([string]$status.status -in $terminal) { break }
     Start-Sleep -Seconds 5
 } while ([DateTime]::UtcNow -lt $controllerDeadline)
-if ([string]$status.status -notin $terminal) { throw "Runtime did not reach a terminal state within $ControllerTimeoutMinutes minutes; the detached task/watchdog remain authoritative." }
+if (-not $status -or [string]$status.status -notin $terminal) { throw "Runtime did not reach a terminal state within $ControllerTimeoutMinutes minutes; the detached task/watchdog remain authoritative." }
 
-$collected = Collect-RemoteRun -TargetRunId $RunId -FixtureForScan $FixturePath
+$collected = Collect-RemoteRun -TargetRunId $RunId
 $postCheck = Invoke-RemotePowerShell -Script "`$p=@(Get-Process -ErrorAction SilentlyContinue | Where-Object ProcessName -Match '^(ZEON|ZEONCli)$'); [ordered]@{hostname=`$env:COMPUTERNAME;sshd=(Get-Service sshd).Status.ToString();zeon_process_count=`$p.Count} | ConvertTo-Json -Compress" | ConvertFrom-Json
 $controllerResult = [ordered]@{
-    schema_version = 1
+    schema_version = 2
     run_id = $RunId
     scenario = $Scenario
+    mode = $NetworkMode
     status = [string]$collected.status.status
+    verdict = [string]$collected.status.verdict
+    classification = [string]$collected.status.classification
+    runtime_identity = [string]$collected.status.runtime_identity
+    runtime_sid = [string]$collected.status.runtime_sid
+    cleanup_verified = [bool]$collected.status.cleanup_verified
+    safe_to_collect = [bool]$collected.status.safe_to_collect
     source_sha = [string]$artifact.manifest.source_sha
     controller_sha = [string]$request.controller_sha
     artifact_sha256 = $artifact.artifact_sha256

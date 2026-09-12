@@ -26,6 +26,42 @@ function Get-RuntimeFileHash {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
+function Assert-RuntimePathWithin {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Root,
+        [string]$Label = 'path'
+    )
+    $resolved = [IO.Path]::GetFullPath($Path)
+    $resolvedRoot = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+    if (-not $resolved.StartsWith($resolvedRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label must stay below $resolvedRoot."
+    }
+    return $resolved
+}
+
+function Mount-RuntimeUserHive {
+    param([Parameter(Mandatory = $true)][string]$UserSid)
+    if ($UserSid -notmatch '^S-1-5-21-(?:\d+-){3}\d+$') { throw 'Runtime user SID is not a local user SID.' }
+    if (Test-Path -LiteralPath "Registry::HKEY_USERS\$UserSid") { return $false }
+    $profile = Get-ItemProperty -LiteralPath "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$UserSid" -ErrorAction Stop
+    $profilePath = [Environment]::ExpandEnvironmentVariables([string]$profile.ProfileImagePath)
+    $hivePath = Join-Path $profilePath 'NTUSER.DAT'
+    if (-not (Test-Path -LiteralPath $hivePath -PathType Leaf)) { throw 'Runtime user profile hive is missing.' }
+    & reg.exe load "HKU\$UserSid" $hivePath | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to load runtime user profile hive.' }
+    return $true
+}
+
+function Dismount-RuntimeUserHive {
+    param([Parameter(Mandatory = $true)][string]$UserSid, [bool]$MountedByCaller)
+    if (-not $MountedByCaller) { return }
+    [GC]::Collect()
+    [GC]::WaitForPendingFinalizers()
+    & reg.exe unload "HKU\$UserSid" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to unload runtime user profile hive.' }
+}
+
 function Add-RuntimeEvent {
     param(
         [Parameter(Mandatory = $true)][string]$EventsPath,
@@ -44,6 +80,7 @@ function Add-RuntimeEvent {
 
 function Get-RuntimeRegistrySnapshot {
     param([Parameter(Mandatory = $true)][string]$UserSid)
+    $mounted = Mount-RuntimeUserHive -UserSid $UserSid
     $path = "Registry::HKEY_USERS\$UserSid\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
     $key = [Microsoft.Win32.Registry]::Users.OpenSubKey("$UserSid\Software\Microsoft\Windows\CurrentVersion\Internet Settings")
     $values = [ordered]@{}
@@ -62,8 +99,43 @@ function Get-RuntimeRegistrySnapshot {
         }
     } finally {
         if ($key) { $key.Dispose() }
+        Dismount-RuntimeUserHive -UserSid $UserSid -MountedByCaller $mounted
     }
     return [ordered]@{ path = $path; values = $values }
+}
+
+function Get-RuntimeSanitizedNetworkState {
+    param([Parameter(Mandatory = $true)]$State)
+    # Normalize OrderedDictionary and deserialized JSON inputs to the same shape.
+    $State = $State | ConvertTo-Json -Depth 16 | ConvertFrom-Json
+    $winInet = [ordered]@{}
+    foreach ($property in $State.wininet.values.PSObject.Properties) {
+        $entry = $property.Value
+        $serialized = [ordered]@{ exists = [bool]$entry.exists; kind = [string]$entry.kind; value = $entry.value } | ConvertTo-Json -Compress -Depth 4
+        $bytes = [Text.Encoding]::UTF8.GetBytes($serialized)
+        $hash = [Security.Cryptography.SHA256]::Create()
+        try { $fingerprint = ([BitConverter]::ToString($hash.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant() } finally { $hash.Dispose() }
+        $winInet[$property.Name] = [ordered]@{
+            exists = [bool]$entry.exists
+            kind = if ([bool]$entry.exists) { [string]$entry.kind } else { $null }
+            value_length = if ($null -eq $entry.value) { 0 } else { ([string]$entry.value).Length }
+            value_sha256 = $fingerprint
+            value_numeric = if ($property.Name -in @('ProxyEnable', 'AutoDetect') -and $null -ne $entry.value) { [int]$entry.value } else { $null }
+        }
+    }
+    $winHttpText = [string]$State.winhttp_show_proxy
+    $winHttpBytes = [Text.Encoding]::UTF8.GetBytes($winHttpText)
+    $winHttpHash = [Security.Cryptography.SHA256]::Create()
+    try { $winHttpFingerprint = ([BitConverter]::ToString($winHttpHash.ComputeHash($winHttpBytes))).Replace('-', '').ToLowerInvariant() } finally { $winHttpHash.Dispose() }
+    return [ordered]@{
+        captured_at = [string]$State.captured_at
+        user_sid = [string]$State.user_sid
+        wininet = $winInet
+        winhttp = [ordered]@{ direct = $winHttpText -match 'Direct access'; value_sha256 = $winHttpFingerprint }
+        routes_ipv4 = @($State.routes_ipv4)
+        dns_ipv4 = @($State.dns_ipv4)
+        listeners = @($State.listeners)
+    }
 }
 
 function Get-RuntimeNetworkState {
@@ -116,7 +188,8 @@ function Get-RuntimeStateComparison {
 function Restore-RuntimeProxyBaseline {
     param([Parameter(Mandatory = $true)]$Baseline)
     $sid = [string]$Baseline.user_sid
-    if ($sid -ne 'S-1-5-18') { throw 'Runtime recovery is limited to the SYSTEM profile SID.' }
+    if ($sid -notmatch '^S-1-5-21-(?:\d+-){3}\d+$') { throw 'Runtime recovery requires the dedicated local user profile SID.' }
+    $mounted = Mount-RuntimeUserHive -UserSid $sid
     $subKey = "$sid\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
     $key = [Microsoft.Win32.Registry]::Users.CreateSubKey($subKey)
     try {
@@ -132,6 +205,7 @@ function Restore-RuntimeProxyBaseline {
         }
     } finally {
         $key.Dispose()
+        Dismount-RuntimeUserHive -UserSid $sid -MountedByCaller $mounted
     }
     if (@($Baseline.winhttp_registry_bytes).Count -gt 0) {
         $bytes = [byte[]]@($Baseline.winhttp_registry_bytes | ForEach-Object { [byte]$_ })
@@ -176,7 +250,11 @@ function Stop-RuntimeOwnedProcesses {
 }
 
 function Set-RuntimeRestrictedAcl {
-    param([Parameter(Mandatory = $true)][string]$Path)
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [string[]]$AdditionalFullControlSids = @(),
+        [string[]]$AdditionalReadExecuteSids = @()
+    )
     $item = Get-Item -LiteralPath $Path
     $acl = if ($item.PSIsContainer) {
         New-Object System.Security.AccessControl.DirectorySecurity
@@ -191,9 +269,15 @@ function Set-RuntimeRestrictedAcl {
     }
     $allow = [System.Security.AccessControl.AccessControlType]::Allow
     $full = [System.Security.AccessControl.FileSystemRights]::FullControl
-    foreach ($sidValue in @('S-1-5-18', 'S-1-5-32-544')) {
+    foreach ($sidValue in @('S-1-5-18', 'S-1-5-32-544') + @($AdditionalFullControlSids)) {
         $sid = New-Object System.Security.Principal.SecurityIdentifier($sidValue)
         $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $full, $inheritance, [System.Security.AccessControl.PropagationFlags]::None, $allow)
+        $acl.AddAccessRule($rule)
+    }
+    $readExecute = [System.Security.AccessControl.FileSystemRights]'ReadAndExecute, Synchronize'
+    foreach ($sidValue in @($AdditionalReadExecuteSids)) {
+        $sid = New-Object System.Security.Principal.SecurityIdentifier($sidValue)
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $readExecute, $inheritance, [System.Security.AccessControl.PropagationFlags]::None, $allow)
         $acl.AddAccessRule($rule)
     }
     Set-Acl -LiteralPath $Path -AclObject $acl

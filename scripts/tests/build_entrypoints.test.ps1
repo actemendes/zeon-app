@@ -106,7 +106,12 @@ Assert-True -Condition $runtimeLab.Contains('ZEON-LAB Runtime Validation') -Mess
 Assert-True -Condition $runtimeLab.Contains('CollectOnly') -Message "Runtime lab must support collection after controller disconnect"
 Assert-True -Condition $runtimeLab.Contains('controller_sha = [string]$request.controller_sha') -Message "Runtime result must preserve the controller SHA frozen in the immutable request"
 Assert-True -Condition $runtimeLab.Contains('TrafficUrl must be an absolute HTTPS URL.') -Message "Runtime traffic override must reject non-HTTPS targets"
-Assert-True -Condition $runtimeLab.Contains("if (Test-Path -LiteralPath '`$remoteFixtureTransfer')") -Message "Fixture transfer cleanup must be idempotent after DPAPI protection"
+Assert-True -Condition ($runtimeLab.Contains("Remove-Item -LiteralPath '`$remoteFixtureTransfer' -Force -ErrorAction SilentlyContinue")) -Message "Fixture transfer cleanup must be idempotent after DPAPI protection"
+Assert-True -Condition $runtimeLab.Contains("[switch]`$Detach") -Message "Runtime controller must support detached execution"
+Assert-True -Condition $runtimeLab.Contains("[switch]`$Status") -Message "Runtime controller must support fresh-session status checks"
+Assert-True -Condition $runtimeLab.Contains("[switch]`$ListRuns") -Message "Runtime controller must list immutable run summaries"
+Assert-True -Condition $runtimeLab.Contains("[switch]`$Recover") -Message "Runtime controller must expose an explicit bounded recovery operation"
+Assert-True -Condition $runtimeLab.Contains('DPAPI CurrentUser') -Message "Runtime controller must retain enrolled fixture material only under user DPAPI"
 Assert-True -Condition (-not $runtimeLab.Contains('vm_cmd.ps1')) -Message "Remote runtime controller must not use the historical guest command bridge"
 Assert-True -Condition (-not $runtimeLab.Contains('restore-clean.ps1')) -Message "Remote runtime controller must not restore a historical VM snapshot"
 
@@ -116,9 +121,15 @@ $runtimeRunner = Get-Content -LiteralPath (Join-Path $runtimeRemoteRoot 'Invoke-
 $runtimeWatchdog = Get-Content -LiteralPath (Join-Path $runtimeRemoteRoot 'Invoke-RuntimeWatchdog.ps1') -Raw
 $runtimeRecovery = Get-Content -LiteralPath (Join-Path $runtimeRemoteRoot 'Invoke-RuntimeRecovery.ps1') -Raw
 $runtimeFixture = Get-Content -LiteralPath (Join-Path $runtimeRemoteRoot 'Protect-RuntimeFixture.ps1') -Raw
-Assert-True -Condition $runtimeInstaller.Contains("New-ScheduledTaskPrincipal -UserId 'SYSTEM'") -Message "Runtime task must run as SYSTEM"
+Assert-True -Condition $runtimeInstaller.Contains("`$testUserName = 'ZEONRuntime'") -Message "Runtime task must use the dedicated test principal"
+Assert-True -Condition $runtimeInstaller.Contains("-User `$qualifiedTestUser -Password `$passwordText -RunLevel Highest") -Message "Runtime task must use Password logon with the dedicated principal"
+Assert-True -Condition $runtimeInstaller.Contains('SeDenyInteractiveLogonRight') -Message "Runtime principal must be denied local interactive logon"
+Assert-True -Condition $runtimeInstaller.Contains('SeDenyRemoteInteractiveLogonRight') -Message "Runtime principal must be denied remote interactive logon"
+Assert-True -Condition $runtimeInstaller.Contains("New-ScheduledTaskPrincipal -UserId 'SYSTEM'") -Message "Watchdog task must remain under SYSTEM"
 Assert-True -Condition $runtimeRunner.Contains('$startInfo.CreateNoWindow = $true') -Message "Runtime process must remain windowless"
-Assert-True -Condition $runtimeRunner.Contains("@('preflight', 'connect')") -Message "Remote runner must enable only preflight and connect"
+Assert-True -Condition $runtimeRunner.Contains("@('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy')") -Message "Remote runner must enable the bounded acceptance scenario set"
+Assert-True -Condition $runtimeRunner.Contains("@('system-proxy', 'tun', 'local-proxy')") -Message "Remote runner must enable every supported Windows network mode"
+Assert-True -Condition $runtimeRunner.Contains("`$currentSid -cne `$expectedSid") -Message "Remote runner must verify its dedicated runtime identity"
 Assert-True -Condition $runtimeWatchdog.Contains('arming_valid') -Message "Watchdog apply mode must require a run-scoped arming manifest"
 Assert-True -Condition $runtimeRecovery.Contains('Stop-RuntimeOwnedProcesses') -Message "Recovery must stop only explicitly recorded lab-owned processes"
 Assert-True -Condition (-not ($runtimeRecovery -match '(?i)shutdown\.exe|Restart-Computer')) -Message "Runtime recovery must never reboot automatically"

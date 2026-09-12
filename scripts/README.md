@@ -45,7 +45,9 @@ SHA-256 ZIP, EXE и native core. Повторная сборка с уже за�
 
 Прямая лаборатория `ZEON-W10-LAB` — это фактически Windows Server 2022, а не
 Windows 10. Controller использует только key-only SSH/SCP и отдельную Scheduled
-Task `\ZEON-LAB\ZEON-LAB Runtime Validation` от `SYSTEM`. Сначала локально
+Task `\ZEON-LAB\ZEON-LAB Runtime Validation` от выделенного локального пользователя
+`ZEONRuntime`. Пользователю разрешён batch logon, запрещены локальный интерактивный
+и RDP logon; watchdog остаётся под `SYSTEM`. Сначала локально
 проверьте controller, затем неизменяемо опубликуйте артефакт и установите harness:
 
 ```powershell
@@ -60,33 +62,43 @@ Task `\ZEON-LAB\ZEON-LAB Runtime Validation` от `SYSTEM`. Сначала ло�
   -ArtifactPath '<out/installers/win/ZEON-1.5.0+N-...zip>'
 ```
 
-На текущем этапе remote request принимает только `preflight` и один ограниченный
-`connect` в `system-proxy`. Параметры передаются валидируемым immutable JSON, а не
-аргументами Scheduled Task. После queue SSH-сессия закрывается; статус читается
-новыми сессиями. Watchdog по умолчанию dry-run и может применить recovery только
-по одноразовому manifest конкретного `run_id`. Автоматический reboot запрещён.
+Remote request принимает `preflight`, `connect`, однократный S02, фазовый S06,
+`manual-proxy` и `auto-proxy` в режимах `system-proxy`, `tun` и `local-proxy`.
+Параметры передаются валидируемым immutable JSON v2, а не аргументами Scheduled
+Task. После queue SSH-сессия закрывается; `-Detach`, `-Status`, `-ListRuns` и
+`-CollectOnly` используют новые конечные сессии. Watchdog применяет delta-recovery
+только по одноразовому manifest конкретного `run_id`; явный `-Recover` использует
+тот же ограниченный contract. Автоматический reboot запрещён.
 
-`preflight` не требует профиля. Для `connect` fixture храните только в
-`Z:\Zeon-Envelope\Temp`: controller передаёт его во временный файл, remote host
-сразу шифрует его DPAPI вне evidence, создаёт plaintext только на время процесса и
-удаляет после secret-scan. Содержимое fixture не выводится:
+`preflight` не требует профиля. Источник разрешённого fixture один раз вводится
+интерактивно через `-EnrollFixture` и хранится только под CurrentUser DPAPI в
+`Z:\Zeon-Envelope\Temp\ZEON-W10-LAB\fixture-vault`. Для обычных прогонов команда
+содержит лишь непрозрачный `-FixtureId`; controller получает свежий профиль в памяти,
+передаёт короткоживущий файл, а remote host сразу шифрует его LocalMachine DPAPI вне
+evidence. Plaintext удаляется после secret-scan. URI и содержимое не выводятся:
 
 ```powershell
+.\scripts\windows_runtime_lab.ps1 `
+  -EnrollFixture -FixtureId 'zeon-authorized'
+.\scripts\windows_runtime_lab.ps1 `
+  -FixtureSelfTest -FixtureId 'zeon-authorized'
 .\scripts\windows_runtime_lab.ps1 `
   -Scenario preflight -RunId '<unique-preflight-id>' `
   -ArtifactPath '<out/installers/win/ZEON-1.5.0+N-...zip>'
 .\scripts\windows_runtime_lab.ps1 `
   -Scenario connect -NetworkMode system-proxy -RunId '<unique-connect-id>' `
   -ArtifactPath '<out/installers/win/ZEON-1.5.0+N-...zip>' `
-  -FixturePath 'Z:\Zeon-Envelope\Temp\zeon-app-testing\fixtures\windows-safe-profile.txt'
+  -FixtureId 'zeon-authorized' -Detach
+.\scripts\windows_runtime_lab.ps1 -Status -RunId '<unique-connect-id>'
+.\scripts\windows_runtime_lab.ps1 -CollectOnly -RunId '<unique-connect-id>'
 ```
 
 Remote evidence находится в `C:\ZEON-LAB\evidence\runs\<run_id>`, локальная
 проверенная копия — в `Z:\Zeon-Envelope\Temp\zeon-app-testing\<run_id>\evidence`.
 Повторный сбор после обрыва controller: `.\scripts\windows_runtime_lab.ps1
--CollectOnly -RunId '<run-id>'`. System Proxy под `SYSTEM` проверяет только профиль
-SYSTEM и не доказывает состояние интерактивного Administrator. S02, S06, TUN и
-полная матрица этим controller не поддерживаются.
+-CollectOnly -RunId '<run-id>'`. System Proxy проверяется клиентом без явного proxy
+override в WinINet-профиле именно `ZEONRuntime`. Это не доказывает интерактивный
+профиль Administrator и не является доказательством Windows 10 compatibility.
 
 Каталоги Flutter/Gradle/Xcode `build`, `dist` и временная рабочая копия — только
 промежуточные данные. Их путь нельзя передавать как итог сборки.

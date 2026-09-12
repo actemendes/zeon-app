@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory = $true)][string]$SourcePath,
     [Parameter(Mandatory = $true)][string]$FixtureId,
     [Parameter(Mandatory = $true)][string]$ExpectedSha256,
-    [string]$SecretRoot = "$env:ProgramData\ZEON-LAB-Secrets"
+    [string]$SecretRoot = "$env:ProgramData\ZEON-LAB-Secrets",
+    [string]$LabRoot = 'C:\ZEON-LAB'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,7 +16,10 @@ if ($ExpectedSha256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'Invalid fixture SHA-
 if (-not (Test-Path -LiteralPath $SourcePath -PathType Leaf)) { throw 'Fixture transfer file is missing.' }
 
 New-Item -ItemType Directory -Path $SecretRoot -Force | Out-Null
-Set-RuntimeRestrictedAcl -Path $SecretRoot
+$deployment = Get-Content -LiteralPath (Join-Path $LabRoot 'state\runtime\deployment.json') -Raw | ConvertFrom-Json
+$testUserSid = [string]$deployment.task.sid
+if ($testUserSid -notmatch '^S-1-5-21-(?:\d+-){3}\d+$') { throw 'Runtime test principal SID is unavailable.' }
+Set-RuntimeRestrictedAcl -Path $SecretRoot -AdditionalFullControlSids @($testUserSid)
 $destination = Join-Path $SecretRoot ("{0}.dpapi" -f $FixtureId)
 if (Test-Path -LiteralPath $destination) { throw 'Encrypted fixture id already exists.' }
 try {
@@ -25,7 +29,7 @@ try {
     try {
         $protected = [Security.Cryptography.ProtectedData]::Protect($plain, $null, [Security.Cryptography.DataProtectionScope]::LocalMachine)
         [IO.File]::WriteAllBytes($destination, $protected)
-        Set-RuntimeRestrictedAcl -Path $destination
+        Set-RuntimeRestrictedAcl -Path $destination -AdditionalFullControlSids @($testUserSid)
     } finally {
         [Array]::Clear($plain, 0, $plain.Length)
     }

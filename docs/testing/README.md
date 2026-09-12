@@ -163,14 +163,16 @@ portable data, 45-секундный connect contract, отдельный cleanu
 указанного сценария/режима; он не заменяет SHORT/FULL или ручной S05.
 
 Прямой remote-controller для `ZEON-W10-LAB` не использует историческую локальную
-VM: он публикует version/build неизменяемо, ставит отдельную SYSTEM Scheduled Task
-и передаёт запрос immutable JSON через SSH/SCP. В разрешённом лабораторном этапе
-controller принимает только `preflight` и один bounded `connect` в System Proxy;
-S02, S06, TUN и остальные режимы остаются вне scope. Fixture шифруется DPAPI вне
-evidence, plaintext существует только во временном каталоге процесса и удаляется
-после secret-scan. Результат этой Windows Server 2022 лаборатории не является
-Windows 10 compatibility evidence; System Proxy под SYSTEM не доказывает профиль
-интерактивного Administrator.
+VM: он публикует version/build неизменяемо, запускает продуктовую Scheduled Task
+под выделенным `ZEONRuntime` и передаёт immutable JSON v2 через SSH/SCP. Пользователю
+разрешён только batch logon, интерактивный и RDP logon запрещены; elevated token
+нужен для TUN, а watchdog/recovery остаются под `SYSTEM`. Controller поддерживает
+bounded `preflight`, `connect`, S02, фазовый S06, ручной/Auto selector и все три
+Windows network mode. Fixture хранится локально под CurrentUser DPAPI, на lab — под
+LocalMachine DPAPI вне evidence; plaintext короткоживущий и удаляется после
+secret-scan. Delta-recovery меняет только совпавшее run-owned состояние, проверяет
+baseline и никогда не перезагружает машину. Результат Windows Server 2022 не является
+Windows 10 compatibility evidence и не доказывает профиль Administrator.
 
 На запуск достаточно `report.json`, краткого `report.md` и необходимого evidence.
 Не создавать новый план, матрицу и десяток summary-файлов для каждого повтора.

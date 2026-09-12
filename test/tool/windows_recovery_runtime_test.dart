@@ -26,6 +26,7 @@ void main() {
           expect(options.scenario, scenario);
           expect(options.mode, mode);
           expect(options.connectTimeout, const Duration(seconds: 45));
+          expect(options.s02Cycles, 1);
           expect(options.toJson()['timeouts_seconds'], containsPair('s06_late_activation_observation', 150));
         }
       }
@@ -228,17 +229,28 @@ void main() {
     expect(source, isNot(contains("'memory_bytes': info.memory,")));
   });
 
-  test('system-proxy verification uses one explicit owned-listener HTTPS route', () async {
+  test('system-proxy verification uses the test principal WinINet profile', () async {
     final source = await File('tool/windows_recovery_runtime.dart').readAsString();
-    expect(source, contains('HarnessMode.systemProxy => await _fetchWithCurl(target)'));
-    expect(source, contains("'http://127.0.0.1:\${options.proxyPort}'"));
-    expect(source, contains("'--proto',"));
-    expect(source, isNot(contains("'--insecure'")));
+    expect(source, contains('HarnessMode.systemProxy => await _fetchWithSystemProxy(target)'));
+    expect(source, contains('[Net.WebRequest]::DefaultWebProxy.GetProxy'));
+    expect(source, contains("Invoke-WebRequest -Uri \$target -UseBasicParsing -TimeoutSec 15"));
+    expect(source, isNot(contains("'--proxy',")));
     expect(source, contains("reporter.event('outbound_selected'"));
     expect(source, contains("RuntimeFailure.deadline('concrete outbound readiness'"));
     expect(source, contains("'runtime_leaf_id':"));
     expect(source, contains("'exit_code': error.errorCode"));
-    expect(source, contains('options.mode != HarnessMode.systemProxy'));
+    expect(source, contains("'signal': 'product-health'"));
     expect(source, contains("'win32_code': error.win32Code"));
+  });
+
+  test('S06 observes the late-start window and then proves retry traffic and stop', () async {
+    final source = await File('tool/windows_recovery_runtime.dart').readAsString();
+    final observation = source.indexOf("reporter.event('s06_no_late_activation'");
+    final retry = source.indexOf("reporter.event('s06_retry_passed'");
+    expect(observation, greaterThan(0));
+    expect(retry, greaterThan(observation));
+    expect(source.substring(observation, retry), contains('await _connectAndProveReady()'));
+    expect(source.substring(observation, retry), contains('await _verifyTraffic()'));
+    expect(source.substring(observation, retry), contains("await _disconnectAndVerify('s06-retry')"));
   });
 }

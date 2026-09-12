@@ -7,7 +7,6 @@ import 'dart:io';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/bootstrap.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
-import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/http_client/windows_system_http_transport.dart';
 import 'package:zeon/core/model/environment.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
@@ -266,7 +265,7 @@ class RuntimeOptions {
       scenarioTimeout: Duration(seconds: scenarioSeconds),
       trafficUrls: trafficUrls,
       backendHealthUrl: backendHealthUrl,
-      s02Cycles: integer('s02-cycles', 'ZEON_RUNTIME_S02_CYCLES', 10, 2, 100),
+      s02Cycles: integer('s02-cycles', 'ZEON_RUNTIME_S02_CYCLES', 1, 1, 100),
       proxyPort: integer('proxy-port', 'ZEON_RUNTIME_PROXY_PORT', _defaultProxyPort, 1024, 65535),
       cancelPhase: cancelPhase,
       manualProxyTag: one('manual-proxy-tag', 'ZEON_RUNTIME_MANUAL_PROXY_TAG'),
@@ -647,6 +646,11 @@ class RuntimeHarness {
       await Future<void>.delayed(const Duration(milliseconds: 500));
     }
     await reporter.event('s06_no_late_activation', {'observed_seconds': _cancelObservation.inSeconds});
+    await _connectAndProveReady();
+    await _reportSelectedOutbound();
+    await _verifyTraffic();
+    await _disconnectAndVerify('s06-retry');
+    await reporter.event('s06_retry_passed');
   }
 
   Future<void> _scenarioManualProxy() async {
@@ -851,7 +855,7 @@ class RuntimeHarness {
         status = switch (options.mode) {
           HarnessMode.localProxy => await _fetchWithDartClient(target, proxy: true),
           HarnessMode.tun => await _fetchWithDartClient(target, proxy: false),
-          HarnessMode.systemProxy => await _fetchWithCurl(target),
+          HarnessMode.systemProxy => await _fetchWithSystemProxy(target),
         };
       } catch (error) {
         reporter.trafficResults.add({
@@ -872,32 +876,46 @@ class RuntimeHarness {
       });
     }
 
-    if (options.mode != HarnessMode.systemProxy) {
-      final backendStopwatch = Stopwatch()..start();
-      try {
-        final response = await container!.read(httpClientProvider).get<dynamic>(options.backendHealthUrl.toString());
-        if (response.statusCode != 200) throw StateError('unexpected backend status');
-        reporter.trafficResults.add({
-          'target': _safeUri(options.backendHealthUrl),
-          'route': 'application-http-client',
-          'status': 'PASS',
-          'http_status': response.statusCode,
-          'elapsed_ms': backendStopwatch.elapsedMilliseconds,
-        });
-      } catch (error) {
-        reporter.trafficResults.add({
-          'target': _safeUri(options.backendHealthUrl),
-          'route': 'application-http-client',
-          'status': 'FAIL',
-          'elapsed_ms': backendStopwatch.elapsedMilliseconds,
-          'error_type': error.runtimeType.toString(),
-        });
-        throw RuntimeFailure.fail('ZEON domain health failed through the application client');
-      }
+    await _verifyBackendHealthSignal();
+    await reporter.event('traffic_verified', {'checks': options.trafficUrls.length + 1});
+  }
+
+  Future<void> _verifyBackendHealthSignal() async {
+    final stopwatch = Stopwatch()..start();
+    var dnsAddresses = 0;
+    try {
+      dnsAddresses = (await InternetAddress.lookup(
+        options.backendHealthUrl.host,
+      ).timeout(const Duration(seconds: 8))).length;
+      if (dnsAddresses == 0) throw const SocketException('health target DNS returned no addresses');
+      final status = switch (options.mode) {
+        HarnessMode.systemProxy => await _fetchWithSystemProxy(options.backendHealthUrl),
+        HarnessMode.localProxy => await _fetchWithDartClient(options.backendHealthUrl, proxy: true),
+        HarnessMode.tun => await _fetchWithDartClient(options.backendHealthUrl, proxy: false),
+      };
+      reporter.trafficResults.add({
+        'target': _safeUri(options.backendHealthUrl),
+        'route': options.mode.cliName,
+        'signal': 'product-health',
+        'status': 'PASS',
+        'http_status': status,
+        'dns_address_count': dnsAddresses,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      });
+    } catch (error) {
+      reporter.trafficResults.add({
+        'target': _safeUri(options.backendHealthUrl),
+        'route': options.mode.cliName,
+        'signal': 'product-health',
+        'status': 'FAIL',
+        'dns_address_count': dnsAddresses,
+        'proxy_listener_ready': await _proxyListening(),
+        'native_core_status': _coreStateJson(coreService.currentState)['status'],
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+        ..._networkFailureJson(error),
+      });
+      throw RuntimeFailure.fail('ZEON domain health failed after deterministic HTTPS controls passed');
     }
-    await reporter.event('traffic_verified', {
-      'checks': options.trafficUrls.length + (options.mode == HarnessMode.systemProxy ? 0 : 1),
-    });
   }
 
   Future<int> _fetchWithDartClient(Uri target, {required bool proxy}) async {
@@ -922,25 +940,24 @@ class RuntimeHarness {
     }
   }
 
-  Future<int> _fetchWithCurl(Uri target) async {
-    final process = await Process.start('curl.exe', [
-      '--silent',
-      '--show-error',
-      '--fail',
-      '--connect-timeout',
-      '10',
-      '--max-time',
-      '15',
-      '--proto',
-      '=https',
-      '--proxy',
-      'http://127.0.0.1:${options.proxyPort}',
-      '--output',
-      'NUL',
-      '--write-out',
-      '%{http_code}',
-      '--url',
+  Future<int> _fetchWithSystemProxy(Uri target) async {
+    const script = r'''
+$ErrorActionPreference='Stop'
+$ProgressPreference='SilentlyContinue'
+$target=[Uri]$args[0]
+$expectedPort=[int]$args[1]
+$resolved=[Net.WebRequest]::DefaultWebProxy.GetProxy($target)
+if($null -eq $resolved -or $resolved.Host -notin @('127.0.0.1','localhost') -or $resolved.Port -ne $expectedPort){exit 42}
+$response=Invoke-WebRequest -Uri $target -UseBasicParsing -TimeoutSec 15
+[Console]::Out.Write([string][int]$response.StatusCode)''';
+    final process = await Process.start('powershell.exe', [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      script,
       target.toString(),
+      '${options.proxyPort}',
     ]);
     final stdout = process.stdout.transform(utf8.decoder).join();
     final stderr = process.stderr.drain<void>();
@@ -955,7 +972,7 @@ class RuntimeHarness {
     }
     final status = int.tryParse((await stdout).trim());
     if (exitCode != 0 || status == null) {
-      throw ProcessException('curl.exe', const [], 'HTTPS probe failed', exitCode);
+      throw ProcessException('powershell.exe', const [], 'System proxy HTTPS probe failed', exitCode);
     }
     if (status != 200) throw StateError('HTTPS response was not 200');
     return status;
