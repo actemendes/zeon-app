@@ -944,12 +944,12 @@ class RuntimeHarness {
     const script = r'''
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
-$target=[Uri]$args[0]
-$expectedPort=[int]$args[1]
-$resolved=[Net.WebRequest]::DefaultWebProxy.GetProxy($target)
-if($null -eq $resolved -or $resolved.Host -notin @('127.0.0.1','localhost') -or $resolved.Port -ne $expectedPort){exit 42}
-[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 try {
+  $target=[Uri]$env:ZEON_RUNTIME_TRAFFIC_TARGET
+  $expectedPort=[int]$env:ZEON_RUNTIME_PROXY_PORT
+  $resolved=[Net.WebRequest]::DefaultWebProxy.GetProxy($target)
+  if($null -eq $resolved -or $resolved.Host -notin @('127.0.0.1','localhost') -or $resolved.Port -ne $expectedPort){exit 42}
+  [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
   $request=[Net.HttpWebRequest]::Create($target)
   $request.Method='GET'
   $request.Proxy=[Net.WebRequest]::DefaultWebProxy
@@ -971,15 +971,23 @@ try {
   }
 } catch [Net.WebException] { exit 43 }
 catch { exit 44 }''';
-    final process = await Process.start('powershell.exe', [
-      '-NoLogo',
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      script,
-      target.toString(),
-      '${options.proxyPort}',
-    ]);
+    final childEnvironment = Map<String, String>.from(Platform.environment)
+      ..remove('HTTP_PROXY')
+      ..remove('HTTPS_PROXY')
+      ..remove('ALL_PROXY')
+      ..remove('NO_PROXY')
+      ..remove('http_proxy')
+      ..remove('https_proxy')
+      ..remove('all_proxy')
+      ..remove('no_proxy')
+      ..['ZEON_RUNTIME_TRAFFIC_TARGET'] = target.toString()
+      ..['ZEON_RUNTIME_PROXY_PORT'] = '${options.proxyPort}';
+    final process = await Process.start(
+      'powershell.exe',
+      ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
+      environment: childEnvironment,
+      includeParentEnvironment: false,
+    );
     final stdout = process.stdout.transform(utf8.decoder).join();
     final stderr = process.stderr.drain<void>();
     late final int exitCode;

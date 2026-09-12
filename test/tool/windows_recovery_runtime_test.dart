@@ -235,6 +235,9 @@ void main() {
     expect(source, contains('[Net.WebRequest]::DefaultWebProxy.GetProxy'));
     expect(source, contains('[Net.HttpWebRequest]::Create'));
     expect(source, contains('Proxy=[Net.WebRequest]::DefaultWebProxy'));
+    expect(source, contains('ZEON_RUNTIME_TRAFFIC_TARGET'));
+    expect(source, contains('includeParentEnvironment: false'));
+    expect(source, isNot(contains("target.toString(),\n      '\${options.proxyPort}',")));
     expect(source, isNot(contains("'--proxy',")));
     expect(source, contains("reporter.event('outbound_selected'"));
     expect(source, contains("RuntimeFailure.deadline('concrete outbound readiness'"));
