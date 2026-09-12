@@ -230,8 +230,10 @@ void main() {
 
   test('system-proxy verification uses one explicit owned-listener HTTPS route', () async {
     final source = await File('tool/windows_recovery_runtime.dart').readAsString();
-    expect(source, contains('HarnessMode.systemProxy => await _fetchWithDartClient(target, proxy: true)'));
-    expect(source, contains("'PROXY 127.0.0.1:\${options.proxyPort}'"));
+    expect(source, contains('HarnessMode.systemProxy => await _fetchWithCurl(target)'));
+    expect(source, contains("'http://127.0.0.1:\${options.proxyPort}'"));
+    expect(source, contains("'--proto',"));
+    expect(source, isNot(contains("'--insecure'")));
     expect(source, contains('options.mode != HarnessMode.systemProxy'));
     expect(source, contains("'win32_code': error.win32Code"));
   });

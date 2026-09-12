@@ -810,7 +810,7 @@ class RuntimeHarness {
         status = switch (options.mode) {
           HarnessMode.localProxy => await _fetchWithDartClient(target, proxy: true),
           HarnessMode.tun => await _fetchWithDartClient(target, proxy: false),
-          HarnessMode.systemProxy => await _fetchWithDartClient(target, proxy: true),
+          HarnessMode.systemProxy => await _fetchWithCurl(target),
         };
       } catch (error) {
         reporter.trafficResults.add({
@@ -879,6 +879,43 @@ class RuntimeHarness {
     } finally {
       client.close(force: true);
     }
+  }
+
+  Future<int> _fetchWithCurl(Uri target) async {
+    final process = await Process.start('curl.exe', [
+      '--silent',
+      '--show-error',
+      '--fail',
+      '--connect-timeout',
+      '10',
+      '--max-time',
+      '15',
+      '--proto',
+      '=https',
+      '--proxy',
+      'http://127.0.0.1:${options.proxyPort}',
+      '--output',
+      'NUL',
+      '--write-out',
+      '%{http_code}',
+      '--url',
+      target.toString(),
+    ]);
+    final stdout = process.stdout.transform(utf8.decoder).join();
+    final stderr = process.stderr.drain<void>();
+    late final int exitCode;
+    try {
+      exitCode = await process.exitCode.timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      process.kill();
+      throw TimeoutException('curl_process');
+    } finally {
+      await stderr.timeout(const Duration(seconds: 2), onTimeout: () {});
+    }
+    final status = int.tryParse((await stdout).trim());
+    if (exitCode != 0 || status == null) throw StateError('HTTPS probe failed with exit code $exitCode');
+    if (status != 200) throw StateError('HTTPS response was not 200');
+    return status;
   }
 
   Map<String, Object?> _networkFailureJson(Object error) => switch (error) {
