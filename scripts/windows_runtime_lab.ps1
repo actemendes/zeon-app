@@ -413,7 +413,7 @@ function Collect-RemoteRun {
         }
         return [ordered]@{ status = $remoteStatus; local_root = $targetRoot; archive = $localArchive; archive_sha256 = $localHash; evidence = $expanded }
     } finally {
-        Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$remoteArchive' -Force -ErrorAction SilentlyContinue" | Out-Null
+        Invoke-RemotePowerShell -Script "if (Test-Path -LiteralPath '$remoteArchive') { Remove-Item -LiteralPath '$remoteArchive' -Force }; exit 0" | Out-Null
     }
 }
 
@@ -426,7 +426,7 @@ function Invoke-FixtureSelfTest {
         Invoke-RemotePowerShell -Script "& '$remoteLabRoot\scripts\runtime\Protect-RuntimeFixture.ps1' -SourcePath '$remoteTransfer' -FixtureId '$($transfer.remote_id)' -ExpectedSha256 '$($transfer.sha256)' | Out-Null" | Out-Null
     } finally {
         Remove-Item -LiteralPath $transfer.path -Force -ErrorAction SilentlyContinue
-        Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$remoteTransfer' -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath '$remoteEncrypted' -Force -ErrorAction SilentlyContinue" | Out-Null
+        Invoke-RemotePowerShell -Script "if (Test-Path -LiteralPath '$remoteTransfer') { Remove-Item -LiteralPath '$remoteTransfer' -Force }; if (Test-Path -LiteralPath '$remoteEncrypted') { Remove-Item -LiteralPath '$remoteEncrypted' -Force }; exit 0" | Out-Null
     }
     $cleanup = Invoke-RemotePowerShell -Script "[ordered]@{transfer_absent=(-not (Test-Path -LiteralPath '$remoteTransfer')); encrypted_absent=(-not (Test-Path -LiteralPath '$remoteEncrypted'))} | ConvertTo-Json -Compress" | ConvertFrom-Json
     if (-not [bool]$cleanup.transfer_absent -or -not [bool]$cleanup.encrypted_absent) { throw 'Fixture injection self-test cleanup failed.' }
@@ -546,11 +546,11 @@ if ($Scenario -ne 'preflight') {
         Copy-ToRemote -Source $fixtureTransfer.path -RemotePath (($remoteFixtureTransfer) -replace '\\', '/')
         Invoke-RemotePowerShell -Script "& '$remoteLabRoot\scripts\runtime\Protect-RuntimeFixture.ps1' -SourcePath '$remoteFixtureTransfer' -FixtureId '$remoteFixtureId' -ExpectedSha256 '$fixtureHash' | Out-Null" | Out-Null
     } catch {
-        Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$env:ProgramData\ZEON-LAB-Secrets\$remoteFixtureId.dpapi' -Force -ErrorAction SilentlyContinue" | Out-Null
+        Invoke-RemotePowerShell -Script "`$p='$env:ProgramData\ZEON-LAB-Secrets\$remoteFixtureId.dpapi'; if (Test-Path -LiteralPath `$p) { Remove-Item -LiteralPath `$p -Force }; exit 0" | Out-Null
         throw
     } finally {
         Remove-Item -LiteralPath $fixtureTransfer.path -Force -ErrorAction SilentlyContinue
-        Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$remoteFixtureTransfer' -Force -ErrorAction SilentlyContinue" | Out-Null
+        Invoke-RemotePowerShell -Script "if (Test-Path -LiteralPath '$remoteFixtureTransfer') { Remove-Item -LiteralPath '$remoteFixtureTransfer' -Force }; exit 0" | Out-Null
     }
 }
 
@@ -565,7 +565,7 @@ try {
     Copy-ToRemote -Source $requestPath -RemotePath (($remoteRequest) -replace '\\', '/')
     Invoke-RemotePowerShell -Script "& '$remoteLabRoot\scripts\runtime\Queue-RuntimeRun.ps1' -RequestPath '$remoteRequest' -LabRoot '$remoteLabRoot'" | Out-Null
 } catch {
-    Invoke-RemotePowerShell -Script "Remove-Item -LiteralPath '$remoteRequest' -Force -ErrorAction SilentlyContinue; if ('$remoteFixtureId') { Remove-Item -LiteralPath '$env:ProgramData\ZEON-LAB-Secrets\$remoteFixtureId.dpapi' -Force -ErrorAction SilentlyContinue }" | Out-Null
+    Invoke-RemotePowerShell -Script "if (Test-Path -LiteralPath '$remoteRequest') { Remove-Item -LiteralPath '$remoteRequest' -Force }; if ('$remoteFixtureId') { `$p='$env:ProgramData\ZEON-LAB-Secrets\$remoteFixtureId.dpapi'; if (Test-Path -LiteralPath `$p) { Remove-Item -LiteralPath `$p -Force } }; exit 0" | Out-Null
     throw
 }
 

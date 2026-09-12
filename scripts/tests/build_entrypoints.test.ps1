@@ -106,7 +106,7 @@ Assert-True -Condition $runtimeLab.Contains('ZEON-LAB Runtime Validation') -Mess
 Assert-True -Condition $runtimeLab.Contains('CollectOnly') -Message "Runtime lab must support collection after controller disconnect"
 Assert-True -Condition $runtimeLab.Contains('controller_sha = [string]$request.controller_sha') -Message "Runtime result must preserve the controller SHA frozen in the immutable request"
 Assert-True -Condition $runtimeLab.Contains('TrafficUrl must be an absolute HTTPS URL.') -Message "Runtime traffic override must reject non-HTTPS targets"
-Assert-True -Condition ($runtimeLab.Contains("Remove-Item -LiteralPath '`$remoteFixtureTransfer' -Force -ErrorAction SilentlyContinue")) -Message "Fixture transfer cleanup must be idempotent after DPAPI protection"
+Assert-True -Condition ($runtimeLab.Contains("if (Test-Path -LiteralPath '`$remoteFixtureTransfer') { Remove-Item -LiteralPath '`$remoteFixtureTransfer' -Force }; exit 0")) -Message "Fixture transfer cleanup must be idempotent after DPAPI protection"
 Assert-True -Condition $runtimeLab.Contains("[switch]`$Detach") -Message "Runtime controller must support detached execution"
 Assert-True -Condition $runtimeLab.Contains("[switch]`$Status") -Message "Runtime controller must support fresh-session status checks"
 Assert-True -Condition $runtimeLab.Contains("[switch]`$ListRuns") -Message "Runtime controller must list immutable run summaries"
