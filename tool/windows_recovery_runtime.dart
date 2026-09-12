@@ -806,17 +806,40 @@ class RuntimeHarness {
   Future<void> _reportSelectedOutbound() async {
     final group = await _selectorGroup();
     String? selectedType;
+    var selectedIsGroup = false;
     for (final item in group.items) {
-      if (item.tag == group.selected) selectedType = item.type;
+      if (item.tag == group.selected) {
+        selectedType = item.type;
+        selectedIsGroup = item.isGroup;
+      }
     }
-    final systemInfo = await coreService.core.backgroundCommandClient
-        .getSystemInfo(Empty())
-        .timeout(const Duration(seconds: 8));
+    const readinessTimeout = Duration(seconds: 30);
+    final deadline = DateTime.now().add(readinessTimeout);
+    OutboundInfo? runtimeLeaf;
+    String runtimeOutbound = '';
+    do {
+      final groups = await coreService.core.backgroundCommandClient
+          .outboundsInfo(Empty())
+          .first
+          .timeout(const Duration(seconds: 8));
+      final systemInfo = await coreService.core.backgroundCommandClient
+          .getSystemInfo(Empty())
+          .timeout(const Duration(seconds: 8));
+      runtimeOutbound = systemInfo.currentOutbound;
+      runtimeLeaf = resolveRuntimeLeaf(groups, runtimeOutbound);
+      if (!selectedIsGroup || runtimeLeaf != null) break;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    } while (DateTime.now().isBefore(deadline));
+    if (selectedIsGroup && runtimeLeaf == null) {
+      throw RuntimeFailure.deadline('concrete outbound readiness', readinessTimeout);
+    }
     await reporter.event('outbound_selected', {
       'selector_id': await safeId(group.tag),
       'selected_id': await safeId(group.selected),
       'selected_type': selectedType,
-      'runtime_outbound_id': await safeId(systemInfo.currentOutbound),
+      'runtime_outbound_id': await safeId(runtimeOutbound),
+      'runtime_leaf_id': runtimeLeaf == null ? null : await safeId(runtimeLeaf.tag),
+      'runtime_leaf_type': runtimeLeaf?.type,
     });
   }
 

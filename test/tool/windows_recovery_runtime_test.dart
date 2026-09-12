@@ -235,6 +235,8 @@ void main() {
     expect(source, contains("'--proto',"));
     expect(source, isNot(contains("'--insecure'")));
     expect(source, contains("reporter.event('outbound_selected'"));
+    expect(source, contains("RuntimeFailure.deadline('concrete outbound readiness'"));
+    expect(source, contains("'runtime_leaf_id':"));
     expect(source, contains("'exit_code': error.errorCode"));
     expect(source, contains('options.mode != HarnessMode.systemProxy'));
     expect(source, contains("'win32_code': error.win32Code"));
