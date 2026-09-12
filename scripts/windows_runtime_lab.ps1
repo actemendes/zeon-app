@@ -72,6 +72,20 @@ function Assert-HttpsUrl([string]$Value, [string[]]$AllowedHosts) {
 
 function Set-LocalSecretAcl([string]$Path) {
     $item = Get-Item -LiteralPath $Path
+    $expectedSids = @(
+        [Security.Principal.WindowsIdentity]::GetCurrent().User.Value,
+        'S-1-5-18',
+        'S-1-5-32-544'
+    )
+    $currentAcl = Get-Acl -LiteralPath $Path
+    $currentRules = @($currentAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+    $unexpectedRules = @($currentRules | Where-Object {
+        $_.IdentityReference.Value -notin $expectedSids -or
+        $_.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
+        ($_.FileSystemRights -band [Security.AccessControl.FileSystemRights]::FullControl) -ne [Security.AccessControl.FileSystemRights]::FullControl
+    })
+    $missingSids = @($expectedSids | Where-Object { $_ -notin @($currentRules.IdentityReference.Value) })
+    if ($unexpectedRules.Count -eq 0 -and $missingSids.Count -eq 0) { return }
     $acl = if ($item.PSIsContainer) { New-Object Security.AccessControl.DirectorySecurity } else { New-Object Security.AccessControl.FileSecurity }
     $acl.SetAccessRuleProtection($true, $false)
     $inheritance = if ($item.PSIsContainer) { [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit' } else { [Security.AccessControl.InheritanceFlags]::None }
@@ -108,6 +122,7 @@ function Initialize-LocalFixtureVault {
             $sourcePath = Join-Path $fixtureVaultRoot ("{0}.source.dpapi" -f $FixtureId)
             [IO.File]::WriteAllBytes($sourcePath, $protected)
             Set-LocalSecretAcl -Path $sourcePath
+            Remove-Item -LiteralPath (Join-Path $fixtureVaultRoot ("{0}.profile.dpapi" -f $FixtureId)) -Force -ErrorAction SilentlyContinue
         } finally {
             [Array]::Clear($sourceBytes, 0, $sourceBytes.Length)
         }
@@ -123,21 +138,26 @@ function New-LocalFixtureTransfer {
     Assert-RunId $FixtureId
     $sourcePath = Join-Path $fixtureVaultRoot ("{0}.source.dpapi" -f $FixtureId)
     if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw 'Fixture source is not enrolled. Run once with -EnrollFixture in an interactive PowerShell.' }
-    $sourceProtected = [IO.File]::ReadAllBytes($sourcePath)
-    $sourceBytes = Unprotect-LocalSecretBytes -Bytes $sourceProtected
+    $profilePath = Join-Path $fixtureVaultRoot ("{0}.profile.dpapi" -f $FixtureId)
+    $sourceBytes = $null
     $sourceUrl = $null
     $profileBytes = $null
     $transferPath = $null
     $transferReady = $false
     try {
-        $sourceUrl = [Text.Encoding]::UTF8.GetString($sourceBytes)
-        $client = New-Object Net.Http.HttpClient
-        $client.Timeout = [TimeSpan]::FromSeconds(30)
-        try { $profileBytes = $client.GetByteArrayAsync($sourceUrl).GetAwaiter().GetResult() } finally { $client.Dispose() }
-        if (-not $profileBytes -or $profileBytes.Length -lt 16 -or $profileBytes.Length -gt 4MB) { throw 'Downloaded fixture size is outside the bounded range.' }
-        $profilePath = Join-Path $fixtureVaultRoot ("{0}.profile.dpapi" -f $FixtureId)
-        [IO.File]::WriteAllBytes($profilePath, (Protect-LocalSecretBytes -Bytes $profileBytes))
-        Set-LocalSecretAcl -Path $profilePath
+        if (Test-Path -LiteralPath $profilePath -PathType Leaf) {
+            $profileBytes = Unprotect-LocalSecretBytes -Bytes ([IO.File]::ReadAllBytes($profilePath))
+        } else {
+            $sourceBytes = Unprotect-LocalSecretBytes -Bytes ([IO.File]::ReadAllBytes($sourcePath))
+            $sourceUrl = [Text.Encoding]::UTF8.GetString($sourceBytes)
+            $client = New-Object Net.Http.HttpClient
+            $client.Timeout = [TimeSpan]::FromSeconds(30)
+            try { $profileBytes = $client.GetByteArrayAsync($sourceUrl).GetAwaiter().GetResult() } finally { $client.Dispose() }
+            if (-not $profileBytes -or $profileBytes.Length -lt 16 -or $profileBytes.Length -gt 4MB) { throw 'Downloaded fixture size is outside the bounded range.' }
+            [IO.File]::WriteAllBytes($profilePath, (Protect-LocalSecretBytes -Bytes $profileBytes))
+            Set-LocalSecretAcl -Path $profilePath
+        }
+        if (-not $profileBytes -or $profileBytes.Length -lt 16 -or $profileBytes.Length -gt 4MB) { throw 'Cached fixture size is outside the bounded range.' }
         $transferRoot = 'Z:\Zeon-Envelope\Temp\ZEON-W10-LAB\fixture-transfer'
         New-Item -ItemType Directory -Path $transferRoot -Force | Out-Null
         Set-LocalSecretAcl -Path $transferRoot
@@ -153,7 +173,7 @@ function New-LocalFixtureTransfer {
         }
     } finally {
         if (-not $transferReady -and $transferPath) { Remove-Item -LiteralPath $transferPath -Force -ErrorAction SilentlyContinue }
-        [Array]::Clear($sourceBytes, 0, $sourceBytes.Length)
+        if ($sourceBytes) { [Array]::Clear($sourceBytes, 0, $sourceBytes.Length) }
         if ($profileBytes) { [Array]::Clear($profileBytes, 0, $profileBytes.Length) }
         $sourceUrl = $null
     }
