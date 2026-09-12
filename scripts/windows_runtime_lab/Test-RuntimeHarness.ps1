@@ -21,8 +21,12 @@ function Get-RuntimeUserRights([string]$Sid) {
         & secedit.exe /export /cfg $path /areas USER_RIGHTS /quiet | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect runtime user rights.' }
         $text = [IO.File]::ReadAllText($path, [Text.Encoding]::Unicode)
+        $account = (New-Object Security.Principal.SecurityIdentifier($Sid)).Translate([Security.Principal.NTAccount]).Value
+        $shortAccount = $account.Split('\')[-1]
         return @('SeBatchLogonRight', 'SeDenyInteractiveLogonRight', 'SeDenyRemoteInteractiveLogonRight') | ForEach-Object {
-            [ordered]@{ name = $_; present = $text -match ("(?m)^{0}\s*=.*(?:\*{1})(?:,|$)" -f [regex]::Escape($_), [regex]::Escape($Sid)) }
+            $line = @($text -split "`r?`n" | Where-Object { $_ -match ("^{0}\s*=" -f [regex]::Escape($_)) } | Select-Object -First 1)
+            $tokens = if ($line) { @(($line[0].Split('=', 2)[1]).Split(',') | ForEach-Object { $_.Trim() }) } else { @() }
+            [ordered]@{ name = $_; present = $tokens -contains "*$Sid" -or $tokens -contains $account -or $tokens -contains $shortAccount }
         }
     } finally {
         Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
@@ -38,7 +42,7 @@ Add-Check 'runtime_task_present' ($null -ne $task) 'ZEON-LAB Runtime Validation'
 $testUserSid = if ($deployment) { [string]$deployment.task.sid } else { '' }
 $testUser = if ($testUserSid) { Get-LocalUser | Where-Object { $_.SID.Value -eq $testUserSid } } else { $null }
 $runtimeRights = if ($testUserSid) { @(Get-RuntimeUserRights -Sid $testUserSid) } else { @() }
-Add-Check 'runtime_test_principal' ($testUser -and $testUser.Enabled -and $task.Principal.UserId -match '\\ZEONRuntime$' -and $task.Principal.LogonType -eq 'Password' -and $task.Principal.RunLevel -eq 'Highest') ("principal={0}; sid={1}" -f $task.Principal.UserId, $testUserSid)
+Add-Check 'runtime_test_principal' ($testUser -and $testUser.Enabled -and $task.Principal.UserId -in @('ZEONRuntime', "$env:COMPUTERNAME\ZEONRuntime") -and $task.Principal.LogonType -eq 'Password' -and $task.Principal.RunLevel -eq 'Highest') ("principal={0}; sid={1}" -f $task.Principal.UserId, $testUserSid)
 Add-Check 'runtime_interactive_logon_denied' ($runtimeRights.Count -eq 3 -and @($runtimeRights | Where-Object { -not $_.present }).Count -eq 0) 'batch allowed; local and remote interactive logon denied'
 Add-Check 'runtime_task_action' ($task -and [string]$task.Actions.Execute -match 'powershell' -and [string]$task.Actions.Arguments -eq '-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File C:\ZEON-LAB\scripts\runtime\Invoke-RuntimeRunner.ps1') 'fixed script action without request or secret arguments'
 Add-Check 'watchdog_task_present' ($null -ne $watchdogTask) 'ZEON-LAB Runtime Watchdog'

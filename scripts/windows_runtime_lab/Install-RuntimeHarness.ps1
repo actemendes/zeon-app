@@ -30,7 +30,16 @@ function Set-RuntimeUserRights {
                 if ($existing -notcontains $sidToken) { $existing += $sidToken }
                 $lines[$index] = "$right = $($existing -join ',')"
             } else {
-                $lines.Add("$right = $sidToken")
+                $privilegeHeader = -1
+                for ($position = 0; $position -lt $lines.Count; $position++) {
+                    if ($lines[$position] -ceq '[Privilege Rights]') { $privilegeHeader = $position; break }
+                }
+                if ($privilegeHeader -lt 0) { throw 'Exported security policy has no Privilege Rights section.' }
+                $insertAt = $lines.Count
+                for ($position = $privilegeHeader + 1; $position -lt $lines.Count; $position++) {
+                    if ($lines[$position] -match '^\[[^]]+\]$') { $insertAt = $position; break }
+                }
+                $lines.Insert($insertAt, "$right = $sidToken")
             }
         }
         [IO.File]::WriteAllLines($configuration, $lines, [Text.Encoding]::Unicode)
