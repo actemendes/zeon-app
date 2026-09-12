@@ -259,7 +259,7 @@ void main() {
     expect(source.substring(observation, retry), contains("await _disconnectAndVerify('s06-retry')"));
   });
 
-  test('S02 waits for a concrete outbound before probing traffic', () async {
+  test('S02 proves traffic, direct internet, reconnect, and final stop', () async {
     final source = await File('tool/windows_recovery_runtime.dart').readAsString();
     final scenarioStart = source.indexOf('Future<void> _scenarioS02()');
     final scenarioEnd = source.indexOf('Future<void> _scenarioS06()', scenarioStart);
@@ -267,8 +267,20 @@ void main() {
     final ready = scenario.indexOf('await _connectAndProveReady()');
     final outbound = scenario.indexOf('await _reportSelectedOutbound()');
     final traffic = scenario.indexOf('await _verifyTraffic()');
+    final firstStop = scenario.indexOf("await _disconnectAndVerify('s02-cycle-\$cycle-first-stop')");
+    final direct = scenario.indexOf('await _verifyDirectTraffic(cycle)');
+    final reconnect = scenario.indexOf('await _connectAndProveReady()', direct);
+    final secondTraffic = scenario.indexOf('await _verifyTraffic()', reconnect);
+    final finalStop = scenario.indexOf("await _disconnectAndVerify('s02-cycle-\$cycle-final-stop')");
     expect(ready, greaterThanOrEqualTo(0));
     expect(outbound, greaterThan(ready));
     expect(traffic, greaterThan(outbound));
+    expect(firstStop, greaterThan(traffic));
+    expect(direct, greaterThan(firstStop));
+    expect(reconnect, greaterThan(direct));
+    expect(secondTraffic, greaterThan(reconnect));
+    expect(finalStop, greaterThan(secondTraffic));
+    expect(source, contains("reporter.event('s02_direct_internet_verified'"));
+    expect(source, contains("'route': 'direct-after-disconnect'"));
   });
 }

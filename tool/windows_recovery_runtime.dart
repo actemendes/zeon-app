@@ -608,7 +608,12 @@ class RuntimeHarness {
       await _connectAndProveReady();
       await _reportSelectedOutbound();
       await _verifyTraffic();
-      await _disconnectAndVerify('s02-cycle-$cycle');
+      await _disconnectAndVerify('s02-cycle-$cycle-first-stop');
+      await _verifyDirectTraffic(cycle);
+      await _connectAndProveReady();
+      await _reportSelectedOutbound();
+      await _verifyTraffic();
+      await _disconnectAndVerify('s02-cycle-$cycle-final-stop');
       await reporter.event('s02_cycle_passed', {'cycle': cycle});
     }
   }
@@ -879,6 +884,34 @@ class RuntimeHarness {
 
     await _verifyBackendHealthSignal();
     await reporter.event('traffic_verified', {'checks': options.trafficUrls.length + 1});
+  }
+
+  Future<void> _verifyDirectTraffic(int cycle) async {
+    for (final target in options.trafficUrls) {
+      final stopwatch = Stopwatch()..start();
+      try {
+        final status = await _fetchWithDartClient(target, proxy: false);
+        reporter.trafficResults.add({
+          'target': _safeUri(target),
+          'route': 'direct-after-disconnect',
+          'signal': 'ordinary-internet',
+          'status': 'PASS',
+          'http_status': status,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+        });
+      } catch (error) {
+        reporter.trafficResults.add({
+          'target': _safeUri(target),
+          'route': 'direct-after-disconnect',
+          'signal': 'ordinary-internet',
+          'status': 'FAIL',
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          ..._networkFailureJson(error),
+        });
+        throw RuntimeFailure.fail('Direct HTTPS failed after S02 disconnect');
+      }
+    }
+    await reporter.event('s02_direct_internet_verified', {'cycle': cycle, 'checks': options.trafficUrls.length});
   }
 
   Future<void> _verifyBackendHealthSignal() async {
