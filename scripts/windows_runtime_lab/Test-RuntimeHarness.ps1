@@ -24,9 +24,10 @@ function Get-RuntimeUserRights([string]$Sid) {
         $account = (New-Object Security.Principal.SecurityIdentifier($Sid)).Translate([Security.Principal.NTAccount]).Value
         $shortAccount = $account.Split('\')[-1]
         return @('SeBatchLogonRight', 'SeDenyInteractiveLogonRight', 'SeDenyRemoteInteractiveLogonRight') | ForEach-Object {
-            $line = @($text -split "`r?`n" | Where-Object { $_ -match ("^{0}\s*=" -f [regex]::Escape($_)) } | Select-Object -First 1)
+            $right = $_
+            $line = @($text -split "`r?`n" | Where-Object { $_ -match ("^{0}\s*=" -f [regex]::Escape($right)) } | Select-Object -First 1)
             $tokens = if ($line) { @(($line[0].Split('=', 2)[1]).Split(',') | ForEach-Object { $_.Trim() }) } else { @() }
-            [ordered]@{ name = $_; present = $tokens -contains "*$Sid" -or $tokens -contains $account -or $tokens -contains $shortAccount }
+            [ordered]@{ name = $right; present = $tokens -contains "*$Sid" -or $tokens -contains $account -or $tokens -contains $shortAccount }
         }
     } finally {
         Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
