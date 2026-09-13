@@ -1,6 +1,6 @@
 # Точка продолжения и план восстановления
 
-Снимок на **2026-09-11**. Актуальные статусы брать из TickTick; этот документ
+Снимок обновлён **2026-09-13**. Актуальные статусы брать из TickTick; этот документ
 не является автоматически обновляемой панелью и не утверждает готовность релиза.
 Требования — [README.md](README.md) и [MATRIX.md](MATRIX.md).
 
@@ -36,6 +36,8 @@ Go **1.25.6** использовался при проверке консоли�
 | Этап 00 | Закрыт пользователем как исходный замер, а не полная приёмка. Исторические FAIL/BLOCKED сохранены |
 | Android | Этап 01 принят на `1.5.0+1050006` / `6713b98f`: UI-free Riverpod S02 и обе фазы S06 PASS на физическом Android 16, по 150 секунд без late activation, retry/HTTPS/stop; native instrumentation 89/89 PASS. S01 остаётся известным FAIL задачи 04; S03/S04 не повышены по незавершённому UI replay |
 | Windows | Этап 01 принят на том же SHA: S02 3/3 и S06 6/6 PASS во всех режимах/обеих фазах, preflight и strict cleanup PASS. SHORT сохранил независимые FAIL: S03 domain health (задача 06), S04 Auto/native selector (задача 04). Стенд Windows Server 2022 не является Windows 10 compatibility evidence |
+| Этап 03 | Принят 13.09.2026 на `1.5.0+1050010` / `9ddff9db`: Android fresh/upgrade подтвердили schema v18 и VPN-only, legacy Proxy preference мигрирована в VPN, native instrumentation 89/89 PASS на обеих изолированных установках; физический Android S02/S06 и 10/10 HTTPS PASS. Windows S02 PASS во всех трёх неизменённых режимах |
+| Этап 06 | Принят 13.09.2026 на том же кандидате: `https://api.zeon-vps.online/health` дал HTTP 200 через Windows System Proxy, TUN и Local Proxy; IP fallback/TLS bypass не добавлялись. Первый TUN запуск harness завершил gRPC stream, повтор неизменённого артефакта PASS; исходный evidence сохранён |
 | Host-lab | Отчёт 09.09 принял standalone Agent через отдельный sing-box, включая stop/crash независимость. Обычный Desktop Agent остаётся ограничением; готовность инфраструктуры не равна приёмке приложения |
 | Релиз | 1.5.0 не принят и не выпущен этим этапом; push/deployment не выполняются в задаче документации |
 
@@ -73,10 +75,10 @@ TickTick: `💤ZEON`, parent `6a9fbc3a8f08ecb120d254c7`.
 | 00 / 6a9fbc748f08c18d5f58c05a | Исторический замер завершён; не повторять весь аудит | Сохранить ограничения исходных отчётов |
 | 01 / 6a9fbc768f0852d54c2e225f | Завершён 12.09.2026 на runtime-кандидате `6713b98f`: собственный acceptance PASS; независимые SHORT FAIL задач 04/06 сохранены | R03/R04/S06: Windows 3 режима × 2 фазы, Android VPN × 2 фазы; S02 reconnect/cleanup |
 | 02 / 6a9fbc778f08ecb120d25be9 | После crash интернет не зависит от ZEON; корректное восстановление чужого proxy/PAC | R14–R16, ownership/RunOnce; reboot пользовательский |
-| 03 / 6a9fbc788f08ecb120d25c0e | Android только VPN; миграция legacy Proxy preference, без удаления нужных внутренних listeners | Fresh/upgrade, VPN permission, SHORT Windows без изменения его режимов |
+| 03 / 6a9fbc788f08ecb120d25c0e | Завершён 13.09.2026 на `1.5.0+1050010` / `9ddff9db`: Android только VPN, legacy Proxy preference мигрирована, внутренние listeners сохранены | Fresh/upgrade и 89/89 instrumentation PASS; физический Android S02/S06 PASS; Windows S02 3/3 PASS |
 | 04 / 6a9fbc798f08ecb120d25c30 | Выбор и persistence соответствуют runtime/UI; кнопки «Сервера» нет при disconnected | R01/R05–R09, late stats/RPC ACK, история старого server selection |
 | 05 / 6a9fbc7a8f08c18d5f58c270 | После reconnect/Auto есть настоящий трафик, а не только Connected | Точный R08/Telegram, недоступный сервер R13 |
-| 06 / 6a9fbc7c8f0852d54c2e2311 | Сохранить и подтвердить domain API | P01, cold/offline/reconnect, legacy URLs, prod/debug, TLS/SNI |
+| 06 / 6a9fbc7c8f0852d54c2e2311 | Завершён 13.09.2026 на `1.5.0+1050010` / `9ddff9db`: domain API сохранён и runtime-подтверждён во всех Windows режимах | P01 targeted + HTTP 200 для доменного health; без IP fallback и TLS/SNI bypass |
 | 07 / 6a9fbc7d8f08c18d5f58c2b7 | Корректное обновление профиля до/во время VPN | R17, cache/retry, WinHTTP TLS 12175 и проблемные узлы без обхода TLS/IP |
 | 08 / 6a9fbc7e8f08c18d5f58c2d5 | Сохранённые managed/per-app/routing правила работают без утечек | R18/R19, P02/P04, DIRECT/VPN/BLOCK/DNS, LKG/overrides, IPv4/IPv6 |
 | 09 / 6a9fbc7f8f08ecb120d25d4a | Проверены и сохранены DB/error fixes | P03, concurrency/integrity, key loss, URI decoding, обе платформы |
@@ -91,11 +93,11 @@ Preserve-first проверки действуют сразу, несмотря 
 
 ## Следующий небольшой шаг
 
-Этап 01 завершён; полный отчёт хранится вне Git в
-`Z:\Zeon-Envelope\Temp\zeon-app-testing\T01-B1050006-FINAL-20260912\report.md`.
-Не запускать автоматически следующий этап. Задачи 04 и 06 уже владеют повторёнными
-S04 selector и S03 domain-health FAIL; S05 остаётся ручным результатом пользователя.
-Следующая работа начинается отдельным заданием и сверкой соответствующего TickTick.
+Этапы 03 и 06 завершены по отдельному пользовательскому заданию; общий отчёт хранится
+вне Git в `Z:\Zeon-Envelope\Temp\zeon-app-testing\T03-T06-B1050010-FINAL-20260913\report.md`.
+Общий SHORT не повышен до PASS: S04 сохранил независимый FAIL задачи 04, S05 остаётся
+ручным `NOT_RUN`, FULL не запускался. Следующая работа начинается отдельным заданием
+и сверкой соответствующего TickTick; release/deployment этим результатом не разрешены.
 
 ## Порядок в репозитории
 
