@@ -104,10 +104,12 @@ $androidRuntimeBuilder = Get-Content -LiteralPath (Join-Path $scriptDir "build_a
 Assert-True -Condition $androidRuntimeBuilder.Contains(':app:assembleValidationAndroidTest') -Message "Android runtime build must publish the isolated instrumentation APK"
 Assert-True -Condition $androidRuntimeBuilder.Contains('Runtime artifacts must be built from a clean committed working tree') -Message "Android runtime builds must reject dirty source"
 Assert-True -Condition $androidRuntimeBuilder.Contains('zeon.android-runtime-build.v1') -Message "Android runtime builds must write provenance"
-Assert-True -Condition $androidRuntimeBuilder.Contains('tool\android_recovery_runtime.dart') -Message "Android runtime builds must use the UI-free lifecycle harness"
+Assert-True -Condition $androidRuntimeBuilder.Contains("[string]`$BuildTarget = 'tool/android_recovery_runtime.dart'") -Message "Android runtime builds must default to the UI-free lifecycle harness"
+Assert-True -Condition $androidRuntimeBuilder.Contains("'lib/main_prod.dart'") -Message "Android runtime builds must permit the isolated full-UI acceptance target"
 Assert-True -Condition $androidRuntimeBuilder.Contains('zeon_android_runtime_validation=true') -Message "Android runtime builds must enable the compile-time harness guard"
 Assert-True -Condition $androidRuntimeBuilder.Contains('-PzeonValidationApplicationIdSuffix=$ApplicationIdSuffix') -Message "Android runtime builds must support an isolated fresh-install application ID"
 Assert-True -Condition $androidRuntimeBuilder.Contains('application_id_suffix = $ApplicationIdSuffix') -Message "Android runtime provenance must record the application ID suffix"
+Assert-True -Condition $androidRuntimeBuilder.Contains('target = $BuildTarget') -Message "Android runtime provenance must record the selected build target"
 
 $androidGradle = Get-Content -LiteralPath (Join-Path $repoRoot "android\app\build.gradle") -Raw
 Assert-True -Condition $androidGradle.Contains('project.findProperty("zeonValidationApplicationIdSuffix") ?: ".validation"') -Message "Android validation package suffix must be overridable only through the canonical build"

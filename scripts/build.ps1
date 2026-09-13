@@ -29,6 +29,9 @@ param(
 
     [string]$AndroidRuntimeArtifactLabel = "",
 
+    [ValidateSet("tool/android_recovery_runtime.dart", "lib/main_prod.dart")]
+    [string]$AndroidRuntimeBuildTarget = "tool/android_recovery_runtime.dart",
+
     [switch]$CleanInstall,
 
     [switch]$Launch,
@@ -157,7 +160,8 @@ try {
         "android-runtime" {
             & (Join-Path $scriptDir "build_android_runtime.ps1") `
                 -ApplicationIdSuffix $AndroidRuntimeApplicationIdSuffix `
-                -ArtifactLabel $AndroidRuntimeArtifactLabel
+                -ArtifactLabel $AndroidRuntimeArtifactLabel `
+                -BuildTarget $AndroidRuntimeBuildTarget
         }
         "android-debug-install" {
             $params = @{ BuildMode = "debug"; BuildTarget = $BuildTarget }

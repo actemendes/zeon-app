@@ -5,7 +5,10 @@ param(
 
     [AllowEmptyString()]
     [ValidatePattern('^(?:|[a-z0-9]+(?:-[a-z0-9]+)*)$')]
-    [string]$ArtifactLabel = ''
+    [string]$ArtifactLabel = '',
+
+    [ValidateSet('tool/android_recovery_runtime.dart', 'lib/main_prod.dart')]
+    [string]$BuildTarget = 'tool/android_recovery_runtime.dart'
 )
 
 $ErrorActionPreference = "Stop"
@@ -68,7 +71,10 @@ try {
 
     $gradle = Join-Path $repoRoot "android\gradlew.bat"
     $androidProject = Join-Path $repoRoot "android"
-    $targetPath = Join-Path $repoRoot "tool\android_recovery_runtime.dart"
+    $targetPath = Join-Path $repoRoot ($BuildTarget -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $targetPath -PathType Leaf)) {
+        throw "Android runtime build target not found: $BuildTarget"
+    }
     $gradleArgs = @(
         "--project-dir",
         $androidProject,
@@ -106,7 +112,7 @@ $manifest = [ordered]@{
     built_utc = $buildUtc
     flutter_version = $flutterMachine.frameworkVersion
     dart_version = $flutterMachine.dartSdkVersion
-    target = "tool/android_recovery_runtime.dart"
+    target = $BuildTarget
     application_id = "com.zeon.hiddify$ApplicationIdSuffix"
     test_application_id = "com.zeon.hiddify$ApplicationIdSuffix.test"
     application_id_suffix = $ApplicationIdSuffix
