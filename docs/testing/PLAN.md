@@ -80,7 +80,7 @@ TickTick: `💤ZEON`, parent `6a9fbc3a8f08ecb120d254c7`.
 | 05 / 6a9fbc7a8f08c18d5f58c270 | После reconnect/Auto есть настоящий трафик, а не только Connected | Точный R08/Telegram, недоступный сервер R13 |
 | 06 / 6a9fbc7c8f0852d54c2e2311 | Завершён 13.09.2026 на `1.5.0+1050010` / `9ddff9db`: domain API сохранён и runtime-подтверждён во всех Windows режимах | P01 targeted + HTTP 200 для доменного health; без IP fallback и TLS/SNI bypass |
 | 07 / 6a9fbc7d8f08c18d5f58c2b7 | Корректное обновление профиля до/во время VPN | R17, cache/retry, WinHTTP TLS 12175 и проблемные узлы без обхода TLS/IP |
-| 08 / 6a9fbc7e8f08c18d5f58c2d5 | Checkpoint 13.09.2026 на `1.5.0+1050012` / `74491004`: Android managed/per-app update и override, TARGETED и SHORT PASS; IPv6 route policy PASS, реальный egress BLOCKED внешним path/outbound | R18/R19 и P02 PASS; P04 IPv4 PASS, IPv6 egress BLOCKED; Windows exact-candidate runtime NOT_RUN |
+| 08 / 6a9fbc7e8f08c18d5f58c2d5 | Завершён 13.09.2026 на `1.5.0+1050012` / `74491004`: Android managed/per-app update, пользовательский override, TARGETED и SHORT PASS | R18/R19 и P02 PASS; IPv4 PASS; отдельная недоработка IPv6 egress вынесена в `6aa6de518f087a6320ca4572` |
 | 09 / 6a9fbc7f8f08ecb120d25d4a | Проверены и сохранены DB/error fixes | P03, concurrency/integrity, key loss, URI decoding, обе платформы |
 | 10 / 6a9fbc808f0857fda2282227 | Проверен настоящий Windows installer/portable пакет | Native dependencies, Private/Public в согласованной disposable-среде; host firewall не менять |
 | 11 / 6a9fbc818f08ea0eca05038e | Полная приёмка и фактический выпуск 1.5.0 | FULL обеих платформ, ручной reboot, release hashes/provenance, KB sync |
@@ -95,12 +95,13 @@ Preserve-first проверки действуют сразу, несмотря 
 
 Этапы 03 и 06 завершены по отдельному пользовательскому заданию; общий отчёт хранится
 вне Git в `Z:\Zeon-Envelope\Temp\zeon-app-testing\T03-T06-B1050010-FINAL-20260913\report.md`.
-По этапу 08 Android managed/per-app routing, override и один SHORT прошли на
+Этап 08 завершён: Android managed/per-app routing, override и один SHORT прошли на
 `1.5.0+1050012`; отчёт хранится в
 `Z:\Zeon-Envelope\Temp\zeon-app-testing\T08-B1050012-FINAL-20260913\report.md`.
-Этап остаётся активным: P04 требует IPv6-capable underlay/outbound для реального
-egress, а Windows exact-candidate runtime не выполнялся. FULL, release и deployment
-этими checkpoint-результатами не разрешены.
+По решению пользователя реальный IPv6 egress не блокирует managed routing: он
+сохранён отдельной отложенной задачей `6aa6de518f087a6320ca4572`. Windows package-list
+N/A; поддерживаемые process/domain compiler paths проверены. FULL, release и
+deployment этим результатом не разрешены.
 
 ## Порядок в репозитории
 
