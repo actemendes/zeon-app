@@ -11,7 +11,7 @@
 
 | ID | Действия и ожидаемый результат | Где |
 |---|---|---|
-| S01 | Cold start → Home/настройки. UI отзывчив; при disconnected кнопки «Сервера» нет, после connect она доступна; нет ложного Connected | Один запуск на Windows и Android; состояние после connect наблюдать в S02 |
+| S01 | Cold start → Home/настройки. UI отзывчив; без фактического подключения карточки «Сервера» нет, после connect она доступна. При возврате/перезаходе в UI с продолжающим работать подключением карточка остаётся доступной; нет ложного Connected | Один запуск на Windows и Android; состояние после connect и возврата в UI наблюдать в S02 |
 | S02 | Connect → свежий HTTPS → disconnect/cleanup → обычный интернет без ZEON proxy → reconnect/HTTPS → stop. Нет старых ресурсов | Windows TUN, System Proxy, Local Proxy; Android VPN — по циклу |
 | S03 | На подключении manual A → B → Auto → manual A. UI/намерение/конкретный native leaf/свежий flow согласованы | Windows System Proxy + Android VPN |
 | S04 | Точный R08 ниже: подключён manual A → OFF → ON(A) → Auto → Telegram → HTTPS/MTProto | Windows System Proxy + Android VPN; один цикл |
@@ -32,15 +32,15 @@ R02–R08 — три повтора на режим; для **R08 Android VPN и
 
 | ID | Действия / ветки | Приёмка |
 |---|---|---|
-| R01 | Cold start с сетью → Home/настройки → connect → серверы | Отзывчивый UI; список доступен только после подключения; Connected подтверждён |
-| R02 | Подключить сохранённый/default сервер → выбрать A → HTTPS → disconnect → обычный HTTPS | Нужный путь трафика, cleanup, кнопки серверов после отключения нет |
+| R01 | Cold start с сетью → Home/настройки → connect → серверы → возврат/перезаход в UI при сохраняющемся подключении | Отзывчивый UI; карточка и список отсутствуют без подключения, доступны при фактическом подключении и не пропадают после возврата в UI; Connected подтверждён |
+| R02 | Подключить сохранённый/default сервер → выбрать A → HTTPS → disconnect → обычный HTTPS | Нужный путь трафика, cleanup, карточки «Сервера» после отключения нет |
 | R03 | A: connect → disconnect → connect → трафик → disconnect | Выбор сохранён, новая сессия без старых ресурсов/колбэков |
 | R04 | Начать connect → отменить до readiness → наблюдать → retry; две доступные фазы startup | Нет поздней активации proxy/TUN; retry и stop работают; Windows наблюдать 150 с, retry ≤45 с |
 | R05 | На подключении A → manual B → трафик → A | UI, persistent intent, native leaf и flow согласованы |
-| R06 | Выбрать B на подключении → disconnect → connect; повторить с Auto | Выбор сохраняется; в disconnected кнопки нет; Auto разрешается в leaf |
+| R06 | Выбрать B на подключении → disconnect → connect; повторить с Auto | Выбор сохраняется; без подключения карточки «Сервера» нет, после reconnect она доступна; Auto разрешается в leaf |
 | R07 | Подключён manual → Auto → трафик → manual B | Оба перехода работают без перезапуска приложения |
 | R08 | Подключён manual A → OFF → ON → Auto → Telegram и probes | Точный протокол ниже; UI и реальный трафик согласованы |
-| R09 | На подключении выбрать A → закрыть/запустить приложение → connect; повторить с Auto | Сохранено намерение выбора; native и UI совпадают |
+| R09 | На подключении выбрать A → выйти с Home/свернуть и вернуться; где runtime сохраняется — закрыть/снова открыть UI; затем disconnect → connect. Повторить с Auto | При живом runtime карточка «Сервера» после возврата доступна; без подключения скрыта. Намерение выбора сохранено; native и UI совпадают |
 | R10 | Сменить режим из disconnected и connected → connect → трафик → disconnect | Windows: все 6 направленных пар между тремя режимами, освобождены старые ресурсы; Android N/A |
 | R11 | На подключении убрать тестовую сеть → вернуть без restart; manual и Auto | UI отражает потерю сети, реальный трафик восстанавливается |
 | R12 | Cold start без сети с кэшем → connect на сохранённом выборе → вернуть сеть; отдельно fresh без кэша | Нет тупика backend, ложной готовности и требования скрытого выбора в disconnected |
@@ -128,7 +128,9 @@ FULL и TARGETED при изменении соответствующего сл
   process kill, permission failure, чужие proxy/PAC и RunOnce. Android nativeStartFailure,
   TUN ownership, foreground/background проверяются отдельно от Windows ownership.
 - Selection: полный путь intent → storage → generated config → core → flow → UI;
-  late stats, потерянный RPC ACK, старые рабочие revisions как источник объяснения.
+  видимость карточки «Сервера» следует authoritative runtime при disconnect,
+  resume и повторном входе; late stats, потерянный RPC ACK, старые рабочие revisions
+  как источник объяснения.
 - Domain/profile: fresh и legacy, prod/debug, HTTPS/WSS, offline/cache/retry,
   проблемные и доступные VPN-узлы; без IP fallback/TLS bypass.
 - Routing: fresh/upgrade от 1.4.2 на тестовых данных, managed update, LKG,
