@@ -8,6 +8,7 @@ import 'package:fpdart/fpdart.dart';
 import 'package:uuid/uuid.dart';
 import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/utils/exception_handler.dart';
+import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
 import 'package:zeon/features/profile/data/profile_config_store.dart';
 import 'package:zeon/features/profile/data/profile_data_mapper.dart';
 import 'package:zeon/features/profile/data/profile_data_source.dart';
@@ -41,7 +42,7 @@ abstract interface class ProfileRepository {
     bool directOnly = false,
     bool disableRetry = false,
     bool validateConfigOnImport = true,
-    bool syncManagedRuleSets = true,
+    bool syncManagedRouting = true,
   });
   TaskEither<ProfileFailure, Unit> addLocal(String content, {UserOverride? userOverride});
   TaskEither<ProfileFailure, Unit> offlineUpdate(ProfileEntity nProfile, String nContent);
@@ -59,12 +60,14 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
     required ProfileParser profileParser,
     required ProfileConfigStore profileConfigStore,
     required ManagedRuleSetSyncService managedRuleSetSyncService,
+    required ManagedApplicationSyncService managedApplicationSyncService,
   }) : _profileParser = profileParser,
        _configOptionRepo = configOptionRepository,
        _singbox = singbox,
        _profilePathResolver = profilePathResolver,
        _profileConfigStore = profileConfigStore,
        _managedRuleSetSyncService = managedRuleSetSyncService,
+       _managedApplicationSyncService = managedApplicationSyncService,
        _profileDataSource = profileDataSource;
 
   final ProfileDataSource _profileDataSource;
@@ -74,6 +77,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
   final ProfileParser _profileParser;
   final ProfileConfigStore _profileConfigStore;
   final ManagedRuleSetSyncService _managedRuleSetSyncService;
+  final ManagedApplicationSyncService _managedApplicationSyncService;
 
   @override
   TaskEither<ProfileFailure, Unit> init() {
@@ -154,7 +158,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
     bool directOnly = false,
     bool disableRetry = false,
     bool validateConfigOnImport = true,
-    bool syncManagedRuleSets = true,
+    bool syncManagedRouting = true,
   }) => TaskEither.tryCatch(() async {
     final originalUrl = url.trim();
     final canonicalUrl = canonicalizeZeonProfileUrl(originalUrl);
@@ -196,13 +200,16 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
                 .run()
                 .then((result) => result.getOrElse((failure) => throw failure));
 
-      // Subscription parsing succeeded. Refresh the optional managed routing
-      // bundle before core validation/config generation so this profile update
-      // can immediately use the newly published policy. The sync service is
-      // deliberately fail-open and never turns a routing outage into a profile
+      // Subscription parsing succeeded. Refresh all optional managed routing
+      // bundles before core validation/config generation so the user-visible
+      // refresh action has one freshness boundary. Both sync services are
+      // deliberately fail-open and never turn a routing outage into a profile
       // update failure.
-      if (syncManagedRuleSets) {
-        await _managedRuleSetSyncService.sync(force: true, reason: 'subscription_refresh');
+      if (syncManagedRouting) {
+        await Future.wait([
+          _managedRuleSetSyncService.sync(force: true, reason: 'subscription_refresh'),
+          _managedApplicationSyncService.sync(force: true, reason: 'subscription_refresh'),
+        ]);
       }
 
       final content = validateConfigOnImport

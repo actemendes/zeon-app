@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
 import 'package:zeon/features/profile/data/profile_config_store.dart';
 import 'package:zeon/features/profile/data/profile_data_source.dart';
 import 'package:zeon/features/profile/data/profile_parser.dart';
@@ -31,6 +32,8 @@ void main() {
   late ProviderContainer container;
   late _MemoryProfileDataSource dataSource;
   late _MemoryProfileConfigStore configStore;
+  late _RecordingRuleSetRemoteDataSource ruleSetRemote;
+  late _RecordingApplicationRemoteDataSource applicationRemote;
 
   Future<ProfileRepositoryImpl> createRepository({required bool failDownload, bool invalidMetadata = false}) async {
     final pathResolver = ProfilePathResolver(Directory('${root.path}/work'), Directory('${root.path}/temp'));
@@ -53,8 +56,13 @@ void main() {
       profileParser: parser,
       profileConfigStore: configStore,
       managedRuleSetSyncService: ManagedRuleSetSyncService(
-        remoteDataSource: const _UnusedRuleSetRemoteDataSource(),
+        remoteDataSource: ruleSetRemote,
         store: ManagedRuleSetStore(directory: Directory('${root.path}/rules')),
+        preferences: preferences,
+      ),
+      managedApplicationSyncService: ManagedApplicationSyncService(
+        remoteDataSource: applicationRemote,
+        store: ManagedApplicationStore(directory: Directory('${root.path}/applications')),
         preferences: preferences,
       ),
     );
@@ -66,6 +74,8 @@ void main() {
     preferences = await SharedPreferences.getInstance();
     container = ProviderContainer(overrides: [sharedPreferencesProvider.overrideWith((ref) => preferences)]);
     await container.read(sharedPreferencesProvider.future);
+    ruleSetRemote = _RecordingRuleSetRemoteDataSource();
+    applicationRemote = _RecordingApplicationRemoteDataSource();
     dataSource = _MemoryProfileDataSource(
       ProfileEntry(
         id: 'profile-id',
@@ -86,7 +96,7 @@ void main() {
   test('successful refresh requests and persists the canonical domain', () async {
     final repository = await createRepository(failDownload: false);
     final result = await repository
-        .upsertRemote(legacyUrl, validateConfigOnImport: false, syncManagedRuleSets: false, disableRetry: true)
+        .upsertRemote(legacyUrl, validateConfigOnImport: false, syncManagedRouting: false, disableRetry: true)
         .run();
 
     expect(result.isRight(), isTrue);
@@ -101,7 +111,7 @@ void main() {
   test('failed canonical request leaves the persisted URL and cached config intact', () async {
     final repository = await createRepository(failDownload: true);
     final result = await repository
-        .upsertRemote(legacyUrl, validateConfigOnImport: false, syncManagedRuleSets: false, disableRetry: true)
+        .upsertRemote(legacyUrl, validateConfigOnImport: false, syncManagedRouting: false, disableRetry: true)
         .run();
 
     expect(result.isLeft(), isTrue);
@@ -116,7 +126,7 @@ void main() {
   test('post-download profile parsing failure does not persist the migration', () async {
     final repository = await createRepository(failDownload: false, invalidMetadata: true);
     final result = await repository
-        .upsertRemote(legacyUrl, validateConfigOnImport: false, syncManagedRuleSets: false, disableRetry: true)
+        .upsertRemote(legacyUrl, validateConfigOnImport: false, syncManagedRouting: false, disableRetry: true)
         .run();
 
     expect(result.isLeft(), isTrue);
@@ -135,7 +145,7 @@ void main() {
           canonicalUrl,
           proxyOnly: true,
           validateConfigOnImport: false,
-          syncManagedRuleSets: false,
+          syncManagedRouting: false,
           disableRetry: true,
         )
         .run();
@@ -144,6 +154,20 @@ void main() {
     expect(_RecordingDioHttpClient.lastCreated.requests, [canonicalUrl]);
     expect(_RecordingDioHttpClient.lastCreated.proxyOnlyValues, [true]);
     expect(dataSource.current.url, canonicalUrl);
+  });
+
+  test('subscription refresh force-checks both managed routing bundles', () async {
+    final repository = await createRepository(failDownload: false);
+
+    final first = await repository.upsertRemote(legacyUrl, validateConfigOnImport: false, disableRetry: true).run();
+    final second = await repository.upsertRemote(legacyUrl, validateConfigOnImport: false, disableRetry: true).run();
+
+    expect(first.isRight(), isTrue);
+    expect(second.isRight(), isTrue);
+    expect(ruleSetRemote.calls, 2);
+    // The second call is inside the 15-minute TTL and therefore proves that
+    // the user-triggered subscription refresh is forced.
+    expect(applicationRemote.calls, 2);
   });
 }
 
@@ -259,9 +283,34 @@ class _MemoryProfileConfigStore extends ProfileConfigStore {
   Future<void> refreshRuntimeConnectionFileIfExists(String profileId, {String? content}) async {}
 }
 
-class _UnusedRuleSetRemoteDataSource implements ManagedRuleSetRemoteDataSource {
-  const _UnusedRuleSetRemoteDataSource();
+class _RecordingRuleSetRemoteDataSource implements ManagedRuleSetRemoteDataSource {
+  int calls = 0;
 
   @override
-  Future<ManagedRuleSetFetchResult> fetch({String? eTag}) => throw UnimplementedError();
+  Future<ManagedRuleSetFetchResult> fetch({String? eTag}) {
+    calls++;
+    return Future<ManagedRuleSetFetchResult>.error(const SocketException('managed rule sets unavailable'));
+  }
+}
+
+class _RecordingApplicationRemoteDataSource implements ManagedApplicationRemoteDataSource {
+  int calls = 0;
+  String? publishedETag;
+
+  @override
+  Future<ManagedApplicationFetchResult> fetch({String? eTag}) async {
+    calls++;
+    if (publishedETag != null) {
+      expect(eTag, publishedETag);
+      return ManagedApplicationFetchResult(notModified: true, config: null, eTag: publishedETag);
+    }
+    final config = ManagedApplicationConfig(
+      formatVersion: managedApplicationFormatVersion,
+      version: 1,
+      updatedAt: DateTime.utc(2026, 9, 13),
+      applications: const <ManagedApplication>[],
+    );
+    publishedETag = 'W/"managed-apps-1-${await config.contentChecksum()}"';
+    return ManagedApplicationFetchResult(notModified: false, config: config, eTag: publishedETag);
+  }
 }
