@@ -17,6 +17,13 @@
             android:exported="true" />
         <activity
             android:name="test.com.zeon.zeon.bg.DataPlaneValidationActivity"
-            android:exported="true" />
+            android:exported="true">
+            <!-- Make the deterministic validation UID visible to the
+                 product's installed-app picker in isolated acceptance builds. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>
