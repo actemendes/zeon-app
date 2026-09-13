@@ -38,6 +38,7 @@ Use them instead of assembling a new direct Flutter/Fastforge command:
 .\scripts\build.ps1 -Action windows-folder
 .\scripts\build.ps1 -Action windows-portable
 .\scripts\build.ps1 -Action windows-exe
+.\scripts\build.ps1 -Action windows-exe-unsigned
 .\scripts\build.ps1 -Action windows-runtime
 ```
 

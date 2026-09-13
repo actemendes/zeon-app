@@ -5,6 +5,7 @@ param(
         "windows-folder",
         "windows-portable",
         "windows-exe",
+        "windows-exe-unsigned",
         "windows-msix",
         "windows-run",
         "windows-runtime",
@@ -64,7 +65,8 @@ $repoRoot = Split-Path -Parent $scriptDir
 $actions = @(
     [pscustomobject]@{ Action = "windows-folder"; Result = "Unpacked Windows folder in out/installers/win" },
     [pscustomobject]@{ Action = "windows-portable"; Result = "Portable Windows ZIP in out/installers/win" },
-    [pscustomobject]@{ Action = "windows-exe"; Result = "Windows EXE installer in out/installers/win" },
+    [pscustomobject]@{ Action = "windows-exe"; Result = "Signed Windows EXE installer in out/installers/win" },
+    [pscustomobject]@{ Action = "windows-exe-unsigned"; Result = "Unsigned Windows EXE installer in out/installers/win" },
     [pscustomobject]@{ Action = "windows-msix"; Result = "Windows MSIX installer in out/installers/win" },
     [pscustomobject]@{ Action = "windows-run"; Result = "Debug Windows build, published folder, and optional launch" },
     [pscustomobject]@{ Action = "windows-runtime"; Result = "Headless Windows runtime harness ZIP and provenance manifest" },
@@ -116,6 +118,12 @@ try {
             [void]$params.Remove("StartupValidation")
             if ($AllowUnsignedExe) { $params.AllowUnsignedExe = $true }
             if ($UseExistingCertificateOnly) { $params.UseExistingCertificateOnly = $true }
+            if ($SkipDependencyInstall) { $params.SkipDependencyInstall = $true }
+            & (Join-Path $scriptDir "build_windows_installer_exe.ps1") @params
+        }
+        "windows-exe-unsigned" {
+            $params = Add-CommonWindowsParameters -Parameters @{ AllowUnsignedExe = $true }
+            [void]$params.Remove("StartupValidation")
             if ($SkipDependencyInstall) { $params.SkipDependencyInstall = $true }
             & (Join-Path $scriptDir "build_windows_installer_exe.ps1") @params
         }

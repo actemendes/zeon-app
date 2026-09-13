@@ -35,15 +35,26 @@ if ($SkipDependencyInstall) { $params.SkipDependencyInstall = $true }
 if ($SkipCodeGeneration) { $params.SkipCodeGeneration = $true }
 if ($SkipClean) { $params.SkipClean = $true }
 
-Write-Host "Building Windows EXE installer (release/prod)..."
+if ($AllowUnsignedExe) {
+    Write-Warning "Building an unsigned Windows EXE installer. Do not distribute it as a signed release."
+}
+else {
+    Write-Host "Building signed Windows EXE installer (release/prod)..."
+}
 Write-Host "Build target: $BuildTarget"
 
 & $innerScript @params
 
 $appVersion = ConvertTo-ZeonArtifactVersion -Version (Get-ZeonAppVersion -RepoRoot $repoRoot)
 $outDir = Get-ZeonInstallerPlatformDirectory -RepoRoot $repoRoot -Platform "win"
-$sourcePath = Join-Path $outDir "ZEON-Windows-Setup-x64.exe"
-$destinationName = "ZEON-$appVersion-Windows-Setup-x64.exe"
+$sourceName = if ($AllowUnsignedExe) { "ZEON-Windows-Setup-x64-unsigned.exe" } else { "ZEON-Windows-Setup-x64.exe" }
+$sourcePath = Join-Path $outDir $sourceName
+$destinationName = if ($AllowUnsignedExe) {
+    "ZEON-$appVersion-Windows-Setup-x64-unsigned.exe"
+}
+else {
+    "ZEON-$appVersion-Windows-Setup-x64.exe"
+}
 
 if (-not (Test-Path -LiteralPath $sourcePath)) {
     throw "Windows EXE installer was not found: $sourcePath"

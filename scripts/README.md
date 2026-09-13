@@ -124,6 +124,9 @@ override в WinINet-профиле именно `ZEONRuntime`. Это не до�
 # Windows: подписанный EXE-установщик
 .\scripts\build.ps1 -Action windows-exe
 
+# Windows: неподписанный EXE-установщик для локальной проверки
+.\scripts\build.ps1 -Action windows-exe-unsigned
+
 # Windows: MSIX
 .\scripts\build.ps1 -Action windows-msix
 
@@ -137,8 +140,10 @@ override в WinINet-профиле именно `ZEONRuntime`. Это не до�
 .\scripts\build.ps1 -Action android-debug-install -CleanInstall -Launch
 ```
 
-При нескольких Android-устройствах укажите `-DeviceId SERIAL`. Локальный неподписанный
-EXE допускается только для проверки: `-AllowUnsignedExe`; его нельзя распространять.
+При нескольких Android-устройствах укажите `-DeviceId SERIAL`. Действие
+`windows-exe-unsigned` публикует отдельный файл с суффиксом `-unsigned`; он допускается
+только для локальной проверки и не должен распространяться как подписанный релиз.
+Параметр `windows-exe -AllowUnsignedExe` сохранён для совместимости и даёт тот же результат.
 Для debug/profile APK можно передать `-Mode debug` или `-Mode profile`.
 Entrypoint проверяет версию Flutter из `pubspec.yaml`; если общий SDK новее, закреплённая
 версия автоматически готовится в `Z:\Zeon-Envelope\Caches\Flutter` из локального Git tag.

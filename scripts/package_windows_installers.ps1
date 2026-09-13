@@ -142,24 +142,6 @@ function Protect-WindowsReleasePayload {
     }
 }
 
-function Test-PathHasFlutterBlockedCharacters {
-    param([Parameter(Mandatory = $true)][string]$PathToCheck)
-
-    return [regex]::IsMatch($PathToCheck, "[\'#!$^&*=|,;<>?]")
-}
-
-function New-CleanPathJunction {
-    param([Parameter(Mandatory = $true)][string]$RepoRoot)
-
-    $junctionRoot = Join-Path $env:TEMP "zeon_windows_build"
-    New-Item -ItemType Directory -Force -Path $junctionRoot | Out-Null
-
-    $junctionPath = Join-Path $junctionRoot ("source_" + [guid]::NewGuid().ToString("N"))
-    New-Item -ItemType Junction -Path $junctionPath -Target $RepoRoot | Out-Null
-
-    return $junctionPath
-}
-
 function Resolve-FlutterPackageRoot {
     param(
         [Parameter(Mandatory = $true)][string]$WorkingRoot,
@@ -983,8 +965,8 @@ try {
         $workingRoot = $isolatedWorkspace
         Write-Host "Using isolated workspace: $isolatedWorkspace"
     }
-    elseif (Test-PathHasFlutterBlockedCharacters -PathToCheck $repoRoot) {
-        $junctionPath = New-CleanPathJunction -RepoRoot $repoRoot
+    elseif (Test-ZeonWindowsPathHasFlutterBlockedCharacters -PathToCheck $repoRoot) {
+        $junctionPath = New-ZeonCleanPathJunction -RepoRoot $repoRoot
         $workingRoot = $junctionPath
         Write-Host "Repo path has characters blocked by Flutter. Using junction: $junctionPath"
     }
@@ -1116,7 +1098,13 @@ try {
             if (-not $exe) {
                 throw "Could not find built Windows setup .exe in dist."
             }
-            Publish-ZeonFile -RepoRoot $repoRoot -Platform "win" -SourcePath $exe.FullName -DestinationName "ZEON-Windows-Setup-x64.exe" | Out-Null
+            $exeDestinationName = if ($AllowUnsignedExe) {
+                "ZEON-Windows-Setup-x64-unsigned.exe"
+            }
+            else {
+                "ZEON-Windows-Setup-x64.exe"
+            }
+            Publish-ZeonFile -RepoRoot $repoRoot -Platform "win" -SourcePath $exe.FullName -DestinationName $exeDestinationName | Out-Null
         }
 
         if ($targets -contains "msix") {
@@ -1140,6 +1128,9 @@ try {
     if (Test-Path -LiteralPath (Join-Path $finalOut "ZEON-Windows-Setup-x64.exe")) {
         Write-Host ("EXE:  " + (Join-Path $finalOut "ZEON-Windows-Setup-x64.exe"))
     }
+    if (Test-Path -LiteralPath (Join-Path $finalOut "ZEON-Windows-Setup-x64-unsigned.exe")) {
+        Write-Host ("Unsigned EXE: " + (Join-Path $finalOut "ZEON-Windows-Setup-x64-unsigned.exe"))
+    }
     if (Test-Path -LiteralPath (Join-Path $finalOut "ZEON-Windows-Setup-x64.msix")) {
         Write-Host ("MSIX: " + (Join-Path $finalOut "ZEON-Windows-Setup-x64.msix"))
     }
@@ -1147,6 +1138,9 @@ try {
 finally {
     if ($isolatedWorkspace) {
         Remove-IsolatedWorkspace -Workspace $isolatedWorkspace -RepoRoot $repoRoot
+    }
+    if ($junctionPath) {
+        Remove-ZeonCleanPathJunction -JunctionPath $junctionPath -RepoRoot $repoRoot
     }
     Pop-Location
 }

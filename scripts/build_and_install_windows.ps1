@@ -110,24 +110,6 @@ function Test-MissingWindowsFlutterWrapperSources {
     return $false
 }
 
-function Test-PathHasFlutterBlockedCharacters {
-    param([Parameter(Mandatory = $true)][string]$PathToCheck)
-
-    return [regex]::IsMatch($PathToCheck, "[\'#!$^&*=|,;<>?]")
-}
-
-function New-CleanPathJunction {
-    param([Parameter(Mandatory = $true)][string]$RepoRoot)
-
-    $junctionRoot = Join-Path $env:TEMP "zeon_windows_build"
-    New-Item -ItemType Directory -Force -Path $junctionRoot | Out-Null
-
-    $junctionPath = Join-Path $junctionRoot ("source_" + [guid]::NewGuid().ToString("N"))
-    New-Item -ItemType Junction -Path $junctionPath -Target $RepoRoot | Out-Null
-
-    return $junctionPath
-}
-
 function Get-BuildConfigName {
     param([Parameter(Mandatory = $true)][string]$Mode)
 
@@ -484,6 +466,7 @@ function Resolve-BuiltExePath {
 
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
+. (Join-Path $scriptDir "build\common.ps1")
 $workingRoot = $repoRoot
 $junctionPath = $null
 $shouldRunClean = -not $SkipClean
@@ -511,8 +494,8 @@ try {
         }
     }
 
-    if (Test-PathHasFlutterBlockedCharacters -PathToCheck $repoRoot) {
-        $junctionPath = New-CleanPathJunction -RepoRoot $repoRoot
+    if (Test-ZeonWindowsPathHasFlutterBlockedCharacters -PathToCheck $repoRoot) {
+        $junctionPath = New-ZeonCleanPathJunction -RepoRoot $repoRoot
         $workingRoot = $junctionPath
         Write-Host "Repo path has characters blocked by Flutter. Using junction: $junctionPath"
 
@@ -623,5 +606,8 @@ try {
     }
 }
 finally {
+    if ($junctionPath) {
+        Remove-ZeonCleanPathJunction -JunctionPath $junctionPath -RepoRoot $repoRoot
+    }
     Pop-Location
 }

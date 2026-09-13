@@ -45,6 +45,7 @@ foreach ($action in @(
     "windows-folder",
     "windows-portable",
     "windows-exe",
+    "windows-exe-unsigned",
     "windows-msix",
     "windows-runtime",
     "android-apk",
@@ -160,11 +161,15 @@ Assert-True -Condition $runtimeHarness.Contains('connectionNotifierProvider.noti
 Assert-True -Condition ($runtimeHarness -notmatch '(?i)sendkeys|findwindow|pyautogui|\.click\(') -Message "Runtime harness must not contain UI automation"
 
 $windowsPackager = Get-Content -LiteralPath (Join-Path $scriptDir "package_windows_installers.ps1") -Raw
-Assert-True -Condition $windowsPackager.Contains('Z:\Zeon-Envelope\Temp\wz') -Message "Canonical Windows workspace must use ZEON Temp"
 Assert-True -Condition $windowsPackager.Contains('[System.IO.Path]::GetTempPath()') -Message "Windows packaging needs a portable CI temp fallback"
 Assert-True -Condition (-not $windowsPackager.Contains('cmd /c')) -Message "Windows packaging must invoke robocopy directly"
+Assert-True -Condition $windowsPackager.Contains('ZEON-Windows-Setup-x64-unsigned.exe') -Message "Unsigned EXE packaging must use a distinct artifact name"
 
 $commonBuild = Get-Content -LiteralPath $commonPath -Raw
 Assert-True -Condition $commonBuild.Contains('Get-Command "flutter"') -Message "Pinned Flutter resolver must accept an exact SDK already in PATH"
+Assert-True -Condition $commonBuild.Contains('Z:\Zeon-Envelope\Temp\wz') -Message "Canonical Windows workspace must use the short ZEON Temp root"
+Assert-True -Condition (-not (Test-ZeonWindowsPathHasFlutterBlockedCharacters -PathToCheck 'Z:\Zeon-Envelope\Projects\zeon-app')) -Message "Canonical repo path must not spuriously trigger a junction"
+Assert-True -Condition (Test-ZeonWindowsPathHasFlutterBlockedCharacters -PathToCheck 'Z:\build#blocked') -Message "Flutter-blocked path characters must trigger a junction"
+Assert-True -Condition ((Get-ZeonShortWindowsWorkspaceRoot -RepoRoot $repoRoot) -eq 'Z:\Zeon-Envelope\Temp\wz') -Message "Canonical Windows builds must use the short ZEON Temp root"
 
 Write-Host "Build entrypoint tests passed."

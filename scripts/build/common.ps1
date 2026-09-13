@@ -1,5 +1,72 @@
 Set-StrictMode -Version Latest
 
+function Test-ZeonWindowsPathHasFlutterBlockedCharacters {
+    param([Parameter(Mandatory = $true)][string]$PathToCheck)
+
+    # Keep this regex single-quoted. In a double-quoted PowerShell string, `$^`
+    # expands to the first token of the previous command and makes the result
+    # depend on unrelated shell history.
+    return [regex]::IsMatch($PathToCheck, '[''#!$^&*=|,;<>?]')
+}
+
+function Get-ZeonShortWindowsWorkspaceRoot {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $repoFullPath = [System.IO.Path]::GetFullPath($RepoRoot)
+    $canonicalProjectsRoot = [System.IO.Path]::GetFullPath("Z:\Zeon-Envelope\Projects")
+    $canonicalPrefix = $canonicalProjectsRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if ($repoFullPath.StartsWith($canonicalPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return [System.IO.Path]::GetFullPath("Z:\Zeon-Envelope\Temp\wz")
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path ([System.IO.Path]::GetTempPath()) "zeon-wz"))
+}
+
+function New-ZeonCleanPathJunction {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $junctionRoot = Get-ZeonShortWindowsWorkspaceRoot -RepoRoot $RepoRoot
+    New-Item -ItemType Directory -Force -Path $junctionRoot | Out-Null
+
+    $junctionPath = Join-Path $junctionRoot ("j" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+    New-Item -ItemType Junction -Path $junctionPath -Target $RepoRoot | Out-Null
+    return $junctionPath
+}
+
+function Remove-ZeonCleanPathJunction {
+    param(
+        [Parameter(Mandatory = $true)][string]$JunctionPath,
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    $junctionRoot = Get-ZeonShortWindowsWorkspaceRoot -RepoRoot $RepoRoot
+    $resolvedJunction = [System.IO.Path]::GetFullPath($JunctionPath)
+    $rootPrefix = $junctionRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedJunction.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove unexpected junction path: $resolvedJunction"
+    }
+    if (-not (Test-Path -LiteralPath $resolvedJunction)) {
+        return
+    }
+
+    $item = Get-Item -LiteralPath $resolvedJunction -Force
+    if ($item.LinkType -ne "Junction") {
+        throw "Refusing to remove a non-junction path: $resolvedJunction"
+    }
+    $target = $item.Target
+    if ($target -is [Array]) {
+        $target = $target[0]
+    }
+    $resolvedTarget = [System.IO.Path]::GetFullPath([string]$target)
+    $resolvedRepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
+    if (-not [StringComparer]::OrdinalIgnoreCase.Equals($resolvedTarget, $resolvedRepoRoot)) {
+        throw "Refusing to remove junction with unexpected target: $resolvedJunction -> $resolvedTarget"
+    }
+
+    [System.IO.Directory]::Delete($resolvedJunction)
+    Write-Host "Removed temporary build junction: $resolvedJunction"
+}
+
 function Get-ZeonRequiredFlutterVersion {
     param([Parameter(Mandatory = $true)][string]$RepoRoot)
 
