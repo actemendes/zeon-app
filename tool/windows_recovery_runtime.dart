@@ -699,35 +699,58 @@ class RuntimeHarness {
       (item) =>
           item.isVisible &&
           item.tag != auto.tag &&
-          !const {'urltest', 'direct', 'block', 'dns', 'balancer'}.contains(item.type),
+          !const {'selector', 'urltest', 'direct', 'block', 'dns', 'balancer'}.contains(item.type),
       orElse: () => throw RuntimeFailure.environment('No manual proxy is available before Auto transition'),
     );
     await container!.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, manual.tag);
-    await _disconnectAndVerify('auto-proxy-manual-stage');
-    await container!.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, auto.tag);
-    await _connectAndProveReady();
+    await _verifyNativeSelection(group.tag, manual.tag, requireConcreteLeaf: false);
     await _verifyTraffic();
+    await reporter.event('auto_proxy_manual_precondition_verified', {'manual_outbound_id': await safeId(manual.tag)});
+    await _disconnectAndVerify('auto-proxy-manual-stage');
+    await _connectAndProveReady();
+    await _verifyNativeSelection(group.tag, manual.tag, requireConcreteLeaf: false);
+    await reporter.event('auto_proxy_manual_reconnect_verified', {'manual_outbound_id': await safeId(manual.tag)});
+    // Exact R08 order: Auto is a live user choice only after the second
+    // connection has become ready with the persisted manual server.
+    await container!.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, auto.tag);
+    final leaf = await _verifyNativeSelection(group.tag, auto.tag, requireConcreteLeaf: true);
+    await _verifyTraffic();
+    await reporter.event('auto_proxy_verified', {
+      'selector_id': await safeId(auto.tag),
+      'runtime_outbound_id': await safeId(leaf!.tag),
+      'exact_r08_order': true,
+    });
+    await _disconnectAndVerify('auto-proxy');
+  }
+
+  Future<OutboundInfo?> _verifyNativeSelection(
+    String groupTag,
+    String selectedTag, {
+    required bool requireConcreteLeaf,
+  }) async {
     final groups = await coreService.core.backgroundCommandClient
         .outboundsInfo(Empty())
         .first
         .timeout(const Duration(seconds: 8));
     final currentGroup = groups.items.firstWhere(
-      (item) => item.tag == group.tag,
-      orElse: () => throw RuntimeFailure.fail('Native selector group disappeared after Auto reconnect'),
+      (item) => item.tag == groupTag,
+      orElse: () => throw RuntimeFailure.fail('Native selector group disappeared'),
     );
-    if (currentGroup.selected != auto.tag) {
-      throw RuntimeFailure.fail('Automatic selection was not applied by native runtime');
+    if (currentGroup.selected != selectedTag) {
+      throw RuntimeFailure.fail('Requested selection was not applied by native runtime');
     }
     final systemInfo = await coreService.core.backgroundCommandClient
         .getSystemInfo(Empty())
         .timeout(const Duration(seconds: 8));
+    if (!requireConcreteLeaf) {
+      if (systemInfo.currentOutbound != selectedTag) {
+        throw RuntimeFailure.fail('Manual selection differs from native runtime');
+      }
+      return null;
+    }
     final leaf = resolveRuntimeLeaf(groups, systemInfo.currentOutbound);
     if (leaf == null) throw RuntimeFailure.fail('Auto selection has no concrete native outbound');
-    await reporter.event('auto_proxy_verified', {
-      'selector_id': await safeId(auto.tag),
-      'runtime_outbound_id': await safeId(leaf.tag),
-    });
-    await _disconnectAndVerify('auto-proxy');
+    return leaf;
   }
 
   Future<void> _prepareMode() async {

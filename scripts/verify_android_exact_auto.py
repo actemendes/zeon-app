@@ -89,6 +89,29 @@ def main():
         # Unique run ID prevents old probes from turning an unexecuted case green.
         return '\n'.join(line for line in log.splitlines() if 'run=' + run_id + ' ' in line)
 
+    def package_uid(package):
+        match = re.search(r'^\s*appId=(\d+)\s*$', adb('shell', 'dumpsys', 'package', package), re.M)
+        if not match:
+            raise RuntimeError('Telegram package UID unavailable')
+        return int(match.group(1))
+
+    def uid_traffic(uid):
+        # Force the in-kernel counters into NetworkStats before taking the
+        # sample, then sum only this UID. No Telegram UI or chat data is read.
+        adb('shell', 'dumpsys', 'netstats', '--poll', 'force')
+        total_rx = total_tx = 0
+        active = False
+        for line in adb('shell', 'dumpsys', 'netstats', 'detail').splitlines():
+            if 'ident=[' in line:
+                active = re.search(r'\buid=' + str(uid) + r'\b', line) is not None
+                continue
+            if active:
+                row = re.search(r'\brb=(\d+).*\btb=(\d+)', line)
+                if row:
+                    total_rx += int(row.group(1))
+                    total_tx += int(row.group(2))
+        return {'rx_bytes': total_rx, 'tx_bytes': total_tx}
+
     def proofs(log):
         expected = [('apple_captive', 'real_http_pass'), ('cloudflare_speed', 'real_http_pass'),
                     ('telegram_dc1', 'mtproto_pass'), ('telegram_dc2', 'mtproto_pass')]
@@ -142,6 +165,9 @@ def main():
         adb('shell', 'am', 'start-foreground-service', '-n', args.package +
             '.test/test.com.zeon.zeon.bg.VerificationTrafficService', '--es', 'run', run_id)
         proof_deadline = time.monotonic() + 45
+        telegram_uid = package_uid('org.telegram.messenger')
+        adb('shell', 'am', 'force-stop', 'org.telegram.messenger')
+        telegram_before = uid_traffic(telegram_uid)
         adb('shell', 'am', 'start', '-n', 'org.telegram.messenger/.DefaultIcon')
         result['telegram_statuses'] = []
         for sample in range(3):
@@ -152,6 +178,15 @@ def main():
             event('telegram_connection_ui', sample=sample, statuses=statuses)
             if sample < 2:
                 time.sleep(3)
+        telegram_after = uid_traffic(telegram_uid)
+        result['telegram_uid_flow'] = {
+            'rx_delta': telegram_after['rx_bytes'] - telegram_before['rx_bytes'],
+            'tx_delta': telegram_after['tx_bytes'] - telegram_before['tx_bytes'],
+        }
+        result['telegram_uid_flow']['passed'] = (
+            result['telegram_uid_flow']['rx_delta'] > 0 and
+            result['telegram_uid_flow']['tx_delta'] > 0)
+        event('telegram_uid_flow', **result['telegram_uid_flow'])
         after = result['after_auto'] = snapshot('after_auto_telegram')
         while True:
             result['vpn_traffic_proofs'] = proofs(proof_log())
@@ -162,6 +197,7 @@ def main():
                             and after.get('runtime_outbound_present') is True
                             and after.get('runtime_outbound_id') != after.get('selected_id')
                             and all(result['vpn_traffic_proofs'].values())
+                            and result['telegram_uid_flow']['passed']
                             and not any(result['telegram_statuses']))
     except Exception as error:
         result['error_type'] = type(error).__name__

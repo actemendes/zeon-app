@@ -284,4 +284,34 @@ void main() {
     expect(source, contains("'route': 'direct-after-disconnect'"));
     expect(source, contains("'product_health_checked': verifyProductHealth"));
   });
+
+  test('Auto scenario follows exact R08 order and proves post-Auto traffic', () async {
+    final source = await File('tool/windows_recovery_runtime.dart').readAsString();
+    final scenarioStart = source.indexOf('Future<void> _scenarioAutoProxy()');
+    final scenarioEnd = source.indexOf('Future<OutboundInfo?> _verifyNativeSelection(', scenarioStart);
+    final scenario = source.substring(scenarioStart, scenarioEnd);
+    final manualChoice = scenario.indexOf('changeProxy(group.tag, manual.tag)');
+    final initialTraffic = scenario.indexOf('await _verifyTraffic()', manualChoice);
+    final stop = scenario.indexOf("await _disconnectAndVerify('auto-proxy-manual-stage')", initialTraffic);
+    final reconnect = scenario.indexOf('await _connectAndProveReady()', stop);
+    final reconnectManualProof = scenario.indexOf(
+      'await _verifyNativeSelection(group.tag, manual.tag, requireConcreteLeaf: false)',
+      reconnect,
+    );
+    final autoChoice = scenario.indexOf('changeProxy(group.tag, auto.tag)', reconnectManualProof);
+    final autoNativeProof = scenario.indexOf(
+      'await _verifyNativeSelection(group.tag, auto.tag, requireConcreteLeaf: true)',
+      autoChoice,
+    );
+    final postAutoTraffic = scenario.indexOf('await _verifyTraffic()', autoNativeProof);
+    expect(manualChoice, greaterThanOrEqualTo(0));
+    expect(initialTraffic, greaterThan(manualChoice));
+    expect(stop, greaterThan(initialTraffic));
+    expect(reconnect, greaterThan(stop));
+    expect(reconnectManualProof, greaterThan(reconnect));
+    expect(autoChoice, greaterThan(reconnectManualProof));
+    expect(autoNativeProof, greaterThan(autoChoice));
+    expect(postAutoTraffic, greaterThan(autoNativeProof));
+    expect(scenario, contains("'exact_r08_order': true"));
+  });
 }
