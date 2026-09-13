@@ -154,7 +154,7 @@ android {
     buildTypes {
         validation {
             initWith debug
-            applicationIdSuffix ".validation"
+            applicationIdSuffix project.findProperty("zeonValidationApplicationIdSuffix") ?: ".validation"
             matchingFallbacks = ["debug"]
             debuggable true
         }

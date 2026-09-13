@@ -1,5 +1,12 @@
 [CmdletBinding()]
-param()
+param(
+    [ValidatePattern('^\.[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)*$')]
+    [string]$ApplicationIdSuffix = '.validation',
+
+    [AllowEmptyString()]
+    [ValidatePattern('^(?:|[a-z0-9]+(?:-[a-z0-9]+)*)$')]
+    [string]$ArtifactLabel = ''
+)
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
@@ -36,8 +43,9 @@ $dartDefines = @(
 
 $safeVersion = ConvertTo-ZeonArtifactVersion -Version $version
 $platformRoot = Get-ZeonInstallerPlatformDirectory -RepoRoot $repoRoot -Platform "android"
-$appName = "ZEON-$safeVersion-Android-runtime-validation.apk"
-$testName = "ZEON-$safeVersion-Android-runtime-validation-androidTest.apk"
+$artifactInfix = if ($ArtifactLabel) { "-$ArtifactLabel" } else { "" }
+$appName = "ZEON-$safeVersion-Android-runtime-validation$artifactInfix.apk"
+$testName = "ZEON-$safeVersion-Android-runtime-validation$artifactInfix-androidTest.apk"
 $appPath = Assert-ZeonInstallerPath -RepoRoot $repoRoot -Path (Join-Path $platformRoot $appName)
 $testPath = Assert-ZeonInstallerPath -RepoRoot $repoRoot -Path (Join-Path $platformRoot $testName)
 $manifestPath = Assert-ZeonInstallerPath -RepoRoot $repoRoot -Path (Join-Path $platformRoot ($appName + ".manifest.json"))
@@ -68,6 +76,7 @@ try {
         ":app:assembleValidationAndroidTest",
         "-Ptarget=$targetPath",
         "-Pdart-defines=$dartDefines",
+        "-PzeonValidationApplicationIdSuffix=$ApplicationIdSuffix",
         "--no-daemon"
     )
     Write-Host ("Running: android\gradlew.bat " + ($gradleArgs -join " "))
@@ -98,8 +107,10 @@ $manifest = [ordered]@{
     flutter_version = $flutterMachine.frameworkVersion
     dart_version = $flutterMachine.dartSdkVersion
     target = "tool/android_recovery_runtime.dart"
-    application_id = "com.zeon.hiddify.validation"
-    test_application_id = "com.zeon.hiddify.validation.test"
+    application_id = "com.zeon.hiddify$ApplicationIdSuffix"
+    test_application_id = "com.zeon.hiddify$ApplicationIdSuffix.test"
+    application_id_suffix = $ApplicationIdSuffix
+    artifact_label = $ArtifactLabel
     artifact_path = $appPath
     artifact_sha256 = (Get-FileHash -LiteralPath $appPath -Algorithm SHA256).Hash
     test_artifact_path = $testPath

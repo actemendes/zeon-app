@@ -106,6 +106,11 @@ Assert-True -Condition $androidRuntimeBuilder.Contains('Runtime artifacts must b
 Assert-True -Condition $androidRuntimeBuilder.Contains('zeon.android-runtime-build.v1') -Message "Android runtime builds must write provenance"
 Assert-True -Condition $androidRuntimeBuilder.Contains('tool\android_recovery_runtime.dart') -Message "Android runtime builds must use the UI-free lifecycle harness"
 Assert-True -Condition $androidRuntimeBuilder.Contains('zeon_android_runtime_validation=true') -Message "Android runtime builds must enable the compile-time harness guard"
+Assert-True -Condition $androidRuntimeBuilder.Contains('-PzeonValidationApplicationIdSuffix=$ApplicationIdSuffix') -Message "Android runtime builds must support an isolated fresh-install application ID"
+Assert-True -Condition $androidRuntimeBuilder.Contains('application_id_suffix = $ApplicationIdSuffix') -Message "Android runtime provenance must record the application ID suffix"
+
+$androidGradle = Get-Content -LiteralPath (Join-Path $repoRoot "android\app\build.gradle") -Raw
+Assert-True -Condition $androidGradle.Contains('project.findProperty("zeonValidationApplicationIdSuffix") ?: ".validation"') -Message "Android validation package suffix must be overridable only through the canonical build"
 
 $runtimeLab = Get-Content -LiteralPath (Join-Path $scriptDir "windows_runtime_lab.ps1") -Raw
 Assert-True -Condition $runtimeLab.Contains('BatchMode=yes') -Message "Runtime lab must use non-interactive key-only SSH"

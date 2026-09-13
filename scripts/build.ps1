@@ -25,6 +25,10 @@ param(
 
     [string]$DeviceId,
 
+    [string]$AndroidRuntimeApplicationIdSuffix = ".validation",
+
+    [string]$AndroidRuntimeArtifactLabel = "",
+
     [switch]$CleanInstall,
 
     [switch]$Launch,
@@ -151,7 +155,9 @@ try {
             & (Join-Path $scriptDir "build_android_installation_apks.ps1") @params
         }
         "android-runtime" {
-            & (Join-Path $scriptDir "build_android_runtime.ps1")
+            & (Join-Path $scriptDir "build_android_runtime.ps1") `
+                -ApplicationIdSuffix $AndroidRuntimeApplicationIdSuffix `
+                -ArtifactLabel $AndroidRuntimeArtifactLabel
         }
         "android-debug-install" {
             $params = @{ BuildMode = "debug"; BuildTarget = $BuildTarget }
