@@ -24,6 +24,8 @@ import (
 )
 
 const (
+	zeonBackendHealthURL = "https://api.zeon-vps.online/health"
+
 	DNSRemoteTag         = "dns-remote"
 	DNSRemoteTagFallback = "dns-remote-fallback"
 	DNSLocalTag          = "dns-local"
@@ -182,6 +184,7 @@ func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptio
 		options.DNS = input.DNS
 		options.Route = input.Route
 	}
+	ensureBackendHealthConnectionTest(hopts)
 
 	setExperimental(&options, hopts)
 
@@ -386,12 +389,6 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 
 		endpoints = append(endpoints, *out)
 	}
-	if len(opt.ConnectionTestUrls) == 0 {
-		opt.ConnectionTestUrls = []string{opt.ConnectionTestUrl, "https://zeon-vps.link/generate_204", "https://www.google.com/generate_204", "http://captive.apple.com/generate_204", "https://cp.cloudflare.com"}
-		if isBlockedConnectionTestUrl(opt.ConnectionTestUrl) {
-			opt.ConnectionTestUrls = []string{opt.ConnectionTestUrl}
-		}
-	}
 	// urlTest := option.Outbound{
 	// 	Type: C.TypeURLTest,
 	// 	Tag:  OutboundURLTestTag,
@@ -538,13 +535,29 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-func setExperimental(options *option.Options, hopt *HiddifyOptions) {
+func ensureBackendHealthConnectionTest(hopt *HiddifyOptions) {
+	// The app routes its control-plane API through the selected VPN outbound.
+	// Probe that exact dependency first so automatic selection cannot treat an
+	// outbound that only reaches generic internet targets as healthy.
 	if len(hopt.ConnectionTestUrls) == 0 {
 		hopt.ConnectionTestUrls = []string{hopt.ConnectionTestUrl, "https://zeon-vps.link/generate_204", "http://captive.apple.com/generate_204", "https://cp.cloudflare.com", "https://google.com/generate_204"}
 		if isBlockedConnectionTestUrl(hopt.ConnectionTestUrl) {
 			hopt.ConnectionTestUrls = []string{hopt.ConnectionTestUrl}
 		}
 	}
+
+	urls := make([]string, 0, len(hopt.ConnectionTestUrls)+1)
+	urls = append(urls, zeonBackendHealthURL)
+	for _, testURL := range hopt.ConnectionTestUrls {
+		if testURL == "" || contains(urls, testURL) {
+			continue
+		}
+		urls = append(urls, testURL)
+	}
+	hopt.ConnectionTestUrls = urls
+}
+
+func setExperimental(options *option.Options, hopt *HiddifyOptions) {
 	if hopt.EnableClashApi {
 		if hopt.ClashApiSecret == "" {
 			hopt.ClashApiSecret = generateRandomString(16)

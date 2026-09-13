@@ -13,6 +13,75 @@ func testConfigContext() context.Context {
 	return include.Context(context.Background())
 }
 
+func TestEnsureBackendHealthConnectionTestPreservesUserPreference(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.ConnectionTestUrl = "https://example.com/custom-check"
+
+	ensureBackendHealthConnectionTest(hopt)
+
+	want := []string{
+		zeonBackendHealthURL,
+		"https://example.com/custom-check",
+		"https://zeon-vps.link/generate_204",
+		"http://captive.apple.com/generate_204",
+		"https://cp.cloudflare.com",
+		"https://google.com/generate_204",
+	}
+	if len(hopt.ConnectionTestUrls) != len(want) {
+		t.Fatalf("connection test URLs = %v, want %v", hopt.ConnectionTestUrls, want)
+	}
+	for index := range want {
+		if hopt.ConnectionTestUrls[index] != want[index] {
+			t.Fatalf("connection test URLs = %v, want %v", hopt.ConnectionTestUrls, want)
+		}
+	}
+	if hopt.ConnectionTestUrl != "https://example.com/custom-check" {
+		t.Fatalf("user connection test URL changed to %q", hopt.ConnectionTestUrl)
+	}
+}
+
+func TestEnsureBackendHealthConnectionTestDoesNotDuplicateDomainHealth(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.ConnectionTestUrls = []string{
+		zeonBackendHealthURL,
+		"https://example.com/custom-check",
+		zeonBackendHealthURL,
+	}
+
+	ensureBackendHealthConnectionTest(hopt)
+
+	want := []string{zeonBackendHealthURL, "https://example.com/custom-check"}
+	if len(hopt.ConnectionTestUrls) != len(want) {
+		t.Fatalf("connection test URLs = %v, want %v", hopt.ConnectionTestUrls, want)
+	}
+	for index := range want {
+		if hopt.ConnectionTestUrls[index] != want[index] {
+			t.Fatalf("connection test URLs = %v, want %v", hopt.ConnectionTestUrls, want)
+		}
+	}
+}
+
+func TestBuildConfigPublishesBackendHealthAsFirstMonitoringURL(t *testing.T) {
+	hopt := DefaultHiddifyOptions()
+	hopt.ConnectionTestUrl = "https://example.com/custom-check"
+
+	built, err := BuildConfig(
+		testConfigContext(),
+		hopt,
+		&ReadOptions{Content: `{"outbounds":[{"type":"direct","tag":"one"},{"type":"direct","tag":"two"}]}`},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built.Experimental == nil || built.Experimental.Monitoring == nil {
+		t.Fatal("generated monitoring options missing")
+	}
+	urls := built.Experimental.Monitoring.URLs
+	if len(urls) < 2 || urls[0] != zeonBackendHealthURL || urls[1] != "https://example.com/custom-check" {
+		t.Fatalf("generated monitoring URLs = %v", urls)
+	}
+}
+
 func TestResolveEffectiveTunMTUDynamicByTransport(t *testing.T) {
 	hopt := DefaultHiddifyOptions()
 	hopt.NetworkMtuMode = "dynamic"

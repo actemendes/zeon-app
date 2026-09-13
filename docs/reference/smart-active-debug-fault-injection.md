@@ -10,7 +10,7 @@ There is no UI control for it.
 Build a debug device core with:
 
 ```powershell
-.\scripts\rebuild_zeon_core.ps1 -Platform android -SmartActiveDebug
+.\scripts\rebuild_hiddify_core.ps1 -Platform android -SmartActiveDebug
 ```
 
 The Flutter debug build can inject the same hidden options with Dart defines,
