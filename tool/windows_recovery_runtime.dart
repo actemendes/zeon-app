@@ -713,11 +713,12 @@ class RuntimeHarness {
     // Exact R08 order: Auto is a live user choice only after the second
     // connection has become ready with the persisted manual server.
     await container!.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, auto.tag);
-    final leaf = await _verifyNativeSelection(group.tag, auto.tag, requireConcreteLeaf: true);
+    await _verifyNativeSelectorTag(group.tag, auto.tag);
     await _verifyTraffic();
+    final leaf = await _waitForConcreteNativeLeaf(group.tag, auto.tag);
     await reporter.event('auto_proxy_verified', {
       'selector_id': await safeId(auto.tag),
-      'runtime_outbound_id': await safeId(leaf!.tag),
+      'runtime_outbound_id': await safeId(leaf.tag),
       'exact_r08_order': true,
     });
     await _disconnectAndVerify('auto-proxy');
@@ -751,6 +752,45 @@ class RuntimeHarness {
     final leaf = resolveRuntimeLeaf(groups, systemInfo.currentOutbound);
     if (leaf == null) throw RuntimeFailure.fail('Auto selection has no concrete native outbound');
     return leaf;
+  }
+
+  Future<void> _verifyNativeSelectorTag(String groupTag, String selectedTag) async {
+    final groups = await coreService.core.backgroundCommandClient
+        .outboundsInfo(Empty())
+        .first
+        .timeout(const Duration(seconds: 8));
+    final currentGroup = groups.items.firstWhere(
+      (item) => item.tag == groupTag,
+      orElse: () => throw RuntimeFailure.fail('Native selector group disappeared'),
+    );
+    if (currentGroup.selected != selectedTag) {
+      throw RuntimeFailure.fail('Requested selection was not applied by native runtime');
+    }
+  }
+
+  Future<OutboundInfo> _waitForConcreteNativeLeaf(String groupTag, String selectedTag) async {
+    const timeout = Duration(seconds: 30);
+    final deadline = DateTime.now().add(timeout);
+    do {
+      final groups = await coreService.core.backgroundCommandClient
+          .outboundsInfo(Empty())
+          .first
+          .timeout(const Duration(seconds: 8));
+      final currentGroup = groups.items.firstWhere(
+        (item) => item.tag == groupTag,
+        orElse: () => throw RuntimeFailure.fail('Native selector group disappeared after Auto traffic'),
+      );
+      if (currentGroup.selected != selectedTag) {
+        throw RuntimeFailure.fail('Native selector changed during Auto traffic');
+      }
+      final systemInfo = await coreService.core.backgroundCommandClient
+          .getSystemInfo(Empty())
+          .timeout(const Duration(seconds: 8));
+      final leaf = resolveRuntimeLeaf(groups, systemInfo.currentOutbound);
+      if (leaf != null) return leaf;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    } while (DateTime.now().isBefore(deadline));
+    throw RuntimeFailure.deadline('Auto concrete native outbound after traffic', timeout);
   }
 
   Future<void> _prepareMode() async {

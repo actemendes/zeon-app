@@ -299,19 +299,18 @@ void main() {
       reconnect,
     );
     final autoChoice = scenario.indexOf('changeProxy(group.tag, auto.tag)', reconnectManualProof);
-    final autoNativeProof = scenario.indexOf(
-      'await _verifyNativeSelection(group.tag, auto.tag, requireConcreteLeaf: true)',
-      autoChoice,
-    );
-    final postAutoTraffic = scenario.indexOf('await _verifyTraffic()', autoNativeProof);
+    final autoSelectorProof = scenario.indexOf('await _verifyNativeSelectorTag(group.tag, auto.tag)', autoChoice);
+    final postAutoTraffic = scenario.indexOf('await _verifyTraffic()', autoSelectorProof);
+    final autoLeafProof = scenario.indexOf('await _waitForConcreteNativeLeaf(group.tag, auto.tag)', postAutoTraffic);
     expect(manualChoice, greaterThanOrEqualTo(0));
     expect(initialTraffic, greaterThan(manualChoice));
     expect(stop, greaterThan(initialTraffic));
     expect(reconnect, greaterThan(stop));
     expect(reconnectManualProof, greaterThan(reconnect));
     expect(autoChoice, greaterThan(reconnectManualProof));
-    expect(autoNativeProof, greaterThan(autoChoice));
-    expect(postAutoTraffic, greaterThan(autoNativeProof));
+    expect(autoSelectorProof, greaterThan(autoChoice));
+    expect(postAutoTraffic, greaterThan(autoSelectorProof));
+    expect(autoLeafProof, greaterThan(postAutoTraffic));
     expect(scenario, contains("'exact_r08_order': true"));
   });
 }
