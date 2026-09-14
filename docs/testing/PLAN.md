@@ -39,7 +39,9 @@ Go **1.25.6** использовался при проверке консоли�
 | Этап 03 | Принят 13.09.2026 на `1.5.0+1050010` / `9ddff9db`: Android fresh/upgrade подтвердили schema v18 и VPN-only, legacy Proxy preference мигрирована в VPN, native instrumentation 89/89 PASS на обеих изолированных установках; физический Android S02/S06 и 10/10 HTTPS PASS. Windows S02 PASS во всех трёх неизменённых режимах |
 | Этап 06 | Принят 13.09.2026 на том же кандидате: `https://api.zeon-vps.online/health` дал HTTP 200 через Windows System Proxy, TUN и Local Proxy; IP fallback/TLS bypass не добавлялись. Первый TUN запуск harness завершил gRPC stream, повтор неизменённого артефакта PASS; исходный evidence сохранён |
 | Этап 05 | Принят 14.09.2026 на `1.5.0+1050016` / `984d40c4`: точный R08 PASS на физическом Android VPN с двусторонним Telegram UID flow, двумя HTTPS и MTProto DC1/DC2; Windows System Proxy и контрольные TUN/Local Proxy PASS. Android R13 UI PASS: crossed manual A доказанно не пропускает пять свежих probes до/после reconnect, Auto выбирает другой concrete leaf и восстанавливает весь трафик. Дополнительно действие уведомления `Перевыбор` PASS: рабочий manual → Auto/concrete leaf без restart VPN generation, HTTP/HTTPS/MTProto PASS до и после; production endpoints не изменялись |
+| Этап 07 | Принят 14.09.2026 на `1.5.0+1050021` / `ec3104f4`: R17 PASS до подключения и при активном VPN на физическом Android и в Windows System Proxy/TUN/Local Proxy. Доменный refresh продвигает timestamp, сохраняет валидный cache и ручной выбор; подключённый refresh выполняет native restart, после него Auto имеет concrete leaf и реальный HTTPS. TLS/IP обходы не добавлялись |
 | Host-lab | Отчёт 09.09 принял standalone Agent через отдельный sing-box, включая stop/crash независимость. Обычный Desktop Agent остаётся ограничением; готовность инфраструктуры не равна приёмке приложения |
+| Этап 09 | Принят 14.09.2026 на том же кандидате: P03 PASS на Android и Windows во всех трёх режимах — WAL/busy timeout, независимые DB connections и competing write, integrity, key-loss fail-closed с восстановлением, URI decode-once, concurrent error dedup и redaction. Targeted Flutter 76/76 и Android instrumentation 89/89 PASS; 8 из разрешённых 10 build-итераций |
 | Релиз | 1.5.0 не принят и не выпущен этим этапом; push/deployment не выполняются в задаче документации |
 
 Первичные локальные evidence, не копировать в Git:
@@ -80,9 +82,9 @@ TickTick: `💤ZEON`, parent `6a9fbc3a8f08ecb120d254c7`.
 | 04 / 6a9fbc798f08ecb120d25c30 | Выбор и persistence соответствуют runtime/UI; карточка «Сервера» отсутствует без подключения и остаётся доступной после возврата/перезапуска UI при живом runtime | R01/R05–R09, обе границы видимости карточки, app resume/re-entry, late stats/RPC ACK, история старого server selection |
 | 05 / 6a9fbc7a8f08c18d5f58c270 | Завершён 14.09.2026 на `1.5.0+1050016` / `984d40c4`: после reconnect/Auto есть конкретный native leaf и настоящий трафик | R08 Android Telegram UID flow + HTTPS/MTProto и Windows три режима PASS; Android R13 fault → reconnect → Auto recovery PASS; Android notification `Перевыбор` manual → Auto without VPN restart PASS |
 | 06 / 6a9fbc7c8f0852d54c2e2311 | Завершён 13.09.2026 на `1.5.0+1050010` / `9ddff9db`: domain API сохранён и runtime-подтверждён во всех Windows режимах | P01 targeted + HTTP 200 для доменного health; без IP fallback и TLS/SNI bypass |
-| 07 / 6a9fbc7d8f08c18d5f58c2b7 | Корректное обновление профиля до/во время VPN | R17, cache/retry, WinHTTP TLS 12175 и проблемные узлы без обхода TLS/IP |
+| 07 / 6a9fbc7d8f08c18d5f58c2b7 | Завершён 14.09.2026 на `1.5.0+1050021` / `ec3104f4`: обновление профиля до/во время VPN сохраняет ownership, cache и ручной выбор; после native restart реальный трафик и Auto/concrete leaf PASS | R17 Android + Windows System Proxy/TUN/Local Proxy; domain/TLS без IP fallback и bypass |
 | 08 / 6a9fbc7e8f08c18d5f58c2d5 | Завершён 13.09.2026 на `1.5.0+1050012` / `74491004`: Android managed/per-app update, пользовательский override, TARGETED и SHORT PASS | R18/R19 и P02 PASS; IPv4 PASS; отдельная недоработка IPv6 egress вынесена в `6aa6de518f087a6320ca4572` |
-| 09 / 6a9fbc7f8f08ecb120d25d4a | Проверены и сохранены DB/error fixes | P03, concurrency/integrity, key loss, URI decoding, обе платформы |
+| 09 / 6a9fbc7f8f08ecb120d25d4a | Завершён 14.09.2026 на `1.5.0+1050021` / `ec3104f4`: DB/error fixes сохранены и runtime-проверены на Android и Windows; регрессия задач 07/05 не выявлена | P03 concurrency/integrity/key loss/URI/error queue/redaction; Android lifecycle + 89/89 instrumentation; Windows три режима PASS |
 | 10 / 6a9fbc808f0857fda2282227 | Проверен настоящий Windows installer/portable пакет | Native dependencies, Private/Public в согласованной disposable-среде; host firewall не менять |
 | 11 / 6a9fbc818f08ea0eca05038e | Полная приёмка и фактический выпуск 1.5.0 | FULL обеих платформ, ручной reboot, release hashes/provenance, KB sync |
 
@@ -99,6 +101,9 @@ Preserve-first проверки действуют сразу, несмотря 
 Этап 08 завершён: Android managed/per-app routing, override и один SHORT прошли на
 `1.5.0+1050012`; отчёт хранится в
 `Z:\Zeon-Envelope\Temp\zeon-app-testing\T08-B1050012-FINAL-20260913\report.md`.
+Этапы 07 и 09 завершены на `1.5.0+1050021` / `ec3104f4`; P03/R17 и регрессия
+задачи 05 прошли на физическом Android и во всех трёх Windows-режимах. Отчёт:
+`Z:\Zeon-Envelope\Temp\zeon-app-testing\T09-B1050021-FINAL-20260914\report.md`.
 По решению пользователя реальный IPv6 egress не блокирует managed routing: он
 сохранён отдельной отложенной задачей `6aa6de518f087a6320ca4572`. Windows package-list
 N/A; поддерживаемые process/domain compiler paths проверены. FULL, release и
