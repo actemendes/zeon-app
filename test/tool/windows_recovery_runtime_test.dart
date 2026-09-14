@@ -285,7 +285,10 @@ void main() {
     expect(scenario, contains("reporter.event('p04_smart_active_verified'"));
     expect(scenario, contains("reporter.event('p04_capability_observed'"));
     expect(source, contains("await container!.read(ConfigOptions.ipv6Mode.notifier).update(originalIPv6Mode!)"));
-    expect(source, contains('terminal.length == leaves.length'));
+    expect(source, contains('terminal.any((item) => item.ipv6Status == \'supported\')'));
+    expect(source, contains('requiredIPv6Status:'));
+    expect(source, contains("? 'supported'"));
+    expect(source, contains("'checking_count'"));
     expect(source, isNot(contains('groups.items.expand((group) => group.items)')));
     expect(source, contains('trimNativeTag(item.tag) == trimNativeTag(leaf.tag)'));
   });
