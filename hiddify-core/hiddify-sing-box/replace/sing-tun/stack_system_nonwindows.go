@@ -8,7 +8,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func fixWindowsFirewall() error {
+func (s *System) startWindowsFirewall() error {
+	return nil
+}
+
+func (s *System) closeWindowsFirewall() error {
 	return nil
 }
 

@@ -209,7 +209,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
-  ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  const HRESULT com_initialize_result =
+      ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  const bool should_uninitialize_com = SUCCEEDED(com_initialize_result);
 
   flutter::DartProject project(L"data");
   WriteStartupMarker("dart_project_created");
@@ -228,7 +230,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     WriteStartupMarker("window_create_failed");
     ::ReleaseMutex(instance_mutex);
     ::CloseHandle(instance_mutex);
-    ::CoUninitialize();
+    if (should_uninitialize_com)
+    {
+      ::CoUninitialize();
+    }
     return EXIT_FAILURE;
   }
   WriteStartupMarker("window_created");
@@ -241,7 +246,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::DispatchMessage(&msg);
   }
 
-  ::CoUninitialize();
+  if (should_uninitialize_com)
+  {
+    ::CoUninitialize();
+  }
   ::ReleaseMutex(instance_mutex);
   ::CloseHandle(instance_mutex);
   WriteStartupMarker("process_exit_clean");

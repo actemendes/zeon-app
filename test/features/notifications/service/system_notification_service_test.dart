@@ -6,6 +6,30 @@ import 'package:zeon/features/notifications/model/notification_priority.dart';
 import 'package:zeon/features/notifications/service/system_notification_service.dart';
 
 void main() {
+  test('falls back without calling native show when platform initialization returns false', () async {
+    final service = SystemNotificationServiceImpl(initializeSystemNotifications: () async => false);
+
+    await service.initialize();
+    final result = await service.show(_notification());
+
+    expect(result.displayed, isFalse);
+    expect(result.fallbackUsed, isTrue);
+    expect(result.errorCode, contains('notification_init_failed'));
+  });
+
+  test('contains platform initialization exceptions and keeps the fallback path usable', () async {
+    final service = SystemNotificationServiceImpl(
+      initializeSystemNotifications: () async => throw StateError('platform unavailable'),
+    );
+
+    await expectLater(service.initialize(), completes);
+    final result = await service.show(_notification());
+
+    expect(result.displayed, isFalse);
+    expect(result.fallbackUsed, isTrue);
+    expect(result.errorCode, contains('notification_init_failed'));
+  });
+
   test('maps Android notification channels by category', () {
     final alert = androidChannelForCategory(NotificationCategory.alert);
     final system = androidChannelForCategory(NotificationCategory.system);
@@ -51,3 +75,14 @@ void main() {
     expect(details.windows?.duration, WindowsNotificationDuration.short);
   });
 }
+
+NotificationEntity _notification() => NotificationEntity(
+  id: 'fallback-test',
+  category: NotificationCategory.system,
+  priority: NotificationPriority.normal,
+  title: 'Title',
+  body: 'Body',
+  actionUrl: null,
+  publishedAt: DateTime.utc(2026),
+  expiresAt: null,
+);

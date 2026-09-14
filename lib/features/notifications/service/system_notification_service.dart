@@ -6,6 +6,7 @@ import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/features/notifications/model/notification_category.dart';
 import 'package:zeon/features/notifications/model/notification_entity.dart';
 import 'package:zeon/features/notifications/model/notification_priority.dart';
+import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/utils/windows_privilege_utils.dart';
 
@@ -18,17 +19,24 @@ abstract interface class SystemNotificationService {
   Future<SystemNotificationShowResult> showTestNotification();
 }
 
-class SystemNotificationServiceImpl implements SystemNotificationService {
-  SystemNotificationServiceImpl({FlutterLocalNotificationsPlugin? plugin, InAppNotificationController? fallback})
-    : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
-      _fallback = fallback;
+class SystemNotificationServiceImpl with InfraLogger implements SystemNotificationService {
+  SystemNotificationServiceImpl({
+    FlutterLocalNotificationsPlugin? plugin,
+    InAppNotificationController? fallback,
+    Future<bool?> Function()? initializeSystemNotifications,
+  }) : _initializeSystemNotifications = initializeSystemNotifications,
+       _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
+       _fallback = fallback;
 
   static const windowsAppUserModelId = 'ZEON.ZEON';
   static const windowsActivatorGuid = '6f903538-42b1-4596-a479-bb779f21a65d';
 
   final FlutterLocalNotificationsPlugin _plugin;
   final InAppNotificationController? _fallback;
+  final Future<bool?> Function()? _initializeSystemNotifications;
   bool _initialized = false;
+  bool _systemNotificationsAvailable = false;
+  String? _initializationErrorCode;
   NotificationTapCallback? _onTap;
 
   @override
@@ -36,26 +44,42 @@ class SystemNotificationServiceImpl implements SystemNotificationService {
     _onTap = onTap ?? _onTap;
     if (_initialized) return;
 
-    await _plugin.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings('ic_stat_logo'),
-        iOS: DarwinInitializationSettings(),
-        macOS: DarwinInitializationSettings(),
-        windows: WindowsInitializationSettings(
-          appName: 'ZEON',
-          appUserModelId: windowsAppUserModelId,
-          guid: windowsActivatorGuid,
-        ),
-      ),
-      onDidReceiveNotificationResponse: _handleNotificationResponse,
-    );
-    await _createAndroidChannels();
-    _initialized = true;
+    try {
+      final initializer = _initializeSystemNotifications;
+      final initialized = initializer != null
+          ? await initializer()
+          : await _plugin.initialize(
+              settings: const InitializationSettings(
+                android: AndroidInitializationSettings('ic_stat_logo'),
+                iOS: DarwinInitializationSettings(),
+                macOS: DarwinInitializationSettings(),
+                windows: WindowsInitializationSettings(
+                  appName: 'ZEON',
+                  appUserModelId: windowsAppUserModelId,
+                  guid: windowsActivatorGuid,
+                ),
+              ),
+              onDidReceiveNotificationResponse: _handleNotificationResponse,
+            );
+      if (initialized != true) {
+        _initializationErrorCode = PlatformUtils.isWindows
+            ? 'windows_notification_init_failed'
+            : 'system_notification_init_failed';
+        return;
+      }
+      await _createAndroidChannels();
+      _systemNotificationsAvailable = true;
 
-    final details = await _plugin.getNotificationAppLaunchDetails();
-    final response = details?.notificationResponse;
-    if (details?.didNotificationLaunchApp == true && response != null) {
-      scheduleMicrotask(() => _handleNotificationResponse(response));
+      final details = await _plugin.getNotificationAppLaunchDetails();
+      final response = details?.notificationResponse;
+      if (details?.didNotificationLaunchApp == true && response != null) {
+        scheduleMicrotask(() => _handleNotificationResponse(response));
+      }
+    } catch (error, stackTrace) {
+      _initializationErrorCode = PlatformUtils.isWindows ? 'windows_notification_init_failed' : _errorCode(error);
+      loggy.warning('system notification initialization failed; using in-app fallback', error, stackTrace);
+    } finally {
+      _initialized = true;
     }
   }
 
@@ -79,9 +103,11 @@ class SystemNotificationServiceImpl implements SystemNotificationService {
   @override
   Future<SystemNotificationShowResult> show(NotificationEntity notification) async {
     await initialize();
-    if (PlatformUtils.isWindows && isWindowsProcessElevated() == true) {
+    if (!_systemNotificationsAvailable || (PlatformUtils.isWindows && isWindowsProcessElevated() == true)) {
       final fallbackDisplayed = _showInAppFallback(notification);
-      final errorCode = isWindowsUacEnabled() == false ? 'windows_uac_disabled' : 'windows_elevated';
+      final errorCode = !_systemNotificationsAvailable
+          ? (_initializationErrorCode ?? 'system_notification_init_failed')
+          : (isWindowsUacEnabled() == false ? 'windows_uac_disabled' : 'windows_elevated');
       return SystemNotificationShowResult(
         displayed: fallbackDisplayed,
         fallbackUsed: true,

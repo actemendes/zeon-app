@@ -23,35 +23,36 @@ import (
 var ErrIncludeAllNetworks = E.New("`system` and `mixed` stack are not available when `includeAllNetworks` is enabled. See https://github.com/SagerNet/sing-tun/issues/25")
 
 type System struct {
-	ctx                  context.Context
-	tun                  Tun
-	tunName              string
-	mtu                  int
-	handler              Handler
-	logger               logger.Logger
-	inet4Prefixes        []netip.Prefix
-	inet6Prefixes        []netip.Prefix
-	inet4Address         netip.Addr
-	inet4NextAddress     netip.Addr
-	inet6Address         netip.Addr
-	inet6NextAddress     netip.Addr
-	broadcastAddr        netip.Addr
-	inet4LoopbackAddress []netip.Addr
-	inet6LoopbackAddress []netip.Addr
-	udpTimeout           time.Duration
-	icmpTimeout          time.Duration
-	tcpListener          net.Listener
-	tcpListener6         net.Listener
-	tcpPort              uint16
-	tcpPort6             uint16
-	tcpNat               *TCPNat
-	udpNat               *udpnat.Service
-	directNat            *DirectRouteMapping
-	bindInterface        bool
-	interfaceFinder      control.InterfaceFinder
-	frontHeadroom        int
-	txChecksumOffload    bool
-	multiPendingPackets  bool
+	ctx                    context.Context
+	tun                    Tun
+	tunName                string
+	mtu                    int
+	handler                Handler
+	logger                 logger.Logger
+	inet4Prefixes          []netip.Prefix
+	inet6Prefixes          []netip.Prefix
+	inet4Address           netip.Addr
+	inet4NextAddress       netip.Addr
+	inet6Address           netip.Addr
+	inet6NextAddress       netip.Addr
+	broadcastAddr          netip.Addr
+	inet4LoopbackAddress   []netip.Addr
+	inet6LoopbackAddress   []netip.Addr
+	udpTimeout             time.Duration
+	icmpTimeout            time.Duration
+	tcpListener            net.Listener
+	tcpListener6           net.Listener
+	tcpPort                uint16
+	tcpPort6               uint16
+	tcpNat                 *TCPNat
+	udpNat                 *udpnat.Service
+	directNat              *DirectRouteMapping
+	windowsFirewallSession uintptr
+	bindInterface          bool
+	interfaceFinder        control.InterfaceFinder
+	frontHeadroom          int
+	txChecksumOffload      bool
+	multiPendingPackets    bool
 }
 
 type Session struct {
@@ -101,23 +102,22 @@ func NewSystem(options StackOptions) (Stack, error) {
 }
 
 func (s *System) Close() error {
-	return common.Close(
+	return E.Errors(common.Close(
 		s.tcpListener,
 		s.tcpListener6,
-	)
+	), s.closeWindowsFirewall())
 }
 
 func (s *System) Start() error {
 	err := s.start()
 	if err != nil {
-		return err
+		return E.Errors(err, s.Close())
 	}
 	go s.tunLoop()
 	return nil
 }
 
 func (s *System) start() error {
-	_ = fixWindowsFirewall()
 	var listener net.ListenConfig
 	if s.bindInterface {
 		listener.Control = control.Append(listener.Control, func(network, address string, conn syscall.RawConn) error {
@@ -159,6 +159,9 @@ func (s *System) start() error {
 		s.tcpListener6 = tcpListener
 		s.tcpPort6 = M.SocksaddrFromNet(tcpListener.Addr()).Port
 		go s.acceptLoop(tcpListener)
+	}
+	if err = s.startWindowsFirewall(); err != nil {
+		return E.Cause(err, "configure scoped Windows firewall filters")
 	}
 	s.tcpNat = NewNat(s.ctx, s.udpTimeout)
 	s.udpNat = udpnat.New(s.handler, s.preparePacketConnection, s.udpTimeout, false)

@@ -52,6 +52,10 @@ type FWP_BYTE_BLOB struct {
 	data *uint8
 }
 
+type FWP_BYTE_ARRAY16 struct {
+	ByteArray16 [16]byte
+}
+
 type FWPM_SUBLAYER0 struct {
 	SubLayerKey  windows.GUID // Windows type: GUID
 	DisplayData  FWPM_DISPLAY_DATA0

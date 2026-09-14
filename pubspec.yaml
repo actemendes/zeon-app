@@ -1,7 +1,7 @@
 name: zeon
 description: ZEON cross-platform VPN client.
 publish_to: "none"
-version: 1.5.0+1050022
+version: 1.5.0+1050023
 
 environment:
   sdk: ^3.10.4
@@ -161,6 +161,12 @@ dev_dependencies:
   widgetbook_generator: ^3.14.0
   # protoc_builder: ^0.4.1
   # google_protobuf: ^3.20.1;
+
+dependency_overrides:
+  # Local 3.1.0 patch: never let Windows toast exceptions cross the C FFI boundary.
+  # Remove after upstream provides equivalent native fail-safe behavior.
+  flutter_local_notifications_windows:
+    path: third_party/flutter_local_notifications_windows
 
 flutter:
   uses-material-design: true
