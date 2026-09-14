@@ -45,6 +45,7 @@ type Selector struct {
 	preferDefault                bool
 	outbounds                    map[string]adapter.Outbound
 	selected                     common.TypedValue[adapter.Outbound]
+	transitionFallback           common.TypedValue[adapter.Outbound]
 	interruptGroup               *interrupt.Group
 	interruptExternalConnections bool
 	sessionGeneration            string
@@ -154,6 +155,7 @@ func (s *Selector) SelectOutbound(tag string) bool {
 	if previous == detour {
 		return true
 	}
+	s.prepareTransitionFallback(detour, previous)
 	if s.Tag() != "" {
 		cacheFile := service.FromContext[adapter.CacheFile](s.ctx)
 		if cacheFile != nil {
@@ -184,6 +186,19 @@ func (s *Selector) SelectOutbound(tag string) bool {
 	return true
 }
 
+func (s *Selector) prepareTransitionFallback(detour, previous adapter.Outbound) {
+	s.transitionFallback.Store(nil)
+	if group, isGroup := detour.(adapter.OutboundGroup); isGroup && group.Now() == "" && previous != nil && common.Contains(group.All(), previous.Tag()) {
+		// Smart Active deliberately starts without an unverified leaf. When the
+		// user changes a live, working manual route to Auto before its first
+		// monitoring batch completes, keep new flows on that same manual leaf
+		// until Auto has a verified candidate. This preserves traffic without
+		// weakening Smart Active's cold-start evidence requirement.
+		s.transitionFallback.Store(previous)
+		s.logger.Info("[SelectorTransitionFallback] group=", detour.Tag(), " fallback_id=", selectorOpaqueOutboundID(previous.Tag()), " reason=auto_waiting_for_verified_leaf")
+	}
+}
+
 func selectorOpaqueOutboundID(tag string) string {
 	if tag == "" {
 		return "none"
@@ -202,20 +217,40 @@ func (s *Selector) pingSelected() {
 		s.logger.Warn("no outbound selected")
 		return
 	}
+	if group, isGroup := selected.(adapter.OutboundGroup); isGroup {
+		monitor := monitoring.Get(s.ctx)
+		if group.Now() == "" {
+			monitor.RequestFullCycle()
+		}
+		monitor.SignalChange(selected.Tag())
+		return
+	}
 	realTag := RealTag(selected)
 	// s.logger.Debug("pinging selected outbound: ", selected.Tag(), " (real tag: ", realTag, ")")
 	if r, ok := s.outbound.Outbound(realTag); ok {
 		// s.logger.Debug("found real tag: ", selected.Tag(), " (real tag: ", r.Tag(), ")")
 		if _, ok := r.(adapter.OutboundGroup); !ok {
 			monitoring.Get(s.ctx).TestNow(realTag)
-		} else {
-			// s.logger.Debug(" real tag: is a group so skipping ping", selected.Tag(), " (real tag: ", r.Tag(), ")")
-			monitoring.Get(s.ctx).SignalChange(s.Tag())
 		}
 	}
 }
-func (s *Selector) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+
+func (s *Selector) connectionOutbound() adapter.Outbound {
 	selected := s.selected.Load()
+	group, isGroup := selected.(adapter.OutboundGroup)
+	if !isGroup || group.Now() != "" {
+		s.transitionFallback.Store(nil)
+		return selected
+	}
+	fallback := s.transitionFallback.Load()
+	if fallback != nil && common.Contains(group.All(), fallback.Tag()) {
+		return fallback
+	}
+	return selected
+}
+
+func (s *Selector) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	selected := s.connectionOutbound()
 	if metadata := adapter.ContextFrom(ctx); metadata != nil && metadata.GetRealOutbound() == "" {
 		metadata.SetRealOutbound(RealTag(selected))
 	}
@@ -227,7 +262,7 @@ func (s *Selector) DialContext(ctx context.Context, network string, destination 
 }
 
 func (s *Selector) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	selected := s.selected.Load()
+	selected := s.connectionOutbound()
 	if metadata := adapter.ContextFrom(ctx); metadata != nil && metadata.GetRealOutbound() == "" {
 		metadata.SetRealOutbound(RealTag(selected))
 	}
@@ -240,7 +275,7 @@ func (s *Selector) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 
 func (s *Selector) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	ctx = interrupt.ContextWithIsExternalConnection(ctx)
-	selected := s.selected.Load()
+	selected := s.connectionOutbound()
 	if metadata.GetRealOutbound() == "" {
 		metadata.SetRealOutbound(RealTag(selected))
 	}
@@ -254,7 +289,7 @@ func (s *Selector) NewConnectionEx(ctx context.Context, conn net.Conn, metadata 
 
 func (s *Selector) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	ctx = interrupt.ContextWithIsExternalConnection(ctx)
-	selected := s.selected.Load()
+	selected := s.connectionOutbound()
 	if metadata.GetRealOutbound() == "" {
 		metadata.SetRealOutbound(RealTag(selected))
 	}
@@ -267,7 +302,7 @@ func (s *Selector) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn,
 }
 
 func (s *Selector) NewDirectRouteConnection(metadata adapter.InboundContext, routeContext tun.DirectRouteContext, timeout time.Duration) (tun.DirectRouteDestination, error) {
-	selected := s.selected.Load()
+	selected := s.connectionOutbound()
 	if !common.Contains(selected.Network(), metadata.Network) {
 		return nil, E.New(metadata.Network, " is not supported by outbound: ", selected.Tag())
 	}

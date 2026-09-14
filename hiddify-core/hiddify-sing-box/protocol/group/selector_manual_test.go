@@ -8,6 +8,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	adapterOutbound "github.com/sagernet/sing-box/adapter/outbound"
+	"github.com/sagernet/sing-box/log"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
@@ -79,6 +80,96 @@ func (*selectorTestOutbound) DialContext(context.Context, string, M.Socksaddr) (
 
 func (*selectorTestOutbound) ListenPacket(context.Context, M.Socksaddr) (net.PacketConn, error) {
 	return nil, errors.New("test outbound does not listen")
+}
+
+type selectorRecordingOutbound struct {
+	adapterOutbound.Adapter
+	dials int
+}
+
+func newSelectorRecordingOutbound(tag string) *selectorRecordingOutbound {
+	return &selectorRecordingOutbound{Adapter: adapterOutbound.NewAdapter("test", tag, []string{N.NetworkTCP, N.NetworkUDP}, nil)}
+}
+
+func (o *selectorRecordingOutbound) DialContext(context.Context, string, M.Socksaddr) (net.Conn, error) {
+	o.dials++
+	return nil, errors.New("recorded test dial")
+}
+
+func (*selectorRecordingOutbound) ListenPacket(context.Context, M.Socksaddr) (net.PacketConn, error) {
+	return nil, errors.New("test outbound does not listen")
+}
+
+type selectorTransitionGroup struct {
+	adapterOutbound.Adapter
+	active  string
+	members []string
+	dials   int
+}
+
+func newSelectorTransitionGroup(tag string, members ...string) *selectorTransitionGroup {
+	return &selectorTransitionGroup{
+		Adapter: adapterOutbound.NewAdapter("balancer", tag, []string{N.NetworkTCP, N.NetworkUDP}, members),
+		members: members,
+	}
+}
+
+func (g *selectorTransitionGroup) Now() string   { return g.active }
+func (g *selectorTransitionGroup) All() []string { return g.members }
+func (g *selectorTransitionGroup) DialContext(context.Context, string, M.Socksaddr) (net.Conn, error) {
+	g.dials++
+	return nil, errors.New("recorded group dial")
+}
+func (*selectorTransitionGroup) ListenPacket(context.Context, M.Socksaddr) (net.PacketConn, error) {
+	return nil, errors.New("test group does not listen")
+}
+
+func TestAutoTransitionKeepsManualTrafficUntilVerifiedLeafExists(t *testing.T) {
+	manual := newSelectorRecordingOutbound("manual-server")
+	automatic := newSelectorTransitionGroup("balance", manual.Tag(), "other-server")
+	selector := &Selector{logger: log.NewNOPFactory().NewLogger("selector-test")}
+	selector.selected.Store(automatic)
+	selector.prepareTransitionFallback(automatic, manual)
+
+	metadata := &adapter.InboundContext{}
+	_, _ = selector.DialContext(
+		adapter.WithContext(context.Background(), metadata),
+		N.NetworkTCP,
+		M.ParseSocksaddr("example.com:443"),
+	)
+	if manual.dials != 1 || automatic.dials != 0 {
+		t.Fatalf("pending Auto dialed manual/group = %d/%d, want 1/0", manual.dials, automatic.dials)
+	}
+	if got := metadata.GetRealOutbound(); got != manual.Tag() {
+		t.Fatalf("pending Auto real outbound = %q, want %q", got, manual.Tag())
+	}
+
+	automatic.active = "other-server"
+	metadata = &adapter.InboundContext{}
+	_, _ = selector.DialContext(
+		adapter.WithContext(context.Background(), metadata),
+		N.NetworkTCP,
+		M.ParseSocksaddr("example.com:443"),
+	)
+	if manual.dials != 1 || automatic.dials != 1 {
+		t.Fatalf("ready Auto dialed manual/group = %d/%d, want 1/1", manual.dials, automatic.dials)
+	}
+	if got := metadata.GetRealOutbound(); got != automatic.active {
+		t.Fatalf("ready Auto real outbound = %q, want %q", got, automatic.active)
+	}
+}
+
+func TestAutoTransitionDoesNotUseOutboundOutsideGroup(t *testing.T) {
+	manual := newSelectorRecordingOutbound("removed-server")
+	automatic := newSelectorTransitionGroup("balance", "available-server")
+	selector := &Selector{logger: log.NewNOPFactory().NewLogger("selector-test")}
+	selector.selected.Store(automatic)
+	selector.prepareTransitionFallback(automatic, manual)
+
+	_, _ = selector.DialContext(context.Background(), N.NetworkTCP, M.ParseSocksaddr("example.com:443"))
+	if manual.dials != 0 || automatic.dials != 1 {
+		t.Fatalf("invalid fallback dialed manual/group = %d/%d, want 0/1", manual.dials, automatic.dials)
+	}
 }
 
 func TestManualSelectorKeepsExplicitSelection(t *testing.T) {
