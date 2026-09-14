@@ -896,7 +896,10 @@ class RuntimeHarness {
         final terminal = leaves.where(
           (item) => const {'supported', 'unavailable', 'indeterminate'}.contains(item.ipv6Status),
         );
-        if (terminal.any((item) => item.ipv6Status == 'supported') || terminal.length == leaves.length) {
+        // Smart Active ranks a coherent completed cohort. Returning after the
+        // first IPv6-capable leaf races that decision and can observe the
+        // previously active leaf while the rest of the selector is checking.
+        if (terminal.length == leaves.length) {
           return leaves;
         }
       }
