@@ -1,7 +1,7 @@
 name: zeon
 description: ZEON cross-platform VPN client.
 publish_to: "none"
-version: 1.5.0+1050021
+version: 1.5.0+1050022
 
 environment:
   sdk: ^3.10.4
@@ -132,6 +132,7 @@ dependencies:
   app_links: ^6.4.0
   # Used for registering custom schemes in the Windows registry
   win32: ^5.12.0
+  win32_registry: 2.1.0
   # Working with Wifi(get LAN IP address)
   # Web platform not supported
   # platform-specific settings

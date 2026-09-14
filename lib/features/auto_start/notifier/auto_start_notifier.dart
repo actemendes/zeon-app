@@ -1,32 +1,37 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:zeon/core/app_info/app_info_provider.dart';
-import 'package:zeon/utils/utils.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:zeon/core/app_info/app_info_provider.dart';
+import 'package:zeon/features/auto_start/data/windows_auto_start.dart';
+import 'package:zeon/utils/utils.dart';
 
 part 'auto_start_notifier.g.dart';
 
 @Riverpod(keepAlive: true)
 class AutoStartNotifier extends _$AutoStartNotifier with InfraLogger {
   Timer? _timer;
+  WindowsAutoStart? _windowsAutoStart;
 
   @override
   Future<bool> build() async {
     if (!PlatformUtils.isDesktop) return false;
     final appInfo = ref.watch(appInfoProvider).requireValue;
-    launchAtStartup.setup(
-      appName: appInfo.name,
-      appPath: Platform.resolvedExecutable,
-      packageName: "ZEON.ZEON",
-    );
-    final isEnabled = await launchAtStartup.isEnabled();
+    launchAtStartup.setup(appName: appInfo.name, appPath: Platform.resolvedExecutable, packageName: "ZEON.ZEON");
+    final isMsix =
+        Platform.resolvedExecutable.contains('WindowsApps') && Platform.resolvedExecutable.contains('ZEON.ZEON');
+    if (Platform.isWindows && !isMsix) {
+      _windowsAutoStart = WindowsAutoStart(appName: appInfo.name, executablePath: Platform.resolvedExecutable);
+    }
+    final isEnabled = await _isEnabled();
     loggy.info("auto start is [${isEnabled ? "Enabled" : "Disabled"}]");
     _startTimer();
     ref.onDispose(() => _timer?.cancel());
     return isEnabled;
   }
+
+  Future<bool> _isEnabled() async => _windowsAutoStart?.isEnabled() ?? await launchAtStartup.isEnabled();
 
   void _startTimer() {
     _timer?.cancel();
@@ -35,20 +40,28 @@ class AutoStartNotifier extends _$AutoStartNotifier with InfraLogger {
 
   Future<bool> updateStatus() async {
     loggy.debug("update auto start status");
-    final isEnabled = await launchAtStartup.isEnabled();
+    final isEnabled = await _isEnabled();
     state = AsyncValue.data(isEnabled);
     return isEnabled;
   }
 
   Future<void> enable() async {
     loggy.debug("enabling auto start");
-    await launchAtStartup.enable();
+    if (_windowsAutoStart case final windows?) {
+      windows.enable();
+    } else {
+      await launchAtStartup.enable();
+    }
     state = const AsyncValue.data(true);
   }
 
   Future<void> disable() async {
     loggy.debug("disabling auto start");
-    await launchAtStartup.disable();
+    if (_windowsAutoStart case final windows?) {
+      windows.disable();
+    } else {
+      await launchAtStartup.disable();
+    }
     state = const AsyncValue.data(false);
   }
 }
