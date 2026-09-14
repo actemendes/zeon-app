@@ -47,6 +47,13 @@ type URLTestHistory struct {
 	SpeedReady        bool           `json:"speed_ready,omitempty"`
 	UDPReady          bool           `json:"udp_ready,omitempty"`
 	CombinedReady     bool           `json:"combined_ready,omitempty"`
+	IPv6Status        string         `json:"ipv6_status,omitempty"`
+	IPv6CheckedAt     time.Time      `json:"ipv6_checked_at,omitempty"`
+	IPv6Generation    uint64         `json:"ipv6_generation,omitempty"`
+	IPv6TargetSuccess int            `json:"ipv6_target_success,omitempty"`
+	IPv6TargetCount   int            `json:"ipv6_target_count,omitempty"`
+	IPv6ErrorType     string         `json:"ipv6_error_type,omitempty"`
+	IPv6ErrorText     string         `json:"ipv6_error_text,omitempty"`
 }
 
 type RuntimePenaltyStats struct {

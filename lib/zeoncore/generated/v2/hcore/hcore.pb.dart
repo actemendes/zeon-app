@@ -768,6 +768,13 @@ class OutboundInfo extends $pb.GeneratedMessage {
     $core.int? udpJitterMs,
     $core.int? udpPenalty,
     $core.String? urlTestStatus,
+    $core.String? ipv6Status,
+    $0.Timestamp? ipv6CheckedAt,
+    $fixnum.Int64? ipv6Generation,
+    $core.int? ipv6TargetSuccess,
+    $core.int? ipv6TargetCount,
+    $core.String? ipv6ErrorType,
+    $core.String? ipv6ErrorText,
   }) {
     final $result = create();
     if (tag != null) {
@@ -851,6 +858,27 @@ class OutboundInfo extends $pb.GeneratedMessage {
     if (urlTestStatus != null) {
       $result.urlTestStatus = urlTestStatus;
     }
+    if (ipv6Status != null) {
+      $result.ipv6Status = ipv6Status;
+    }
+    if (ipv6CheckedAt != null) {
+      $result.ipv6CheckedAt = ipv6CheckedAt;
+    }
+    if (ipv6Generation != null) {
+      $result.ipv6Generation = ipv6Generation;
+    }
+    if (ipv6TargetSuccess != null) {
+      $result.ipv6TargetSuccess = ipv6TargetSuccess;
+    }
+    if (ipv6TargetCount != null) {
+      $result.ipv6TargetCount = ipv6TargetCount;
+    }
+    if (ipv6ErrorType != null) {
+      $result.ipv6ErrorType = ipv6ErrorType;
+    }
+    if (ipv6ErrorText != null) {
+      $result.ipv6ErrorText = ipv6ErrorText;
+    }
     return $result;
   }
   OutboundInfo._() : super();
@@ -888,6 +916,14 @@ class OutboundInfo extends $pb.GeneratedMessage {
     ..a<$core.int>(25, _omitFieldNames ? '' : 'udpJitterMs', $pb.PbFieldType.O3)
     ..a<$core.int>(26, _omitFieldNames ? '' : 'udpPenalty', $pb.PbFieldType.O3)
     ..aOS(27, _omitFieldNames ? '' : 'urlTestStatus')
+    ..aOS(28, _omitFieldNames ? '' : 'ipv6Status')
+    ..aOM<$0.Timestamp>(29, _omitFieldNames ? '' : 'ipv6CheckedAt', subBuilder: $0.Timestamp.create)
+    ..a<$fixnum.Int64>(30, _omitFieldNames ? '' : 'ipv6Generation', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$core.int>(31, _omitFieldNames ? '' : 'ipv6TargetSuccess', $pb.PbFieldType.O3)
+    ..a<$core.int>(32, _omitFieldNames ? '' : 'ipv6TargetCount', $pb.PbFieldType.O3)
+    ..aOS(33, _omitFieldNames ? '' : 'ipv6ErrorType')
+    ..aOS(34, _omitFieldNames ? '' : 'ipv6ErrorText')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('Using this can add significant overhead to your binary. '
@@ -1237,6 +1273,92 @@ class OutboundInfo extends $pb.GeneratedMessage {
   $core.bool hasUrlTestStatus() => $_has(26);
   @$pb.TagNumber(27)
   void clearUrlTestStatus() => clearField(27);
+
+  @$pb.TagNumber(28)
+  $core.String get ipv6Status => $_getSZ(27);
+  @$pb.TagNumber(28)
+  set ipv6Status($core.String v) {
+    $_setString(27, v);
+  }
+
+  @$pb.TagNumber(28)
+  $core.bool hasIpv6Status() => $_has(27);
+  @$pb.TagNumber(28)
+  void clearIpv6Status() => clearField(28);
+
+  @$pb.TagNumber(29)
+  $0.Timestamp get ipv6CheckedAt => $_getN(28);
+  @$pb.TagNumber(29)
+  set ipv6CheckedAt($0.Timestamp v) {
+    setField(29, v);
+  }
+
+  @$pb.TagNumber(29)
+  $core.bool hasIpv6CheckedAt() => $_has(28);
+  @$pb.TagNumber(29)
+  void clearIpv6CheckedAt() => clearField(29);
+  @$pb.TagNumber(29)
+  $0.Timestamp ensureIpv6CheckedAt() => $_ensure(28);
+
+  @$pb.TagNumber(30)
+  $fixnum.Int64 get ipv6Generation => $_getI64(29);
+  @$pb.TagNumber(30)
+  set ipv6Generation($fixnum.Int64 v) {
+    $_setInt64(29, v);
+  }
+
+  @$pb.TagNumber(30)
+  $core.bool hasIpv6Generation() => $_has(29);
+  @$pb.TagNumber(30)
+  void clearIpv6Generation() => clearField(30);
+
+  @$pb.TagNumber(31)
+  $core.int get ipv6TargetSuccess => $_getIZ(30);
+  @$pb.TagNumber(31)
+  set ipv6TargetSuccess($core.int v) {
+    $_setSignedInt32(30, v);
+  }
+
+  @$pb.TagNumber(31)
+  $core.bool hasIpv6TargetSuccess() => $_has(30);
+  @$pb.TagNumber(31)
+  void clearIpv6TargetSuccess() => clearField(31);
+
+  @$pb.TagNumber(32)
+  $core.int get ipv6TargetCount => $_getIZ(31);
+  @$pb.TagNumber(32)
+  set ipv6TargetCount($core.int v) {
+    $_setSignedInt32(31, v);
+  }
+
+  @$pb.TagNumber(32)
+  $core.bool hasIpv6TargetCount() => $_has(31);
+  @$pb.TagNumber(32)
+  void clearIpv6TargetCount() => clearField(32);
+
+  @$pb.TagNumber(33)
+  $core.String get ipv6ErrorType => $_getSZ(32);
+  @$pb.TagNumber(33)
+  set ipv6ErrorType($core.String v) {
+    $_setString(32, v);
+  }
+
+  @$pb.TagNumber(33)
+  $core.bool hasIpv6ErrorType() => $_has(32);
+  @$pb.TagNumber(33)
+  void clearIpv6ErrorType() => clearField(33);
+
+  @$pb.TagNumber(34)
+  $core.String get ipv6ErrorText => $_getSZ(33);
+  @$pb.TagNumber(34)
+  set ipv6ErrorText($core.String v) {
+    $_setString(33, v);
+  }
+
+  @$pb.TagNumber(34)
+  $core.bool hasIpv6ErrorText() => $_has(33);
+  @$pb.TagNumber(34)
+  void clearIpv6ErrorText() => clearField(34);
 }
 
 class IpInfo extends $pb.GeneratedMessage {

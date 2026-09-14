@@ -114,6 +114,14 @@ message OutboundInfo {
   double udp_loss = 24;
   int32 udp_jitter_ms = 25;
   int32 udp_penalty = 26;
+  string url_test_status = 27;
+  string ipv6_status = 28;
+  google.protobuf.Timestamp ipv6_checked_at = 29;
+  uint64 ipv6_generation = 30;
+  int32 ipv6_target_success = 31;
+  int32 ipv6_target_count = 32;
+  string ipv6_error_type = 33;
+  string ipv6_error_text = 34;
 }
 
 message IpInfo {
@@ -238,5 +246,4 @@ message LogRequest {
 
 message StopRequest{
 }
-
 

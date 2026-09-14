@@ -410,6 +410,8 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			Outbounds:            tags,
 			Strategy:             "lowest-delay",
 			DelayAcceptableRatio: 2,
+			IPv6Mode:             opt.IPv6Mode,
+			IPv6CapabilityTTL:    badoption.Duration(10 * time.Minute),
 			// URL:       opt.ConnectionTestUrl,
 			// URLs:      opt.ConnectionTestUrls,
 			// Interval:  badoption.Duration(opt.URLTestInterval.Duration()),
@@ -431,6 +433,8 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			Outbounds:            tags,
 			Strategy:             balancerStrategy,
 			DelayAcceptableRatio: 2,
+			IPv6Mode:             opt.IPv6Mode,
+			IPv6CapabilityTTL:    badoption.Duration(10 * time.Minute),
 			// URL:       opt.ConnectionTestUrl,
 			// URLs:      opt.ConnectionTestUrls,
 			// Interval:  badoption.Duration(opt.URLTestInterval.Duration()),
@@ -484,6 +488,8 @@ func setOutbounds(options *option.Options, input *option.Options, opt *HiddifyOp
 			Default:                   defaultSelect,
 			ZeonPreferDefault:         preferDefault,
 			InterruptExistConnections: PreserveExistingUserConnections,
+			IPv6Mode:                  opt.IPv6Mode,
+			IPv6CapabilityTTL:         badoption.Duration(10 * time.Minute),
 		},
 	}
 	outbounds = append([]option.Outbound{selector}, outbounds...)
@@ -558,19 +564,17 @@ func ensureBackendHealthConnectionTest(hopt *HiddifyOptions) {
 }
 
 func setExperimental(options *option.Options, hopt *HiddifyOptions) {
-	if hopt.EnableClashApi {
-		if hopt.ClashApiSecret == "" {
+	capabilityMonitoringRequired := hopt.IPv6Mode == option.DomainStrategy(C.DomainStrategyPreferIPv4) ||
+		hopt.IPv6Mode == option.DomainStrategy(C.DomainStrategyPreferIPv6) ||
+		hopt.IPv6Mode == option.DomainStrategy(C.DomainStrategyIPv6Only)
+	if hopt.EnableClashApi || capabilityMonitoringRequired {
+		if hopt.EnableClashApi && hopt.ClashApiSecret == "" {
 			hopt.ClashApiSecret = generateRandomString(16)
 		}
 		options.Experimental = &option.ExperimentalOptions{
 			UnifiedDelay: &option.UnifiedDelayOptions{
 				Enabled: true,
 			},
-			ClashAPI: &option.ClashAPIOptions{
-				ExternalController: fmt.Sprintf("%s:%d", "127.0.0.1", hopt.ClashApiPort),
-				Secret:             hopt.ClashApiSecret,
-			},
-
 			CacheFile: &option.CacheFileOptions{
 				Enabled:         true,
 				StoreWARPConfig: true,
@@ -578,20 +582,28 @@ func setExperimental(options *option.Options, hopt *HiddifyOptions) {
 			},
 
 			Monitoring: &option.MonitoringOptions{
-				URLs:             hopt.ConnectionTestUrls,
-				Interval:         badoption.Duration(hopt.URLTestInterval.Duration()),
-				DebounceWindow:   badoption.Duration(time.Millisecond * 500),
-				IdleTimeout:      badoption.Duration(hopt.URLTestInterval.Duration().Nanoseconds() * 3),
-				UDPProbeEnabled:  hopt.UDPProbeEnabled || parseEnvBool("ZEON_UDP_PROBE_ENABLED"),
-				UDPProbeEndpoint: envOrDefault("ZEON_UDP_PROBE_ENDPOINT", hopt.UDPProbeEndpoint),
-				UDPProbeSecret:   envOrDefault("ZEON_UDP_PROBE_SECRET", hopt.UDPProbeSecret),
-				UDPProbeCount:    hopt.UDPProbeCount,
-				UDPProbeSize:     hopt.UDPProbeSize,
-				UDPProbeInterval: badoption.Duration(time.Duration(hopt.UDPProbeIntervalMs) * time.Millisecond),
-				UDPProbeTimeout:  badoption.Duration(time.Duration(hopt.UDPProbeTimeoutMs) * time.Millisecond),
-				UDPProbeCooldown: badoption.Duration(time.Duration(hopt.UDPProbeCooldownSec) * time.Second),
-				UDPProbeTopN:     hopt.UDPProbeTopN,
+				URLs:              hopt.ConnectionTestUrls,
+				Interval:          badoption.Duration(hopt.URLTestInterval.Duration()),
+				DebounceWindow:    badoption.Duration(time.Millisecond * 500),
+				IdleTimeout:       badoption.Duration(hopt.URLTestInterval.Duration().Nanoseconds() * 3),
+				UDPProbeEnabled:   hopt.UDPProbeEnabled || parseEnvBool("ZEON_UDP_PROBE_ENABLED"),
+				UDPProbeEndpoint:  envOrDefault("ZEON_UDP_PROBE_ENDPOINT", hopt.UDPProbeEndpoint),
+				UDPProbeSecret:    envOrDefault("ZEON_UDP_PROBE_SECRET", hopt.UDPProbeSecret),
+				UDPProbeCount:     hopt.UDPProbeCount,
+				UDPProbeSize:      hopt.UDPProbeSize,
+				UDPProbeInterval:  badoption.Duration(time.Duration(hopt.UDPProbeIntervalMs) * time.Millisecond),
+				UDPProbeTimeout:   badoption.Duration(time.Duration(hopt.UDPProbeTimeoutMs) * time.Millisecond),
+				UDPProbeCooldown:  badoption.Duration(time.Duration(hopt.UDPProbeCooldownSec) * time.Second),
+				UDPProbeTopN:      hopt.UDPProbeTopN,
+				IPv6Mode:          hopt.IPv6Mode,
+				IPv6CapabilityTTL: badoption.Duration(10 * time.Minute),
 			},
+		}
+		if hopt.EnableClashApi {
+			options.Experimental.ClashAPI = &option.ClashAPIOptions{
+				ExternalController: fmt.Sprintf("%s:%d", "127.0.0.1", hopt.ClashApiPort),
+				Secret:             hopt.ClashApiSecret,
+			}
 		}
 	}
 }

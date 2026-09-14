@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/common/monitoring"
 	"github.com/sagernet/sing-box/common/urltest"
+	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 )
 
@@ -38,6 +40,9 @@ type SmartActive struct {
 	diagnosticHistory    map[string]*adapter.URLTestHistory
 	diagnosticGeneration uint64
 	diagnosticSource     string
+	ipv6Mode             C.DomainStrategy
+	ipv6CapabilityTTL    time.Duration
+	latestHistory        map[string]*adapter.URLTestHistory
 }
 
 type smartEvidence struct {
@@ -70,14 +75,21 @@ const (
 
 var _ Strategy = (*SmartActive)(nil)
 
-func NewSmartActive(outbounds []adapter.Outbound, _ option.BalancerOutboundOptions) *SmartActive {
+func NewSmartActive(outbounds []adapter.Outbound, options option.BalancerOutboundOptions) *SmartActive {
+	ipv6TTL := options.IPv6CapabilityTTL.Build()
+	if ipv6TTL <= 0 {
+		ipv6TTL = monitoring.DefaultIPv6CapabilityTTL
+	}
 	return &SmartActive{
-		outbounds:       outbounds,
-		bootstrap:       true,
-		startedAt:       time.Now(),
-		evidence:        make(map[string]*smartEvidence),
-		avoidUntil:      make(map[string]time.Time),
-		lastFullHistory: make(map[string]*adapter.URLTestHistory),
+		outbounds:         outbounds,
+		bootstrap:         true,
+		startedAt:         time.Now(),
+		evidence:          make(map[string]*smartEvidence),
+		avoidUntil:        make(map[string]time.Time),
+		lastFullHistory:   make(map[string]*adapter.URLTestHistory),
+		latestHistory:     make(map[string]*adapter.URLTestHistory),
+		ipv6Mode:          C.DomainStrategy(options.IPv6Mode),
+		ipv6CapabilityTTL: ipv6TTL,
 		decision: smartDecision{
 			action: "wait",
 			reason: "startup_waiting_for_verified_batch",
@@ -96,9 +108,12 @@ func (s *SmartActive) Now() string {
 	return s.active.Tag()
 }
 
-func (s *SmartActive) Select(_ adapter.InboundContext, _ string, _ bool) adapter.Outbound {
+func (s *SmartActive) Select(metadata adapter.InboundContext, _ string, _ bool) adapter.Outbound {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.active != nil && !monitoring.IPv6TrafficAllowed(s.ipv6Mode, metadata, s.latestHistory[s.active.Tag()], time.Now(), s.ipv6CapabilityTTL) {
+		return nil
+	}
 	return s.active
 }
 
@@ -128,6 +143,7 @@ func (s *SmartActive) updateOutboundsInfo(history map[string]*adapter.URLTestHis
 		fullGenerationChanged = s.rememberFullGeneration(history, generation)
 	}
 	s.updateEvidence(history)
+	s.latestHistory = cloneSmartActiveHistoryMap(history)
 	current := s.active
 	decisionHistory := history
 	decisionSource := smartActiveHistorySource(history, generation)
@@ -541,6 +557,12 @@ func (s *SmartActive) bestCandidate(history map[string]*adapter.URLTestHistory, 
 	candidates := append([]adapter.Outbound(nil), s.outbounds...)
 	sort.SliceStable(candidates, func(i, j int) bool {
 		left, right := history[candidates[i].Tag()], history[candidates[j].Tag()]
+		if s.ipv6Mode == C.DomainStrategyPreferIPv6 {
+			leftIPv6, rightIPv6 := s.ipv6Preferred(left, generation), s.ipv6Preferred(right, generation)
+			if leftIPv6 != rightIPv6 {
+				return leftIPv6
+			}
+		}
 		leftScore, rightScore := getHealthScore(candidates[i].Tag(), left), getHealthScore(candidates[j].Tag(), right)
 		if leftScore != rightScore {
 			return leftScore > rightScore
@@ -601,6 +623,12 @@ func (s *SmartActive) bestSignificantCandidate(
 	candidates := append([]adapter.Outbound(nil), s.outbounds...)
 	sort.SliceStable(candidates, func(i, j int) bool {
 		left, right := candidates[i], candidates[j]
+		if s.ipv6Mode == C.DomainStrategyPreferIPv6 {
+			leftIPv6, rightIPv6 := s.ipv6Preferred(history[left.Tag()], generation), s.ipv6Preferred(history[right.Tag()], generation)
+			if leftIPv6 != rightIPv6 {
+				return leftIPv6
+			}
+		}
 		leftScore := getHealthScore(left.Tag(), history[left.Tag()])
 		rightScore := getHealthScore(right.Tag(), history[right.Tag()])
 		if leftScore != rightScore {
@@ -650,7 +678,7 @@ func (s *SmartActive) bestSignificantCandidate(
 			rejectionReason = "candidate_recently_avoided_waiting_recovery"
 			continue
 		}
-		better, reason := significantSmartActiveAdvantage(currentTag, candidateTag, history, currentState)
+		better, reason := s.significantSmartActiveAdvantage(currentTag, candidateTag, history, currentState, generation)
 		if better {
 			return candidate, comparisonTag, reason, false
 		}
@@ -683,6 +711,21 @@ func (s *SmartActive) bestProgressiveBatchCandidate(history map[string]*adapter.
 	if len(eligible) == 0 {
 		return nil
 	}
+	if s.ipv6Mode == C.DomainStrategyPreferIPv6 {
+		ipv6Eligible := make([]adapter.Outbound, 0, len(eligible))
+		for _, candidate := range eligible {
+			if s.ipv6Preferred(history[candidate.Tag()], generation) {
+				ipv6Eligible = append(ipv6Eligible, candidate)
+			}
+		}
+		if len(ipv6Eligible) > 0 {
+			eligible = ipv6Eligible
+			bestScore = 0
+			for _, candidate := range eligible {
+				bestScore = max(bestScore, getHealthScore(candidate.Tag(), history[candidate.Tag()]))
+			}
+		}
+	}
 
 	// A small quality-score difference must not pin the route to a dramatically
 	// slower early-batch winner. Start with the highest-quality candidate, then
@@ -692,6 +735,12 @@ func (s *SmartActive) bestProgressiveBatchCandidate(history map[string]*adapter.
 	// the deterministic tie-breaker so profile list order has no effect.
 	sort.SliceStable(eligible, func(i, j int) bool {
 		left, right := eligible[i], eligible[j]
+		if s.ipv6Mode == C.DomainStrategyPreferIPv6 {
+			leftIPv6, rightIPv6 := s.ipv6Preferred(history[left.Tag()], generation), s.ipv6Preferred(history[right.Tag()], generation)
+			if leftIPv6 != rightIPv6 {
+				return leftIPv6
+			}
+		}
 		leftScore := getHealthScore(left.Tag(), history[left.Tag()])
 		rightScore := getHealthScore(right.Tag(), history[right.Tag()])
 		if leftScore != rightScore {
@@ -830,8 +879,11 @@ func preferFallbackOutbound(candidate, current adapter.Outbound, history map[str
 	return getModifiedDelay(candidateHistory) < getModifiedDelay(currentHistory)
 }
 
-func significantSmartActiveAdvantage(currentTag, candidateTag string, history map[string]*adapter.URLTestHistory, currentState string) (bool, string) {
+func (s *SmartActive) significantSmartActiveAdvantage(currentTag, candidateTag string, history map[string]*adapter.URLTestHistory, currentState string, generation uint64) (bool, string) {
 	current, candidate := history[currentTag], history[candidateTag]
+	if s.ipv6Mode == C.DomainStrategyPreferIPv6 && s.ipv6Preferred(candidate, generation) && !s.ipv6Preferred(current, generation) {
+		return true, "ipv6_capable_candidate_preferred"
+	}
 	if current == nil || !current.Success {
 		return true, "current_unhealthy_candidate_fresh"
 	}
@@ -1419,6 +1471,9 @@ func (s *SmartActive) candidateStatus(tag string, h *adapter.URLTestHistory, gen
 	if h.IsFromCache {
 		return smartCandidateStatus{reason: "cached_history"}
 	}
+	if s.ipv6Mode == C.DomainStrategyIPv6Only && !s.ipv6Preferred(h, generation) {
+		return smartCandidateStatus{reason: "ipv6_capability_required"}
+	}
 	if !h.Success {
 		if h.ErrorType != "" {
 			return smartCandidateStatus{reason: "failed_" + h.ErrorType}
@@ -1445,4 +1500,8 @@ func (s *SmartActive) candidateStatus(tag string, h *adapter.URLTestHistory, gen
 		return smartCandidateStatus{reason: "bad_health_state"}
 	}
 	return smartCandidateStatus{ok: true}
+}
+
+func (s *SmartActive) ipv6Preferred(history *adapter.URLTestHistory, generation uint64) bool {
+	return history != nil && history.IPv6Generation == generation && monitoring.IPv6CapabilityFresh(history, time.Now(), s.ipv6CapabilityTTL)
 }

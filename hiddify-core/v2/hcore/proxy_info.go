@@ -101,6 +101,15 @@ func (h *HiddifyInstance) GetProxyInfo(url_test_history *adapter.URLTestHistory,
 				PostalCode:  url_test_history.IpInfo.PostalCode,
 			}
 		}
+		out.Ipv6Status = url_test_history.IPv6Status
+		if !url_test_history.IPv6CheckedAt.IsZero() {
+			out.Ipv6CheckedAt = timestamppb.New(url_test_history.IPv6CheckedAt)
+		}
+		out.Ipv6Generation = url_test_history.IPv6Generation
+		out.Ipv6TargetSuccess = int32(url_test_history.IPv6TargetSuccess)
+		out.Ipv6TargetCount = int32(url_test_history.IPv6TargetCount)
+		out.Ipv6ErrorType = url_test_history.IPv6ErrorType
+		out.Ipv6ErrorText = url_test_history.IPv6ErrorText
 
 	}
 

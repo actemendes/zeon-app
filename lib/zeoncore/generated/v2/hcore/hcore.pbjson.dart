@@ -247,6 +247,13 @@ const OutboundInfo$json = {
     {'1': 'udp_jitter_ms', '3': 25, '4': 1, '5': 5, '10': 'udpJitterMs'},
     {'1': 'udp_penalty', '3': 26, '4': 1, '5': 5, '10': 'udpPenalty'},
     {'1': 'url_test_status', '3': 27, '4': 1, '5': 9, '10': 'urlTestStatus'},
+    {'1': 'ipv6_status', '3': 28, '4': 1, '5': 9, '10': 'ipv6Status'},
+    {'1': 'ipv6_checked_at', '3': 29, '4': 1, '5': 11, '6': '.google.protobuf.Timestamp', '10': 'ipv6CheckedAt'},
+    {'1': 'ipv6_generation', '3': 30, '4': 1, '5': 4, '10': 'ipv6Generation'},
+    {'1': 'ipv6_target_success', '3': 31, '4': 1, '5': 5, '10': 'ipv6TargetSuccess'},
+    {'1': 'ipv6_target_count', '3': 32, '4': 1, '5': 5, '10': 'ipv6TargetCount'},
+    {'1': 'ipv6_error_type', '3': 33, '4': 1, '5': 9, '10': 'ipv6ErrorType'},
+    {'1': 'ipv6_error_text', '3': 34, '4': 1, '5': 9, '10': 'ipv6ErrorText'},
   ],
   '8': [
     {'1': '_ipinfo'},
@@ -274,8 +281,13 @@ final $typed_data.Uint8List outboundInfoDescriptor =
         'cHJvYmVfYXZhaWxhYmxlGBcgASgIUhF1ZHBQcm9iZUF2YWlsYWJsZRIZCgh1ZHBfbG9zcxgYIA'
         'EoAVIHdWRwTG9zcxIiCg11ZHBfaml0dGVyX21zGBkgASgFUgt1ZHBKaXR0ZXJNcxIfCgt1ZHBf'
         'cGVuYWx0eRgaIAEoBVIKdWRwUGVuYWx0eRImCg91cmxfdGVzdF9zdGF0dXMYGyABKAlSDXVybF'
-        'Rlc3RTdGF0dXNCCQoHX2lwaW5mb0IVChNfZ3JvdXBfc2VsZWN0ZWRfdGFnQh0KG19ncm91cF9z'
-        'ZWxlY3RlZF90YWdfZGlzcGxheQ==');
+        'Rlc3RTdGF0dXMSHwoLaXB2Nl9zdGF0dXMYHCABKAlSCmlwdjZTdGF0dXMSQgoPaXB2Nl9jaGVj'
+        'a2VkX2F0GB0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFINaXB2NkNoZWNrZWRBdB'
+        'InCg9pcHY2X2dlbmVyYXRpb24YHiABKARSDmlwdjZHZW5lcmF0aW9uEi4KE2lwdjZfdGFyZ2V0'
+        'X3N1Y2Nlc3MYHyABKAVSEWlwdjZUYXJnZXRTdWNjZXNzEioKEWlwdjZfdGFyZ2V0X2NvdW50GC'
+        'AgASgFUg9pcHY2VGFyZ2V0Q291bnQSJgoPaXB2Nl9lcnJvcl90eXBlGCEgASgJUg1pcHY2RXJy'
+        'b3JUeXBlEiYKD2lwdjZfZXJyb3JfdGV4dBgiIAEoCVINaXB2NkVycm9yVGV4dEIJCgdfaXBpbm'
+        'ZvQhUKE19ncm91cF9zZWxlY3RlZF90YWdCHQobX2dyb3VwX3NlbGVjdGVkX3RhZ19kaXNwbGF5');
 
 @$core.Deprecated('Use ipInfoDescriptor instead')
 const IpInfo$json = {
@@ -431,7 +443,7 @@ final $typed_data.Uint8List parseResponseDescriptor =
         'NlQ29kZVIMcmVzcG9uc2VDb2RlEhgKB2NvbnRlbnQYAiABKAlSB2NvbnRlbnQSGAoHbWVzc2Fn'
         'ZRgDIAEoCVIHbWVzc2FnZQ==');
 
-@$core.Deprecated('Use ChangeHiddifySettingsRequestDescriptor instead')
+@$core.Deprecated('Use changeHiddifySettingsRequestDescriptor instead')
 const ChangeHiddifySettingsRequest$json = {
   '1': 'ChangeHiddifySettingsRequest',
   '2': [
@@ -440,7 +452,7 @@ const ChangeHiddifySettingsRequest$json = {
 };
 
 /// Descriptor for `ChangeHiddifySettingsRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List ChangeHiddifySettingsRequestDescriptor =
+final $typed_data.Uint8List changeHiddifySettingsRequestDescriptor =
     $convert.base64Decode('ChxDaGFuZ2VIaWRkaWZ5U2V0dGluZ3NSZXF1ZXN0EjIKFWhpZGRpZnlfc2V0dGluZ3NfanNvbh'
         'gBIAEoCVITaGlkZGlmeVNldHRpbmdzSnNvbg==');
 

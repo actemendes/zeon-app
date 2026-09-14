@@ -1,15 +1,18 @@
 import 'dart:math';
+
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/failures.dart';
 import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/features/proxy/overview/proxies_overview_notifier.dart';
 import 'package:zeon/features/proxy/widget/proxy_tile.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
   const ProxiesOverviewPage({super.key});
@@ -22,6 +25,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
 
     final proxies = ref.watch(proxiesOverviewNotifierProvider);
     final sortBy = ref.watch(proxiesSortNotifierProvider);
+    final ipv6Mode = ref.watch(ConfigOptions.ipv6Mode);
 
     // final selectActiveProxyMutation = useMutation(
     //   initialOnFailure: (error) => CustomToast.error(t.presentShortError(error)).show(context),
@@ -61,7 +65,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                     itemCount: group.items.length,
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: crossAxisCount,
-                      mainAxisExtent: 64,
+                      mainAxisExtent: ipv6Mode == IPv6Mode.disable ? 64 : 76,
                       mainAxisSpacing: 8,
                       crossAxisSpacing: 8,
                     ),
@@ -74,11 +78,22 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                           : null;
                       final isActive = proxy.tag == group.selected || (isAutoSelected && proxy.tag == realAutoTag);
                       final displayInfo = resolveOutboundDisplayInfo(proxy, allOutbounds: group.items);
+                      final ipv6Status = proxy.isGroup ? "not_tested" : proxy.ipv6Status;
+                      final ipv6StatusText = ipv6Mode == IPv6Mode.disable
+                          ? null
+                          : switch (ipv6Status) {
+                              "supported" => t.pages.proxies.ipv6.supported,
+                              "unavailable" => t.pages.proxies.ipv6.unavailable,
+                              "checking" => t.pages.proxies.ipv6.checking,
+                              _ => t.pages.proxies.ipv6.notTested,
+                            };
                       return ProxyTile(
                         proxy,
                         selected: group.selected == proxy.tag,
                         isActive: isActive,
                         countryCode: displayInfo.countryCode,
+                        ipv6Status: ipv6Status,
+                        ipv6StatusText: ipv6StatusText,
                         onTap: () async {
                           await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
                           // if (selectActiveProxyMutation.state.isInProgress) return;

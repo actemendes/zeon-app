@@ -184,6 +184,8 @@ func TestActiveProbePresentationMergesLatestRealUserEvidence(t *testing.T) {
 		URLTestStatus: urltest.StatusSuccess, HealthScore: 70, CheckGeneration: 7,
 		PingReady: true, QualityReady: true, SpeedReady: true, CombinedReady: true,
 		RealUserPenalty: 18, DegradationPoints: 34, StabilityPoints: 22, VolatilityPenalty: 9,
+		IPv6Status: IPv6StatusSupported, IPv6CheckedAt: now, IPv6Generation: 7,
+		IPv6TargetSuccess: 1, IPv6TargetCount: 2,
 	})
 	state := monitor.outbounds["active"]
 	result := ActiveProbeResult{
@@ -205,6 +207,10 @@ func TestActiveProbePresentationMergesLatestRealUserEvidence(t *testing.T) {
 	if presentation.RealUserPenalty != 18 || presentation.DegradationPoints != 34 ||
 		presentation.StabilityPoints != 22 || presentation.VolatilityPenalty != 9 {
 		t.Fatalf("latest real-user evidence was overwritten: %+v", presentation)
+	}
+	if presentation.IPv6Status != IPv6StatusSupported || presentation.IPv6CheckedAt != now ||
+		presentation.IPv6Generation != 7 || presentation.IPv6TargetSuccess != 1 || presentation.IPv6TargetCount != 2 {
+		t.Fatalf("verified IPv6 capability was overwritten: %+v", presentation)
 	}
 	if presentation.HealthScore >= 100 {
 		t.Fatalf("health score ignored accumulated evidence: %+v", presentation)

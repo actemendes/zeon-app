@@ -3,9 +3,9 @@ import 'package:zeon/features/proxy/active/ip_widget.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:zeon/gen/fonts.gen.dart';
-import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 class ProxyTile extends StatelessWidget with PresLogger {
   const ProxyTile(
@@ -14,6 +14,8 @@ class ProxyTile extends StatelessWidget with PresLogger {
     required this.selected,
     required this.isActive,
     this.countryCode,
+    this.ipv6Status,
+    this.ipv6StatusText,
     required this.onTap,
   });
 
@@ -21,6 +23,8 @@ class ProxyTile extends StatelessWidget with PresLogger {
   final bool selected;
   final bool isActive;
   final String? countryCode;
+  final String? ipv6Status;
+  final String? ipv6StatusText;
   final GestureTapCallback? onTap;
 
   @override
@@ -43,25 +47,27 @@ class ProxyTile extends StatelessWidget with PresLogger {
       tileColor: tileColor,
       selected: selected,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-      minTileHeight: 64,
+      minTileHeight: ipv6StatusText == null ? 64 : 76,
       minLeadingWidth: 40,
       horizontalTitleGap: 12,
-      title: SizedBox(
-        height: 40,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            formatOutboundTitle(proxy),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: primaryColor,
-              fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
-            ),
-          ),
+      title: Text(
+        formatOutboundTitle(proxy),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodyLarge?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: primaryColor,
+          fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
         ),
       ),
+      subtitle: ipv6StatusText == null
+          ? null
+          : Text(
+              ipv6StatusText!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(color: selected ? primaryColor : _ipv6StatusColor(theme)),
+            ),
       leading: GestureDetector(
         behavior: HitTestBehavior.opaque,
         excludeFromSemantics: true,
@@ -101,6 +107,13 @@ class ProxyTile extends StatelessWidget with PresLogger {
       onTap: onTap,
     );
   }
+
+  Color _ipv6StatusColor(ThemeData theme) => switch (ipv6Status) {
+    "supported" => theme.brightness == Brightness.dark ? Colors.lightGreen : Colors.green,
+    "unavailable" => theme.colorScheme.error,
+    "checking" => theme.colorScheme.primary,
+    _ => theme.colorScheme.onSurfaceVariant,
+  };
 
   Color delayColor(BuildContext context, int delay) {
     if (Theme.of(context).brightness == Brightness.dark) {

@@ -117,6 +117,12 @@
       "empty": "Нет доступных серверов",
       "activeProxy": "Активный сервер",
       "unknownIp": "Неизвестный IP",
+      "ipv6": {
+        "supported": "IPv6 ✓",
+        "unavailable": "IPv6 недоступен",
+        "notTested": "IPv6 не проверен",
+        "checking": "Проверка IPv6…"
+      },
       "sortOptions": {
         "unsorted": "По умолчанию",
         "name": "По алфавиту",

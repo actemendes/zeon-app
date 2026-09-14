@@ -245,6 +245,16 @@ func mergeActiveProbePresentation(probe, ranking adapter.URLTestHistory) adapter
 	presentation.VolatilityPenalty = ranking.VolatilityPenalty
 	presentation.StabilityPoints = ranking.StabilityPoints
 	presentation.DegradationPoints = ranking.DegradationPoints
+	// An isolated active latency probe does not perform the strict IPv6
+	// capability check. Keep the last independently verified capability instead
+	// of turning a valid proof into an implicit "not tested" result.
+	presentation.IPv6Status = ranking.IPv6Status
+	presentation.IPv6CheckedAt = ranking.IPv6CheckedAt
+	presentation.IPv6Generation = ranking.IPv6Generation
+	presentation.IPv6TargetSuccess = ranking.IPv6TargetSuccess
+	presentation.IPv6TargetCount = ranking.IPv6TargetCount
+	presentation.IPv6ErrorType = ranking.IPv6ErrorType
+	presentation.IPv6ErrorText = ranking.IPv6ErrorText
 	presentation.CheckGeneration = 0
 	presentation.PingReady = true
 	presentation.QualityReady = true

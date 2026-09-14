@@ -10,6 +10,8 @@ type BalancerOutboundOptions struct {
 	DelayAcceptableRatio      float64            `json:"delay_acceptable_ratio,omitempty"`
 	TTL                       badoption.Duration `json:"ttl,omitempty"`
 	MaxRetry                  int                `json:"max_retry,omitempty"` //not implemented yet
+	IPv6Mode                  DomainStrategy     `json:"ipv6_mode,omitempty"`
+	IPv6CapabilityTTL         badoption.Duration `json:"ipv6_capability_ttl,omitempty"`
 	// Smart Active fault injection is compiled in only with the
 	// smart_active_debug build tag. Release builds intentionally ignore these
 	// fields even if a hand-written config contains them.

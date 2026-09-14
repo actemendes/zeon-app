@@ -113,6 +113,12 @@
       "empty": "No proxies available",
       "activeProxy": "Active proxy",
       "unknownIp": "Unknown IP",
+      "ipv6": {
+        "supported": "IPv6 ✓",
+        "unavailable": "IPv6 unavailable",
+        "notTested": "IPv6 not checked",
+        "checking": "Checking IPv6…"
+      },
       "sortOptions": {
         "unsorted": "Default",
         "name": "Alphabetically",

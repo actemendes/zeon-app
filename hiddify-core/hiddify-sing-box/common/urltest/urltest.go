@@ -128,6 +128,13 @@ func mergeURLTestHistory(old *adapter.URLTestHistory, history *adapter.URLTestHi
 	old.SpeedReady = history.SpeedReady
 	old.UDPReady = history.UDPReady
 	old.CombinedReady = history.CombinedReady
+	old.IPv6Status = history.IPv6Status
+	old.IPv6CheckedAt = history.IPv6CheckedAt
+	old.IPv6Generation = history.IPv6Generation
+	old.IPv6TargetSuccess = history.IPv6TargetSuccess
+	old.IPv6TargetCount = history.IPv6TargetCount
+	old.IPv6ErrorType = history.IPv6ErrorType
+	old.IPv6ErrorText = history.IPv6ErrorText
 }
 
 func (s *HistoryStorage) AddOnlyIpToHistory(tag string, history *adapter.URLTestHistory) {

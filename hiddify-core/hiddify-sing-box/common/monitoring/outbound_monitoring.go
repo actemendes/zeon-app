@@ -68,28 +68,31 @@ func Get(ctx context.Context) *OutboundMonitoring {
 
 // OutboundMonitoring orchestrates URL testing and traffic sampling for outbounds.
 type OutboundMonitoring struct {
-	endpointManager  adapter.EndpointManager
-	outboundManager  adapter.OutboundManager
-	logger           log.ContextLogger
-	cache            adapter.CacheFile
-	ctx              context.Context
-	cancel           context.CancelFunc
-	tag              string
-	pause            pause.Manager
-	pauseCallback    *list.Element[pause.Callback]
-	started          atomic.Bool
-	urls             []string
-	currentLinkIndex atomic.Uint32
-	access           sync.Mutex
-	idleTimeout      time.Duration
-	lastActive       common.TypedValue[time.Time]
-	workersRunning   atomic.Bool
-	mainInterval     time.Duration
-	debounceWindow   time.Duration
-	urlTestTimeout   time.Duration
-	workersCount     int
-	history          adapter.URLTestHistoryStorage
-	mainTicker       *time.Ticker
+	endpointManager   adapter.EndpointManager
+	outboundManager   adapter.OutboundManager
+	logger            log.ContextLogger
+	cache             adapter.CacheFile
+	ctx               context.Context
+	cancel            context.CancelFunc
+	tag               string
+	pause             pause.Manager
+	pauseCallback     *list.Element[pause.Callback]
+	started           atomic.Bool
+	urls              []string
+	currentLinkIndex  atomic.Uint32
+	access            sync.Mutex
+	idleTimeout       time.Duration
+	lastActive        common.TypedValue[time.Time]
+	workersRunning    atomic.Bool
+	mainInterval      time.Duration
+	debounceWindow    time.Duration
+	urlTestTimeout    time.Duration
+	workersCount      int
+	history           adapter.URLTestHistoryStorage
+	mainTicker        *time.Ticker
+	ipv6Mode          C.DomainStrategy
+	ipv6ProbeURLs     []string
+	ipv6CapabilityTTL time.Duration
 
 	priorityQueue chan *testTask
 	normalQueue   chan *testTask
@@ -132,7 +135,33 @@ type OutboundMonitoring struct {
 
 // InterfaceUpdated implements [adapter.InterfaceUpdateListener].
 func (m *OutboundMonitoring) InterfaceUpdated() {
+	m.invalidateIPv6Capabilities("network_changed")
 	m.startCycleOnce()
+}
+
+func (m *OutboundMonitoring) invalidateIPv6Capabilities(reason string) {
+	for tag, state := range m.outbounds {
+		if _, isGroup := m.groups[tag]; isGroup {
+			continue
+		}
+		state.historyPublish.Lock()
+		state.mu.Lock()
+		state.history.IPv6Status = IPv6StatusNotTested
+		state.history.IPv6CheckedAt = time.Time{}
+		state.history.IPv6Generation = 0
+		state.history.IPv6TargetSuccess = 0
+		state.history.IPv6TargetCount = 0
+		state.history.IPv6ErrorType = ""
+		state.history.IPv6ErrorText = ""
+		history := state.history
+		groups := append([]string(nil), state.groupTags...)
+		state.mu.Unlock()
+		m.history.StoreURLTestHistory(tag, &history)
+		state.historyPublish.Unlock()
+		m.emitGroupEvent(groups)
+	}
+	m.cacheDirty.Store(true)
+	m.logger.Info("[IPv6CapabilityInvalidated] reason=", reason)
 }
 
 // Name implements [adapter.LifecycleService].
@@ -145,6 +174,12 @@ func (m *OutboundMonitoring) Name() string {
 // changing the coherent full-generation history used for ranking.
 func (m *OutboundMonitoring) OutboundsHistory(groupTag string) map[string]*adapter.URLTestHistory {
 	return m.outboundsHistory(groupTag, true)
+}
+
+// OutboundHistory returns the current presentation snapshot for one concrete
+// leaf. Callers must treat the returned value as immutable.
+func (m *OutboundMonitoring) OutboundHistory(tag string) *adapter.URLTestHistory {
+	return m.getURLTest(tag, true)
 }
 
 // OutboundsRankingHistory returns only coherent monitoring-cycle results.
@@ -287,6 +322,9 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 	if options.DebounceWindow <= 0 {
 		options.DebounceWindow = badoption.Duration(defaultDebounceWindow)
 	}
+	if options.IPv6CapabilityTTL <= 0 {
+		options.IPv6CapabilityTTL = badoption.Duration(DefaultIPv6CapabilityTTL)
+	}
 
 	cloned := append([]string(nil), options.URLs...)
 	if len(cloned) == 0 {
@@ -314,11 +352,14 @@ func NewOutboundMonitoring(ctx context.Context, logger log.ContextLogger, option
 
 		history: history,
 
-		mainInterval:   options.Interval.Build(),
-		idleTimeout:    options.IdleTimeout.Build(),
-		workersCount:   options.Workers,
-		urlTestTimeout: options.URLTestTimeout.Build(),
-		debounceWindow: options.DebounceWindow.Build(),
+		mainInterval:      options.Interval.Build(),
+		idleTimeout:       options.IdleTimeout.Build(),
+		workersCount:      options.Workers,
+		urlTestTimeout:    options.URLTestTimeout.Build(),
+		debounceWindow:    options.DebounceWindow.Build(),
+		ipv6Mode:          C.DomainStrategy(options.IPv6Mode),
+		ipv6ProbeURLs:     append([]string(nil), options.IPv6ProbeURLs...),
+		ipv6CapabilityTTL: options.IPv6CapabilityTTL.Build(),
 
 		priorityQueue:  make(chan *testTask, 1000),
 		normalQueue:    make(chan *testTask, 10000),
@@ -584,6 +625,16 @@ func (m *OutboundMonitoring) resetOutboundCheckState(tag string, generation uint
 		VolatilityPenalty: volatility,
 		PolicyPenalty:     policyPenalty,
 		CheckGeneration:   generation,
+		IPv6Status:        previousHistory.IPv6Status,
+		IPv6CheckedAt:     previousHistory.IPv6CheckedAt,
+		IPv6Generation:    previousHistory.IPv6Generation,
+		IPv6TargetSuccess: previousHistory.IPv6TargetSuccess,
+		IPv6TargetCount:   previousHistory.IPv6TargetCount,
+		IPv6ErrorType:     previousHistory.IPv6ErrorType,
+		IPv6ErrorText:     previousHistory.IPv6ErrorText,
+	}
+	if m.ipv6Mode != C.DomainStrategyIPv4Only && !IPv6CapabilityFresh(&previousHistory, now, m.ipv6CapabilityTTL) {
+		state.history.IPv6Status = IPv6StatusChecking
 	}
 	state.lastResultFromFullGeneration = false
 	state.lastResultSourceKnown = true
@@ -1824,6 +1875,15 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 	ctx, cancel := context.WithTimeout(parent, m.urlTestTimeout)
 	defer cancel()
 
+	type capabilityResult struct{ result ipv6ProbeResult }
+	var capability <-chan capabilityResult
+	if IPv6ModeRequiresCapability(m.ipv6Mode) {
+		capabilityChannel := make(chan capabilityResult, 1)
+		capability = capabilityChannel
+		go func() {
+			capabilityChannel <- capabilityResult{result: probeIPv6Capability(ctx, testedOutbound, m.ipv6ProbeURLs)}
+		}()
+	}
 	delay, err := urltest.URLTest(ctx, m.urls[idx], testedOutbound)
 	if err == nil && delay == 0 {
 		err = errors.New("URL test returned empty delay")
@@ -1839,6 +1899,17 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 		ErrorText:      errorText,
 		RuntimePenalty: runtimePenalty,
 		URLTestStatus:  urltest.ResultStatus(err == nil && delay > 0 && delay < TimeoutDelay),
+	}
+	if capability != nil {
+		result := (<-capability).result
+		his.IPv6Status = result.status
+		his.IPv6CheckedAt = result.checkedAt
+		his.IPv6TargetSuccess = result.successes
+		his.IPv6TargetCount = result.attempts
+		his.IPv6ErrorType = result.errorType
+		his.IPv6ErrorText = result.errorText
+	} else {
+		his.IPv6Status = IPv6StatusNotTested
 	}
 	if err != nil || delay == 0 || delay >= TimeoutDelay {
 		his.Delay = TimeoutDelay
@@ -2143,6 +2214,13 @@ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHi
 	state.history.QualityReady = true
 	state.history.SpeedReady = true
 	state.history.CombinedReady = true
+	state.history.IPv6Status = outcome.history.IPv6Status
+	state.history.IPv6CheckedAt = outcome.history.IPv6CheckedAt
+	state.history.IPv6Generation = outcome.cycleID
+	state.history.IPv6TargetSuccess = outcome.history.IPv6TargetSuccess
+	state.history.IPv6TargetCount = outcome.history.IPv6TargetCount
+	state.history.IPv6ErrorType = outcome.history.IPv6ErrorType
+	state.history.IPv6ErrorText = outcome.history.IPv6ErrorText
 	state.lastResultFromFullGeneration = outcome.fullGeneration
 	state.lastResultSourceKnown = true
 	applyProbeEvidenceWithRecovery(outcome.outboundTag, &state.history, previousHistory, outcome.fullGeneration)
@@ -2955,6 +3033,13 @@ func (m *OutboundMonitoring) loadHistory() *History {
 			his.SpeedReady = false
 			his.UDPReady = false
 			his.CombinedReady = false
+			his.IPv6Status = IPv6StatusNotTested
+			his.IPv6CheckedAt = time.Time{}
+			his.IPv6Generation = 0
+			his.IPv6TargetSuccess = 0
+			his.IPv6TargetCount = 0
+			his.IPv6ErrorType = ""
+			his.IPv6ErrorText = ""
 			state.mu.Lock()
 			state.history = *his
 			state.from_cache = true

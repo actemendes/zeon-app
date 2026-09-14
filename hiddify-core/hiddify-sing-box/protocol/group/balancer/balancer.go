@@ -13,6 +13,7 @@ import (
 	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/common/monitoring"
+	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -115,6 +116,7 @@ func (s *Balancer) Start() error {
 		}
 		outbounds = append(outbounds, detour)
 	}
+	s.availbleOutbounds = outbounds
 	switch s.options.Strategy {
 	case StrategyRoundRobin:
 		s.strategyFn = NewRoundRobin(outbounds, s.options)
@@ -665,9 +667,15 @@ func (s *Balancer) DialContext(ctx context.Context, network string, destination 
 	if metadata == nil {
 		metadata = &adapter.InboundContext{}
 	}
-	outbound := s.strategyFn.Select(*metadata, network, true)
+	if !metadata.Destination.IsValid() {
+		metadata.Destination = destination
+	}
+	outbound, bootstrap := s.selectOutbound(ctx, *metadata, network)
 	if outbound == nil {
-		return nil, E.New("missing supported outbound")
+		return nil, s.missingOutboundError(*metadata)
+	}
+	if !bootstrap && !s.ipv6TrafficAllowed(*metadata, outbound) {
+		return nil, s.missingOutboundError(*metadata)
 	}
 	if metadata != nil {
 		metadata.SetRealOutbound(outbound.Tag())
@@ -691,9 +699,15 @@ func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 	if metadata == nil {
 		metadata = &adapter.InboundContext{}
 	}
-	outbound := s.strategyFn.Select(*metadata, N.NetworkUDP, true)
+	if !metadata.Destination.IsValid() {
+		metadata.Destination = destination
+	}
+	outbound, bootstrap := s.selectOutbound(ctx, *metadata, N.NetworkUDP)
 	if outbound == nil {
-		return nil, E.New("missing supported outbound")
+		return nil, s.missingOutboundError(*metadata)
+	}
+	if !bootstrap && !s.ipv6TrafficAllowed(*metadata, outbound) {
+		return nil, s.missingOutboundError(*metadata)
 	}
 	if metadata != nil {
 		metadata.SetRealOutbound(outbound.Tag())
@@ -713,8 +727,13 @@ func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 
 func (s *Balancer) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	ctx = interrupt.ContextWithIsExternalConnection(ctx)
-	selected := s.strategyFn.Select(metadata, metadata.Network, true)
-	if selected == nil {
+	selected, bootstrap := s.selectOutbound(ctx, metadata, metadata.Network)
+	if selected == nil || !bootstrap && !s.ipv6TrafficAllowed(metadata, selected) {
+		err := s.missingOutboundError(metadata)
+		conn.Close()
+		if onClose != nil {
+			onClose(err)
+		}
 		return
 	}
 	metadata.SetRealOutbound(selected.Tag())
@@ -728,8 +747,13 @@ func (s *Balancer) NewConnectionEx(ctx context.Context, conn net.Conn, metadata 
 
 func (s *Balancer) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	ctx = interrupt.ContextWithIsExternalConnection(ctx)
-	selected := s.strategyFn.Select(metadata, metadata.Network, true)
-	if selected == nil {
+	selected, bootstrap := s.selectOutbound(ctx, metadata, metadata.Network)
+	if selected == nil || !bootstrap && !s.ipv6TrafficAllowed(metadata, selected) {
+		err := s.missingOutboundError(metadata)
+		conn.Close()
+		if onClose != nil {
+			onClose(err)
+		}
 		return
 	}
 	metadata.SetRealOutbound(selected.Tag())
@@ -743,9 +767,48 @@ func (s *Balancer) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn,
 
 func (s *Balancer) NewDirectRouteConnection(metadata adapter.InboundContext, routeContext tun.DirectRouteContext, timeout time.Duration) (tun.DirectRouteDestination, error) {
 	selected := s.strategyFn.Select(metadata, metadata.Network, true)
-	if selected == nil {
-		return nil, E.New(metadata.Network, " is not supported by outbound: ")
+	if selected == nil || !s.ipv6TrafficAllowed(metadata, selected) {
+		return nil, s.missingOutboundError(metadata)
 	}
 	metadata.SetRealOutbound(selected.Tag())
 	return selected.(adapter.DirectRouteOutbound).NewDirectRouteConnection(metadata, routeContext, timeout)
+}
+
+func (s *Balancer) selectOutbound(ctx context.Context, metadata adapter.InboundContext, network string) (adapter.Outbound, bool) {
+	if !urltest.IsIPv6CapabilityBootstrap(ctx) {
+		return s.strategyFn.Select(metadata, network, true), false
+	}
+	if current := s.strategyFn.Now(); current != "" {
+		for _, candidate := range s.availbleOutbounds {
+			if candidate.Tag() == current {
+				return candidate, true
+			}
+		}
+	}
+	if len(s.availbleOutbounds) > 0 {
+		return s.availbleOutbounds[0], true
+	}
+	return nil, true
+}
+
+func (s *Balancer) ipv6TrafficAllowed(metadata adapter.InboundContext, selected adapter.Outbound) bool {
+	if s.monitor == nil {
+		return monitoring.IPv6TrafficAllowed(C.DomainStrategy(s.options.IPv6Mode), metadata, nil, time.Now(), s.options.IPv6CapabilityTTL.Build())
+	}
+	tag := selected.Tag()
+	if group, ok := selected.(adapter.OutboundGroup); ok {
+		tag = group.Now()
+	}
+	history := s.monitor.OutboundHistory(tag)
+	return monitoring.IPv6TrafficAllowed(C.DomainStrategy(s.options.IPv6Mode), metadata, history, time.Now(), s.options.IPv6CapabilityTTL.Build())
+}
+
+func (s *Balancer) missingOutboundError(metadata adapter.InboundContext) error {
+	if C.DomainStrategy(s.options.IPv6Mode) == C.DomainStrategyIPv6Only {
+		return E.New("IPv6-only: no currently verified IPv6 egress outbound")
+	}
+	if metadata.IPVersion == 6 || metadata.Destination.Addr.Is6() && !metadata.Destination.Addr.Is4In6() {
+		return E.New("IPv6 egress is not currently verified for the selected outbound")
+	}
+	return E.New("missing supported outbound")
 }

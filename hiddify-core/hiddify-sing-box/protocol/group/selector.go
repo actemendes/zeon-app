@@ -12,6 +12,7 @@ import (
 	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/common/monitoring"
+	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -49,6 +50,8 @@ type Selector struct {
 	interruptGroup               *interrupt.Group
 	interruptExternalConnections bool
 	sessionGeneration            string
+	ipv6Mode                     C.DomainStrategy
+	ipv6CapabilityTTL            time.Duration
 }
 
 func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.SelectorOutboundOptions) (adapter.Outbound, error) {
@@ -65,6 +68,8 @@ func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextL
 		interruptGroup:               interrupt.NewGroup(),
 		interruptExternalConnections: options.InterruptExistConnections,
 		sessionGeneration:            os.Getenv("ZEON_SESSION_GENERATION"),
+		ipv6Mode:                     C.DomainStrategy(options.IPv6Mode),
+		ipv6CapabilityTTL:            options.IPv6CapabilityTTL.Build(),
 	}
 	if len(outbound.tags) == 0 {
 		return nil, E.New("missing tags")
@@ -235,23 +240,65 @@ func (s *Selector) pingSelected() {
 	}
 }
 
-func (s *Selector) connectionOutbound() adapter.Outbound {
+func (s *Selector) connectionOutbound(ctx context.Context, metadata adapter.InboundContext) (adapter.Outbound, error) {
 	selected := s.selected.Load()
 	group, isGroup := selected.(adapter.OutboundGroup)
 	if !isGroup || group.Now() != "" {
 		s.transitionFallback.Store(nil)
-		return selected
+		return s.capabilityCheckedOutbound(ctx, selected, metadata)
 	}
 	fallback := s.transitionFallback.Load()
 	if fallback != nil && common.Contains(group.All(), fallback.Tag()) {
-		return fallback
+		return s.capabilityCheckedOutbound(ctx, fallback, metadata)
 	}
-	return selected
+	return s.capabilityCheckedOutbound(ctx, selected, metadata)
+}
+
+func (s *Selector) capabilityCheckedOutbound(ctx context.Context, selected adapter.Outbound, metadata adapter.InboundContext) (adapter.Outbound, error) {
+	if selected == nil {
+		return nil, E.New("missing selected outbound")
+	}
+	if urltest.IsIPv6CapabilityBootstrap(ctx) {
+		return selected, nil
+	}
+	if s.ipv6Mode == C.DomainStrategyAsIS {
+		return selected, nil
+	}
+	if s.ipv6Mode == C.DomainStrategyIPv4Only {
+		if monitoring.IPv6TrafficAllowed(s.ipv6Mode, metadata, nil, time.Now(), s.ipv6CapabilityTTL) {
+			return selected, nil
+		}
+		return nil, E.New("IPv6 traffic is disabled")
+	}
+	tag := RealTag(selected)
+	monitor := monitoring.Get(s.ctx)
+	if monitor == nil {
+		if monitoring.IPv6TrafficAllowed(s.ipv6Mode, metadata, nil, time.Now(), s.ipv6CapabilityTTL) {
+			return selected, nil
+		}
+		return nil, E.New("IPv6 egress capability monitoring is unavailable")
+	}
+	if !monitoring.IPv6TrafficAllowed(s.ipv6Mode, metadata, monitor.OutboundHistory(tag), time.Now(), s.ipv6CapabilityTTL) {
+		if s.ipv6Mode == C.DomainStrategyIPv6Only {
+			return nil, E.New("IPv6-only: selected outbound has no current IPv6 egress proof")
+		}
+		return nil, E.New("IPv6 egress is not currently verified for the selected outbound")
+	}
+	return selected, nil
 }
 
 func (s *Selector) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	selected := s.connectionOutbound()
-	if metadata := adapter.ContextFrom(ctx); metadata != nil && metadata.GetRealOutbound() == "" {
+	metadata := adapter.ContextFrom(ctx)
+	if metadata == nil {
+		metadata = &adapter.InboundContext{Destination: destination}
+	} else if !metadata.Destination.IsValid() {
+		metadata.Destination = destination
+	}
+	selected, err := s.connectionOutbound(ctx, *metadata)
+	if err != nil {
+		return nil, err
+	}
+	if metadata.GetRealOutbound() == "" {
 		metadata.SetRealOutbound(RealTag(selected))
 	}
 	conn, err := selected.DialContext(ctx, network, destination)
@@ -262,8 +309,17 @@ func (s *Selector) DialContext(ctx context.Context, network string, destination 
 }
 
 func (s *Selector) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	selected := s.connectionOutbound()
-	if metadata := adapter.ContextFrom(ctx); metadata != nil && metadata.GetRealOutbound() == "" {
+	metadata := adapter.ContextFrom(ctx)
+	if metadata == nil {
+		metadata = &adapter.InboundContext{Destination: destination}
+	} else if !metadata.Destination.IsValid() {
+		metadata.Destination = destination
+	}
+	selected, err := s.connectionOutbound(ctx, *metadata)
+	if err != nil {
+		return nil, err
+	}
+	if metadata.GetRealOutbound() == "" {
 		metadata.SetRealOutbound(RealTag(selected))
 	}
 	conn, err := selected.ListenPacket(ctx, destination)
@@ -275,7 +331,14 @@ func (s *Selector) ListenPacket(ctx context.Context, destination M.Socksaddr) (n
 
 func (s *Selector) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	ctx = interrupt.ContextWithIsExternalConnection(ctx)
-	selected := s.connectionOutbound()
+	selected, err := s.connectionOutbound(ctx, metadata)
+	if err != nil {
+		conn.Close()
+		if onClose != nil {
+			onClose(err)
+		}
+		return
+	}
 	if metadata.GetRealOutbound() == "" {
 		metadata.SetRealOutbound(RealTag(selected))
 	}
@@ -289,7 +352,14 @@ func (s *Selector) NewConnectionEx(ctx context.Context, conn net.Conn, metadata 
 
 func (s *Selector) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	ctx = interrupt.ContextWithIsExternalConnection(ctx)
-	selected := s.connectionOutbound()
+	selected, err := s.connectionOutbound(ctx, metadata)
+	if err != nil {
+		conn.Close()
+		if onClose != nil {
+			onClose(err)
+		}
+		return
+	}
 	if metadata.GetRealOutbound() == "" {
 		metadata.SetRealOutbound(RealTag(selected))
 	}
@@ -302,7 +372,10 @@ func (s *Selector) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn,
 }
 
 func (s *Selector) NewDirectRouteConnection(metadata adapter.InboundContext, routeContext tun.DirectRouteContext, timeout time.Duration) (tun.DirectRouteDestination, error) {
-	selected := s.connectionOutbound()
+	selected, err := s.connectionOutbound(context.Background(), metadata)
+	if err != nil {
+		return nil, err
+	}
 	if !common.Contains(selected.Network(), metadata.Network) {
 		return nil, E.New(metadata.Network, " is not supported by outbound: ", selected.Tag())
 	}
