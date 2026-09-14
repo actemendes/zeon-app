@@ -13,6 +13,7 @@ import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/db/provider/db_providers.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/core/security/secure_storage_mutex.dart';
 import 'package:zeon/features/diagnostics/data/error_report_queue.dart';
 import 'package:zeon/features/diagnostics/data/error_report_redactor.dart';
 import 'package:zeon/features/profile/data/profile_config_store.dart';
@@ -27,6 +28,9 @@ class RuntimeP03R17Validation {
   RuntimeP03R17Validation(this.container);
 
   static const _secureKeyName = 'profile_config_encryption_key_v1';
+  static const _fallbackKeyName = 'profile_config_encryption_key_v1_insecure_fallback';
+  static const _fallbackMarkerName = 'profile_config_encryption_key_uses_insecure_fallback';
+  static const _keyInitializedMarkerName = 'profile_config_encryption_key_v1_initialized';
   static const _dummyConfig = '{"runtime":"p03-key-loss-probe"}';
 
   final ProviderContainer container;
@@ -113,28 +117,39 @@ class RuntimeP03R17Validation {
         storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
       ),
     );
-    final originalKey = await secureStorage.read(key: _secureKeyName);
-    if (originalKey == null || originalKey.trim().isEmpty) {
-      throw StateError('P03 secure profile key was unavailable before the key-loss probe');
-    }
-
     final directories = await container.read(appDirectoriesProvider.future);
     final token = DateTime.now().microsecondsSinceEpoch.toString();
     final working = Directory(p.join(directories.tempDir.path, 'zeon-p03-keyloss-$token'));
     final temporary = Directory(p.join(directories.tempDir.path, 'zeon-p03-keyloss-temp-$token'));
     final resolver = ProfilePathResolver(working, temporary);
     final preferences = container.read(sharedPreferencesProvider).requireValue;
+    final originalKey = await SecureStorageMutex.protect(() => secureStorage.read(key: _secureKeyName));
+    final originalFallbackKey = preferences.getString(_fallbackKeyName);
+    final originalFallbackMarker = preferences.getBool(_fallbackMarkerName);
+    final originalInitializedMarker = preferences.getBool(_keyInitializedMarkerName);
+    final usesSyntheticSecureKey = originalKey == null || originalKey.trim().isEmpty;
     final store = ProfileConfigStore(pathResolver: resolver, preferences: preferences, secureStorage: secureStorage);
     var refusedReplacement = false;
     String? beforeHash;
     String? afterHash;
     try {
+      if (usesSyntheticSecureKey) {
+        final randomKey = SecretKeyData.random(length: 32);
+        final syntheticKey = base64Encode(randomKey.bytes);
+        randomKey.destroy();
+        await SecureStorageMutex.protect(() => secureStorage.write(key: _secureKeyName, value: syntheticKey));
+        final verified = await SecureStorageMutex.protect(() => secureStorage.read(key: _secureKeyName));
+        if (verified != syntheticKey) throw StateError('P03 synthetic secure key fixture could not be installed');
+      }
+      await preferences.remove(_fallbackKeyName);
+      await preferences.remove(_fallbackMarkerName);
+
       await store.init();
       await store.write('probe', _dummyConfig);
       final encrypted = resolver.encryptedFile('probe');
       beforeHash = await _digestBytes(await encrypted.readAsBytes());
 
-      await secureStorage.delete(key: _secureKeyName);
+      await SecureStorageMutex.protect(() => secureStorage.delete(key: _secureKeyName));
       final afterLoss = ProfileConfigStore(
         pathResolver: resolver,
         preferences: preferences,
@@ -146,13 +161,32 @@ class RuntimeP03R17Validation {
         refusedReplacement = error.message.contains('refusing to replace the key');
       }
       if (!refusedReplacement) throw StateError('P03 key loss did not fail closed');
-      if (await secureStorage.read(key: _secureKeyName) != null) {
+      if (await SecureStorageMutex.protect(() => secureStorage.read(key: _secureKeyName)) != null) {
         throw StateError('P03 key loss silently generated a replacement key');
       }
       afterHash = await _digestBytes(await encrypted.readAsBytes());
       if (beforeHash != afterHash) throw StateError('P03 encrypted artifact changed after key loss');
     } finally {
-      await secureStorage.write(key: _secureKeyName, value: originalKey);
+      if (originalKey == null || originalKey.trim().isEmpty) {
+        await SecureStorageMutex.protect(() => secureStorage.delete(key: _secureKeyName));
+      } else {
+        await SecureStorageMutex.protect(() => secureStorage.write(key: _secureKeyName, value: originalKey));
+      }
+      if (originalFallbackKey == null) {
+        await preferences.remove(_fallbackKeyName);
+      } else {
+        await preferences.setString(_fallbackKeyName, originalFallbackKey);
+      }
+      if (originalFallbackMarker == null) {
+        await preferences.remove(_fallbackMarkerName);
+      } else {
+        await preferences.setBool(_fallbackMarkerName, originalFallbackMarker);
+      }
+      if (originalInitializedMarker == null) {
+        await preferences.remove(_keyInitializedMarkerName);
+      } else {
+        await preferences.setBool(_keyInitializedMarkerName, originalInitializedMarker);
+      }
       if (await working.exists()) await working.delete(recursive: true);
       if (await temporary.exists()) await temporary.delete(recursive: true);
     }
@@ -164,6 +198,7 @@ class RuntimeP03R17Validation {
       'encrypted_artifact_preserved': beforeHash == afterHash,
       'original_key_restored': true,
       'profile_read_after_restore': true,
+      'secure_key_fixture': usesSyntheticSecureKey ? 'isolated_synthetic' : 'existing',
     };
   }
 
