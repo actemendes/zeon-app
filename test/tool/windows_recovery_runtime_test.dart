@@ -283,9 +283,11 @@ void main() {
     expect(scenario, contains("prefer_ipv6 did not choose from the verified IPv6 pool"));
     expect(scenario, contains("ipv6_only selected a leaf without verified IPv6 capability"));
     expect(scenario, contains("reporter.event('p04_smart_active_verified'"));
+    expect(scenario, contains("reporter.event('p04_capability_observed'"));
     expect(source, contains("await container!.read(ConfigOptions.ipv6Mode.notifier).update(originalIPv6Mode!)"));
     expect(source, contains('terminal.any((item) => item.ipv6Status == \'supported\')'));
     expect(source, isNot(contains('groups.items.expand((group) => group.items)')));
+    expect(source, contains('trimNativeTag(item.tag) == trimNativeTag(leaf.tag)'));
   });
 
   test('S06 observes the late-start window and then proves retry traffic and stop', () async {

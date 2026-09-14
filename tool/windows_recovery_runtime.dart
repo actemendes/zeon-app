@@ -26,7 +26,7 @@ import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/zeon_core_service.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
-import 'runtime_core_snapshot.dart' show resolveRuntimeLeaf, safeId;
+import 'runtime_core_snapshot.dart' show resolveRuntimeLeaf, safeId, trimNativeTag;
 import 'runtime_p03_r17_validation.dart';
 
 const _sourceSha = String.fromEnvironment('zeon_source_sha');
@@ -847,6 +847,19 @@ class RuntimeHarness {
     final selected = await _p04SelectionSnapshot(group.tag, auto.tag);
     final supported = capability.where((item) => item.ipv6Status == 'supported').toList(growable: false);
     final selectedStatus = selected.ipv6Status.isEmpty ? 'not_tested' : selected.ipv6Status;
+    final observation = {
+      'ipv6_mode': options.ipv6Mode.key,
+      'transport_mode': options.mode.cliName,
+      'candidate_count': capability.length,
+      'supported_count': supported.length,
+      'unavailable_count': capability.where((item) => item.ipv6Status == 'unavailable').length,
+      'indeterminate_count': capability.where((item) => item.ipv6Status == 'indeterminate').length,
+      'not_tested_count': capability.where((item) => item.ipv6Status.isEmpty || item.ipv6Status == 'not_tested').length,
+      'selected_leaf_id': await safeId(selected.tag),
+      'selected_ipv6_status': selectedStatus,
+      'smart_active': true,
+    };
+    await reporter.event('p04_capability_observed', observation);
 
     if (options.ipv6Mode == IPv6Mode.disable) {
       if (capability.any((item) => item.ipv6Status.isNotEmpty && item.ipv6Status != 'not_tested')) {
@@ -858,18 +871,7 @@ class RuntimeHarness {
       throw RuntimeFailure.fail('ipv6_only selected a leaf without verified IPv6 capability');
     }
 
-    await reporter.event('p04_smart_active_verified', {
-      'ipv6_mode': options.ipv6Mode.key,
-      'transport_mode': options.mode.cliName,
-      'candidate_count': capability.length,
-      'supported_count': supported.length,
-      'unavailable_count': capability.where((item) => item.ipv6Status == 'unavailable').length,
-      'indeterminate_count': capability.where((item) => item.ipv6Status == 'indeterminate').length,
-      'not_tested_count': capability.where((item) => item.ipv6Status.isEmpty || item.ipv6Status == 'not_tested').length,
-      'selected_leaf_id': await safeId(selected.tag),
-      'selected_ipv6_status': selectedStatus,
-      'smart_active': true,
-    });
+    await reporter.event('p04_smart_active_verified', observation);
     await _disconnectAndVerify('p04');
   }
 
@@ -932,7 +934,12 @@ class RuntimeHarness {
           .getSystemInfo(Empty())
           .timeout(const Duration(seconds: 8));
       final leaf = resolveRuntimeLeaf(groups, systemInfo.currentOutbound);
-      if (leaf != null) return leaf;
+      if (leaf != null) {
+        final selectorLeaf = currentGroup.items.where(
+          (item) => !item.isGroup && trimNativeTag(item.tag) == trimNativeTag(leaf.tag),
+        );
+        if (selectorLeaf.length == 1) return selectorLeaf.single;
+      }
       await Future<void>.delayed(const Duration(milliseconds: 500));
     } while (DateTime.now().isBefore(deadline));
     throw RuntimeFailure.deadline('P04 concrete Smart Active leaf', timeout);
