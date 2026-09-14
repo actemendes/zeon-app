@@ -279,6 +279,10 @@ void main() {
     final scenario = source.substring(scenarioStart, scenarioEnd);
     expect(scenario, contains('urlTest(group.tag)'));
     expect(scenario, contains('await _verifyTraffic(verifyProductHealth: false)'));
+    expect(
+      scenario.indexOf('_p04SelectionSnapshot'),
+      lessThan(scenario.indexOf('_verifyTraffic(verifyProductHealth: false)')),
+    );
     expect(scenario, contains("ipv4_only unexpectedly executed IPv6 capability probes"));
     expect(scenario, contains("prefer_ipv6 did not choose from the verified IPv6 pool"));
     expect(scenario, contains("ipv6_only selected a leaf without verified IPv6 capability"));

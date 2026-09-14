@@ -843,7 +843,6 @@ class RuntimeHarness {
     await container!.read(proxiesOverviewNotifierProvider.notifier).urlTest(group.tag);
 
     final capability = await _waitForP04Capability(group.tag);
-    await _verifyTraffic(verifyProductHealth: false);
     final supported = capability.where((item) => item.ipv6Status == 'supported').toList(growable: false);
     final selected = await _p04SelectionSnapshot(
       group.tag,
@@ -853,6 +852,7 @@ class RuntimeHarness {
           ? 'supported'
           : null,
     );
+    await _verifyTraffic(verifyProductHealth: false);
     final selectedStatus = selected.ipv6Status.isEmpty ? 'not_tested' : selected.ipv6Status;
     final observation = {
       'ipv6_mode': options.ipv6Mode.key,
