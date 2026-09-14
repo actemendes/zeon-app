@@ -1,6 +1,6 @@
 # Точка продолжения и план восстановления
 
-Снимок обновлён **2026-09-14**. Актуальные статусы брать из TickTick; этот документ
+Снимок обновлён **2026-09-15**. Актуальные статусы брать из TickTick; этот документ
 не является автоматически обновляемой панелью и не утверждает готовность релиза.
 Требования — [README.md](README.md) и [MATRIX.md](MATRIX.md).
 
@@ -42,6 +42,7 @@ Go **1.25.6** использовался при проверке консоли�
 | Этап 07 | Принят 14.09.2026 на `1.5.0+1050021` / `ec3104f4`: R17 PASS до подключения и при активном VPN на физическом Android и в Windows System Proxy/TUN/Local Proxy. Доменный refresh продвигает timestamp, сохраняет валидный cache и ручной выбор; подключённый refresh выполняет native restart, после него Auto имеет concrete leaf и реальный HTTPS. TLS/IP обходы не добавлялись |
 | Host-lab | Отчёт 09.09 принял standalone Agent через отдельный sing-box, включая stop/crash независимость. Обычный Desktop Agent остаётся ограничением; готовность инфраструктуры не равна приёмке приложения |
 | Этап 09 | Принят 14.09.2026 на том же кандидате: P03 PASS на Android и Windows во всех трёх режимах — WAL/busy timeout, независимые DB connections и competing write, integrity, key-loss fail-closed с восстановлением, URI decode-once, concurrent error dedup и redaction. Targeted Flutter 76/76 и Android instrumentation 89/89 PASS; 8 из разрешённых 10 build-итераций |
+| Этап 12 | Реализован 15.09.2026 на `1.5.0+1050026` / `4322e96b`: strict per-leaf IPv6 HTTPS capability, TTL/generation/network invalidation, четыре режима, Smart Active gating и UI. Android P04 PASS без global-IPv6 underlay; Windows обычный connect 3/3 PASS, но Windows P04 `NOT_RUN` |
 | Релиз | 1.5.0 не принят и не выпущен этим этапом; push/deployment не выполняются в задаче документации |
 
 Первичные локальные evidence, не копировать в Git:
@@ -87,6 +88,7 @@ TickTick: `💤ZEON`, parent `6a9fbc3a8f08ecb120d254c7`.
 | 09 / 6a9fbc7f8f08ecb120d25d4a | Завершён 14.09.2026 на `1.5.0+1050021` / `ec3104f4`: DB/error fixes сохранены и runtime-проверены на Android и Windows; регрессия задач 07/05 не выявлена | P03 concurrency/integrity/key loss/URI/error queue/redaction; Android lifecycle + 89/89 instrumentation; Windows три режима PASS |
 | 10 / 6a9fbc808f0857fda2282227 | Проверен настоящий Windows installer/portable пакет | Native dependencies, Private/Public в согласованной disposable-среде; host firewall не менять |
 | 11 / 6a9fbc818f08ea0eca05038e | Полная приёмка и фактический выпуск 1.5.0 | FULL обеих платформ, ручной reboot, release hashes/provenance, KB sync |
+| 12 / 6aa6de518f087a6320ca4572 | Реализация завершена на `1.5.0+1050026` / `4322e96b`; Android P04 PASS, Windows P04 и leak-проверка на global-IPv6 underlay остаются `NOT_RUN` | Strict HTTPS/AAAA/SNI/cert per leaf, capability cache/generation, четыре режима, manual/Auto, P04 Android; Windows System Proxy/TUN/Local Proxy только обычный connect PASS |
 
 Порядок: stop → crash cleanup → Android VPN-only → selection → Auto traffic →
 domain → profile → routing → DB → package → release. Изменение зависимости допустимо
@@ -105,9 +107,12 @@ Preserve-first проверки действуют сразу, несмотря 
 задачи 05 прошли на физическом Android и во всех трёх Windows-режимах. Отчёт:
 `Z:\Zeon-Envelope\Temp\zeon-app-testing\T09-B1050021-FINAL-20260914\report.md`.
 По решению пользователя реальный IPv6 egress не блокирует managed routing: он
-сохранён отдельной отложенной задачей `6aa6de518f087a6320ca4572`. Windows package-list
-N/A; поддерживаемые process/domain compiler paths проверены. FULL, release и
-deployment этим результатом не разрешены.
+реализован отдельной задачей `6aa6de518f087a6320ca4572` на `1.5.0+1050026` /
+`4322e96b`. Android task-specific P04 прошёл; Windows P04 и проверка утечки при
+global IPv6 остаются `NOT_RUN`. Отчёт:
+`Z:\Zeon-Envelope\Temp\zeon-app-testing\T12-B1050026-FINAL-20260915\report.md`.
+Windows package-list N/A; поддерживаемые process/domain compiler paths проверены.
+FULL, release и deployment этим результатом не разрешены.
 
 ## Порядок в репозитории
 
