@@ -265,7 +265,7 @@ class RuntimeP03R17Validation {
     });
     final encoded = jsonEncode(redacted);
     if (encoded.contains('runtime-p03-dummy-secret')) throw StateError('P03 error redaction leaked a credential');
-    if (!encoded.contains('[REDACTED]')) throw StateError('P03 error redaction marker is missing');
+    if (!encoded.contains('<redacted>')) throw StateError('P03 error redaction marker is missing');
     return {'concurrent_queue_deduplicated': true, 'dummy_credential_redacted': true};
   }
 
