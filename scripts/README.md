@@ -66,7 +66,10 @@ CurrentUser DPAPI. Выделенное roaming-состояние ZEON очищ
 ```
 
 Remote request принимает `preflight`, `connect`, однократный S02, фазовый S06,
-`manual-proxy` и `auto-proxy` в режимах `system-proxy`, `tun` и `local-proxy`.
+`manual-proxy`, `auto-proxy` и совмещённый P03/R17 в режимах `system-proxy`,
+`tun` и `local-proxy`. Для P03/R17 контроллер передаёт временный источник
+подписки из локального DPAPI vault; remote harness хранит его только под DPAPI
+выделенного тестового пользователя и редактирует URI из evidence.
 Параметры передаются валидируемым immutable JSON v2, а не аргументами Scheduled
 Task. После queue SSH-сессия закрывается; `-Detach`, `-Status`, `-ListRuns` и
 `-CollectOnly` используют новые конечные сессии. Watchdog применяет delta-recovery

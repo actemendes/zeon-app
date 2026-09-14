@@ -14,6 +14,7 @@ import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/log/model/log_level.dart' as app_log;
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
+import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/proxy/overview/proxies_overview_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
@@ -25,6 +26,7 @@ import 'package:zeon/zeoncore/zeon_core_service.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
 import 'runtime_core_snapshot.dart' show resolveRuntimeLeaf, safeId;
+import 'runtime_p03_r17_validation.dart';
 
 const _sourceSha = String.fromEnvironment('zeon_source_sha');
 const _buildType = String.fromEnvironment('zeon_build_type');
@@ -39,7 +41,8 @@ enum RuntimeScenario {
   s02('s02'),
   s06('s06'),
   manualProxy('manual-proxy'),
-  autoProxy('auto-proxy');
+  autoProxy('auto-proxy'),
+  p03R17('p03-r17');
 
   const RuntimeScenario(this.cliName);
   final String cliName;
@@ -224,7 +227,7 @@ class RuntimeOptions {
       RuntimeScenario.preflight => 300,
       RuntimeScenario.s02 => 3600,
       RuntimeScenario.s06 => 300,
-      RuntimeScenario.manualProxy || RuntimeScenario.autoProxy => 600,
+      RuntimeScenario.manualProxy || RuntimeScenario.autoProxy || RuntimeScenario.p03R17 => 900,
       RuntimeScenario.connect => 300,
     };
     final scenarioSeconds = integer(
@@ -559,6 +562,7 @@ class RuntimeHarness {
           RuntimeScenario.s06 => _scenarioS06(),
           RuntimeScenario.manualProxy => _scenarioManualProxy(),
           RuntimeScenario.autoProxy => _scenarioAutoProxy(),
+          RuntimeScenario.p03R17 => _scenarioP03R17(),
         }.timeout(
           options.scenarioTimeout,
           onTimeout: () => throw RuntimeFailure.deadline('scenario', options.scenarioTimeout),
@@ -722,6 +726,88 @@ class RuntimeHarness {
       'exact_r08_order': true,
     });
     await _disconnectAndVerify('auto-proxy');
+  }
+
+  Future<void> _scenarioP03R17() async {
+    final validation = RuntimeP03R17Validation(container!);
+    await reporter.event('p03_data_checks_started');
+    await reporter.event('p03_data_checks_passed', await validation.runDataAndErrorChecks());
+
+    await reporter.event('r17_disconnected_refresh_started');
+    final disconnectedRefresh = await validation.refreshActiveRemoteProfile();
+    if (container!.read(connectionNotifierProvider).valueOrNull is! Disconnected ||
+        coreService.currentState is! CoreStopped ||
+        await _proxyListening()) {
+      throw RuntimeFailure.fail('R17 disconnected refresh changed VPN runtime ownership');
+    }
+    await _verifyDirectTraffic(0);
+    await reporter.event('r17_disconnected_refresh_passed', disconnectedRefresh);
+
+    await _connectAndProveReady();
+    var group = await _selectorGroup();
+    originalProxySelection ??= group.selected;
+    final auto = group.items.firstWhere(
+      (item) => item.tag == 'balance' || item.type == 'balancer',
+      orElse: () => throw RuntimeFailure.environment('Automatic proxy selector is unavailable'),
+    );
+    final manual = group.items.firstWhere(
+      (item) =>
+          item.isVisible &&
+          item.tag != auto.tag &&
+          !const {'selector', 'urltest', 'direct', 'block', 'dns', 'balancer'}.contains(item.type),
+      orElse: () => throw RuntimeFailure.environment('No manual proxy is available for R17'),
+    );
+    await container!.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, manual.tag);
+    await _verifyNativeSelection(group.tag, manual.tag, requireConcreteLeaf: false);
+    await _verifyTraffic();
+
+    final restartStates = <String>[];
+    final restartSubscription = coreService.statusController.stream.listen((state) {
+      restartStates.add(state.runtimeType.toString());
+    });
+    try {
+      await reporter.event('r17_connected_refresh_started', {'manual_outbound_id': await safeId(manual.tag)});
+      final connectedRefresh = await validation.refreshActiveRemoteProfile();
+      await _until(
+        () async =>
+            container!.read(connectionNotifierProvider).valueOrNull is Connected &&
+            coreService.currentState is CoreStarted &&
+            await _proxyListening(),
+        'R17 connected refresh readiness',
+        options.connectTimeout,
+      );
+      group = await _selectorGroup();
+      await _verifyNativeSelection(group.tag, manual.tag, requireConcreteLeaf: false);
+      await _verifyTraffic();
+      if (!restartStates.contains('CoreStopping') || !restartStates.contains('CoreStarting')) {
+        throw RuntimeFailure.fail('R17 connected refresh did not prove a native restart');
+      }
+      await reporter.event('r17_connected_refresh_passed', {
+        ...connectedRefresh,
+        'manual_outbound_preserved': true,
+        'native_restart_observed': true,
+      });
+    } finally {
+      await restartSubscription.cancel();
+    }
+
+    group = await _selectorGroup();
+    final refreshedAuto = group.items.firstWhere(
+      (item) => item.tag == auto.tag,
+      orElse: () => throw RuntimeFailure.fail('Auto selector disappeared after R17 refresh'),
+    );
+    await container!.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, refreshedAuto.tag);
+    await _verifyNativeSelectorTag(group.tag, refreshedAuto.tag);
+    await _verifyTraffic();
+    final leaf = await _waitForConcreteNativeLeaf(group.tag, refreshedAuto.tag);
+    await reporter.event('task05_auto_after_profile_refresh_passed', {
+      'selector_id': await safeId(refreshedAuto.tag),
+      'runtime_outbound_id': await safeId(leaf.tag),
+    });
+
+    await _disconnectAndVerify('p03-r17');
+    await reporter.event('p03_key_loss_started');
+    await reporter.event('p03_key_loss_passed', await validation.runKeyLossCheckAndRestore());
   }
 
   Future<OutboundInfo?> _verifyNativeSelection(
@@ -1142,20 +1228,56 @@ catch { exit 44 }''';
 
   Future<void> _ensureProfile() async {
     final existing = await container!.read(activeProfileProvider.future);
-    if (existing != null) return;
+    if (existing != null && options.scenario != RuntimeScenario.p03R17) return;
     final fixturePath = options.profileFile;
     if (fixturePath == null) throw RuntimeFailure.environment('Profile fixture file is required');
     final fixture = File(fixturePath);
     if (!await fixture.exists()) throw RuntimeFailure.environment('Profile fixture file does not exist');
     final repository = await container!.read(profileRepositoryProvider.future);
-    final imported = await repository.addLocal(await fixture.readAsString()).run();
+    final imported = options.scenario == RuntimeScenario.p03R17
+        ? await repository
+              .upsertRemote(_validatedRemoteFixtureSource(await fixture.readAsString()), directOnly: true)
+              .run()
+        : await repository.addLocal(await fixture.readAsString()).run();
     if (imported.isLeft()) throw RuntimeFailure.environment('Validation profile fixture import failed');
     await _until(
-      () => container!.read(activeProfileProvider).valueOrNull != null,
+      () {
+        final active = container!.read(activeProfileProvider).valueOrNull;
+        return options.scenario == RuntimeScenario.p03R17 ? active is RemoteProfileEntity : active != null;
+      },
       'active profile fixture',
       const Duration(seconds: 60),
     );
-    await reporter.event('validation_profile_imported');
+    await reporter.event('validation_profile_imported', {
+      'remote': options.scenario == RuntimeScenario.p03R17,
+      if (options.scenario == RuntimeScenario.p03R17) 'source_host': 'zeon-vps.link',
+    });
+  }
+
+  String _validatedRemoteFixtureSource(String fixture) {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(fixture);
+    } catch (_) {
+      throw RuntimeFailure.environment('Remote profile fixture bundle is malformed');
+    }
+    if (decoded is! Map<String, dynamic> || decoded['schema'] != 'zeon.runtime-remote-profile-fixture.v1') {
+      throw RuntimeFailure.environment('Remote profile fixture bundle schema is invalid');
+    }
+    final source = Uri.tryParse(decoded['source_url']?.toString() ?? '');
+    if (source == null ||
+        source.scheme != 'https' ||
+        source.host.toLowerCase() != 'zeon-vps.link' ||
+        source.userInfo.isNotEmpty ||
+        source.hasQuery ||
+        source.hasFragment ||
+        (source.hasPort && source.port != 443) ||
+        source.pathSegments.length != 2 ||
+        source.pathSegments.first != 'open' ||
+        source.pathSegments.last.isEmpty) {
+      throw RuntimeFailure.environment('Remote profile fixture source is outside the approved HTTPS scope');
+    }
+    return source.toString();
   }
 
   Future<void> _validateMachine() async {

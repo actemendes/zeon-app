@@ -14,12 +14,18 @@ import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
+import 'package:zeon/features/proxy/overview/proxies_overview_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
+import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 import 'package:zeon/zeoncore/zeon_core_service.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
+
+import 'runtime_core_snapshot.dart' show resolveRuntimeLeaf, safeId;
+import 'runtime_p03_r17_validation.dart';
 
 const _sourceSha = String.fromEnvironment('zeon_source_sha');
 const _buildType = String.fromEnvironment('zeon_build_type');
@@ -79,6 +85,136 @@ class _AndroidRuntimeHarness {
     await _runS06('app-connecting');
     await _runS06('core-starting');
     await _runS02();
+    await _runP03R17();
+  }
+
+  Future<void> _runP03R17() async {
+    final validation = RuntimeP03R17Validation(container);
+    _event('p03_data_checks_started');
+    _event('p03_data_checks_passed', await validation.runDataAndErrorChecks());
+
+    _event('r17_disconnected_refresh_started');
+    final disconnectedRefresh = await validation.refreshActiveRemoteProfile();
+    final stopped =
+        container.read(connectionNotifierProvider).valueOrNull is Disconnected &&
+        core.currentState is CoreStopped &&
+        core.authoritativeSessionSnapshot?.provesConnected != true;
+    if (!stopped) throw StateError('R17 disconnected refresh changed VPN runtime ownership');
+    await _verifyTraffic('r17-disconnected-refresh', expectedVpn: false);
+    _event('r17_disconnected_refresh_passed', disconnectedRefresh);
+
+    await _connectAndVerify('r17-connect');
+    var group = await _selectorGroup();
+    final auto = group.items.firstWhere(
+      (item) => item.tag == 'balance' || item.type == 'balancer',
+      orElse: () => throw StateError('Automatic proxy selector is unavailable'),
+    );
+    final manual = group.items.firstWhere(
+      (item) =>
+          item.isVisible &&
+          item.tag != auto.tag &&
+          !const {'selector', 'urltest', 'direct', 'block', 'dns', 'balancer'}.contains(item.type),
+      orElse: () => throw StateError('No manual proxy is available for R17'),
+    );
+    await container.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, manual.tag);
+    await _verifyNativeManual(group.tag, manual.tag);
+    await _verifyTraffic('r17-manual-before-refresh', expectedVpn: true);
+    final generationBefore = core.authoritativeSessionSnapshot?.generation;
+    if (generationBefore == null || generationBefore <= 0) {
+      throw StateError('R17 connected generation is unavailable');
+    }
+
+    _event('r17_connected_refresh_started', {'manual_outbound_id': await safeId(manual.tag)});
+    final connectedRefresh = await validation.refreshActiveRemoteProfile();
+    await _until(
+      () {
+        final snapshot = core.authoritativeSessionSnapshot;
+        return container.read(connectionNotifierProvider).valueOrNull is Connected &&
+            core.currentState is CoreStarted &&
+            snapshot?.provesConnected == true &&
+            snapshot!.generation > generationBefore;
+      },
+      'R17 connected refresh readiness',
+      _connectTimeout,
+    );
+    group = await _selectorGroup();
+    await _verifyNativeManual(group.tag, manual.tag);
+    await _verifyTraffic('r17-connected-refresh', expectedVpn: true);
+    _event('r17_connected_refresh_passed', {
+      ...connectedRefresh,
+      'manual_outbound_preserved': true,
+      'generation_advanced': true,
+    });
+
+    group = await _selectorGroup();
+    final refreshedAuto = group.items.firstWhere(
+      (item) => item.tag == auto.tag,
+      orElse: () => throw StateError('Auto selector disappeared after R17 refresh'),
+    );
+    await container.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, refreshedAuto.tag);
+    await _verifyNativeSelector(group.tag, refreshedAuto.tag);
+    await _verifyTraffic('task05-auto-after-profile-refresh', expectedVpn: true);
+    final leaf = await _waitForConcreteLeaf(group.tag, refreshedAuto.tag);
+    _event('task05_auto_after_profile_refresh_passed', {
+      'selector_id': await safeId(refreshedAuto.tag),
+      'runtime_outbound_id': await safeId(leaf.tag),
+    });
+
+    await _disconnectAndVerify('p03-r17');
+    _event('p03_key_loss_started');
+    _event('p03_key_loss_passed', await validation.runKeyLossCheckAndRestore());
+  }
+
+  Future<OutboundGroup> _selectorGroup() async {
+    final group = await container.read(proxiesOverviewNotifierProvider.future).timeout(const Duration(seconds: 20));
+    if (group == null) throw StateError('Proxy selector fixture is unavailable');
+    return group;
+  }
+
+  Future<void> _verifyNativeManual(String groupTag, String selectedTag) async {
+    final groups = await core.core.backgroundCommandClient
+        .outboundsInfo(Empty())
+        .first
+        .timeout(const Duration(seconds: 8));
+    final group = groups.items.firstWhere(
+      (item) => item.tag == groupTag,
+      orElse: () => throw StateError('Native selector group disappeared'),
+    );
+    if (group.selected != selectedTag) throw StateError('Requested manual selection was not applied');
+    final system = await core.core.backgroundCommandClient.getSystemInfo(Empty()).timeout(const Duration(seconds: 8));
+    if (system.currentOutbound != selectedTag) throw StateError('Manual selection differs from native runtime');
+  }
+
+  Future<void> _verifyNativeSelector(String groupTag, String selectedTag) async {
+    final groups = await core.core.backgroundCommandClient
+        .outboundsInfo(Empty())
+        .first
+        .timeout(const Duration(seconds: 8));
+    final group = groups.items.firstWhere(
+      (item) => item.tag == groupTag,
+      orElse: () => throw StateError('Native selector group disappeared'),
+    );
+    if (group.selected != selectedTag) throw StateError('Requested Auto selector was not applied');
+  }
+
+  Future<OutboundInfo> _waitForConcreteLeaf(String groupTag, String selectedTag) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    do {
+      final groups = await core.core.backgroundCommandClient
+          .outboundsInfo(Empty())
+          .first
+          .timeout(const Duration(seconds: 8));
+      final group = groups.items.firstWhere(
+        (item) => item.tag == groupTag,
+        orElse: () => throw StateError('Native selector group disappeared after Auto traffic'),
+      );
+      if (group.selected != selectedTag) throw StateError('Native selector changed during Auto traffic');
+      final system = await core.core.backgroundCommandClient.getSystemInfo(Empty()).timeout(const Duration(seconds: 8));
+      final leaf = resolveRuntimeLeaf(groups, system.currentOutbound);
+      if (leaf != null) return leaf;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    } while (DateTime.now().isBefore(deadline));
+    throw TimeoutException('Auto concrete native outbound after traffic', const Duration(seconds: 30));
   }
 
   Future<void> _runS06(String phase) async {

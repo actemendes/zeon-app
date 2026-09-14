@@ -307,7 +307,7 @@ function Protect-RuntimeEvidence {
     $redactedFiles = @()
     $detectedBefore = 0
     $remainingAfter = 0
-    $profilePattern = '(?i)\b(?:vless|vmess|trojan|ss|hysteria2?|tuic):\/\/[^\s"''<>]+'
+    $profilePattern = '(?i)\b(?:(?:vless|vmess|trojan|ss|hysteria2?|tuic):\/\/|https:\/\/[^\s"''<>]+\/open\/)[^\s"''<>]+'
     foreach ($file in @(Get-ChildItem -LiteralPath $EvidenceDirectory -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.json', '.jsonl', '.log', '.txt') })) {
         $text = [IO.File]::ReadAllText($file.FullName)
         $changed = $false

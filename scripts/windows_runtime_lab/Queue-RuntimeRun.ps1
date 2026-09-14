@@ -12,7 +12,7 @@ $request = Get-Content -LiteralPath $RequestPath -Raw | ConvertFrom-Json
 if ([int]$request.schema_version -ne 2 -or [string]$request.controller_schema -cne 'zeon.remote-controller.v2' -or [string]$request.runtime_schema -cne 'zeon.windows-runtime.v1') { throw 'Unsupported runtime request schema.' }
 $runId = [string]$request.run_id
 Assert-RuntimeSafeId -Value $runId -Label 'run_id'
-$allowedScenarios = @('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy')
+$allowedScenarios = @('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy', 'p03-r17')
 $allowedModes = @('system-proxy', 'tun', 'local-proxy')
 if ([string]$request.scenario -notin $allowedScenarios) { throw 'Scenario is outside the runtime allowlist.' }
 if ([string]$request.mode -notin $allowedModes) { throw 'Network mode is outside the runtime allowlist.' }

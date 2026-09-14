@@ -313,4 +313,36 @@ void main() {
     expect(autoLeafProof, greaterThan(postAutoTraffic));
     expect(scenario, contains("'exact_r08_order': true"));
   });
+
+  test('P03 R17 scenario proves refresh ownership, restart, and post-refresh Auto traffic', () async {
+    final source = await File('tool/windows_recovery_runtime.dart').readAsString();
+    final scenarioStart = source.indexOf('Future<void> _scenarioP03R17()');
+    final scenarioEnd = source.indexOf('Future<OutboundInfo?> _verifyNativeSelection(', scenarioStart);
+    final scenario = source.substring(scenarioStart, scenarioEnd);
+    final dataChecks = scenario.indexOf('validation.runDataAndErrorChecks()');
+    final disconnectedRefresh = scenario.indexOf('validation.refreshActiveRemoteProfile()', dataChecks);
+    final connect = scenario.indexOf('await _connectAndProveReady()', disconnectedRefresh);
+    final manualChoice = scenario.indexOf('changeProxy(group.tag, manual.tag)', connect);
+    final connectedRefresh = scenario.indexOf('validation.refreshActiveRemoteProfile()', manualChoice);
+    final restartProof = scenario.indexOf("restartStates.contains('CoreStopping')", connectedRefresh);
+    final autoChoice = scenario.indexOf('changeProxy(group.tag, refreshedAuto.tag)', restartProof);
+    final postAutoTraffic = scenario.indexOf('await _verifyTraffic()', autoChoice);
+    final concreteLeaf = scenario.indexOf(
+      'await _waitForConcreteNativeLeaf(group.tag, refreshedAuto.tag)',
+      postAutoTraffic,
+    );
+    final keyLoss = scenario.indexOf('validation.runKeyLossCheckAndRestore()', concreteLeaf);
+    expect(dataChecks, greaterThanOrEqualTo(0));
+    expect(disconnectedRefresh, greaterThan(dataChecks));
+    expect(connect, greaterThan(disconnectedRefresh));
+    expect(manualChoice, greaterThan(connect));
+    expect(connectedRefresh, greaterThan(manualChoice));
+    expect(restartProof, greaterThan(connectedRefresh));
+    expect(autoChoice, greaterThan(restartProof));
+    expect(postAutoTraffic, greaterThan(autoChoice));
+    expect(concreteLeaf, greaterThan(postAutoTraffic));
+    expect(keyLoss, greaterThan(concreteLeaf));
+    expect(source, contains('zeon.runtime-remote-profile-fixture.v1'));
+    expect(source, contains("source.host.toLowerCase() != 'zeon-vps.link'"));
+  });
 }

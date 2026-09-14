@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy')][string]$Scenario = 'preflight',
+    [ValidateSet('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy', 'p03-r17')][string]$Scenario = 'preflight',
     [ValidateSet('system-proxy', 'tun', 'local-proxy')][string]$NetworkMode = 'system-proxy',
     [string]$ArtifactPath,
     [string]$FixtureId = 'zeon-authorized',
@@ -135,6 +135,7 @@ function Initialize-LocalFixtureVault {
 }
 
 function New-LocalFixtureTransfer {
+    param([switch]$IncludeSourceBundle)
     Assert-RunId $FixtureId
     $sourcePath = Join-Path $fixtureVaultRoot ("{0}.source.dpapi" -f $FixtureId)
     if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw 'Fixture source is not enrolled. Run once with -EnrollFixture in an interactive PowerShell.' }
@@ -145,11 +146,11 @@ function New-LocalFixtureTransfer {
     $transferPath = $null
     $transferReady = $false
     try {
+        $sourceBytes = Unprotect-LocalSecretBytes -Bytes ([IO.File]::ReadAllBytes($sourcePath))
+        $sourceUrl = [Text.Encoding]::UTF8.GetString($sourceBytes)
         if (Test-Path -LiteralPath $profilePath -PathType Leaf) {
             $profileBytes = Unprotect-LocalSecretBytes -Bytes ([IO.File]::ReadAllBytes($profilePath))
         } else {
-            $sourceBytes = Unprotect-LocalSecretBytes -Bytes ([IO.File]::ReadAllBytes($sourcePath))
-            $sourceUrl = [Text.Encoding]::UTF8.GetString($sourceBytes)
             $client = New-Object Net.Http.HttpClient
             $client.Timeout = [TimeSpan]::FromSeconds(30)
             try { $profileBytes = $client.GetByteArrayAsync($sourceUrl).GetAwaiter().GetResult() } finally { $client.Dispose() }
@@ -162,7 +163,16 @@ function New-LocalFixtureTransfer {
         New-Item -ItemType Directory -Path $transferRoot -Force | Out-Null
         Set-LocalSecretAcl -Path $transferRoot
         $transferPath = Join-Path $transferRoot ("{0}.tmp" -f [guid]::NewGuid().ToString('N'))
-        [IO.File]::WriteAllBytes($transferPath, $profileBytes)
+        if ($IncludeSourceBundle) {
+            $bundle = [ordered]@{
+                schema = 'zeon.runtime-remote-profile-fixture.v1'
+                source_url = $sourceUrl
+            } | ConvertTo-Json -Compress
+            [IO.File]::WriteAllText($transferPath, $bundle, (New-Object Text.UTF8Encoding($false)))
+            $bundle = $null
+        } else {
+            [IO.File]::WriteAllBytes($transferPath, $profileBytes)
+        }
         Set-LocalSecretAcl -Path $transferPath
         $transferReady = $true
         return [ordered]@{
@@ -331,6 +341,7 @@ function Get-ScenarioTimeoutSeconds {
         s06 = 480
         'manual-proxy' = 360
         'auto-proxy' = 360
+        'p03-r17' = 900
     })[$Scenario]
 }
 
@@ -481,7 +492,7 @@ if ($ValidateOnly) {
         schema = $controllerSchema
         remote_host = $RemoteHost
         transport = 'key-only SSH and SCP'
-        scenarios = @('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy')
+        scenarios = @('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy', 'p03-r17')
         modes = @('system-proxy', 'tun', 'local-proxy')
         scheduled_task = '\ZEON-LAB\ZEON-LAB Runtime Validation'
         task_identity = 'dedicated non-interactive local test principal'
@@ -538,7 +549,7 @@ $remoteFixtureTransfer = $null
 $remoteFixtureId = $null
 $fixtureHash = $null
 if ($Scenario -ne 'preflight') {
-    $fixtureTransfer = New-LocalFixtureTransfer
+    $fixtureTransfer = New-LocalFixtureTransfer -IncludeSourceBundle:($Scenario -eq 'p03-r17')
     $remoteFixtureId = [string]$fixtureTransfer.remote_id
     $fixtureHash = [string]$fixtureTransfer.sha256
     $remoteFixtureTransfer = "$env:SystemRoot\Temp\ZEON-LAB-fixture-$([guid]::NewGuid().ToString('N')).tmp"
