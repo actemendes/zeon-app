@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:grpc/grpc.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/bootstrap.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
@@ -860,22 +861,29 @@ class RuntimeHarness {
     const timeout = Duration(seconds: 30);
     final deadline = DateTime.now().add(timeout);
     do {
-      final groups = await coreService.core.backgroundCommandClient
-          .outboundsInfo(Empty())
-          .first
-          .timeout(const Duration(seconds: 8));
-      final currentGroup = groups.items.firstWhere(
-        (item) => item.tag == groupTag,
-        orElse: () => throw RuntimeFailure.fail('Native selector group disappeared after Auto traffic'),
-      );
-      if (currentGroup.selected != selectedTag) {
-        throw RuntimeFailure.fail('Native selector changed during Auto traffic');
+      try {
+        final groups = await coreService.core.backgroundCommandClient
+            .outboundsInfo(Empty())
+            .first
+            .timeout(const Duration(seconds: 8));
+        final currentGroup = groups.items.firstWhere(
+          (item) => item.tag == groupTag,
+          orElse: () => throw RuntimeFailure.fail('Native selector group disappeared after Auto traffic'),
+        );
+        if (currentGroup.selected != selectedTag) {
+          throw RuntimeFailure.fail('Native selector changed during Auto traffic');
+        }
+        final systemInfo = await coreService.core.backgroundCommandClient
+            .getSystemInfo(Empty())
+            .timeout(const Duration(seconds: 8));
+        final leaf = resolveRuntimeLeaf(groups, systemInfo.currentOutbound);
+        if (leaf != null) return leaf;
+      } on GrpcError {
+        if (container!.read(connectionNotifierProvider).valueOrNull is! Connected ||
+            coreService.currentState is! CoreStarted) {
+          rethrow;
+        }
       }
-      final systemInfo = await coreService.core.backgroundCommandClient
-          .getSystemInfo(Empty())
-          .timeout(const Duration(seconds: 8));
-      final leaf = resolveRuntimeLeaf(groups, systemInfo.currentOutbound);
-      if (leaf != null) return leaf;
       await Future<void>.delayed(const Duration(milliseconds: 500));
     } while (DateTime.now().isBefore(deadline));
     throw RuntimeFailure.deadline('Auto concrete native outbound after traffic', timeout);

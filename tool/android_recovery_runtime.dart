@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:grpc/grpc.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/bootstrap.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
@@ -200,18 +201,26 @@ class _AndroidRuntimeHarness {
   Future<OutboundInfo> _waitForConcreteLeaf(String groupTag, String selectedTag) async {
     final deadline = DateTime.now().add(const Duration(seconds: 30));
     do {
-      final groups = await core.core.backgroundCommandClient
-          .outboundsInfo(Empty())
-          .first
-          .timeout(const Duration(seconds: 8));
-      final group = groups.items.firstWhere(
-        (item) => item.tag == groupTag,
-        orElse: () => throw StateError('Native selector group disappeared after Auto traffic'),
-      );
-      if (group.selected != selectedTag) throw StateError('Native selector changed during Auto traffic');
-      final system = await core.core.backgroundCommandClient.getSystemInfo(Empty()).timeout(const Duration(seconds: 8));
-      final leaf = resolveRuntimeLeaf(groups, system.currentOutbound);
-      if (leaf != null) return leaf;
+      try {
+        final groups = await core.core.backgroundCommandClient
+            .outboundsInfo(Empty())
+            .first
+            .timeout(const Duration(seconds: 8));
+        final group = groups.items.firstWhere(
+          (item) => item.tag == groupTag,
+          orElse: () => throw StateError('Native selector group disappeared after Auto traffic'),
+        );
+        if (group.selected != selectedTag) throw StateError('Native selector changed during Auto traffic');
+        final system = await core.core.backgroundCommandClient
+            .getSystemInfo(Empty())
+            .timeout(const Duration(seconds: 8));
+        final leaf = resolveRuntimeLeaf(groups, system.currentOutbound);
+        if (leaf != null) return leaf;
+      } on GrpcError {
+        if (container.read(connectionNotifierProvider).valueOrNull is! Connected || core.currentState is! CoreStarted) {
+          rethrow;
+        }
+      }
       await Future<void>.delayed(const Duration(milliseconds: 500));
     } while (DateTime.now().isBefore(deadline));
     throw TimeoutException('Auto concrete native outbound after traffic', const Duration(seconds: 30));
