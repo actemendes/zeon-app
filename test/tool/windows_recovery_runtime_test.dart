@@ -275,7 +275,7 @@ void main() {
   test('P04 proves capability gating and Smart Active selection for every IPv6 mode', () async {
     final source = await File('tool/windows_recovery_runtime.dart').readAsString();
     final scenarioStart = source.indexOf('Future<void> _scenarioP04()');
-    final scenarioEnd = source.indexOf('Future<List<OutboundInfo>> _waitForP04Capability()', scenarioStart);
+    final scenarioEnd = source.indexOf('Future<List<OutboundInfo>> _waitForP04Capability(', scenarioStart);
     final scenario = source.substring(scenarioStart, scenarioEnd);
     expect(scenario, contains('urlTest(group.tag)'));
     expect(scenario, contains('await _verifyTraffic(verifyProductHealth: false)'));
@@ -284,6 +284,8 @@ void main() {
     expect(scenario, contains("ipv6_only selected a leaf without verified IPv6 capability"));
     expect(scenario, contains("reporter.event('p04_smart_active_verified'"));
     expect(source, contains("await container!.read(ConfigOptions.ipv6Mode.notifier).update(originalIPv6Mode!)"));
+    expect(source, contains('terminal.any((item) => item.ipv6Status == \'supported\')'));
+    expect(source, isNot(contains('groups.items.expand((group) => group.items)')));
   });
 
   test('S06 observes the late-start window and then proves retry traffic and stop', () async {

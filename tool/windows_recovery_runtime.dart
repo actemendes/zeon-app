@@ -842,7 +842,7 @@ class RuntimeHarness {
     await _verifyNativeSelectorTag(group.tag, auto.tag);
     await container!.read(proxiesOverviewNotifierProvider.notifier).urlTest(group.tag);
 
-    final capability = await _waitForP04Capability();
+    final capability = await _waitForP04Capability(group.tag);
     await _verifyTraffic(verifyProductHealth: false);
     final selected = await _p04SelectionSnapshot(group.tag, auto.tag);
     final supported = capability.where((item) => item.ipv6Status == 'supported').toList(growable: false);
@@ -873,7 +873,7 @@ class RuntimeHarness {
     await _disconnectAndVerify('p04');
   }
 
-  Future<List<OutboundInfo>> _waitForP04Capability() async {
+  Future<List<OutboundInfo>> _waitForP04Capability(String groupTag) async {
     const timeout = Duration(seconds: 180);
     final deadline = DateTime.now().add(timeout);
     do {
@@ -881,7 +881,7 @@ class RuntimeHarness {
           .outboundsInfo(Empty())
           .first
           .timeout(const Duration(seconds: 8));
-      final leaves = _p04Leaves(groups);
+      final leaves = _p04Leaves(groups, groupTag);
       if (leaves.isNotEmpty) {
         if (options.ipv6Mode == IPv6Mode.disable) {
           await Future<void>.delayed(const Duration(seconds: 3));
@@ -889,9 +889,12 @@ class RuntimeHarness {
               .outboundsInfo(Empty())
               .first
               .timeout(const Duration(seconds: 8));
-          return _p04Leaves(confirmation);
+          return _p04Leaves(confirmation, groupTag);
         }
-        if (leaves.every((item) => const {'supported', 'unavailable', 'indeterminate'}.contains(item.ipv6Status))) {
+        final terminal = leaves.where(
+          (item) => const {'supported', 'unavailable', 'indeterminate'}.contains(item.ipv6Status),
+        );
+        if (terminal.any((item) => item.ipv6Status == 'supported') || terminal.length == leaves.length) {
           return leaves;
         }
       }
@@ -900,14 +903,14 @@ class RuntimeHarness {
     throw RuntimeFailure.deadline('P04 IPv6 capability readiness', timeout);
   }
 
-  List<OutboundInfo> _p04Leaves(OutboundGroupList groups) {
-    final leaves = <String, OutboundInfo>{};
-    for (final item in groups.items.expand((group) => group.items)) {
-      if (!item.isGroup && item.isVisible && !const {'direct', 'block', 'dns'}.contains(item.type)) {
-        leaves[item.tag] = item;
-      }
-    }
-    return leaves.values.toList(growable: false);
+  List<OutboundInfo> _p04Leaves(OutboundGroupList groups, String groupTag) {
+    final selector = groups.items.firstWhere(
+      (item) => item.tag == groupTag,
+      orElse: () => throw RuntimeFailure.fail('P04 selector group disappeared during capability check'),
+    );
+    return selector.items
+        .where((item) => !item.isGroup && item.isVisible && !const {'direct', 'block', 'dns'}.contains(item.type))
+        .toList(growable: false);
   }
 
   Future<OutboundInfo> _p04SelectionSnapshot(String groupTag, String autoTag) async {
