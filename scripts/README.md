@@ -190,6 +190,23 @@ HTTPS/MTProto-ответы через VPN из отдельного Android UID.
 остаётся в Auto, Telegram — на переднем плане. Результат этого сценария не
 подтверждает доступность API ZEON: она проверяется отдельно.
 
+`verify_android_r13.py` проверяет recovery от реально неработающего manual
+сервера. До запуска при включённом validation VPN вручную выбрать сервер, который
+после свежей проверки задержки имеет `✕`, и независимо подтвердить, что новые
+HTTP/HTTPS/MTProto-запросы через него завершаются ошибкой: сам значок `✕` не
+доказывает отказ data plane. Скрипт повторяет fault-probe, выполняет OFF → ON с
+сохранённым manual A, повторно доказывает отсутствие трафика, UI-нажатием выбирает
+Auto и требует конкретный новый native leaf плюс HTTP 204 от
+`zeon-vps.link/generate_204`, две HTTPS-цели и MTProto DC1/DC2 `resPQ`.
+
+```powershell
+python scripts/verify_android_r13.py --serial DEVICE_SERIAL --fault-label 'FAULT_SERVER_LABEL' --snapshot-exe $snapshotExe --evidence-dir $testRunDir
+```
+
+Скрипт не изменяет профиль и не сохраняет UI-дерево или секреты; fault endpoint
+должен уже присутствовать в validation-подписке. После PASS приложение остаётся
+подключённым в Auto, поэтому вызывающий тест обязан выполнить disconnect/cleanup.
+
 ## Пересборка core
 
 `rebuild_hiddify_core.ps1` запускает Linux-инструменты через WSL и собирает локальные
