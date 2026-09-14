@@ -761,9 +761,11 @@ class RuntimeHarness {
     await _verifyNativeSelection(group.tag, manual.tag, requireConcreteLeaf: false);
     await _verifyTraffic();
 
-    final restartStates = <String>[];
+    var observedStopping = false;
+    var observedStarting = false;
     final restartSubscription = coreService.statusController.stream.listen((state) {
-      restartStates.add(state.runtimeType.toString());
+      observedStopping = observedStopping || state is CoreStopping;
+      observedStarting = observedStarting || state is CoreStarting;
     });
     try {
       await reporter.event('r17_connected_refresh_started', {'manual_outbound_id': await safeId(manual.tag)});
@@ -779,7 +781,7 @@ class RuntimeHarness {
       group = await _selectorGroup();
       await _verifyNativeSelection(group.tag, manual.tag, requireConcreteLeaf: false);
       await _verifyTraffic();
-      if (!restartStates.contains('CoreStopping') || !restartStates.contains('CoreStarting')) {
+      if (!observedStopping || !observedStarting) {
         throw RuntimeFailure.fail('R17 connected refresh did not prove a native restart');
       }
       await reporter.event('r17_connected_refresh_passed', {

@@ -324,7 +324,7 @@ void main() {
     final connect = scenario.indexOf('await _connectAndProveReady()', disconnectedRefresh);
     final manualChoice = scenario.indexOf('changeProxy(group.tag, manual.tag)', connect);
     final connectedRefresh = scenario.indexOf('validation.refreshActiveRemoteProfile()', manualChoice);
-    final restartProof = scenario.indexOf("restartStates.contains('CoreStopping')", connectedRefresh);
+    final restartProof = scenario.indexOf('if (!observedStopping || !observedStarting)', connectedRefresh);
     final autoChoice = scenario.indexOf('changeProxy(group.tag, refreshedAuto.tag)', restartProof);
     final postAutoTraffic = scenario.indexOf('await _verifyTraffic()', autoChoice);
     final concreteLeaf = scenario.indexOf(
