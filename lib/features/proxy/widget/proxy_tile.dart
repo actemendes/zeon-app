@@ -3,6 +3,7 @@ import 'package:zeon/features/proxy/active/ip_widget.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:zeon/gen/fonts.gen.dart';
+import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
@@ -16,6 +17,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
     this.countryCode,
     this.ipv6Status,
     this.ipv6StatusText,
+    required this.ipv6Mode,
     required this.onTap,
   });
 
@@ -25,6 +27,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
   final String? countryCode;
   final String? ipv6Status;
   final String? ipv6StatusText;
+  final IPv6Mode ipv6Mode;
   final GestureTapCallback? onTap;
 
   @override
@@ -41,13 +44,15 @@ class ProxyTile extends StatelessWidget with PresLogger {
     final pingColor = failedPing
         ? theme.colorScheme.error
         : delayColor(context, proxy.hasUrlTestDelay() ? proxy.urlTestDelay : 0);
+    final showIpv6Outline = ipv6Mode != IPv6Mode.disable && ipv6Status == "supported";
+    final showIpv6Unavailable = ipv6Mode == IPv6Mode.only && ipv6Status == "unavailable";
 
     return ListTile(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       tileColor: tileColor,
       selected: selected,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-      minTileHeight: ipv6StatusText == null ? 64 : 76,
+      minTileHeight: 64,
       minLeadingWidth: 40,
       horizontalTitleGap: 12,
       title: Text(
@@ -60,23 +65,30 @@ class ProxyTile extends StatelessWidget with PresLogger {
           fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
         ),
       ),
-      subtitle: ipv6StatusText == null
-          ? null
-          : Text(
-              ipv6StatusText!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(color: selected ? primaryColor : _ipv6StatusColor(theme)),
-            ),
       leading: GestureDetector(
         behavior: HitTestBehavior.opaque,
         excludeFromSemantics: true,
         onLongPress: () {},
-        child: IPCountryFlag(
-          countryCode:
-              countryCode ??
-              resolveProxyCountryCode(tagDisplay: proxy.tagDisplay, fallbackCountryCode: proxy.ipinfo.countryCode),
-          size: 40,
+        child: Semantics(
+          label: ipv6Mode == IPv6Mode.disable ? null : ipv6StatusText,
+          child: Container(
+            key: const ValueKey('proxy-ipv6-flag-frame'),
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: showIpv6Outline
+                ? BoxDecoration(
+                    border: Border.all(color: const Color(0xFF3CE74F)),
+                    borderRadius: BorderRadius.circular(9),
+                  )
+                : null,
+            child: IPCountryFlag(
+              countryCode:
+                  countryCode ??
+                  resolveProxyCountryCode(tagDisplay: proxy.tagDisplay, fallbackCountryCode: proxy.ipinfo.countryCode),
+              size: 40,
+            ),
+          ),
         ),
       ),
       trailing: SizedBox(
@@ -85,20 +97,30 @@ class ProxyTile extends StatelessWidget with PresLogger {
           mainAxisAlignment: MainAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Flexible(
-              child: Text(
-                pingText,
-                maxLines: 1,
-                overflow: TextOverflow.fade,
-                softWrap: false,
-                textAlign: TextAlign.right,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: selected ? primaryColor : pingColor,
-                  fontSize: failedPing ? 16 : null,
-                  height: 1,
+            if (showIpv6Unavailable)
+              Icon(
+                Icons.close_rounded,
+                key: const ValueKey('proxy-ipv6-unavailable-cross'),
+                size: 20,
+                color: selected ? primaryColor : theme.colorScheme.error,
+                semanticLabel: ipv6StatusText,
+              )
+            else
+              Flexible(
+                child: Text(
+                  pingText,
+                  key: const ValueKey('proxy-ping'),
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  textAlign: TextAlign.right,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: selected ? primaryColor : pingColor,
+                    fontSize: failedPing ? 16 : null,
+                    height: 1,
+                  ),
                 ),
               ),
-            ),
             const SizedBox(width: 6),
             QualityBars.fromOutbound(proxy, isActive: isActive),
           ],
@@ -107,13 +129,6 @@ class ProxyTile extends StatelessWidget with PresLogger {
       onTap: onTap,
     );
   }
-
-  Color _ipv6StatusColor(ThemeData theme) => switch (ipv6Status) {
-    "supported" => theme.brightness == Brightness.dark ? Colors.lightGreen : Colors.green,
-    "unavailable" => theme.colorScheme.error,
-    "checking" => theme.colorScheme.primary,
-    _ => theme.colorScheme.onSurfaceVariant,
-  };
 
   Color delayColor(BuildContext context, int delay) {
     if (Theme.of(context).brightness == Brightness.dark) {

@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy', 'p03-r17')][string]$Scenario = 'preflight',
+    [ValidateSet('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy', 'p03-r17', 'p04')][string]$Scenario = 'preflight',
     [ValidateSet('system-proxy', 'tun', 'local-proxy')][string]$NetworkMode = 'system-proxy',
+    [ValidateSet('ipv4_only', 'prefer_ipv4', 'prefer_ipv6', 'ipv6_only')][string]$IPv6Mode = 'ipv4_only',
     [string]$ArtifactPath,
     [string]$FixtureId = 'zeon-authorized',
     [string]$RunId = ("runtime-{0}-{1}" -f $Scenario, [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')),
@@ -342,6 +343,7 @@ function Get-ScenarioTimeoutSeconds {
         'manual-proxy' = 360
         'auto-proxy' = 360
         'p03-r17' = 900
+        p04 = 600
     })[$Scenario]
 }
 
@@ -357,6 +359,7 @@ function New-RuntimeRequest {
         run_id = $RunId
         scenario = $Scenario
         mode = $NetworkMode
+        ipv6_mode = $IPv6Mode
         version = $Artifact.version
         build_number = $Artifact.build_number
         artifact_file = [IO.Path]::GetFileName($Artifact.path)
@@ -492,8 +495,9 @@ if ($ValidateOnly) {
         schema = $controllerSchema
         remote_host = $RemoteHost
         transport = 'key-only SSH and SCP'
-        scenarios = @('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy', 'p03-r17')
+        scenarios = @('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy', 'p03-r17', 'p04')
         modes = @('system-proxy', 'tun', 'local-proxy')
+        ipv6_modes = @('ipv4_only', 'prefer_ipv4', 'prefer_ipv6', 'ipv6_only')
         scheduled_task = '\ZEON-LAB\ZEON-LAB Runtime Validation'
         task_identity = 'dedicated non-interactive local test principal'
         watchdog_identity = 'SYSTEM'
@@ -605,6 +609,7 @@ $controllerResult = [ordered]@{
     run_id = $RunId
     scenario = $Scenario
     mode = $NetworkMode
+    ipv6_mode = $IPv6Mode
     status = [string]$collected.status.status
     verdict = [string]$collected.status.verdict
     classification = [string]$collected.status.classification

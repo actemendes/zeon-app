@@ -66,8 +66,11 @@ CurrentUser DPAPI. Выделенное roaming-состояние ZEON очищ
 ```
 
 Remote request принимает `preflight`, `connect`, однократный S02, фазовый S06,
-`manual-proxy`, `auto-proxy` и совмещённый P03/R17 в режимах `system-proxy`,
-`tun` и `local-proxy`. Для P03/R17 контроллер передаёт временный источник
+`manual-proxy`, `auto-proxy`, совмещённый P03/R17 и P04 в режимах `system-proxy`,
+`tun` и `local-proxy`. P04 дополнительно требует один из четырёх `-IPv6Mode`:
+`ipv4_only`, `prefer_ipv4`, `prefer_ipv6` или `ipv6_only`. Он проверяет Smart Active,
+capability gating concrete leaf и HTTPS-трафик через выбранный transport. Для
+P03/R17 контроллер передаёт временный источник
 подписки из локального DPAPI vault; remote harness хранит его только под DPAPI
 выделенного тестового пользователя и редактирует URI из evidence.
 Параметры передаются валидируемым immutable JSON v2, а не аргументами Scheduled
@@ -93,6 +96,10 @@ evidence. Plaintext удаляется после secret-scan. URI и содер
   -ArtifactPath '<out/installers/win/ZEON-1.5.0+N-...zip>'
 .\scripts\windows_runtime_lab.ps1 `
   -Scenario connect -NetworkMode system-proxy -RunId '<unique-connect-id>' `
+  -ArtifactPath '<out/installers/win/ZEON-1.5.0+N-...zip>' `
+  -FixtureId 'zeon-authorized' -Detach
+.\scripts\windows_runtime_lab.ps1 `
+  -Scenario p04 -NetworkMode tun -IPv6Mode prefer_ipv6 -RunId '<unique-p04-id>' `
   -ArtifactPath '<out/installers/win/ZEON-1.5.0+N-...zip>' `
   -FixtureId 'zeon-authorized' -Detach
 .\scripts\windows_runtime_lab.ps1 -Status -RunId '<unique-connect-id>'

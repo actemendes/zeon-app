@@ -65,7 +65,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                     itemCount: group.items.length,
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: crossAxisCount,
-                      mainAxisExtent: ipv6Mode == IPv6Mode.disable ? 64 : 76,
+                      mainAxisExtent: 64,
                       mainAxisSpacing: 8,
                       crossAxisSpacing: 8,
                     ),
@@ -94,6 +94,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                         countryCode: displayInfo.countryCode,
                         ipv6Status: ipv6Status,
                         ipv6StatusText: ipv6StatusText,
+                        ipv6Mode: ipv6Mode,
                         onTap: () async {
                           await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
                           // if (selectActiveProxyMutation.state.isInProgress) return;

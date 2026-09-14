@@ -44,7 +44,7 @@ try {
     }
     $runId = [string]$request.run_id
     Assert-RuntimeSafeId -Value $runId -Label 'run_id'
-    if ([string]$request.scenario -notin @('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy', 'p03-r17') -or [string]$request.mode -notin @('system-proxy', 'tun', 'local-proxy')) {
+    if ([string]$request.scenario -notin @('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy', 'p03-r17', 'p04') -or [string]$request.mode -notin @('system-proxy', 'tun', 'local-proxy') -or [string]$request.ipv6_mode -notin @('ipv4_only', 'prefer_ipv4', 'prefer_ipv6', 'ipv6_only')) {
         throw 'Queued request is outside the enabled runtime scope.'
     }
     $deployment = Get-Content -LiteralPath (Join-Path $LabRoot 'state\runtime\deployment.json') -Raw | ConvertFrom-Json
@@ -167,6 +167,7 @@ try {
     $arguments = @(
         '--scenario', [string]$request.scenario,
         '--mode', [string]$request.mode,
+        '--ipv6-mode', [string]$request.ipv6_mode,
         '--evidence-dir', $runtimeEvidence,
         '--run-id', $runId,
         '--connect-timeout-seconds', [string][int]$request.connect_timeout_seconds,

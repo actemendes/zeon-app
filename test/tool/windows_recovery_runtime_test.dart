@@ -25,10 +25,34 @@ void main() {
 
           expect(options.scenario, scenario);
           expect(options.mode, mode);
+          expect(options.ipv6Mode, IPv6Mode.disable);
           expect(options.connectTimeout, const Duration(seconds: 45));
           expect(options.s02Cycles, 1);
           expect(options.toJson()['timeouts_seconds'], containsPair('s06_late_activation_observation', 150));
         }
+      }
+    });
+
+    test('parses all four P04 IPv6 modes', () {
+      for (final ipv6Mode in IPv6Mode.values) {
+        final options = RuntimeOptions.parse([
+          '--scenario',
+          'p04',
+          '--mode',
+          'tun',
+          '--ipv6-mode',
+          ipv6Mode.key,
+          '--evidence-dir',
+          r'C:\evidence',
+          '--profile-file',
+          r'C:\fixture.txt',
+          '--run-id',
+          'p04-options-001',
+        ], environment: const {});
+
+        expect(options.scenario, RuntimeScenario.p04);
+        expect(options.ipv6Mode, ipv6Mode);
+        expect(options.toJson(), containsPair('ipv6_mode', ipv6Mode.key));
       }
     });
 
@@ -246,6 +270,20 @@ void main() {
     expect(source, contains("43 => 'system_proxy_web_request'"));
     expect(source, contains("'signal': 'product-health'"));
     expect(source, contains("'win32_code': error.win32Code"));
+  });
+
+  test('P04 proves capability gating and Smart Active selection for every IPv6 mode', () async {
+    final source = await File('tool/windows_recovery_runtime.dart').readAsString();
+    final scenarioStart = source.indexOf('Future<void> _scenarioP04()');
+    final scenarioEnd = source.indexOf('Future<List<OutboundInfo>> _waitForP04Capability()', scenarioStart);
+    final scenario = source.substring(scenarioStart, scenarioEnd);
+    expect(scenario, contains('urlTest(group.tag)'));
+    expect(scenario, contains('await _verifyTraffic(verifyProductHealth: false)'));
+    expect(scenario, contains("ipv4_only unexpectedly executed IPv6 capability probes"));
+    expect(scenario, contains("prefer_ipv6 did not choose from the verified IPv6 pool"));
+    expect(scenario, contains("ipv6_only selected a leaf without verified IPv6 capability"));
+    expect(scenario, contains("reporter.event('p04_smart_active_verified'"));
+    expect(source, contains("await container!.read(ConfigOptions.ipv6Mode.notifier).update(originalIPv6Mode!)"));
   });
 
   test('S06 observes the late-start window and then proves retry traffic and stop', () async {

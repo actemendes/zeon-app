@@ -12,10 +12,12 @@ $request = Get-Content -LiteralPath $RequestPath -Raw | ConvertFrom-Json
 if ([int]$request.schema_version -ne 2 -or [string]$request.controller_schema -cne 'zeon.remote-controller.v2' -or [string]$request.runtime_schema -cne 'zeon.windows-runtime.v1') { throw 'Unsupported runtime request schema.' }
 $runId = [string]$request.run_id
 Assert-RuntimeSafeId -Value $runId -Label 'run_id'
-$allowedScenarios = @('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy', 'p03-r17')
+$allowedScenarios = @('preflight', 'connect', 's02', 's06', 'manual-proxy', 'auto-proxy', 'p03-r17', 'p04')
 $allowedModes = @('system-proxy', 'tun', 'local-proxy')
+$allowedIPv6Modes = @('ipv4_only', 'prefer_ipv4', 'prefer_ipv6', 'ipv6_only')
 if ([string]$request.scenario -notin $allowedScenarios) { throw 'Scenario is outside the runtime allowlist.' }
 if ([string]$request.mode -notin $allowedModes) { throw 'Network mode is outside the runtime allowlist.' }
+if ([string]$request.ipv6_mode -notin $allowedIPv6Modes) { throw 'IPv6 mode is outside the runtime allowlist.' }
 if ([string]$request.cleanup_policy -cne 'strict-restore-and-verify') { throw 'Unsupported cleanup policy.' }
 if ([int]$request.execution_timeout_seconds -lt 3 -or [int]$request.execution_timeout_seconds -gt 7200) { throw 'Execution deadline is outside the finite allowlist.' }
 if ([int]$request.controller_timeout_seconds -lt 60 -or [int]$request.controller_timeout_seconds -gt 10800) { throw 'Controller deadline is outside the finite allowlist.' }

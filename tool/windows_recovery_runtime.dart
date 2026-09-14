@@ -43,7 +43,8 @@ enum RuntimeScenario {
   s06('s06'),
   manualProxy('manual-proxy'),
   autoProxy('auto-proxy'),
-  p03R17('p03-r17');
+  p03R17('p03-r17'),
+  p04('p04');
 
   const RuntimeScenario(this.cliName);
   final String cliName;
@@ -115,6 +116,7 @@ class RuntimeOptions {
   const RuntimeOptions({
     required this.scenario,
     required this.mode,
+    required this.ipv6Mode,
     required this.evidenceDirectory,
     this.profileFile,
     required this.runId,
@@ -132,6 +134,7 @@ class RuntimeOptions {
 
   final RuntimeScenario scenario;
   final HarnessMode mode;
+  final IPv6Mode ipv6Mode;
   final String evidenceDirectory;
   final String? profileFile;
   final String runId;
@@ -152,6 +155,7 @@ class RuntimeOptions {
     const valued = {
       'scenario',
       'mode',
+      'ipv6-mode',
       'evidence-dir',
       'profile-file',
       'run-id',
@@ -204,6 +208,11 @@ class RuntimeOptions {
 
     final scenario = RuntimeScenario.parse(one('scenario', 'ZEON_RUNTIME_SCENARIO') ?? 'connect');
     final mode = HarnessMode.parse(one('mode', 'ZEON_RUNTIME_MODE') ?? 'system-proxy');
+    final ipv6ModeKey = one('ipv6-mode', 'ZEON_RUNTIME_IPV6_MODE') ?? IPv6Mode.disable.key;
+    final ipv6Mode = IPv6Mode.values.firstWhere(
+      (item) => item.key == ipv6ModeKey,
+      orElse: () => throw FormatException('Unsupported IPv6 mode: $ipv6ModeKey'),
+    );
     final evidenceDirectory = one('evidence-dir', 'ZEON_RUNTIME_EVIDENCE_DIR');
     final profileFile = one('profile-file', 'ZEON_RUNTIME_PROFILE_FILE');
     final runId = one('run-id', 'ZEON_RUNTIME_RUN_ID');
@@ -229,6 +238,7 @@ class RuntimeOptions {
       RuntimeScenario.s02 => 3600,
       RuntimeScenario.s06 => 300,
       RuntimeScenario.manualProxy || RuntimeScenario.autoProxy || RuntimeScenario.p03R17 => 900,
+      RuntimeScenario.p04 => 600,
       RuntimeScenario.connect => 300,
     };
     final scenarioSeconds = integer(
@@ -260,6 +270,7 @@ class RuntimeOptions {
     return RuntimeOptions(
       scenario: scenario,
       mode: mode,
+      ipv6Mode: ipv6Mode,
       evidenceDirectory: evidenceDirectory,
       profileFile: profileFile,
       runId: runId,
@@ -279,6 +290,7 @@ class RuntimeOptions {
   Map<String, Object?> toJson() => {
     'scenario': scenario.cliName,
     'mode': mode.cliName,
+    'ipv6_mode': ipv6Mode.key,
     'run_id': runId,
     'timeouts_seconds': {
       'connect_readiness': connectTimeout.inSeconds,
@@ -488,6 +500,7 @@ class RuntimeHarness {
   ProviderContainer? container;
   NetworkBaseline? baseline;
   ServiceMode? originalMode;
+  IPv6Mode? originalIPv6Mode;
   int? originalMixedPort;
   String? originalProxySelection;
   ProviderSubscription<AsyncValue<ConnectionStatus>>? appSubscription;
@@ -535,6 +548,7 @@ class RuntimeHarness {
       await _ensureProfile();
     }
     originalMode = container!.read(ConfigOptions.serviceMode);
+    originalIPv6Mode = container!.read(ConfigOptions.ipv6Mode);
     originalMixedPort = container!.read(ConfigOptions.mixedPort);
     await container!.read(ConfigOptions.mixedPort.notifier).update(options.proxyPort);
     if (Platform.environment['ZEON_RUNTIME_NATIVE_DEBUG'] == '1') {
@@ -564,6 +578,7 @@ class RuntimeHarness {
           RuntimeScenario.manualProxy => _scenarioManualProxy(),
           RuntimeScenario.autoProxy => _scenarioAutoProxy(),
           RuntimeScenario.p03R17 => _scenarioP03R17(),
+          RuntimeScenario.p04 => _scenarioP04(),
         }.timeout(
           options.scenarioTimeout,
           onTimeout: () => throw RuntimeFailure.deadline('scenario', options.scenarioTimeout),
@@ -813,6 +828,113 @@ class RuntimeHarness {
     await reporter.event('p03_key_loss_passed', await validation.runKeyLossCheckAndRestore());
   }
 
+  Future<void> _scenarioP04() async {
+    await _connectAndProveReady();
+    final group = await _selectorGroup();
+    originalProxySelection ??= group.selected;
+    final auto = group.items.firstWhere(
+      (item) => item.tag == 'balance' || item.type == 'balancer',
+      orElse: () => throw RuntimeFailure.environment('Smart Active Auto selector is unavailable'),
+    );
+    if (group.selected != auto.tag) {
+      await container!.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, auto.tag);
+    }
+    await _verifyNativeSelectorTag(group.tag, auto.tag);
+    await container!.read(proxiesOverviewNotifierProvider.notifier).urlTest(group.tag);
+
+    final capability = await _waitForP04Capability();
+    await _verifyTraffic(verifyProductHealth: false);
+    final selected = await _p04SelectionSnapshot(group.tag, auto.tag);
+    final supported = capability.where((item) => item.ipv6Status == 'supported').toList(growable: false);
+    final selectedStatus = selected.ipv6Status.isEmpty ? 'not_tested' : selected.ipv6Status;
+
+    if (options.ipv6Mode == IPv6Mode.disable) {
+      if (capability.any((item) => item.ipv6Status.isNotEmpty && item.ipv6Status != 'not_tested')) {
+        throw RuntimeFailure.fail('ipv4_only unexpectedly executed IPv6 capability probes');
+      }
+    } else if (options.ipv6Mode == IPv6Mode.prefer && supported.isNotEmpty && selectedStatus != 'supported') {
+      throw RuntimeFailure.fail('prefer_ipv6 did not choose from the verified IPv6 pool');
+    } else if (options.ipv6Mode == IPv6Mode.only && selectedStatus != 'supported') {
+      throw RuntimeFailure.fail('ipv6_only selected a leaf without verified IPv6 capability');
+    }
+
+    await reporter.event('p04_smart_active_verified', {
+      'ipv6_mode': options.ipv6Mode.key,
+      'transport_mode': options.mode.cliName,
+      'candidate_count': capability.length,
+      'supported_count': supported.length,
+      'unavailable_count': capability.where((item) => item.ipv6Status == 'unavailable').length,
+      'indeterminate_count': capability.where((item) => item.ipv6Status == 'indeterminate').length,
+      'not_tested_count': capability.where((item) => item.ipv6Status.isEmpty || item.ipv6Status == 'not_tested').length,
+      'selected_leaf_id': await safeId(selected.tag),
+      'selected_ipv6_status': selectedStatus,
+      'smart_active': true,
+    });
+    await _disconnectAndVerify('p04');
+  }
+
+  Future<List<OutboundInfo>> _waitForP04Capability() async {
+    const timeout = Duration(seconds: 180);
+    final deadline = DateTime.now().add(timeout);
+    do {
+      final groups = await coreService.core.backgroundCommandClient
+          .outboundsInfo(Empty())
+          .first
+          .timeout(const Duration(seconds: 8));
+      final leaves = _p04Leaves(groups);
+      if (leaves.isNotEmpty) {
+        if (options.ipv6Mode == IPv6Mode.disable) {
+          await Future<void>.delayed(const Duration(seconds: 3));
+          final confirmation = await coreService.core.backgroundCommandClient
+              .outboundsInfo(Empty())
+              .first
+              .timeout(const Duration(seconds: 8));
+          return _p04Leaves(confirmation);
+        }
+        if (leaves.every((item) => const {'supported', 'unavailable', 'indeterminate'}.contains(item.ipv6Status))) {
+          return leaves;
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    } while (DateTime.now().isBefore(deadline));
+    throw RuntimeFailure.deadline('P04 IPv6 capability readiness', timeout);
+  }
+
+  List<OutboundInfo> _p04Leaves(OutboundGroupList groups) {
+    final leaves = <String, OutboundInfo>{};
+    for (final item in groups.items.expand((group) => group.items)) {
+      if (!item.isGroup && item.isVisible && !const {'direct', 'block', 'dns'}.contains(item.type)) {
+        leaves[item.tag] = item;
+      }
+    }
+    return leaves.values.toList(growable: false);
+  }
+
+  Future<OutboundInfo> _p04SelectionSnapshot(String groupTag, String autoTag) async {
+    const timeout = Duration(seconds: 30);
+    final deadline = DateTime.now().add(timeout);
+    do {
+      final groups = await coreService.core.backgroundCommandClient
+          .outboundsInfo(Empty())
+          .first
+          .timeout(const Duration(seconds: 8));
+      final currentGroup = groups.items.firstWhere(
+        (item) => item.tag == groupTag,
+        orElse: () => throw RuntimeFailure.fail('P04 selector group disappeared'),
+      );
+      if (currentGroup.selected != autoTag) {
+        throw RuntimeFailure.fail('P04 Smart Active selector changed unexpectedly');
+      }
+      final systemInfo = await coreService.core.backgroundCommandClient
+          .getSystemInfo(Empty())
+          .timeout(const Duration(seconds: 8));
+      final leaf = resolveRuntimeLeaf(groups, systemInfo.currentOutbound);
+      if (leaf != null) return leaf;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    } while (DateTime.now().isBefore(deadline));
+    throw RuntimeFailure.deadline('P04 concrete Smart Active leaf', timeout);
+  }
+
   Future<OutboundInfo?> _verifyNativeSelection(
     String groupTag,
     String selectedTag, {
@@ -891,6 +1013,9 @@ class RuntimeHarness {
 
   Future<void> _prepareMode() async {
     await container!.read(ConfigOptions.serviceMode.notifier).update(options.mode.serviceMode);
+    if (options.scenario == RuntimeScenario.p04) {
+      await container!.read(ConfigOptions.ipv6Mode.notifier).update(options.ipv6Mode);
+    }
     await reporter.event('service_mode_selected', {'service_mode': options.mode.serviceMode.name});
   }
 
@@ -1397,6 +1522,13 @@ catch { exit 44 }''';
             await container!.read(ConfigOptions.serviceMode.notifier).update(originalMode!);
           } catch (error) {
             errors.add('service_mode_restore:${error.runtimeType}');
+          }
+        }
+        if (originalIPv6Mode != null) {
+          try {
+            await container!.read(ConfigOptions.ipv6Mode.notifier).update(originalIPv6Mode!);
+          } catch (error) {
+            errors.add('ipv6_mode_restore:${error.runtimeType}');
           }
         }
         if (originalMixedPort != null) {
