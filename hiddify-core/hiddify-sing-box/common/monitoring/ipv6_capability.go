@@ -24,7 +24,7 @@ const (
 
 var defaultIPv6ProbeURLs = []string{
 	"https://speed.cloudflare.com/__down?bytes=1",
-	"https://ipv6.google.com/generate_204",
+	"https://www.google.com/robots.txt",
 }
 
 type ipv6ProbeResult struct {

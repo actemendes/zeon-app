@@ -71,7 +71,7 @@ func TestDefaultIPv6ProbeTargetsUseDistinctLiveHostnames(t *testing.T) {
 	}
 	first := ipv6ProbeTargetLabel(defaultIPv6ProbeURLs[0])
 	second := ipv6ProbeTargetLabel(defaultIPv6ProbeURLs[1])
-	if first != "speed.cloudflare.com" || second != "ipv6.google.com" || first == second {
+	if first != "speed.cloudflare.com" || second != "www.google.com" || first == second {
 		t.Fatalf("unexpected default IPv6 capability hosts: %q, %q", first, second)
 	}
 }
