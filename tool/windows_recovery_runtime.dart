@@ -976,7 +976,10 @@ class RuntimeHarness {
       'supported_count': leaves.where((item) => item.ipv6Status == 'supported').length,
       'complete_supported_count': leaves.where(_hasCompleteIPv6Proof).length,
       'partial_supported_count': leaves
-          .where((item) => item.ipv6Status == 'supported' && !_hasCompleteIPv6Proof(item))
+          .where(
+            (item) =>
+                item.ipv6TargetSuccess > 0 && item.ipv6TargetCount > 0 && item.ipv6TargetSuccess < item.ipv6TargetCount,
+          )
           .length,
       'unavailable_count': leaves.where((item) => item.ipv6Status == 'unavailable').length,
       'indeterminate_count': leaves.where((item) => item.ipv6Status == 'indeterminate').length,

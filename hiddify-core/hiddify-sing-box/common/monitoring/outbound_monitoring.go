@@ -1902,7 +1902,7 @@ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter
 	}
 	if capability != nil {
 		result := (<-capability).result
-		his.IPv6Status = result.status
+		his.IPv6Status = ipv6CapabilityStatusForMode(result, m.ipv6Mode)
 		his.IPv6CheckedAt = result.checkedAt
 		his.IPv6TargetSuccess = result.successes
 		his.IPv6TargetCount = result.attempts

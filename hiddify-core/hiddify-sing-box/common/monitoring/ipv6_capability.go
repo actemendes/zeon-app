@@ -2,6 +2,7 @@ package monitoring
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"time"
 
@@ -40,19 +41,22 @@ func probeIPv6Capability(ctx context.Context, outbound N.Dialer, targets []strin
 		targets = defaultIPv6ProbeURLs
 	}
 	type result struct {
-		err error
+		target string
+		err    error
 	}
 	results := make(chan result, len(targets))
 	for _, target := range targets {
 		target := target
 		go func() {
 			_, err := urltest.IPv6URLTest(ctx, target, outbound)
-			results <- result{err: err}
+			results <- result{target: target, err: err}
 		}()
 	}
 	probe := ipv6ProbeResult{status: IPv6StatusUnavailable, checkedAt: time.Now(), attempts: len(targets)}
 	var errorTypes []string
 	var errorTexts []string
+	var classifiedErrorTypes []string
+	var classifiedErrorTexts []string
 	for range targets {
 		item := <-results
 		if item.err == nil {
@@ -60,19 +64,37 @@ func probeIPv6Capability(ctx context.Context, outbound N.Dialer, targets []strin
 			continue
 		}
 		errorType, errorText := urltest.ClassifyProbeError(item.err)
-		errorTypes = append(errorTypes, errorType)
-		errorTexts = append(errorTexts, errorText)
+		classifiedErrorTypes = append(classifiedErrorTypes, errorType)
+		classifiedErrorTexts = append(classifiedErrorTexts, errorText)
+		label := ipv6ProbeTargetLabel(item.target)
+		errorTypes = append(errorTypes, label+"="+errorType)
+		errorTexts = append(errorTexts, label+"="+errorText)
 	}
+	probe.errorType = strings.Join(errorTypes, ",")
+	probe.errorText = strings.Join(errorTexts, "; ")
 	if probe.successes > 0 {
 		probe.status = IPv6StatusSupported
 		return probe
 	}
-	probe.errorType = strings.Join(errorTypes, ",")
-	probe.errorText = strings.Join(errorTexts, "; ")
-	if ctx.Err() != nil || allIPv6ProbeErrorsInfrastructure(errorTypes, errorTexts) {
+	if ctx.Err() != nil || allIPv6ProbeErrorsInfrastructure(classifiedErrorTypes, classifiedErrorTexts) {
 		probe.status = IPv6StatusIndeterminate
 	}
 	return probe
+}
+
+func ipv6ProbeTargetLabel(target string) string {
+	parsed, err := url.Parse(target)
+	if err != nil || parsed.Hostname() == "" {
+		return "target"
+	}
+	return strings.ToLower(parsed.Hostname())
+}
+
+func ipv6CapabilityStatusForMode(result ipv6ProbeResult, mode C.DomainStrategy) string {
+	if mode == C.DomainStrategyIPv6Only && result.successes > 0 && result.successes < result.attempts {
+		return IPv6StatusUnavailable
+	}
+	return result.status
 }
 
 func allIPv6ProbeErrorsInfrastructure(errorTypes, errorTexts []string) bool {

@@ -45,6 +45,26 @@ func TestIPv6CapabilityFreshForModeRequiresAllTargetsOnlyInStrictMode(t *testing
 	}
 }
 
+func TestIPv6CapabilityPresentationMarksPartialStrictProofUnavailable(t *testing.T) {
+	partial := ipv6ProbeResult{status: IPv6StatusSupported, successes: 1, attempts: 2}
+	if got := ipv6CapabilityStatusForMode(partial, C.DomainStrategyIPv6Only); got != IPv6StatusUnavailable {
+		t.Fatalf("strict partial status = %q, want unavailable", got)
+	}
+	if got := ipv6CapabilityStatusForMode(partial, C.DomainStrategyPreferIPv6); got != IPv6StatusSupported {
+		t.Fatalf("preferred-mode partial status = %q, want supported", got)
+	}
+	complete := ipv6ProbeResult{status: IPv6StatusSupported, successes: 2, attempts: 2}
+	if got := ipv6CapabilityStatusForMode(complete, C.DomainStrategyIPv6Only); got != IPv6StatusSupported {
+		t.Fatalf("strict complete status = %q, want supported", got)
+	}
+}
+
+func TestIPv6ProbeTargetLabelUsesOnlyHostname(t *testing.T) {
+	if got := ipv6ProbeTargetLabel("https://IPv6.Example.test/private/path?secret=value"); got != "ipv6.example.test" {
+		t.Fatalf("target label = %q", got)
+	}
+}
+
 func TestIPv6TrafficAllowedAppliesFourModeContract(t *testing.T) {
 	now := time.Now()
 	proof := &adapter.URLTestHistory{
