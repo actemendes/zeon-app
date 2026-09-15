@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/region.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
-import 'package:zeon/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/features/per_app_proxy/model/app_package_info.dart';
@@ -290,19 +289,6 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
               onPressed: () =>
                   scrollController.animateTo(0.0, duration: const Duration(milliseconds: 500), curve: Curves.easeOut),
               child: Icon(Icons.keyboard_arrow_up_rounded, color: fabForegroundColor),
-            )
-          : (ref.watch(ConfigOptions.region) != Region.other)
-          ? FloatingActionButton.extended(
-              foregroundColor: fabForegroundColor,
-              onPressed: () async =>
-                  await ref.read(bottomSheetsNotifierProvider.notifier).showAutoAppsSelection(mode: mode!),
-              label: Text(t.pages.settings.routing.perAppProxy.autoSelection.title),
-              icon: Icon(
-                ref.watch(Preferences.autoAppsSelectionRegion) == null
-                    ? Icons.toggle_off_outlined
-                    : Icons.toggle_on_rounded,
-                color: fabForegroundColor,
-              ),
             )
           : null,
       body: displayedApps.when(
