@@ -102,8 +102,13 @@ func ipv6OnlyRemoteDNSAddress(address string) (string, error) {
 func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string][]string) error {
 	remoteDNSAddress := opt.RemoteDnsAddress
 	remoteDomainResolverStrategy := option.DomainStrategy(C.DomainStrategyPreferIPv4)
+	var ipv6CapabilityBootstrapDNS *option.DNSServerOptions
 	if opt.IPv6Mode == option.DomainStrategy(C.DomainStrategyIPv6Only) {
 		var err error
+		ipv6CapabilityBootstrapDNS, err = getDNSServerOptions(DNSIPv6CapabilityBootstrapTag, opt.RemoteDnsAddress, DNSDirectTag, OutboundMainDetour)
+		if err != nil {
+			return err
+		}
 		remoteDNSAddress, err = ipv6OnlyRemoteDNSAddress(remoteDNSAddress)
 		if err != nil {
 			return err
@@ -210,6 +215,9 @@ func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string]
 				Inet6Range: &inet6Range,
 			},
 		})
+	}
+	if ipv6CapabilityBootstrapDNS != nil {
+		dnsOptions.Servers = append(dnsOptions.Servers, *ipv6CapabilityBootstrapDNS)
 	}
 	options.DNS = &dnsOptions
 

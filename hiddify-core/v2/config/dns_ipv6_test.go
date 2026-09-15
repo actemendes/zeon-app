@@ -68,6 +68,9 @@ func TestSetDNSUsesIPv6TransportForStrictMode(t *testing.T) {
 	if got := servers[DNSRemoteNoWarpTag]; got != "2001:4860:4860::8888" {
 		t.Fatalf("strict no-WARP DNS=%q want IPv6 Google endpoint", got)
 	}
+	if got := servers[DNSIPv6CapabilityBootstrapTag]; got != "8.8.8.8" {
+		t.Fatalf("strict capability bootstrap DNS=%q want original IPv4 endpoint", got)
+	}
 }
 
 func TestSetDNSResolvesNamedStrictEndpointAsIPv6Only(t *testing.T) {

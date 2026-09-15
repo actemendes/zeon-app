@@ -20,6 +20,8 @@ import (
 
 type ipv6CapabilityBootstrapKey struct{}
 
+const ipv6CapabilityBootstrapDNSTag = "dns-ipv6-capability-bootstrap"
+
 // ContextWithIPv6CapabilityBootstrap marks only the DNS control-plane work
 // needed to resolve an IPv6 probe target. IPv6-only data-plane gates may let
 // this lookup reach the configured resolver before any leaf has proof; the
@@ -65,10 +67,16 @@ func IPv6URLTest(ctx context.Context, link string, detour N.Dialer) (uint16, err
 		return 0, fmt.Errorf("ipv6 urltest DNS router is unavailable")
 	}
 	lookupCtx := ContextWithIPv6CapabilityBootstrap(ctx)
-	addresses, err := dnsRouter.Lookup(lookupCtx, hostname, adapter.DNSQueryOptions{
+	queryOptions := adapter.DNSQueryOptions{
 		Strategy:     C.DomainStrategyIPv6Only,
 		DisableCache: true,
-	})
+	}
+	if transportManager := service.FromContext[adapter.DNSTransportManager](ctx); transportManager != nil {
+		if bootstrapTransport, loaded := transportManager.Transport(ipv6CapabilityBootstrapDNSTag); loaded {
+			queryOptions.Transport = bootstrapTransport
+		}
+	}
+	addresses, err := dnsRouter.Lookup(lookupCtx, hostname, queryOptions)
 	if err != nil {
 		return 0, fmt.Errorf("ipv6 urltest AAAA lookup: %w", err)
 	}
