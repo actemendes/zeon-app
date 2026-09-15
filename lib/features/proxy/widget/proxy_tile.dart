@@ -78,7 +78,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
             alignment: Alignment.center,
             decoration: showIpv6Outline
                 ? BoxDecoration(
-                    border: Border.all(color: const Color(0xFF3CE74F)),
+                    border: Border.all(color: const Color(0xFF3CE74F), width: 2),
                     borderRadius: BorderRadius.circular(9),
                   )
                 : null,
