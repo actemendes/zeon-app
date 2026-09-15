@@ -290,6 +290,10 @@ void main() {
     expect(scenario, contains("ipv6_only selected a leaf without complete IPv6 capability proof"));
     expect(scenario, contains("reporter.event('p04_smart_active_verified'"));
     expect(scenario, contains("reporter.event('p04_capability_observed'"));
+    expect(scenario, contains("reporter.event('p04_capability_snapshot'"));
+    expect(source, contains("reporter.event('p04_capability_progress'"));
+    expect(source, contains("reporter.event('p04_capability_timeout'"));
+    expect(source, contains('complete_supported_count'));
     expect(
       scenario.indexOf("reporter.event('p04_capability_observed'"),
       lessThan(scenario.indexOf('_verifyTraffic(verifyProductHealth: false)')),

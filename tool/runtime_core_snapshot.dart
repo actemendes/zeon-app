@@ -17,6 +17,17 @@ String trimNativeTag(String value) => value.split('§').first.split('В§').firs
 OutboundInfo? resolveRuntimeLeaf(OutboundGroupList groups, String nativeReport) {
   final selected = groups.items.where((group) => group.tag == 'select').first;
   final selectedTag = trimNativeTag(selected.selected);
+  final selectedGroups = selected.items.where(
+    (item) => item.isGroup && item.tag == selected.selected && item.hasGroupSelectedTag(),
+  );
+  if (selectedGroups.length == 1) {
+    final exactTag = selectedGroups.single.groupSelectedTag.trim();
+    final exactMatches = <String, OutboundInfo>{
+      for (final item in groups.items.expand((group) => group.items))
+        if (!item.isGroup && item.tag == exactTag) item.tag: item,
+    };
+    if (exactMatches.length == 1) return exactMatches.values.single;
+  }
   final prefix = '$selectedTag -> ';
   final leafReport = nativeReport.startsWith(prefix) ? nativeReport.substring(prefix.length) : nativeReport;
   final matches = <String, OutboundInfo>{

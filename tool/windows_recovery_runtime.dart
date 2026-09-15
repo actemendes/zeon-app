@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:grpc/grpc.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -847,6 +848,11 @@ class RuntimeHarness {
 
     final capability = await _waitForP04Capability(group.tag);
     final supported = capability.where((item) => item.ipv6Status == 'supported').toList(growable: false);
+    final completeSupported = capability.where(_hasCompleteIPv6Proof).toList(growable: false);
+    await reporter.event('p04_capability_snapshot', _p04CapabilitySummary(capability));
+    if (options.ipv6Mode == IPv6Mode.only && completeSupported.isEmpty) {
+      throw RuntimeFailure.fail('ipv6_only has no leaf with complete IPv6 capability proof');
+    }
     final selected = await _p04SelectionSnapshot(
       group.tag,
       auto.tag,
@@ -908,12 +914,15 @@ class RuntimeHarness {
   Future<List<OutboundInfo>> _waitForP04Capability(String groupTag) async {
     const timeout = Duration(seconds: 180);
     final deadline = DateTime.now().add(timeout);
+    List<OutboundInfo> lastLeaves = const [];
+    String? lastProgressSignature;
     do {
       final groups = await _p04Command(
         'capability snapshot',
         (client) => client.outboundsInfo(Empty()).first.timeout(const Duration(seconds: 8)),
       );
       final leaves = _p04Leaves(groups, groupTag);
+      lastLeaves = leaves;
       if (leaves.isNotEmpty) {
         if (options.ipv6Mode == IPv6Mode.disable) {
           await Future<void>.delayed(const Duration(seconds: 3));
@@ -926,13 +935,57 @@ class RuntimeHarness {
         final terminal = leaves.where(
           (item) => const {'supported', 'unavailable', 'indeterminate'}.contains(item.ipv6Status),
         );
-        if (terminal.any((item) => item.ipv6Status == 'supported') || terminal.length == leaves.length) {
+        final summary = _p04CapabilitySummary(leaves);
+        final progressSignature = jsonEncode(summary);
+        if (progressSignature != lastProgressSignature &&
+            (lastProgressSignature == null ||
+                (summary['complete_supported_count']! as int) > 0 ||
+                terminal.length == leaves.length)) {
+          await reporter.event('p04_capability_progress', summary);
+          lastProgressSignature = progressSignature;
+        }
+        final hasRequiredSupport = options.ipv6Mode == IPv6Mode.only
+            ? leaves.any(_hasCompleteIPv6Proof)
+            : terminal.any((item) => item.ipv6Status == 'supported');
+        if (hasRequiredSupport || terminal.length == leaves.length) {
           return leaves;
         }
       }
       await Future<void>.delayed(const Duration(milliseconds: 500));
     } while (DateTime.now().isBefore(deadline));
+    if (lastLeaves.isNotEmpty) {
+      await reporter.event('p04_capability_timeout', _p04CapabilitySummary(lastLeaves));
+    }
     throw RuntimeFailure.deadline('P04 IPv6 capability readiness', timeout);
+  }
+
+  bool _hasCompleteIPv6Proof(OutboundInfo item) {
+    return item.ipv6Status == 'supported' && item.ipv6TargetCount > 0 && item.ipv6TargetSuccess == item.ipv6TargetCount;
+  }
+
+  Map<String, Object> _p04CapabilitySummary(List<OutboundInfo> leaves) {
+    final errorTypes = <String, int>{};
+    for (final item in leaves) {
+      for (final errorType in item.ipv6ErrorType.split(',')) {
+        final normalized = errorType.trim();
+        if (normalized.isNotEmpty) errorTypes.update(normalized, (count) => count + 1, ifAbsent: () => 1);
+      }
+    }
+    return {
+      'candidate_count': leaves.length,
+      'supported_count': leaves.where((item) => item.ipv6Status == 'supported').length,
+      'complete_supported_count': leaves.where(_hasCompleteIPv6Proof).length,
+      'partial_supported_count': leaves
+          .where((item) => item.ipv6Status == 'supported' && !_hasCompleteIPv6Proof(item))
+          .length,
+      'unavailable_count': leaves.where((item) => item.ipv6Status == 'unavailable').length,
+      'indeterminate_count': leaves.where((item) => item.ipv6Status == 'indeterminate').length,
+      'checking_count': leaves.where((item) => item.ipv6Status == 'checking').length,
+      'not_tested_count': leaves.where((item) => item.ipv6Status.isEmpty || item.ipv6Status == 'not_tested').length,
+      'max_target_success': leaves.fold<int>(0, (value, item) => math.max(value, item.ipv6TargetSuccess)),
+      'max_target_count': leaves.fold<int>(0, (value, item) => math.max(value, item.ipv6TargetCount)),
+      'error_types': errorTypes,
+    };
   }
 
   List<OutboundInfo> _p04Leaves(OutboundGroupList groups, String groupTag) {

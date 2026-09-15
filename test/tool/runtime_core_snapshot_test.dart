@@ -39,4 +39,17 @@ void main() {
     );
     expect(resolveRuntimeLeaf(ambiguous, 'balance -> Denmark'), isNull);
   });
+
+  test('exact nested group tag disambiguates duplicate display names', () {
+    final exactLeaf = OutboundInfo(tag: 'Denmark §exact§', tagDisplay: 'Denmark');
+    final ambiguous = groups(
+      'balance',
+      items: [
+        OutboundInfo(tag: 'balance', isGroup: true, groupSelectedTag: exactLeaf.tag),
+        exactLeaf,
+        OutboundInfo(tag: 'Denmark §other§', tagDisplay: 'Denmark'),
+      ],
+    );
+    expect(resolveRuntimeLeaf(ambiguous, 'balance -> Denmark')?.tag, exactLeaf.tag);
+  });
 }
