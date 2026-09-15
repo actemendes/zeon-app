@@ -91,6 +91,7 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
     }
     final serviceRunning = await ref.watch(serviceRunningProvider.future);
     if (!serviceRunning) {
+      _lastDisplayProxy = null;
       loggy.debug("service is not running, skipping active proxy stream");
       return;
     }
@@ -98,7 +99,11 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
     final activeProxyStream = proxyProvider
         .watchActiveProxies()
         .map((event) => event.getOrElse((l) => List<OutboundGroup>.empty()))
-        .map(_activeProxyFromGroups);
+        .map(_activeProxyFromGroups)
+        // mainOutboundsInfo does not guarantee an immediate replay after the
+        // UI or core stream is recreated. Let the selector snapshot resolve
+        // the concrete runtime leaf while the active stream catches up.
+        .startWith(OutboundInfo());
     final selectorStream = proxyProvider.watchProxies().map((event) => event.getOrElse((l) => null)).startWith(null);
     final statsStream = ref
         .watch(statsRepositoryProvider)
