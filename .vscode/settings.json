@@ -1,4 +1,5 @@
 {
+	"dart.flutterSdkPath": "Z:/Zeon-Envelope/Caches/Flutter/3.38.5",
 	"[dart]": {
 		"editor.defaultFormatter": "Dart-Code.dart-code",
         "editor.formatOnSave": true,

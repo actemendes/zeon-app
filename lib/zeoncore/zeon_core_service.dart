@@ -2643,6 +2643,7 @@ class ZeonCoreService with InfraLogger {
   }
 
   Future<void> _deleteCoreCurrentConfigSnapshot() async {
+    if (kIsWeb) return;
     try {
       final directories = ref.read(appDirectoriesProvider).requireValue;
       final file = File(p.join(directories.workingDir.path, "data", "current-config.json"));

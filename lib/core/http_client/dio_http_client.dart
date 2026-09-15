@@ -5,12 +5,13 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:dio_smart_retry/dio_smart_retry.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:meta/meta.dart';
 
 import 'package:zeon/core/http_client/adaptive_websocket.dart';
 import 'package:zeon/core/http_client/mobile_api_proxy_route.dart';
-import 'package:zeon/core/http_client/windows_system_http_transport.dart';
 import 'package:zeon/core/http_client/windows_network_diagnostics.dart';
+import 'package:zeon/core/http_client/windows_system_http_transport.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 
 class DioHttpClient with InfraLogger {
@@ -30,7 +31,7 @@ class DioHttpClient with InfraLogger {
   }) : _requestVpnRecovery = requestVpnRecovery,
        _proxyProbe = proxyProbe,
        _controlPlaneMatcher = controlPlaneMatcher ?? MobileApiProxyRoute.requiresVpn,
-       _isWindows = isWindows ?? Platform.isWindows,
+       _isWindows = isWindows ?? (!kIsWeb && Platform.isWindows),
        _timeout = timeout,
        _windowsSystemTransport = windowsSystemTransport,
        _windowsSystemWebSocketTransport = windowsSystemWebSocketTransport {

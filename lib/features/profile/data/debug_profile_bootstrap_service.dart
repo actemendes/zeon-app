@@ -56,6 +56,16 @@ class DebugProfileBootstrapService with InfraLogger {
       return;
     }
 
+    // The Chrome profile is a UI fixture, not a subscription/runtime test.
+    // Its fallback row is enough to exercise the complete seeded interface
+    // and avoids native temp/config files that do not exist on web.
+    if (kIsWeb) {
+      await _insertFallback(url, seedName);
+      await _preferences.setBool(_prefDone, true);
+      loggy.info("debug profile bootstrap: web fallback profile inserted");
+      return;
+    }
+
     final alreadyDone = _preferences.getBool(_prefDone) ?? false;
     if (!alreadyDone) {
       try {

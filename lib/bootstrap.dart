@@ -174,7 +174,10 @@ class _BootstrapHostState extends State<_BootstrapHost> {
 }
 
 void _writeWindowsStartupMarker(String marker) {
-  if (!PlatformUtils.isWindows) return;
+  // The web-only UI preview may intentionally emulate Windows layout. It must
+  // never execute native dart:io diagnostics just because of that visual
+  // platform override.
+  if (kIsWeb || !PlatformUtils.isWindows) return;
   final path = Platform.environment["ZEON_STARTUP_DIAGNOSTICS_FILE"]?.trim();
   if (path == null || path.isEmpty) return;
   try {

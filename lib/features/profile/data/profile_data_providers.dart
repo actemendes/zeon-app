@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/db/provider/db_providers.dart';
@@ -38,7 +39,10 @@ ProfileDataSource profileDataSource(Ref ref) {
   return ProtectedProfileDataSource(
     delegate: ProfileDao(ref.watch(dbProvider)),
     configStore: ref.watch(profileConfigStoreProvider),
-    enabled: PlatformUtils.isApple || PlatformUtils.isAndroid || PlatformUtils.isWindows,
+    // debug_platform_override controls preview layout only. Web profiles live
+    // in IndexedDB and must not be routed through the native file-backed
+    // protection layer when the preview emulates Windows.
+    enabled: !kIsWeb && (PlatformUtils.isApple || PlatformUtils.isAndroid || PlatformUtils.isWindows),
   );
 }
 

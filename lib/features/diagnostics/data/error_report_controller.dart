@@ -493,7 +493,10 @@ class ErrorReportController {
 
   String _fingerprint(List<Object?> parts) {
     final input = parts.whereType<Object>().join('|');
-    var hash = 0xcbf29ce484222325;
+    // The algorithm is reduced to 53 bits on every round. Starting with the
+    // already-reduced offset basis keeps the same result and is exactly
+    // representable by JavaScript when the UI preview is compiled for web.
+    var hash = 0x129ce484222325;
     for (final unit in utf8.encode(input)) {
       hash ^= unit;
       hash = (hash * 0x100000001b3) & 0x1fffffffffffff;
