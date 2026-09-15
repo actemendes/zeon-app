@@ -1250,32 +1250,42 @@ class RuntimeHarness {
   }
 
   Future<void> _verifyTraffic({bool verifyProductHealth = true}) async {
-    for (final target in options.trafficUrls) {
-      final stopwatch = Stopwatch()..start();
-      int status;
-      try {
-        status = switch (options.mode) {
-          HarnessMode.localProxy => await _fetchWithDartClient(target, proxy: true),
-          HarnessMode.tun => await _fetchWithDartClient(target, proxy: false),
-          HarnessMode.systemProxy => await _fetchWithSystemProxy(target),
-        };
-      } catch (error) {
+    final sharedTrafficClient = options.mode == HarnessMode.systemProxy
+        ? null
+        : _createDartClient(proxy: options.mode == HarnessMode.localProxy);
+    try {
+      for (final target in options.trafficUrls) {
+        final stopwatch = Stopwatch()..start();
+        int status;
+        try {
+          status = switch (options.mode) {
+            HarnessMode.localProxy || HarnessMode.tun => await _fetchWithDartClient(
+              target,
+              proxy: options.mode == HarnessMode.localProxy,
+              client: sharedTrafficClient,
+            ),
+            HarnessMode.systemProxy => await _fetchWithSystemProxy(target),
+          };
+        } catch (error) {
+          reporter.trafficResults.add({
+            'target': _safeUri(target),
+            'route': options.mode.cliName,
+            'status': 'FAIL',
+            'elapsed_ms': stopwatch.elapsedMilliseconds,
+            ..._networkFailureJson(error),
+          });
+          throw RuntimeFailure.fail('HTTPS traffic failed through ${options.mode.cliName}');
+        }
         reporter.trafficResults.add({
           'target': _safeUri(target),
           'route': options.mode.cliName,
-          'status': 'FAIL',
+          'status': 'PASS',
+          'http_status': status,
           'elapsed_ms': stopwatch.elapsedMilliseconds,
-          ..._networkFailureJson(error),
         });
-        throw RuntimeFailure.fail('HTTPS traffic failed through ${options.mode.cliName}');
       }
-      reporter.trafficResults.add({
-        'target': _safeUri(target),
-        'route': options.mode.cliName,
-        'status': 'PASS',
-        'http_status': status,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      });
+    } finally {
+      sharedTrafficClient?.close(force: true);
     }
 
     if (verifyProductHealth) await _verifyBackendHealthSignal();
@@ -1351,11 +1361,17 @@ class RuntimeHarness {
     }
   }
 
-  Future<int> _fetchWithDartClient(Uri target, {required bool proxy}) async {
+  HttpClient _createDartClient({required bool proxy}) {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
     client.findProxy = (_) => proxy ? 'PROXY 127.0.0.1:${options.proxyPort}' : 'DIRECT';
+    return client;
+  }
+
+  Future<int> _fetchWithDartClient(Uri target, {required bool proxy, HttpClient? client}) async {
+    final ownsClient = client == null;
+    final activeClient = client ?? _createDartClient(proxy: proxy);
     try {
-      final request = await client
+      final request = await activeClient
           .getUrl(target)
           .timeout(const Duration(seconds: 15), onTimeout: () => throw TimeoutException('get_url'));
       final response = await request.close().timeout(
@@ -1369,7 +1385,7 @@ class RuntimeHarness {
       if (response.statusCode != 200) throw StateError('HTTPS response was not 200');
       return response.statusCode;
     } finally {
-      client.close(force: true);
+      if (ownsClient) activeClient.close(force: true);
     }
   }
 
