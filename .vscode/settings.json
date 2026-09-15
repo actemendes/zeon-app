@@ -1,5 +1,11 @@
 {
 	"dart.flutterSdkPath": "Z:/Zeon-Envelope/Caches/Flutter/3.38.5",
+	"dart.openDevTools": "flutter",
+	"dart.shareDevToolsWithFlutter": true,
+	"dart.devToolsLocation": {
+		"default": "beside",
+		"inspector": "sidebar"
+	},
 	"[dart]": {
 		"editor.defaultFormatter": "Dart-Code.dart-code",
         "editor.formatOnSave": true,
