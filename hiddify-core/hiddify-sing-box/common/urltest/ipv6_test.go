@@ -62,8 +62,11 @@ func (*ipv6TestDialer) ListenPacket(context.Context, M.Socksaddr) (net.PacketCon
 }
 
 func TestIPv6URLTestUsesFixedIPv6AndValidatesTLSHostname(t *testing.T) {
+	var requestMethod string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.WriteHeader(http.StatusNoContent)
+		requestMethod = request.Method
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write([]byte("ipv6-egress"))
 	}))
 	defer server.Close()
 	certificate, err := x509.ParseCertificate(server.TLS.Certificates[0].Certificate[0])
@@ -95,6 +98,9 @@ func TestIPv6URLTestUsesFixedIPv6AndValidatesTLSHostname(t *testing.T) {
 	}
 	if dialer.bootstrapSeen {
 		t.Fatal("bootstrap marker leaked from DNS lookup into the HTTPS capability proof")
+	}
+	if requestMethod != http.MethodGet {
+		t.Fatalf("probe method = %q, want GET", requestMethod)
 	}
 
 	untrustedCtx := service.ContextWith[adapter.DNSRouter](context.Background(), &ipv6TestDNSRouter{address: netip.MustParseAddr("2001:db8::42")})

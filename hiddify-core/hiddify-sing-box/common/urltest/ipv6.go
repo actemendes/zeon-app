@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -91,7 +92,7 @@ func IPv6URLTest(ctx context.Context, link string, detour N.Dialer) (uint16, err
 			lastErr = dialErr
 			continue
 		}
-		request, requestErr := http.NewRequestWithContext(ctx, http.MethodHead, link, nil)
+		request, requestErr := http.NewRequestWithContext(ctx, http.MethodGet, link, nil)
 		if requestErr != nil {
 			instance.Close()
 			return 0, requestErr
@@ -114,7 +115,12 @@ func IPv6URLTest(ctx context.Context, link string, detour N.Dialer) (uint16, err
 			lastErr = requestErr
 			continue
 		}
+		_, readErr := io.CopyN(io.Discard, response.Body, 4096)
 		response.Body.Close()
+		if readErr != nil && readErr != io.EOF {
+			lastErr = readErr
+			continue
+		}
 		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusBadRequest {
 			lastErr = fmt.Errorf("bad status: %s", response.Status)
 			continue
