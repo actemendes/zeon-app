@@ -251,7 +251,7 @@ class RuntimeOptions {
       7200,
     );
     final defaultTrafficValues = scenario == RuntimeScenario.p04
-        ? const ['https://speed.cloudflare.com/__down?bytes=4096', 'https://www.google.com/robots.txt']
+        ? const ['https://www.google.com/robots.txt', 'https://speed.cloudflare.com/__down?bytes=4096']
         : const ['https://speed.cloudflare.com/__down?bytes=4096', 'https://captive.apple.com/hotspot-detect.html'];
     final trafficValues =
         parsed['traffic-url'] ??

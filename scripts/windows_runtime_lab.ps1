@@ -471,7 +471,7 @@ if ($EnrollFixture) {
 Assert-RunId $RunId
 if (-not $PSBoundParameters.ContainsKey('TrafficUrls')) {
     $TrafficUrls = if ($Scenario -eq 'p04') {
-        @('https://speed.cloudflare.com/__down?bytes=4096', 'https://www.google.com/robots.txt')
+        @('https://www.google.com/robots.txt', 'https://speed.cloudflare.com/__down?bytes=4096')
     } else {
         @('https://speed.cloudflare.com/__down?bytes=4096', 'https://captive.apple.com/hotspot-detect.html')
     }

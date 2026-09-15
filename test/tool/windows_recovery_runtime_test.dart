@@ -55,7 +55,7 @@ void main() {
         expect(options.toJson(), containsPair('ipv6_mode', ipv6Mode.key));
         expect(
           options.trafficUrls.map((uri) => uri.host),
-          orderedEquals(const ['speed.cloudflare.com', 'www.google.com']),
+          orderedEquals(const ['www.google.com', 'speed.cloudflare.com']),
         );
       }
     });
