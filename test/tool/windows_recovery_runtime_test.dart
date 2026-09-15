@@ -335,6 +335,9 @@ void main() {
     expect(source, isNot(contains('groups.items.expand((group) => group.items)')));
     expect(source, contains('trimNativeTag(item.tag) == trimNativeTag(leaf.tag)'));
     expect(source, contains("reporter.event('p04_grpc_transport_retry'"));
+    expect(source, contains("reporter.event('p04_traffic_retry'"));
+    expect(source, contains('options.scenario == RuntimeScenario.p04 ? 3 : 1'));
+    expect(source, contains("'attempts': attempt"));
     expect(source, contains('runBackgroundCommandWithRecovery'));
   });
 

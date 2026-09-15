@@ -1256,31 +1256,49 @@ class RuntimeHarness {
     try {
       for (final target in options.trafficUrls) {
         final stopwatch = Stopwatch()..start();
-        int status;
-        try {
-          status = switch (options.mode) {
-            HarnessMode.localProxy || HarnessMode.tun => await _fetchWithDartClient(
-              target,
-              proxy: options.mode == HarnessMode.localProxy,
-              client: sharedTrafficClient,
-            ),
-            HarnessMode.systemProxy => await _fetchWithSystemProxy(target),
-          };
-        } catch (error) {
-          reporter.trafficResults.add({
-            'target': _safeUri(target),
-            'route': options.mode.cliName,
-            'status': 'FAIL',
-            'elapsed_ms': stopwatch.elapsedMilliseconds,
-            ..._networkFailureJson(error),
-          });
-          throw RuntimeFailure.fail('HTTPS traffic failed through ${options.mode.cliName}');
+        final maxAttempts = options.scenario == RuntimeScenario.p04 ? 3 : 1;
+        var attempt = 0;
+        int? status;
+        while (attempt < maxAttempts) {
+          attempt++;
+          try {
+            status = switch (options.mode) {
+              HarnessMode.localProxy || HarnessMode.tun => await _fetchWithDartClient(
+                target,
+                proxy: options.mode == HarnessMode.localProxy,
+                client: sharedTrafficClient,
+              ),
+              HarnessMode.systemProxy => await _fetchWithSystemProxy(target),
+            };
+            break;
+          } catch (error) {
+            final retrying = attempt < maxAttempts && _isTransientTrafficError(error);
+            if (retrying) {
+              await reporter.event('p04_traffic_retry', {
+                'target': _safeUri(target),
+                'failed_attempt': attempt,
+                ..._networkFailureJson(error),
+              });
+              await Future<void>.delayed(Duration(milliseconds: 250 * attempt));
+              continue;
+            }
+            reporter.trafficResults.add({
+              'target': _safeUri(target),
+              'route': options.mode.cliName,
+              'status': 'FAIL',
+              'attempts': attempt,
+              'elapsed_ms': stopwatch.elapsedMilliseconds,
+              ..._networkFailureJson(error),
+            });
+            throw RuntimeFailure.fail('HTTPS traffic failed through ${options.mode.cliName}');
+          }
         }
         reporter.trafficResults.add({
           'target': _safeUri(target),
           'route': options.mode.cliName,
           'status': 'PASS',
-          'http_status': status,
+          'http_status': status!,
+          'attempts': attempt,
           'elapsed_ms': stopwatch.elapsedMilliseconds,
         });
       }
@@ -1483,6 +1501,9 @@ catch { exit 44 }''';
     },
     _ => {'error_type': error.runtimeType.toString()},
   };
+
+  bool _isTransientTrafficError(Object error) =>
+      error is HandshakeException || error is SocketException || error is TimeoutException;
 
   Future<bool> _proxyListening() async {
     try {
