@@ -1,7 +1,6 @@
 package config
 
 import (
-	"net"
 	"net/netip"
 	"net/url"
 	"strconv"
@@ -37,11 +36,11 @@ func getDnsAddress(d string) string {
 	return d
 }
 
-var ipv6DNSAddressByIPv4 = map[string]string{
-	"1.1.1.1": "2606:4700:4700::1111",
-	"1.0.0.1": "2606:4700:4700::1001",
-	"8.8.8.8": "2001:4860:4860::8888",
-	"8.8.4.4": "2001:4860:4860::8844",
+var ipv6DoHAddressByIPv4 = map[string]string{
+	"1.1.1.1": "https://cloudflare-dns.com/dns-query",
+	"1.0.0.1": "https://cloudflare-dns.com/dns-query",
+	"8.8.8.8": "https://dns.google/dns-query",
+	"8.8.4.4": "https://dns.google/dns-query",
 }
 
 // ipv6OnlyRemoteDNSAddress keeps strict IPv6 data-plane DNS on IPv6. Without
@@ -59,7 +58,7 @@ func ipv6OnlyRemoteDNSAddress(address string) (string, error) {
 		if ip.Is6() {
 			return "udp://[" + ip.String() + "]", nil
 		}
-		if _, found := ipv6DNSAddressByIPv4[ip.String()]; !found {
+		if _, found := ipv6DoHAddressByIPv4[ip.String()]; !found {
 			return "", E.New("IPv6-only mode has no IPv6 peer for remote DNS server ", ip.String())
 		}
 		address = "udp://" + ip.String()
@@ -71,30 +70,16 @@ func ipv6OnlyRemoteDNSAddress(address string) (string, error) {
 	}
 	host := serverURL.Hostname()
 	if ip, parseErr := netip.ParseAddr(host); parseErr == nil && ip.Is4() {
-		mapped, found := ipv6DNSAddressByIPv4[ip.String()]
+		mapped, found := ipv6DoHAddressByIPv4[ip.String()]
 		if !found {
 			return "", E.New("IPv6-only mode has no IPv6 peer for remote DNS server ", ip.String())
 		}
-		// The shipped desktop default is TCP DNS over port 53. An outbound can
-		// legitimately expose HTTPS IPv6 egress while filtering TCP/53, so use
-		// the same provider's DoH endpoint for mapped legacy defaults.
-		if serverURL.Scheme == C.DNSTypeUDP || serverURL.Scheme == C.DNSTypeTCP {
-			if port := serverURL.Port(); port != "" && port != "53" {
-				return "", E.New("IPv6-only mode cannot translate a custom IPv4 DNS port")
-			}
-			serverURL.Scheme = C.DNSTypeHTTPS
-			serverURL.Path = "/dns-query"
-			serverURL.RawPath = ""
-			serverURL.RawQuery = ""
-			serverURL.Fragment = ""
-			serverURL.Host = "[" + mapped + "]"
-			return serverURL.String(), nil
+		if port := serverURL.Port(); port != "" && port != "53" && port != "443" {
+			return "", E.New("IPv6-only mode cannot translate a custom IPv4 DNS port")
 		}
-		if port := serverURL.Port(); port != "" {
-			serverURL.Host = net.JoinHostPort(mapped, port)
-		} else {
-			serverURL.Host = "[" + mapped + "]"
-		}
+		// Use the provider hostname so TLS gets a valid SNI while its dedicated
+		// domain resolver is constrained to AAAA by setDns.
+		return mapped, nil
 	}
 	return serverURL.String(), nil
 }
