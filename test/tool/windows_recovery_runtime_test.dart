@@ -285,14 +285,23 @@ void main() {
     );
     expect(scenario, contains("ipv4_only unexpectedly executed IPv6 capability probes"));
     expect(scenario, contains("prefer_ipv6 did not choose from the verified IPv6 pool"));
-    expect(scenario, contains("ipv6_only selected a leaf without verified IPv6 capability"));
+    expect(scenario, contains("ipv6_only selected a leaf without complete IPv6 capability proof"));
     expect(scenario, contains("reporter.event('p04_smart_active_verified'"));
     expect(scenario, contains("reporter.event('p04_capability_observed'"));
+    expect(
+      scenario.indexOf("reporter.event('p04_capability_observed'"),
+      lessThan(scenario.indexOf('_verifyTraffic(verifyProductHealth: false)')),
+    );
+    expect(scenario, contains("'selected_ipv6_target_success'"));
+    expect(scenario, contains("'selected_ipv6_target_count'"));
+    expect(scenario, contains('requireCompleteIPv6Proof: options.ipv6Mode == IPv6Mode.only'));
     expect(source, contains("await container!.read(ConfigOptions.ipv6Mode.notifier).update(originalIPv6Mode!)"));
     expect(source, contains("terminal.any((item) => item.ipv6Status == 'supported')"));
     expect(source, contains('requiredIPv6Status:'));
     expect(source, contains("? 'supported'"));
     expect(source, contains("'checking_count'"));
+    expect(source, contains("'stage': 'tls_handshake'"));
+    expect(source, contains("'os_error_code': osError.errorCode"));
     expect(source, isNot(contains('groups.items.expand((group) => group.items)')));
     expect(source, contains('trimNativeTag(item.tag) == trimNativeTag(leaf.tag)'));
   });

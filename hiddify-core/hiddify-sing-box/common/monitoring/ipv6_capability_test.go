@@ -25,9 +25,34 @@ func TestIPv6CapabilityFreshRequiresCurrentSupportedProof(t *testing.T) {
 	}
 }
 
+func TestIPv6CapabilityFreshForModeRequiresAllTargetsOnlyInStrictMode(t *testing.T) {
+	now := time.Now()
+	partial := &adapter.URLTestHistory{
+		IPv6Status:        IPv6StatusSupported,
+		IPv6CheckedAt:     now,
+		IPv6TargetSuccess: 1,
+		IPv6TargetCount:   2,
+	}
+	if !IPv6CapabilityFreshForMode(partial, C.DomainStrategyPreferIPv6, now, time.Minute) {
+		t.Fatal("prefer_ipv6 rejected a fresh partial capability proof")
+	}
+	if IPv6CapabilityFreshForMode(partial, C.DomainStrategyIPv6Only, now, time.Minute) {
+		t.Fatal("ipv6_only accepted a partial capability proof")
+	}
+	partial.IPv6TargetSuccess = 2
+	if !IPv6CapabilityFreshForMode(partial, C.DomainStrategyIPv6Only, now, time.Minute) {
+		t.Fatal("ipv6_only rejected a complete capability proof")
+	}
+}
+
 func TestIPv6TrafficAllowedAppliesFourModeContract(t *testing.T) {
 	now := time.Now()
-	proof := &adapter.URLTestHistory{IPv6Status: IPv6StatusSupported, IPv6CheckedAt: now}
+	proof := &adapter.URLTestHistory{
+		IPv6Status:        IPv6StatusSupported,
+		IPv6CheckedAt:     now,
+		IPv6TargetSuccess: 2,
+		IPv6TargetCount:   2,
+	}
 	ipv4 := adapter.InboundContext{IPVersion: 4, Destination: M.SocksaddrFrom(netip.MustParseAddr("192.0.2.1"), 443)}
 	ipv6 := adapter.InboundContext{IPVersion: 6, Destination: M.SocksaddrFrom(netip.MustParseAddr("2001:db8::1"), 443)}
 
@@ -45,6 +70,11 @@ func TestIPv6TrafficAllowedAppliesFourModeContract(t *testing.T) {
 	}
 	if IPv6TrafficAllowed(C.DomainStrategyIPv6Only, ipv4, proof, now, time.Minute) {
 		t.Fatal("ipv6_only accepted IPv4 fallback")
+	}
+	partialProof := *proof
+	partialProof.IPv6TargetSuccess = 1
+	if IPv6TrafficAllowed(C.DomainStrategyIPv6Only, ipv6, &partialProof, now, time.Minute) {
+		t.Fatal("ipv6_only accepted IPv6 traffic with a partial capability proof")
 	}
 	if !IPv6TrafficAllowed(C.DomainStrategyIPv6Only, ipv6, proof, now, time.Minute) {
 		t.Fatal("ipv6_only rejected verified IPv6 traffic")

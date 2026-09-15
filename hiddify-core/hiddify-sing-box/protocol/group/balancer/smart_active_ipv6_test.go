@@ -18,8 +18,11 @@ func ipv6History(delay uint16, supported bool) *adapter.URLTestHistory {
 	history.IPv6CheckedAt = time.Now()
 	if supported {
 		history.IPv6Status = monitoring.IPv6StatusSupported
+		history.IPv6TargetSuccess = 2
+		history.IPv6TargetCount = 2
 	} else {
 		history.IPv6Status = monitoring.IPv6StatusUnavailable
+		history.IPv6TargetCount = 2
 	}
 	return history
 }
@@ -74,5 +77,25 @@ func TestSmartActiveIPv6OnlyHasNoHiddenIPv4Fallback(t *testing.T) {
 	metadata4 := adapter.InboundContext{IPVersion: 4, Destination: M.SocksaddrFrom(netip.MustParseAddr("192.0.2.1"), 443)}
 	if selected := strategy.Select(metadata4, "tcp", true); selected != nil {
 		t.Fatalf("ipv6_only exposed IPv4 fallback through %q", selected.Tag())
+	}
+}
+
+func TestSmartActiveIPv6OnlyRejectsPartialCapabilityProof(t *testing.T) {
+	strategy := newIPv6SmartActive(C.DomainStrategyIPv6Only)
+	partial := ipv6History(25, true)
+	partial.IPv6TargetSuccess = 1
+	history := map[string]*adapter.URLTestHistory{
+		"fast-v4":   ipv6History(20, false),
+		"slower-v6": partial,
+	}
+	strategy.UpdateOutboundsInfoForCompletedBatch(history, smartActiveTestGeneration)
+	if got := strategy.Now(); got != "" {
+		t.Fatalf("ipv6_only selected partial-proof leaf %q", got)
+	}
+
+	partial.IPv6TargetSuccess = partial.IPv6TargetCount
+	strategy.UpdateOutboundsInfoForCompletedBatch(history, smartActiveTestGeneration)
+	if got := strategy.Now(); got != "slower-v6" {
+		t.Fatalf("ipv6_only selected %q after complete proof", got)
 	}
 }

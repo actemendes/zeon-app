@@ -1503,5 +1503,5 @@ func (s *SmartActive) candidateStatus(tag string, h *adapter.URLTestHistory, gen
 }
 
 func (s *SmartActive) ipv6Preferred(history *adapter.URLTestHistory, generation uint64) bool {
-	return history != nil && history.IPv6Generation == generation && monitoring.IPv6CapabilityFresh(history, time.Now(), s.ipv6CapabilityTTL)
+	return history != nil && history.IPv6Generation == generation && monitoring.IPv6CapabilityFreshForMode(history, s.ipv6Mode, time.Now(), s.ipv6CapabilityTTL)
 }

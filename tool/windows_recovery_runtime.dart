@@ -851,9 +851,11 @@ class RuntimeHarness {
           options.ipv6Mode == IPv6Mode.only || (options.ipv6Mode == IPv6Mode.prefer && supported.isNotEmpty)
           ? 'supported'
           : null,
+      requireCompleteIPv6Proof: options.ipv6Mode == IPv6Mode.only,
     );
-    await _verifyTraffic(verifyProductHealth: false);
     final selectedStatus = selected.ipv6Status.isEmpty ? 'not_tested' : selected.ipv6Status;
+    final selectedCompleteProof =
+        selected.ipv6TargetCount > 0 && selected.ipv6TargetSuccess == selected.ipv6TargetCount;
     final observation = {
       'ipv6_mode': options.ipv6Mode.key,
       'transport_mode': options.mode.cliName,
@@ -865,6 +867,9 @@ class RuntimeHarness {
       'not_tested_count': capability.where((item) => item.ipv6Status.isEmpty || item.ipv6Status == 'not_tested').length,
       'selected_leaf_id': await safeId(selected.tag),
       'selected_ipv6_status': selectedStatus,
+      'selected_ipv6_target_success': selected.ipv6TargetSuccess,
+      'selected_ipv6_target_count': selected.ipv6TargetCount,
+      'selected_ipv6_complete_proof': selectedCompleteProof,
       'smart_active': true,
     };
     await reporter.event('p04_capability_observed', observation);
@@ -875,10 +880,11 @@ class RuntimeHarness {
       }
     } else if (options.ipv6Mode == IPv6Mode.prefer && supported.isNotEmpty && selectedStatus != 'supported') {
       throw RuntimeFailure.fail('prefer_ipv6 did not choose from the verified IPv6 pool');
-    } else if (options.ipv6Mode == IPv6Mode.only && selectedStatus != 'supported') {
-      throw RuntimeFailure.fail('ipv6_only selected a leaf without verified IPv6 capability');
+    } else if (options.ipv6Mode == IPv6Mode.only && (selectedStatus != 'supported' || !selectedCompleteProof)) {
+      throw RuntimeFailure.fail('ipv6_only selected a leaf without complete IPv6 capability proof');
     }
 
+    await _verifyTraffic(verifyProductHealth: false);
     await reporter.event('p04_smart_active_verified', observation);
     await _disconnectAndVerify('p04');
   }
@@ -923,7 +929,12 @@ class RuntimeHarness {
         .toList(growable: false);
   }
 
-  Future<OutboundInfo> _p04SelectionSnapshot(String groupTag, String autoTag, {String? requiredIPv6Status}) async {
+  Future<OutboundInfo> _p04SelectionSnapshot(
+    String groupTag,
+    String autoTag, {
+    String? requiredIPv6Status,
+    bool requireCompleteIPv6Proof = false,
+  }) async {
     const timeout = Duration(seconds: 180);
     final deadline = DateTime.now().add(timeout);
     do {
@@ -946,9 +957,13 @@ class RuntimeHarness {
         final selectorLeaf = currentGroup.items.where(
           (item) => !item.isGroup && trimNativeTag(item.tag) == trimNativeTag(leaf.tag),
         );
-        if (selectorLeaf.length == 1 &&
-            (requiredIPv6Status == null || selectorLeaf.single.ipv6Status == requiredIPv6Status)) {
-          return selectorLeaf.single;
+        if (selectorLeaf.length == 1) {
+          final candidate = selectorLeaf.single;
+          final statusMatches = requiredIPv6Status == null || candidate.ipv6Status == requiredIPv6Status;
+          final proofMatches =
+              !requireCompleteIPv6Proof ||
+              candidate.ipv6TargetCount > 0 && candidate.ipv6TargetSuccess == candidate.ipv6TargetCount;
+          if (statusMatches && proofMatches) return candidate;
         }
       }
       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -1368,6 +1383,11 @@ catch { exit 44 }''';
         44 => 'system_proxy_probe',
         _ => 'system_proxy_process',
       },
+    },
+    HandshakeException() => {
+      'error_type': error.runtimeType.toString(),
+      'stage': 'tls_handshake',
+      if (error.osError case final osError?) 'os_error_code': osError.errorCode,
     },
     _ => {'error_type': error.runtimeType.toString()},
   };

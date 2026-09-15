@@ -102,6 +102,20 @@ func IPv6CapabilityFresh(history *adapter.URLTestHistory, now time.Time, ttl tim
 	return !history.IPv6CheckedAt.After(now) && now.Sub(history.IPv6CheckedAt) <= ttl
 }
 
+// IPv6CapabilityFreshForMode keeps the broad capability signal useful for the
+// preferred-family modes, where one independent HTTPS target is sufficient to
+// prove IPv6 egress. Strict IPv6-only traffic is fail-closed: every configured
+// capability target must succeed before the outbound can carry user traffic.
+func IPv6CapabilityFreshForMode(history *adapter.URLTestHistory, mode C.DomainStrategy, now time.Time, ttl time.Duration) bool {
+	if !IPv6CapabilityFresh(history, now, ttl) {
+		return false
+	}
+	if mode != C.DomainStrategyIPv6Only {
+		return true
+	}
+	return history.IPv6TargetCount > 0 && history.IPv6TargetSuccess == history.IPv6TargetCount
+}
+
 func IPv6ModeRequiresCapability(mode C.DomainStrategy) bool {
 	return mode == C.DomainStrategyPreferIPv4 || mode == C.DomainStrategyPreferIPv6 || mode == C.DomainStrategyIPv6Only
 }
@@ -116,7 +130,7 @@ func IPv6TrafficAllowed(mode C.DomainStrategy, metadata adapter.InboundContext, 
 		return !isIPv6
 	}
 	if mode == C.DomainStrategyIPv6Only {
-		return !isIPv4 && IPv6CapabilityFresh(history, now, ttl)
+		return !isIPv4 && IPv6CapabilityFreshForMode(history, mode, now, ttl)
 	}
 	if isIPv6 && IPv6ModeRequiresCapability(mode) {
 		return IPv6CapabilityFresh(history, now, ttl)
