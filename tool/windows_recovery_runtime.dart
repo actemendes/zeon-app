@@ -23,6 +23,7 @@ import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/zeoncore/generated/v2/hcommon/common.pb.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:zeon/zeoncore/zeon_core_service.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
@@ -840,7 +841,9 @@ class RuntimeHarness {
       await container!.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, auto.tag);
     }
     await _verifyNativeSelectorTag(group.tag, auto.tag);
+    await reporter.event('p04_url_test_started');
     await container!.read(proxiesOverviewNotifierProvider.notifier).urlTest(group.tag);
+    await reporter.event('p04_url_test_completed');
 
     final capability = await _waitForP04Capability(group.tag);
     final supported = capability.where((item) => item.ipv6Status == 'supported').toList(growable: false);
@@ -889,22 +892,35 @@ class RuntimeHarness {
     await _disconnectAndVerify('p04');
   }
 
+  Future<T> _p04Command<T>(String operation, Future<T> Function(CoreClient client) invoke) {
+    return coreService.runBackgroundCommandWithRecovery(
+      'P04 $operation',
+      invoke,
+      onRetry: (attempt, error) => reporter.event('p04_grpc_transport_retry', {
+        'operation': operation,
+        'failed_attempt': attempt,
+        'grpc_code': error.code,
+        'error_type': error.runtimeType.toString(),
+      }),
+    );
+  }
+
   Future<List<OutboundInfo>> _waitForP04Capability(String groupTag) async {
     const timeout = Duration(seconds: 180);
     final deadline = DateTime.now().add(timeout);
     do {
-      final groups = await coreService.core.backgroundCommandClient
-          .outboundsInfo(Empty())
-          .first
-          .timeout(const Duration(seconds: 8));
+      final groups = await _p04Command(
+        'capability snapshot',
+        (client) => client.outboundsInfo(Empty()).first.timeout(const Duration(seconds: 8)),
+      );
       final leaves = _p04Leaves(groups, groupTag);
       if (leaves.isNotEmpty) {
         if (options.ipv6Mode == IPv6Mode.disable) {
           await Future<void>.delayed(const Duration(seconds: 3));
-          final confirmation = await coreService.core.backgroundCommandClient
-              .outboundsInfo(Empty())
-              .first
-              .timeout(const Duration(seconds: 8));
+          final confirmation = await _p04Command(
+            'disabled-mode confirmation',
+            (client) => client.outboundsInfo(Empty()).first.timeout(const Duration(seconds: 8)),
+          );
           return _p04Leaves(confirmation, groupTag);
         }
         final terminal = leaves.where(
@@ -938,10 +954,10 @@ class RuntimeHarness {
     const timeout = Duration(seconds: 180);
     final deadline = DateTime.now().add(timeout);
     do {
-      final groups = await coreService.core.backgroundCommandClient
-          .outboundsInfo(Empty())
-          .first
-          .timeout(const Duration(seconds: 8));
+      final groups = await _p04Command(
+        'selection snapshot',
+        (client) => client.outboundsInfo(Empty()).first.timeout(const Duration(seconds: 8)),
+      );
       final currentGroup = groups.items.firstWhere(
         (item) => item.tag == groupTag,
         orElse: () => throw RuntimeFailure.fail('P04 selector group disappeared'),
@@ -949,9 +965,10 @@ class RuntimeHarness {
       if (currentGroup.selected != autoTag) {
         throw RuntimeFailure.fail('P04 Smart Active selector changed unexpectedly');
       }
-      final systemInfo = await coreService.core.backgroundCommandClient
-          .getSystemInfo(Empty())
-          .timeout(const Duration(seconds: 8));
+      final systemInfo = await _p04Command(
+        'selection system info',
+        (client) => client.getSystemInfo(Empty()).timeout(const Duration(seconds: 8)),
+      );
       final leaf = resolveRuntimeLeaf(groups, systemInfo.currentOutbound);
       if (leaf != null) {
         final selectorLeaf = currentGroup.items.where(
@@ -1002,10 +1019,10 @@ class RuntimeHarness {
   }
 
   Future<void> _verifyNativeSelectorTag(String groupTag, String selectedTag) async {
-    final groups = await coreService.core.backgroundCommandClient
-        .outboundsInfo(Empty())
-        .first
-        .timeout(const Duration(seconds: 8));
+    final groups = await coreService.runBackgroundCommandWithRecovery(
+      'native selector verification',
+      (client) => client.outboundsInfo(Empty()).first.timeout(const Duration(seconds: 8)),
+    );
     final currentGroup = groups.items.firstWhere(
       (item) => item.tag == groupTag,
       orElse: () => throw RuntimeFailure.fail('Native selector group disappeared'),

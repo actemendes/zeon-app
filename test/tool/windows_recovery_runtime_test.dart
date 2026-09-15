@@ -278,6 +278,8 @@ void main() {
     final scenarioEnd = source.indexOf('Future<List<OutboundInfo>> _waitForP04Capability(', scenarioStart);
     final scenario = source.substring(scenarioStart, scenarioEnd);
     expect(scenario, contains('urlTest(group.tag)'));
+    expect(scenario, contains("reporter.event('p04_url_test_started')"));
+    expect(scenario, contains("reporter.event('p04_url_test_completed')"));
     expect(scenario, contains('await _verifyTraffic(verifyProductHealth: false)'));
     expect(
       scenario.indexOf('_p04SelectionSnapshot'),
@@ -304,6 +306,8 @@ void main() {
     expect(source, contains("'os_error_code': osError.errorCode"));
     expect(source, isNot(contains('groups.items.expand((group) => group.items)')));
     expect(source, contains('trimNativeTag(item.tag) == trimNativeTag(leaf.tag)'));
+    expect(source, contains("reporter.event('p04_grpc_transport_retry'"));
+    expect(source, contains('runBackgroundCommandWithRecovery'));
   });
 
   test('S06 observes the late-start window and then proves retry traffic and stop', () async {

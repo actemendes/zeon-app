@@ -18,6 +18,10 @@ final _testCoreServiceProvider = Provider<ZeonCoreService>(
   (ref) => ZeonCoreService(ref, coreInterface: CoreInterface()),
 );
 
+final _testWindowsCoreServiceProvider = Provider<ZeonCoreService>(
+  (ref) => ZeonCoreService(ref, coreInterface: CoreInterface(), isWindows: true),
+);
+
 void main() {
   test('final payload keeps control-plane first and appends explicit user rules without duplicates', () async {
     final directory = await Directory.systemTemp.createTemp('zeon-core-options-');
@@ -88,6 +92,28 @@ void main() {
     expect(payload['region'], 'other');
     expect(payload['network-profile'], 'stable_mobile');
   });
+
+  test('Windows dynamic TUN uses the approved 1500 MTU when interface discovery is unavailable', () async {
+    final directory = await Directory.systemTemp.createTemp('zeon-core-options-windows-mtu-');
+    addTearDown(() => directory.delete(recursive: true));
+    final directories = (baseDir: directory, workingDir: directory, tempDir: directory);
+    final container = ProviderContainer(
+      overrides: [appDirectoriesProvider.overrideWith(() => _TestAppDirectories(directories))],
+    );
+    addTearDown(container.dispose);
+    await container.read(appDirectoriesProvider.future);
+
+    final payload = await container
+        .read(_testWindowsCoreServiceProvider)
+        .buildCoreOptionsPayloadForTesting(
+          _configOptions(rules: const <SingboxRule>[], mtu: 1400, networkMtuMode: 'dynamic'),
+        );
+
+    expect(payload['network-mtu-mode'], 'dynamic');
+    expect(payload['mtu'], 1400, reason: 'saved user/configured MTU remains untouched');
+    expect(payload['network-transport-type'], 'unknown');
+    expect(payload['network-interface-mtu'], 1500);
+  });
 }
 
 class _TestAppDirectories extends AppDirectories {
@@ -99,7 +125,11 @@ class _TestAppDirectories extends AppDirectories {
   Future<Directories> build() async => _directories;
 }
 
-SingboxConfigOption _configOptions({required List<SingboxRule> rules}) {
+SingboxConfigOption _configOptions({
+  required List<SingboxRule> rules,
+  int mtu = 1500,
+  String networkMtuMode = 'adaptive',
+}) {
   return SingboxConfigOption(
     region: 'other',
     balancerStrategy: BalancerStrategy.roundRobin,
@@ -118,10 +148,10 @@ SingboxConfigOption _configOptions({required List<SingboxRule> rules}) {
     directPort: 12337,
     redirectPort: 12336,
     tunImplementation: TunImplementation.gvisor,
-    mtu: 1500,
+    mtu: mtu,
     strictRoute: true,
     networkProfile: 'stable_mobile',
-    networkMtuMode: 'adaptive',
+    networkMtuMode: networkMtuMode,
     fragmentMode: 'off',
     profileDnsStrategy: 'prefer_ipv4',
     connectionTestUrl: 'http://captive.apple.com/hotspot-detect.html',

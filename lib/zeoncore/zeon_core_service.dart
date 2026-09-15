@@ -187,7 +187,9 @@ CloseFrontPublicationDecision classifyCloseFrontPublication({
 }
 
 class ZeonCoreService with InfraLogger {
-  ZeonCoreService(this.ref, {CoreInterface? coreInterface}) : core = coreInterface ?? getCoreInterface() {
+  ZeonCoreService(this.ref, {CoreInterface? coreInterface, bool? isWindows})
+    : core = coreInterface ?? getCoreInterface(),
+      _isWindows = isWindows ?? PlatformUtils.isWindows {
     _platformSnapshotSubscription = core.watchSessionSnapshots().listen(
       _queuePlatformSessionSnapshot,
       onError: (Object error, StackTrace stackTrace) {
@@ -229,6 +231,7 @@ class ZeonCoreService with InfraLogger {
 
   // CoreZeonCoreService() {}
   final CoreInterface core;
+  final bool _isWindows;
 
   CoreStatus currentState = const CoreStatus.stopped();
   final statusController = BehaviorSubject<CoreStatus>();
@@ -1398,6 +1401,41 @@ class ZeonCoreService with InfraLogger {
         message.contains("socketexception");
   }
 
+  /// Retries a transient pooled HTTP/2 failure on the independently owned
+  /// background channel. Desktop command RPCs normally use the isolated
+  /// command transport, while [core.bgClient] remains a safe one-shot fallback
+  /// when that transport is torn down by the HTTP/2 implementation.
+  Future<T> runBackgroundCommandWithRecovery<T>(
+    String operation,
+    Future<T> Function(CoreClient client) invoke, {
+    int maxAttempts = 3,
+    FutureOr<void> Function(int failedAttempt, GrpcError error)? onRetry,
+  }) async {
+    if (maxAttempts < 1) throw ArgumentError.value(maxAttempts, 'maxAttempts');
+    final primary = core.backgroundCommandClient;
+    final fallback = core.bgClient;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      final client = attempt == 1 || identical(primary, fallback) ? primary : fallback;
+      try {
+        return await invoke(client);
+      } on GrpcError catch (error, stackTrace) {
+        final running = currentState is CoreStarted || currentState is CoreStarting;
+        if (!_isTransientGrpcFailure(error) || !running || attempt == maxAttempts) {
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+        loggy.warning(
+          '$operation transient grpc transport failure [$attempt/$maxAttempts]; '
+          '${identical(primary, fallback) ? 'retrying the shared background channel' : 'retrying on the independent background channel'}',
+          error,
+          stackTrace,
+        );
+        await onRetry?.call(attempt, error);
+        await Future<void>.delayed(Duration(milliseconds: 180 * attempt));
+      }
+    }
+    throw StateError('$operation exhausted without a result');
+  }
+
   Future<Map<String, dynamic>> _buildCoreOptionsPayload(SingboxConfigOption options) async {
     final map = Map<String, dynamic>.from(options.toCoreJson());
     final fullConfig = switch (map["enable-full-config"] ?? map["execute-config-as-is"] ?? false) {
@@ -1452,8 +1490,16 @@ class ZeonCoreService with InfraLogger {
       }
     }
     final runtime = await _readRuntimeNetworkInfo();
+    var runtimeInterfaceMtu = runtime.$2;
+    final mtuMode = (map["network-mtu-mode"] ?? '').toString().trim().toLowerCase();
+    if (_isWindows && map["enable-tun"] == true && mtuMode == 'dynamic' && runtimeInterfaceMtu == 0) {
+      // Windows has no Android-style runtime interface probe. Honour the
+      // approved TUN baseline instead of silently falling back to 1400 for an
+      // "unknown" transport. Saved manual/fixed preferences remain untouched.
+      runtimeInterfaceMtu = 1500;
+    }
     map["network-transport-type"] = runtime.$1;
-    map["network-interface-mtu"] = runtime.$2;
+    map["network-interface-mtu"] = runtimeInterfaceMtu;
 
     final userRules = await _loadUserRouteRulesFromProto();
     final managedApplicationRules = await _loadManagedApplicationRules();
@@ -1470,7 +1516,7 @@ class ZeonCoreService with InfraLogger {
     map["profile-rules"] = rulePlan.profileRules;
 
     loggy.info(
-      "core options prepared: full-config=$fullConfig transport=${runtime.$1} iface-mtu=${runtime.$2} user-rules=${(map["rules"] as List?)?.length ?? 0}",
+      "core options prepared: full-config=$fullConfig transport=${runtime.$1} iface-mtu=$runtimeInterfaceMtu user-rules=${(map["rules"] as List?)?.length ?? 0}",
     );
     return map;
   }
@@ -2690,20 +2736,6 @@ class ZeonCoreService with InfraLogger {
 
     while (_lifecycleState != _CoreLifecycleState.stopped) {
       try {
-        final snapshot = await core.backgroundCommandClient
-            .outboundsInfo(Empty())
-            .map((event) {
-              _rememberOutboundGroups(event.items, "outboundsInfo initial");
-              return _firstOutboundGroupSnapshot();
-            })
-            .first
-            .timeout(const Duration(seconds: 2));
-        if (snapshot != null) yield snapshot;
-      } catch (e, st) {
-        loggy.debug("failed to read initial group snapshot", e, st);
-      }
-
-      try {
         await for (final event in core.bgClient.outboundsInfo(Empty())) {
           _rememberOutboundGroups(event.items, "outboundsInfo stream");
           yield _firstOutboundGroupSnapshot();
@@ -2910,7 +2942,10 @@ class ZeonCoreService with InfraLogger {
       }
       loggy.debug("url test");
       try {
-        final res = await core.backgroundCommandClient.urlTest(UrlTestRequest(tag: tag));
+        final res = await runBackgroundCommandWithRecovery(
+          "url test",
+          (client) => client.urlTest(UrlTestRequest(tag: tag)),
+        );
         if (!_sessionGeneration.isCurrent(generation, source: "url_test_result")) {
           return left("stale VPN session");
         }
