@@ -23,7 +23,7 @@ const (
 )
 
 var defaultIPv6ProbeURLs = []string{
-	"https://ipv6.cloudflare.com/cdn-cgi/trace",
+	"https://speed.cloudflare.com/__down?bytes=1",
 	"https://ipv6.google.com/generate_204",
 }
 
