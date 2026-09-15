@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/model/environment.dart';
 import 'package:zeon/core/model/failures.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
@@ -180,7 +181,7 @@ class SettingsPage extends HookConsumerWidget {
               namedLocation: context.namedLocation('about'),
             ),
           ],
-          if (appInfo.release.allowCustomUpdateChecker && !PlatformUtils.isIOS)
+          if (shouldShowManualAppUpdate(appInfo.release, isIOS: PlatformUtils.isIOS))
             Material(
               child: ListTile(
                 leading: const Icon(Icons.system_update_alt_rounded),
@@ -197,6 +198,8 @@ class SettingsPage extends HookConsumerWidget {
     );
   }
 }
+
+bool shouldShowManualAppUpdate(Release release, {required bool isIOS}) => release.allowCustomUpdateChecker && !isIOS;
 
 Future<void> _checkForUpdate(BuildContext context, WidgetRef ref) async {
   final result = await ref.read(appUpdateNotifierProvider.notifier).check();

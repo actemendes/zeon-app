@@ -23,6 +23,7 @@ $powershellFiles = @(
     "build_windows_portable.ps1",
     "build_windows_runtime.ps1",
     "build_android_runtime.ps1",
+    "build_google_play.ps1",
     "windows_runtime_lab.ps1",
     "build_windows_release_folder.ps1",
     "build_windows_installer_exe.ps1",
@@ -50,6 +51,7 @@ foreach ($action in @(
     "windows-runtime",
     "android-apk",
     "android-apks",
+    "android-google-play",
     "android-runtime",
     "android-debug-install"
 )) {
@@ -111,6 +113,13 @@ Assert-True -Condition $androidRuntimeBuilder.Contains('zeon_android_runtime_val
 Assert-True -Condition $androidRuntimeBuilder.Contains('-PzeonValidationApplicationIdSuffix=$ApplicationIdSuffix') -Message "Android runtime builds must support an isolated fresh-install application ID"
 Assert-True -Condition $androidRuntimeBuilder.Contains('application_id_suffix = $ApplicationIdSuffix') -Message "Android runtime provenance must record the application ID suffix"
 Assert-True -Condition $androidRuntimeBuilder.Contains('target = $BuildTarget') -Message "Android runtime provenance must record the selected build target"
+
+$googlePlayBuilder = Get-Content -LiteralPath (Join-Path $scriptDir "build_google_play.ps1") -Raw
+Assert-True -Condition $googlePlayBuilder.Contains('"appbundle"') -Message "Google Play builder must produce an Android App Bundle"
+Assert-True -Condition $googlePlayBuilder.Contains('"release=google-play"') -Message "Google Play builder must hard-code the store release contract"
+Assert-True -Condition $googlePlayBuilder.Contains('This build never generates or substitutes a signing identity.') -Message "Google Play builder must fail closed without the configured upload key"
+Assert-True -Condition $googlePlayBuilder.Contains('google-play.aab') -Message "Google Play builder must publish a distinct AAB artifact"
+Assert-True -Condition $googlePlayBuilder.Contains('Publish-ZeonFile') -Message "Google Play builder must publish through the installer path guard"
 
 $androidGradle = Get-Content -LiteralPath (Join-Path $repoRoot "android\app\build.gradle") -Raw
 Assert-True -Condition $androidGradle.Contains('project.findProperty("zeonValidationApplicationIdSuffix") ?: ".validation"') -Message "Android validation package suffix must be overridable only through the canonical build"

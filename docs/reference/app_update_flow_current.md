@@ -102,6 +102,16 @@ TestFlight/App Store.
 Собственный GitHub checker для этого типа релиза отключен через
 `allowCustomUpdateChecker=false`.
 
+Canonical локальная сборка выполняется отдельным действием:
+
+```powershell
+.\scripts\build.ps1 -Action android-google-play
+```
+
+Оно вызывает внутренний `scripts/build_google_play.ps1`, всегда передаёт
+`release=google-play`, требует заранее настроенный upload keystore и публикует
+versioned AAB только в `out/installers/android`.
+
 ## 8) Apple Store / TestFlight
 
 Apple-сборки должны передавать dart-define:
@@ -169,7 +179,7 @@ Apple-сборки должны передавать dart-define:
   - `flutter run --dart-define=update_channel=beta`
   - `flutter build apk --dart-define=update_channel=beta`
 - Google Play:
-  - `flutter build appbundle --dart-define=release=google-play`
+  - `.\scripts\build.ps1 -Action android-google-play`
 - Apple Store/TestFlight:
   - `flutter build ipa --dart-define=release=app-store`
   - `flutter build macos --release --dart-define=release=app-store`

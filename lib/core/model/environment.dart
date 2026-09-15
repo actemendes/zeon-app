@@ -11,7 +11,7 @@ enum Environment {
 
 enum Release {
   general("general"),
-  // This environment variable is set in the 'android-release-aab' command
+  // This environment variable is set in the 'android-google-play' build action.
   googlePlay("google-play"),
   // This environment variable is set in the Apple App Store build scripts
   appStore("app-store");

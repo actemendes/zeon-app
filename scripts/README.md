@@ -146,6 +146,9 @@ override в WinINet-профиле именно `ZEONRuntime`. Это не до�
 # Android: универсальный и отдельные ABI APK
 .\scripts\build.ps1 -Action android-apks
 
+# Google Play: подписанный release AAB без GitHub-проверки обновлений и её UI
+.\scripts\build.ps1 -Action android-google-play
+
 # Android: debug APK, установка на единственный подключённый телефон и запуск
 .\scripts\build.ps1 -Action android-debug-install -CleanInstall -Launch
 ```
@@ -155,6 +158,12 @@ override в WinINet-профиле именно `ZEONRuntime`. Это не до�
 только для локальной проверки и не должен распространяться как подписанный релиз.
 Параметр `windows-exe -AllowUnsignedExe` сохранён для совместимости и даёт тот же результат.
 Для debug/profile APK можно передать `-Mode debug` или `-Mode profile`.
+`android-google-play` всегда собирает release AAB с жёстко заданным
+`release=google-play`, публикует `ZEON-<version>-google-play.aab` и не создаёт
+локальный ключ: до запуска должны существовать корректные `android/key.properties`
+и настроенный upload keystore. В этой сборке автоматический GitHub checker и ручная
+кнопка «Проверить обновления» отключены; магазинный `UpgradeAlert` остаётся
+Google Play-механизмом обновления.
 Entrypoint проверяет версию Flutter из `pubspec.yaml`; если общий SDK новее, закреплённая
 версия автоматически готовится в `Z:\Zeon-Envelope\Caches\Flutter` из локального Git tag.
 Переопределить SDK можно переменной `ZEON_FLUTTER_ROOT`.
