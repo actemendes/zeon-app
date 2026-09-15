@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net"
 	"net/netip"
 	"net/url"
 	"strconv"
@@ -36,25 +37,90 @@ func getDnsAddress(d string) string {
 	return d
 }
 
+var ipv6DNSAddressByIPv4 = map[string]string{
+	"1.1.1.1": "2606:4700:4700::1111",
+	"1.0.0.1": "2606:4700:4700::1001",
+	"8.8.8.8": "2001:4860:4860::8888",
+	"8.8.4.4": "2001:4860:4860::8844",
+}
+
+// ipv6OnlyRemoteDNSAddress keeps strict IPv6 data-plane DNS on IPv6. Without
+// this normalization, the default IPv4 DNS endpoint is dialed through the
+// selected proxy and is correctly rejected by the IPv6-only outbound gate,
+// leaving Windows TUN clients unable to resolve otherwise reachable AAAA
+// destinations. Unknown IPv4-only and local resolvers fail closed instead of
+// silently leaking DNS outside the requested family contract.
+func ipv6OnlyRemoteDNSAddress(address string) (string, error) {
+	address = strings.TrimSpace(address)
+	if address == "" || address == "local" {
+		return "", E.New("IPv6-only mode requires an IPv6-capable remote DNS server")
+	}
+	if ip, err := netip.ParseAddr(strings.Trim(address, "[]")); err == nil {
+		if ip.Is6() {
+			return "udp://[" + ip.String() + "]", nil
+		}
+		mapped, found := ipv6DNSAddressByIPv4[ip.String()]
+		if !found {
+			return "", E.New("IPv6-only mode has no IPv6 peer for remote DNS server ", ip.String())
+		}
+		return "udp://[" + mapped + "]", nil
+	}
+
+	serverURL, err := url.Parse(getDnsAddress(address))
+	if err != nil || serverURL.Hostname() == "" {
+		return "", E.New("invalid IPv6-only remote DNS server address")
+	}
+	host := serverURL.Hostname()
+	if ip, parseErr := netip.ParseAddr(host); parseErr == nil && ip.Is4() {
+		mapped, found := ipv6DNSAddressByIPv4[ip.String()]
+		if !found {
+			return "", E.New("IPv6-only mode has no IPv6 peer for remote DNS server ", ip.String())
+		}
+		if port := serverURL.Port(); port != "" {
+			serverURL.Host = net.JoinHostPort(mapped, port)
+		} else {
+			serverURL.Host = "[" + mapped + "]"
+		}
+	}
+	return serverURL.String(), nil
+}
+
 func setDns(options *option.Options, opt *HiddifyOptions, staticIps *map[string][]string) error {
-	remoteAddr := getDnsAddress(opt.RemoteDnsAddress)
+	remoteDNSAddress := opt.RemoteDnsAddress
+	remoteDomainResolverStrategy := option.DomainStrategy(C.DomainStrategyPreferIPv4)
+	if opt.IPv6Mode == option.DomainStrategy(C.DomainStrategyIPv6Only) {
+		var err error
+		remoteDNSAddress, err = ipv6OnlyRemoteDNSAddress(remoteDNSAddress)
+		if err != nil {
+			return err
+		}
+		remoteDomainResolverStrategy = option.DomainStrategy(C.DomainStrategyIPv6Only)
+	}
+	remoteAddr := getDnsAddress(remoteDNSAddress)
 	fallbackAddr := "https://8.8.8.8/dns-query"
 	if remoteAddr == fallbackAddr {
 		fallbackAddr = "https://1.0.0.1/dns-query"
+	}
+	if opt.IPv6Mode == option.DomainStrategy(C.DomainStrategyIPv6Only) {
+		var err error
+		fallbackAddr, err = ipv6OnlyRemoteDNSAddress(fallbackAddr)
+		if err != nil {
+			return err
+		}
 	}
 	// if strings.HasPrefix(remoteAddr, "udp://") {
 	// 	remoteAddr = strings.Replace(remoteAddr, "udp://", "tcp://", 1)
 	// }
 
-	remote_dns, err := getDNSServerOptions(DNSRemoteTag, remoteAddr, DNSDirectTag, OutboundMainDetour)
+	remote_dns, err := getDNSServerOptions(DNSRemoteTag, remoteAddr, DNSDirectTag, OutboundMainDetour, remoteDomainResolverStrategy)
 	if err != nil {
 		return err
 	}
-	remote_dns_fallback, err := getDNSServerOptions(DNSRemoteTagFallback, fallbackAddr, DNSDirectTag, OutboundMainDetour)
+	remote_dns_fallback, err := getDNSServerOptions(DNSRemoteTagFallback, fallbackAddr, DNSDirectTag, OutboundMainDetour, remoteDomainResolverStrategy)
 	if err != nil {
 		return err
 	}
-	remote_no_warp_dns, err := getDNSServerOptions(DNSRemoteNoWarpTag, opt.RemoteDnsAddress, DNSDirectTag, OutboundWARPConfigDetour)
+	remote_no_warp_dns, err := getDNSServerOptions(DNSRemoteNoWarpTag, remoteDNSAddress, DNSDirectTag, OutboundWARPConfigDetour, remoteDomainResolverStrategy)
 	if err != nil {
 		return err
 	}
@@ -310,7 +376,7 @@ func addForceDirect(options *option.Options, hopt *HiddifyOptions) ([]option.Def
 
 }
 
-func getDNSServerOptions(tag string, dnsurl string, domain_resolver string, detour string) (*option.DNSServerOptions, error) {
+func getDNSServerOptions(tag string, dnsurl string, domain_resolver string, detour string, domainStrategies ...option.DomainStrategy) (*option.DNSServerOptions, error) {
 	serverURL, _ := url.Parse(dnsurl)
 	var serverType string
 	if serverURL != nil && serverURL.Scheme != "" {
@@ -326,13 +392,17 @@ func getDNSServerOptions(tag string, dnsurl string, domain_resolver string, deto
 	if res, _ := getHostnameIfNotIP(dnsurl); res == "" {
 		domain_resolver = ""
 	}
+	domainStrategy := option.DomainStrategy(C.DomainStrategyPreferIPv4)
+	if len(domainStrategies) > 0 {
+		domainStrategy = domainStrategies[0]
+	}
 	remoteOptions := option.RemoteDNSServerOptions{
 		RawLocalDNSServerOptions: option.RawLocalDNSServerOptions{
 			DialerOptions: option.DialerOptions{
 				Detour: detour,
 				DomainResolver: &option.DomainResolveOptions{
 					Server:   domain_resolver,
-					Strategy: option.DomainStrategy(C.DomainStrategyPreferIPv4),
+					Strategy: domainStrategy,
 				},
 			},
 		},
