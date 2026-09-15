@@ -157,12 +157,12 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
   @override
   void initState() {
     super.initState();
-    _rotationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1320))..repeat();
+    _rotationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1320));
     _loadingController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 220),
       reverseDuration: const Duration(milliseconds: 180),
-    );
+    )..addStatusListener(_handleLoadingAnimationStatus);
     _connectedController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 380),
@@ -191,6 +191,9 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
 
     if (animate) {
       if (loadingTarget > _loadingController.value) {
+        if (!_rotationController.isAnimating) {
+          _rotationController.repeat();
+        }
         _loadingController.forward();
       } else {
         _loadingController.reverse();
@@ -204,6 +207,21 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
     }
     _loadingController.value = loadingTarget;
     _connectedController.value = connectedTarget;
+    if (state == MainVpnButtonVisualState.loading) {
+      _rotationController.repeat();
+    } else {
+      _rotationController
+        ..stop()
+        ..value = 0;
+    }
+  }
+
+  void _handleLoadingAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && widget.visualState != MainVpnButtonVisualState.loading) {
+      _rotationController
+        ..stop()
+        ..value = 0;
+    }
   }
 
   @override

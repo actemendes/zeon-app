@@ -1,7 +1,7 @@
 name: zeon
 description: ZEON cross-platform VPN client.
 publish_to: "none"
-version: 1.5.0+1050048
+version: 1.5.0+1050049
 
 environment:
   sdk: ^3.10.4
@@ -171,6 +171,7 @@ dependency_overrides:
 flutter:
   uses-material-design: true
   assets:
+    - assets/fonts/OFL-Montserrat.txt
     # - assets/core/geoip.db
     # - assets/core/geosite.db
     - assets/images/logo.svg
@@ -237,8 +238,14 @@ flutter:
           weight: 700
     - family: Montserrat
       fonts:
-        - asset: assets/fonts/Montserrat-Medium.ttf
+        - asset: assets/fonts/Montserrat-VariableFont_wght.ttf
+          weight: 400
+        - asset: assets/fonts/Montserrat-VariableFont_wght.ttf
           weight: 500
+        - asset: assets/fonts/Montserrat-VariableFont_wght.ttf
+          weight: 600
+        - asset: assets/fonts/Montserrat-VariableFont_wght.ttf
+          weight: 700
     # - family: Roboto
     #   fonts:
     #     - asset: assets/fonts/Roboto.ttf

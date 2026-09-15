@@ -153,6 +153,24 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       semantics.dispose();
     });
+
+    testWidgets('spinner schedules frames only while loading is visible', (tester) async {
+      final disconnected = MainVpnButtonState.fromSnapshot(snapshot(VpnSessionPhase.disconnected));
+      final loading = MainVpnButtonState.fromSnapshot(snapshot(VpnSessionPhase.verifying));
+      final connected = MainVpnButtonState.fromSnapshot(snapshot(VpnSessionPhase.connected));
+
+      await pumpButton(tester, disconnected, onTap: () {});
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.binding.transientCallbackCount, 0);
+
+      await pumpButton(tester, loading, onTap: () {});
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.binding.transientCallbackCount, greaterThan(0));
+
+      await pumpButton(tester, connected, onTap: () {});
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.binding.transientCallbackCount, 0);
+    });
   });
 }
 
