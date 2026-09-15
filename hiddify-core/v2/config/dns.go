@@ -59,11 +59,10 @@ func ipv6OnlyRemoteDNSAddress(address string) (string, error) {
 		if ip.Is6() {
 			return "udp://[" + ip.String() + "]", nil
 		}
-		mapped, found := ipv6DNSAddressByIPv4[ip.String()]
-		if !found {
+		if _, found := ipv6DNSAddressByIPv4[ip.String()]; !found {
 			return "", E.New("IPv6-only mode has no IPv6 peer for remote DNS server ", ip.String())
 		}
-		return "udp://[" + mapped + "]", nil
+		address = "udp://" + ip.String()
 	}
 
 	serverURL, err := url.Parse(getDnsAddress(address))
@@ -75,6 +74,21 @@ func ipv6OnlyRemoteDNSAddress(address string) (string, error) {
 		mapped, found := ipv6DNSAddressByIPv4[ip.String()]
 		if !found {
 			return "", E.New("IPv6-only mode has no IPv6 peer for remote DNS server ", ip.String())
+		}
+		// The shipped desktop default is TCP DNS over port 53. An outbound can
+		// legitimately expose HTTPS IPv6 egress while filtering TCP/53, so use
+		// the same provider's DoH endpoint for mapped legacy defaults.
+		if serverURL.Scheme == C.DNSTypeUDP || serverURL.Scheme == C.DNSTypeTCP {
+			if port := serverURL.Port(); port != "" && port != "53" {
+				return "", E.New("IPv6-only mode cannot translate a custom IPv4 DNS port")
+			}
+			serverURL.Scheme = C.DNSTypeHTTPS
+			serverURL.Path = "/dns-query"
+			serverURL.RawPath = ""
+			serverURL.RawQuery = ""
+			serverURL.Fragment = ""
+			serverURL.Host = "[" + mapped + "]"
+			return serverURL.String(), nil
 		}
 		if port := serverURL.Port(); port != "" {
 			serverURL.Host = net.JoinHostPort(mapped, port)

@@ -9,9 +9,9 @@ import (
 
 func TestIPv6OnlyRemoteDNSAddressUsesProviderIPv6Peer(t *testing.T) {
 	tests := map[string]string{
-		"tcp://8.8.8.8":                        "tcp://[2001:4860:4860::8888]",
+		"tcp://8.8.8.8":                        "https://[2001:4860:4860::8888]/dns-query",
 		"https://1.1.1.1/dns-query":            "https://[2606:4700:4700::1111]/dns-query",
-		"1.0.0.1":                              "udp://[2606:4700:4700::1001]",
+		"1.0.0.1":                              "https://[2606:4700:4700::1001]/dns-query",
 		"tcp://[2606:4700:4700::1111]":         "tcp://[2606:4700:4700::1111]",
 		"https://dns.cloudflare.com/dns-query": "https://dns.cloudflare.com/dns-query",
 	}
@@ -56,6 +56,11 @@ func TestSetDNSUsesIPv6TransportForStrictMode(t *testing.T) {
 	}
 	if got := servers[DNSRemoteTag]; got != "2001:4860:4860::8888" {
 		t.Fatalf("strict primary DNS=%q want IPv6 Google endpoint", got)
+	}
+	for _, server := range built.DNS.Servers {
+		if server.Tag == DNSRemoteTag && server.Type != C.DNSTypeHTTPS {
+			t.Fatalf("strict mapped primary DNS type=%q want HTTPS", server.Type)
+		}
 	}
 	if got := servers[DNSRemoteTagFallback]; got != "2001:4860:4860::8888" {
 		t.Fatalf("strict fallback DNS=%q want IPv6 Google endpoint", got)
