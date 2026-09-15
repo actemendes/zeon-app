@@ -1,7 +1,7 @@
 name: zeon
 description: ZEON cross-platform VPN client.
 publish_to: "none"
-version: 1.5.0+1050050
+version: 1.5.0+1050051
 
 environment:
   sdk: ^3.10.4
@@ -172,6 +172,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fonts/OFL-Montserrat.txt
+    - assets/fonts/OFL-Unbounded.txt
     # - assets/core/geoip.db
     # - assets/core/geosite.db
     - assets/images/logo.svg
@@ -230,21 +231,23 @@ flutter:
         - asset: assets/fonts/Shabnam.ttf
     - family: Unbounded
       fonts:
-        - asset: assets/fonts/Unbounded-VariableFont_wght.ttf
+        - asset: assets/fonts/Unbounded-Light.ttf
           weight: 300
-        - asset: assets/fonts/Unbounded-VariableFont_wght.ttf
+        - asset: assets/fonts/Unbounded-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Unbounded-Medium.ttf
           weight: 500
-        - asset: assets/fonts/Unbounded-VariableFont_wght.ttf
+        - asset: assets/fonts/Unbounded-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Unbounded-Bold.ttf
           weight: 700
     - family: Montserrat
       fonts:
-        - asset: assets/fonts/Montserrat-VariableFont_wght.ttf
-          weight: 400
-        - asset: assets/fonts/Montserrat-VariableFont_wght.ttf
+        - asset: assets/fonts/Montserrat-Medium.ttf
           weight: 500
-        - asset: assets/fonts/Montserrat-VariableFont_wght.ttf
+        - asset: assets/fonts/Montserrat-SemiBold.ttf
           weight: 600
-        - asset: assets/fonts/Montserrat-VariableFont_wght.ttf
+        - asset: assets/fonts/Montserrat-Bold.ttf
           weight: 700
     # - family: Roboto
     #   fonts:

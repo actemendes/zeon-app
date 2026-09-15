@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:installed_apps/index.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/region.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
@@ -16,11 +18,11 @@ import 'package:zeon/features/per_app_proxy/overview/per_app_proxy_loading_notif
 import 'package:zeon/features/per_app_proxy/overview/per_app_proxy_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:installed_apps/index.dart';
 
 class PerAppProxyPage extends HookConsumerWidget with PresLogger {
   const PerAppProxyPage({super.key});
+
+  static const double applicationIconLogicalSize = 48;
 
   int _getPriority(AppPackageInfo app, Map<String, int> selected) {
     final flag = selected[app.packageName];
@@ -46,6 +48,7 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final applicationIconPhysicalSize = applicationIconCacheExtent(MediaQuery.devicePixelRatioOf(context));
     final fabForegroundColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : null;
     final t = ref.watch(translationsProvider).requireValue;
     final localizations = MaterialLocalizations.of(context);
@@ -58,18 +61,16 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
     final searchQuery = useState("");
     final sortListener = useState(false);
 
-    final asyncApps = useFuture(useMemoized(() => getApps(false)));
-    final asyncAppsHideSys = useFuture(useMemoized(() => getApps(true)));
-
-    final asyncFilteredApps = hideSystemApps.value ? asyncAppsHideSys : asyncApps;
+    final asyncFilteredApps = useFuture(useMemoized(() => getApps(hideSystemApps.value), [hideSystemApps.value]));
 
     final displayedApps = useMemoized<AsyncValue<List<AppPackageInfo>>>(
       () {
         if (!(selectedApps.hasValue &&
             selectedApps is AsyncData &&
             asyncFilteredApps.hasData &&
-            asyncFilteredApps.connectionState == ConnectionState.done))
+            asyncFilteredApps.connectionState == ConnectionState.done)) {
           return const AsyncValue.loading();
+        }
         final appsList = asyncFilteredApps.requireData.toList();
         if (searchQuery.value.isBlank) {
           appsList.sort((a, b) {
@@ -247,8 +248,9 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
                         tooltip: (mode?.toPerAppProxy() ?? PerAppProxyMode.off).present(t).message,
                         initialValue: mode?.toPerAppProxy() ?? PerAppProxyMode.off,
                         onSelected: (e) async {
-                          if (ref.read(Preferences.autoAppsSelectionRegion) != null)
+                          if (ref.read(Preferences.autoAppsSelectionRegion) != null) {
                             await ref.read(PerAppProxyProvider(mode).notifier).clearAutoSelected();
+                          }
                           if (e == PerAppProxyMode.off && context.mounted) context.pop();
                           await ref.read(Preferences.perAppProxyMode.notifier).update(e);
                         },
@@ -323,7 +325,14 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
               onChanged: (_) => ref.read(PerAppProxyProvider(mode).notifier).updatePkg(package.packageName),
               secondary: package.icon == null
                   ? null
-                  : Image.memory(package.icon!, width: 48, height: 48, cacheWidth: 48, cacheHeight: 48),
+                  : Image.memory(
+                      package.icon!,
+                      width: applicationIconLogicalSize,
+                      height: applicationIconLogicalSize,
+                      cacheWidth: applicationIconPhysicalSize,
+                      cacheHeight: applicationIconPhysicalSize,
+                      filterQuality: FilterQuality.high,
+                    ),
             );
           },
           itemCount: packages.length,
@@ -334,3 +343,6 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
     );
   }
 }
+
+int applicationIconCacheExtent(double devicePixelRatio) =>
+    (PerAppProxyPage.applicationIconLogicalSize * devicePixelRatio).ceil();
