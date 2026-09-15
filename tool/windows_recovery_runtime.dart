@@ -250,6 +250,9 @@ class RuntimeOptions {
       60,
       7200,
     );
+    final defaultTrafficValues = scenario == RuntimeScenario.p04
+        ? const ['https://speed.cloudflare.com/__down?bytes=4096', 'https://www.google.com/robots.txt']
+        : const ['https://speed.cloudflare.com/__down?bytes=4096', 'https://captive.apple.com/hotspot-detect.html'];
     final trafficValues =
         parsed['traffic-url'] ??
         env['ZEON_RUNTIME_TRAFFIC_URLS']
@@ -257,7 +260,7 @@ class RuntimeOptions {
             .map((item) => item.trim())
             .where((item) => item.isNotEmpty)
             .toList() ??
-        const ['https://speed.cloudflare.com/__down?bytes=4096', 'https://captive.apple.com/hotspot-detect.html'];
+        defaultTrafficValues;
     if (trafficValues.isEmpty) throw const FormatException('At least one traffic URL is required');
     final trafficUrls = trafficValues.map((value) => httpsUri(value, 'Traffic URL')).toList(growable: false);
     final backendHealthUrl = httpsUri(

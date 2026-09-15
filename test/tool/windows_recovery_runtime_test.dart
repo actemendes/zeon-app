@@ -53,7 +53,31 @@ void main() {
         expect(options.scenario, RuntimeScenario.p04);
         expect(options.ipv6Mode, ipv6Mode);
         expect(options.toJson(), containsPair('ipv6_mode', ipv6Mode.key));
+        expect(
+          options.trafficUrls.map((uri) => uri.host),
+          orderedEquals(const ['speed.cloudflare.com', 'www.google.com']),
+        );
       }
+    });
+
+    test('keeps the established traffic targets outside P04', () {
+      final options = RuntimeOptions.parse([
+        '--scenario',
+        's02',
+        '--mode',
+        'tun',
+        '--evidence-dir',
+        r'C:\evidence',
+        '--profile-file',
+        r'C:\fixture.txt',
+        '--run-id',
+        's02-default-targets-001',
+      ], environment: const {});
+
+      expect(
+        options.trafficUrls.map((uri) => uri.host),
+        orderedEquals(const ['speed.cloudflare.com', 'captive.apple.com']),
+      );
     });
 
     test('maps public mode names to application service modes', () {

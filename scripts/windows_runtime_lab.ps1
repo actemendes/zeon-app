@@ -9,7 +9,7 @@ param(
     [string]$EvidenceRoot = 'Z:\Zeon-Envelope\Temp\zeon-app-testing',
     [string]$RemoteHost = 'Administrator@89.111.171.67',
     [string]$IdentityFile = 'C:\Users\ZEON\.ssh\id_ed25519_zeon_ai',
-    [string[]]$TrafficUrls = @('https://speed.cloudflare.com/__down?bytes=4096', 'https://captive.apple.com/hotspot-detect.html'),
+    [string[]]$TrafficUrls,
     [string]$BackendHealthUrl = 'https://api.zeon-vps.online/health',
     [ValidateRange(1, 45)][int]$ConnectTimeoutSeconds = 45,
     [ValidateRange(30, 600)][int]$BootstrapTimeoutSeconds = 240,
@@ -469,7 +469,14 @@ if ($EnrollFixture) {
 }
 
 Assert-RunId $RunId
-foreach ($trafficUrl in $TrafficUrls) { Assert-HttpsUrl -Value $trafficUrl -AllowedHosts @('speed.cloudflare.com', 'captive.apple.com') }
+if (-not $PSBoundParameters.ContainsKey('TrafficUrls')) {
+    $TrafficUrls = if ($Scenario -eq 'p04') {
+        @('https://speed.cloudflare.com/__down?bytes=4096', 'https://www.google.com/robots.txt')
+    } else {
+        @('https://speed.cloudflare.com/__down?bytes=4096', 'https://captive.apple.com/hotspot-detect.html')
+    }
+}
+foreach ($trafficUrl in $TrafficUrls) { Assert-HttpsUrl -Value $trafficUrl -AllowedHosts @('speed.cloudflare.com', 'captive.apple.com', 'www.google.com') }
 Assert-HttpsUrl -Value $BackendHealthUrl -AllowedHosts @('api.zeon-vps.online')
 if ($ManualProxyTag -and $ManualProxyTag -notmatch '^[A-Za-z0-9._-]{1,80}$') { throw 'ManualProxyTag contains unsupported characters.' }
 if (-not (Test-Path -LiteralPath $IdentityFile -PathType Leaf)) { throw 'Dedicated SSH identity file is missing.' }
