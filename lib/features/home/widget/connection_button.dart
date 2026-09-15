@@ -17,6 +17,12 @@ import 'package:zeon/gen/assets.gen.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/utils/platform_utils.dart';
 
+@visibleForTesting
+double resolveConnectedRingProgress(MainVpnButtonVisualState visualState, double animatedProgress) {
+  if (visualState == MainVpnButtonVisualState.connected) return 1;
+  return animatedProgress;
+}
+
 class ConnectionButton extends ConsumerWidget {
   const ConnectionButton({super.key});
 
@@ -278,7 +284,7 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
                     painter: _ConnectionRingPainter(
                       offColor: theme.colorScheme.secondaryContainer,
                       loadingProgress: _loadingController.value,
-                      connectedProgress: _connectedController.value,
+                      connectedProgress: resolveConnectedRingProgress(widget.visualState, _connectedController.value),
                       rotationTurns: _rotationController.value,
                     ),
                   ),
