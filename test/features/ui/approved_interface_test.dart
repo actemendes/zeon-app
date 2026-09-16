@@ -88,6 +88,7 @@ void main() {
         await pumpPage(tester, page, size: size, scale: scale);
         expect(tester.takeException(), isNull);
         if (name == 'home') {
+          expect(find.byKey(const ValueKey('home_header_panel')), size.width < 600 ? findsOneWidget : findsNothing);
           final nameRect = tester.getRect(find.byKey(const ValueKey('home_header_text')));
           final refresh = tester.getRect(find.byKey(const ValueKey('home_refresh')));
           expect(nameRect.right, lessThan(refresh.left));

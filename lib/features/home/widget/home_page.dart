@@ -79,40 +79,47 @@ class HomePage extends HookConsumerWidget {
                   desktop: breakpoint.isDesktop(),
                   secure: _hasSecureConnection(ref),
                   tablet: breakpoint.isTablet(),
-                  header: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _HomeAppBarTitle(
-                          activeBreakpoint: breakpoint.activeBreakpoint,
-                          internetLabel: t.pages.home.internet,
-                          forYouLabel: t.pages.home.forYou,
-                          subscriptionName: subscriptionName,
-                          tipAnchor: tipAnchor,
+                  header: _HomeHeaderFrame(
+                    mobile: breakpoint.isMobile(),
+                    child: Row(
+                      crossAxisAlignment: breakpoint.isMobile() ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _HomeAppBarTitle(
+                            activeBreakpoint: breakpoint.activeBreakpoint,
+                            internetLabel: t.pages.home.internet,
+                            forYouLabel: t.pages.home.forYou,
+                            subscriptionName: subscriptionName,
+                            tipAnchor: tipAnchor,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      IconButton(
-                        key: const ValueKey('home_refresh'),
-                        tooltip: t.common.update,
-                        style: IconButton.styleFrom(
-                          backgroundColor: theme.colorScheme.secondaryContainer,
-                          fixedSize: const Size(48, 48),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        SizedBox(width: breakpoint.isMobile() ? 12 : 16),
+                        IconButton(
+                          key: const ValueKey('home_refresh'),
+                          tooltip: t.common.update,
+                          style: IconButton.styleFrom(
+                            backgroundColor: breakpoint.isMobile()
+                                ? theme.colorScheme.surface
+                                : theme.colorScheme.secondaryContainer,
+                            fixedSize: const Size(48, 48),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          onPressed: isUpdatingProfile
+                              ? null
+                              : () async {
+                                  final active = await ref.read(activeProfileProvider.future);
+                                  if (active is! RemoteProfileEntity) return;
+                                  await ref
+                                      .read(updateProfileNotifierProvider(active.id).notifier)
+                                      .updateProfile(active);
+                                },
+                          icon: RotationTransition(
+                            turns: refreshAnimationController,
+                            child: Icon(Icons.refresh_rounded, size: 22, color: theme.colorScheme.onSurfaceVariant),
+                          ),
                         ),
-                        onPressed: isUpdatingProfile
-                            ? null
-                            : () async {
-                                final active = await ref.read(activeProfileProvider.future);
-                                if (active is! RemoteProfileEntity) return;
-                                await ref.read(updateProfileNotifierProvider(active.id).notifier).updateProfile(active);
-                              },
-                        icon: RotationTransition(
-                          turns: refreshAnimationController,
-                          child: Icon(Icons.refresh_rounded, size: 22, color: theme.colorScheme.onSurfaceVariant),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -403,6 +410,25 @@ class _HomeQuickSettingsButton extends ConsumerWidget {
   }
 }
 
+class _HomeHeaderFrame extends StatelessWidget {
+  const _HomeHeaderFrame({required this.mobile, required this.child});
+  final bool mobile;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => mobile
+      ? Container(
+          key: const ValueKey('home_header_panel'),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.secondaryContainer,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: child,
+        )
+      : child;
+}
+
 class _HomeAppBarTitle extends StatelessWidget {
   const _HomeAppBarTitle({
     required this.activeBreakpoint,
@@ -419,6 +445,7 @@ class _HomeAppBarTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final mobile = activeBreakpoint == Breakpoints.mobile;
     final headerStyle = TextStyle(
       fontFamily: 'Unbounded',
       fontSize: 18,
@@ -433,16 +460,22 @@ class _HomeAppBarTitle extends StatelessWidget {
       children: [
         Text(
           '$internetLabel $forYouLabel'.toUpperCase(),
-          style: headerStyle,
+          style: mobile ? headerStyle.copyWith(fontSize: 14, fontWeight: FontWeight.w400) : headerStyle,
         ),
-        SizedBox(height: activeBreakpoint == Breakpoints.desktop ? 3 : 8),
+        SizedBox(
+          height: mobile
+              ? 2
+              : activeBreakpoint == Breakpoints.desktop
+              ? 3
+              : 8,
+        ),
         CompositedTransformTarget(
           link: tipAnchor,
           child: Text(
             subscriptionName.toUpperCase(),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: headerStyle,
+            style: mobile ? headerStyle.copyWith(fontSize: 20, fontWeight: FontWeight.w700) : headerStyle,
           ),
         ),
       ],
