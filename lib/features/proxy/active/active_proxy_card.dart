@@ -11,7 +11,14 @@ import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 
 class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
-  const ActiveProxyFooter({super.key});
+  const ActiveProxyFooter({
+    super.key,
+    this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    this.backgroundColor,
+  });
+
+  final EdgeInsetsGeometry margin;
+  final Color? backgroundColor;
 
   static const _panelRadius = 16.0;
 
@@ -49,9 +56,9 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
 
     return Container(
       key: const ValueKey('home_server_picker'),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      margin: margin,
       decoration: BoxDecoration(
-        color: navBarBackground,
+        color: backgroundColor ?? navBarBackground,
         borderRadius: BorderRadius.circular(_panelRadius),
         // boxShadow: [
         //   BoxShadow(

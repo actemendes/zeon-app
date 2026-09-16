@@ -129,42 +129,42 @@ class HomePage extends HookConsumerWidget {
                   ),
                 ),
               ),
-              body: Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: breakpoint.isDesktop() ? 600 : double.infinity,
-                  ),
-                  child: CustomScrollView(
-                    slivers: [
-                      MultiSliver(
-                        children: [
-                          SliverFillRemaining(
-                            hasScrollBody: false,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              body: breakpoint.isDesktop()
+                  ? _HomeDesktopBody(buttonFaceKey: buttonFaceKey)
+                  : Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: breakpoint.isDesktop() ? 600 : double.infinity),
+                        child: CustomScrollView(
+                          slivers: [
+                            MultiSliver(
                               children: [
-                                Expanded(
+                                SliverFillRemaining(
+                                  hasScrollBody: false,
                                   child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      ConnectionButton(faceKey: buttonFaceKey),
-                                      const ActiveProxyDelayIndicator(),
+                                      Expanded(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            ConnectionButton(faceKey: buttonFaceKey),
+                                            const ActiveProxyDelayIndicator(),
+                                          ],
+                                        ),
+                                      ),
+                                      _HomeQuickSettingsButton(label: t.pages.home.quickSettings),
+                                      const ActiveProxyFooter(),
+                                      if (!breakpoint.isMobile()) const HomePremiumAccessButton(),
                                     ],
                                   ),
                                 ),
-                                _HomeQuickSettingsButton(label: t.pages.home.quickSettings),
-                                const ActiveProxyFooter(),
-                                if (!breakpoint.isMobile()) const HomePremiumAccessButton(),
                               ],
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
+                    ),
             ),
           ],
         );
@@ -173,10 +173,115 @@ class HomePage extends HookConsumerWidget {
   }
 }
 
+class _HomeDesktopBody extends StatelessWidget {
+  const _HomeDesktopBody({required this.buttonFaceKey});
+
+  final GlobalKey buttonFaceKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ConnectionButton(faceKey: buttonFaceKey, showStatus: false),
+                    const SizedBox(height: 32),
+                    const _HomeDesktopConnectionPanel(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeDesktopConnectionPanel extends ConsumerWidget {
+  const _HomeDesktopConnectionPanel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final t = ref.watch(translationsProvider).requireValue;
+    final connectionState = ref.watch(homeConnectionStateProvider);
+    final isConnected = connectionState.isConnected;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final status = Semantics(
+      liveRegion: true,
+      child: Text(
+        connectionState.present(t).label.replaceAll('\n', ' '),
+        textAlign: TextAlign.center,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+      ),
+    );
+    final quickSettings = _HomeQuickSettingsButton(label: t.pages.home.quickSettings, embedded: true);
+
+    return Material(
+      key: const ValueKey('home_desktop_connection_panel'),
+      color: theme.navigationBarTheme.backgroundColor ?? theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(34),
+      clipBehavior: Clip.antiAlias,
+      child: AnimatedSize(
+        key: ValueKey(reduceMotion),
+        duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 240),
+        curve: Curves.easeInOutCubic,
+        alignment: Alignment.topCenter,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 40),
+                child: Row(
+                  children: isConnected
+                      ? [
+                          const Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: FittedBox(fit: BoxFit.scaleDown, child: ActiveProxyDelayIndicator(compact: true)),
+                            ),
+                          ),
+                          Expanded(flex: 2, child: status),
+                          Expanded(
+                            child: Align(alignment: Alignment.centerRight, child: quickSettings),
+                          ),
+                        ]
+                      : [const SizedBox(width: 40), Expanded(child: status), SizedBox(width: 40, child: quickSettings)],
+                ),
+              ),
+              if (isConnected) ...[
+                const SizedBox(height: 12),
+                ActiveProxyFooter(margin: EdgeInsets.zero, backgroundColor: theme.colorScheme.surface),
+              ],
+              const SizedBox(height: 12),
+              const HomePremiumAccessButton(padding: EdgeInsets.zero),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HomeQuickSettingsButton extends ConsumerWidget {
-  const _HomeQuickSettingsButton({required this.label});
+  const _HomeQuickSettingsButton({required this.label, this.embedded = false});
 
   final String label;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -188,15 +293,17 @@ class _HomeQuickSettingsButton extends ConsumerWidget {
         theme.navigationBarTheme.iconTheme?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: embedded ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 16),
       child: Align(
         alignment: Alignment.centerRight,
+        widthFactor: embedded ? 1 : null,
+        heightFactor: embedded ? 1 : null,
         child: Semantics(
           key: const ValueKey("profile_quick_settings"),
           label: label,
           button: true,
           child: Material(
-            color: backgroundColor,
+            color: embedded ? theme.colorScheme.surface : backgroundColor,
             shape: const CircleBorder(),
             clipBehavior: Clip.antiAlias,
             child: Tooltip(

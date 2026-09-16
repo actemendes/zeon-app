@@ -7,7 +7,9 @@ import 'package:zeon/utils/custom_loggers.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
-  const ActiveProxyDelayIndicator({super.key});
+  const ActiveProxyDelayIndicator({super.key, this.compact = false});
+
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -23,6 +25,7 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
     final failedPing = proxyPingFailed(proxy);
 
     return Center(
+      widthFactor: compact ? 1 : null,
       child: InkWell(
         onTap: () async {
           try {
@@ -34,25 +37,34 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
         },
         borderRadius: BorderRadius.circular(24),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          padding: EdgeInsets.symmetric(vertical: 8, horizontal: compact ? 4 : 16),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(FluentIcons.wifi_1_24_regular),
+              if (compact)
+                QualityBars.fromOutbound(
+                  proxy,
+                  isActive: !failedPing,
+                  activeColor: failedPing ? theme.colorScheme.error : null,
+                )
+              else
+                const Icon(FluentIcons.wifi_1_24_regular),
               const Gap(8),
               Text(
                 pingText,
-                style: theme.textTheme.titleMedium?.copyWith(
+                style: (compact ? theme.textTheme.bodyMedium : theme.textTheme.titleMedium)?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: failedPing ? theme.colorScheme.error : null,
                 ),
               ),
-              const Gap(8),
-              QualityBars.fromOutbound(
-                proxy,
-                isActive: !failedPing,
-                activeColor: failedPing ? theme.colorScheme.error : null,
-              ),
+              if (!compact) ...[
+                const Gap(8),
+                QualityBars.fromOutbound(
+                  proxy,
+                  isActive: !failedPing,
+                  activeColor: failedPing ? theme.colorScheme.error : null,
+                ),
+              ],
             ],
           ),
         ),

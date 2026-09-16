@@ -19,9 +19,10 @@ import 'package:zeon/singbox/model/singbox_config_enum.dart';
 const _connectionTransitionDuration = Duration(milliseconds: 460);
 
 class ConnectionButton extends ConsumerWidget {
-  const ConnectionButton({super.key, this.faceKey});
+  const ConnectionButton({super.key, this.faceKey, this.showStatus = true});
 
   final GlobalKey? faceKey;
+  final bool showStatus;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -45,6 +46,7 @@ class ConnectionButton extends ConsumerWidget {
 
     return MainVpnButtonView(
       faceKey: faceKey,
+      showStatus: showStatus,
       onTap: buttonState.enabled
           ? () => ref.read(connectionNotifierProvider.notifier).handleMainVpnButtonTap(buttonState)
           : null,
@@ -60,6 +62,7 @@ class MainVpnButtonView extends StatelessWidget {
   const MainVpnButtonView({
     super.key,
     this.faceKey,
+    this.showStatus = true,
     required this.onTap,
     required this.presentation,
     required this.image,
@@ -69,6 +72,7 @@ class MainVpnButtonView extends StatelessWidget {
 
   final VoidCallback? onTap;
   final GlobalKey? faceKey;
+  final bool showStatus;
   final MainVpnButtonPresentation presentation;
   final AssetGenImage image;
   final bool useImage;
@@ -78,6 +82,7 @@ class MainVpnButtonView extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = presentation.state;
     return Column(
+      mainAxisSize: showStatus ? MainAxisSize.max : MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Semantics(
@@ -99,43 +104,45 @@ class MainVpnButtonView extends StatelessWidget {
             ),
           ),
         ),
-        const Gap(16),
-        ExcludeSemantics(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              DefaultTextStyle.merge(
-                textAlign: TextAlign.center,
-                child: _ConnectionContentOpacity(
-                  key: const ValueKey('home_connection_label_opacity'),
-                  visualState: state.visualState,
-                  isStopping: state.isStopping,
-                  child: AnimatedText(
-                    presentation.label,
-                    style: Theme.of(context).textTheme.titleMedium,
-                    size: false,
-                    slide: false,
+        if (showStatus) ...[
+          const Gap(16),
+          ExcludeSemantics(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                DefaultTextStyle.merge(
+                  textAlign: TextAlign.center,
+                  child: _ConnectionContentOpacity(
+                    key: const ValueKey('home_connection_label_opacity'),
+                    visualState: state.visualState,
+                    isStopping: state.isStopping,
+                    child: AnimatedText(
+                      presentation.label,
+                      style: Theme.of(context).textTheme.titleMedium,
+                      size: false,
+                      slide: false,
+                    ),
                   ),
                 ),
-              ),
-              if (secureLabel.isNotEmpty) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(FontAwesomeIcons.shieldHalved, size: 16, color: Theme.of(context).colorScheme.secondary),
-                    const Gap(4),
-                    Text(
-                      secureLabel,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.secondary),
-                    ),
-                  ],
-                ),
+                if (secureLabel.isNotEmpty) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(FontAwesomeIcons.shieldHalved, size: 16, color: Theme.of(context).colorScheme.secondary),
+                      const Gap(4),
+                      Text(
+                        secureLabel,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.secondary),
+                      ),
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
