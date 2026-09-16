@@ -27,11 +27,31 @@ void main() {
       motion.advance(.05);
     }
     expect(motion.sample(button, Offset.zero).tint, greaterThan(.2));
+    expect(motion.sample(button, Offset.zero).scale, greaterThan(1.3));
     expect(motion.sample(button + const Offset(300, 0), Offset.zero).tint, 0);
     for (var i = 0; i < 26; i++) {
       motion.advance(.05);
     }
     expect(motion.sample(button + const Offset(300, 0), Offset.zero).tint, greaterThan(.2));
+    expect(motion.sample(button + const Offset(300, 0), Offset.zero).scale, greaterThan(1.3));
+  });
+
+  test('neutral dots visibly breathe in size and all states keep radii bounded', () {
+    for (final phase in [VpnSessionPhase.disconnected, VpnSessionPhase.verifying, VpnSessionPhase.connected]) {
+      final motion = WorldMapMotion(state(phase));
+      addTearDown(motion.dispose);
+      var smallest = double.infinity;
+      var largest = 0.0;
+      for (var i = 0; i < 600; i++) {
+        motion.advance(.05);
+        final sample = motion.sample(const Offset(300, 400), Offset.zero);
+        expect(sample.scale, inInclusiveRange(.45, 1.35));
+        if (phase == VpnSessionPhase.disconnected) expect(sample.tint, 0);
+        if (sample.scale < smallest) smallest = sample.scale;
+        if (sample.scale > largest) largest = sample.scale;
+      }
+      expect(largest - smallest, greaterThan(.5));
+    }
   });
 
   test('elapsed time cannot promote connecting to Connected; cancellation settles idle', () {

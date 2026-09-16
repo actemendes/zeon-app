@@ -85,8 +85,11 @@ class WorldMapMotion extends ChangeNotifier {
       final beat = localTime % 2.8;
       if (beat < .95) pulse = math.pow(math.sin(math.pi * beat / .95), 2).toDouble();
     }
+    // Size carries the wave even in the neutral palette. Blend toward the
+    // crest radius instead of adding it, keeping neighboring dots separate.
+    final breathingScale = .8 + .35 * ambient + .12 * connected * (ambient + 1) / 2;
     return (
-      scale: .9 + .1 * ambient + .32 * connecting * pulse + .13 * connected * (ambient + 1) / 2,
+      scale: breathingScale + (1.35 - breathingScale) * connecting * pulse,
       tint: (.08 + .1 * (ambient + 1) / 2) * connected + .24 * connecting * pulse,
     );
   }

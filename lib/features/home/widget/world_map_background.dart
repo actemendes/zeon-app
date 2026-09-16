@@ -124,7 +124,9 @@ class WorldMapPainter extends CustomPainter {
     if (size == _layoutSize) return;
     _layoutSize = size;
     final scale = math.max(size.width / worldMapSize.width, size.height / worldMapSize.height);
-    final offset = Offset((size.width - worldMapSize.width * scale) / 2, 0);
+    // Center the Atlantic under the button; keep this geographic shift in
+    // source units so the composition scales with the map on every screen.
+    final offset = Offset((size.width - worldMapSize.width * scale) / 2 + 270 * scale, 0);
     _radius = worldMapDotRadius * scale;
     final bounds = (Offset.zero & size).inflate(_radius * 1.5);
     _visiblePoints = [
