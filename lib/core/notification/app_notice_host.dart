@@ -303,7 +303,7 @@ class AppNoticeCard extends StatelessWidget {
                                     maxLines: remote ? 2 : 4,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      fontSize: 13,
+                                      fontSize: 14,
                                       height: 1.3,
                                       fontWeight: FontWeight.w600,
                                       color: scheme.onSurface,
@@ -320,7 +320,7 @@ class AppNoticeCard extends StatelessWidget {
                                     ),
                                     child: Text(
                                       '×${entry.count}',
-                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: accent),
+                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: accent),
                                     ),
                                   ),
                                 ],
@@ -332,7 +332,7 @@ class AppNoticeCard extends StatelessWidget {
                                 notice.body!,
                                 maxLines: 4,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 11, height: 1.45, color: scheme.onSurfaceVariant),
+                                style: TextStyle(fontSize: 14, height: 1.45, color: scheme.onSurfaceVariant),
                               ),
                             ],
                             if (notice.hasAction) ...[
@@ -342,7 +342,7 @@ class AppNoticeCard extends StatelessWidget {
                                 children: [
                                   Text(
                                     Localizations.localeOf(context).languageCode == 'ru' ? 'Открыть' : 'Open',
-                                    style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w600),
+                                    style: TextStyle(color: accent, fontSize: 14, fontWeight: FontWeight.w600),
                                   ),
                                   const SizedBox(width: 5),
                                   Icon(Icons.arrow_forward_rounded, color: accent, size: 14),

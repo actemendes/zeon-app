@@ -59,7 +59,7 @@ void main() {
     });
   }
 
-  test('Montserrat body and labels use semibold in every palette', () {
+  test('Montserrat body and labels use semibold and at least 14px in every palette', () {
     for (final mode in [AppThemeMode.light, AppThemeMode.dark, AppThemeMode.amoled]) {
       final app = AppTheme(mode, 'Montserrat');
       final theme = mode == AppThemeMode.light ? app.lightTheme(null) : app.darkTheme(null);
@@ -72,6 +72,7 @@ void main() {
         theme.textTheme.labelSmall,
       ]) {
         expect(style?.fontWeight, FontWeight.w600);
+        expect(style?.fontSize, greaterThanOrEqualTo(14));
       }
     }
   });

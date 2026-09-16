@@ -93,7 +93,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
                     style: TextStyle(
                       fontFamily: 'Montserrat',
                       fontFamilyFallback: const ['Emoji'],
-                      fontSize: 13,
+                      fontSize: 14,
                       height: 1.3,
                       fontWeight: FontWeight.w600,
                       color: primaryColor,
@@ -118,7 +118,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
                         key: const ValueKey('proxy-ping'),
                         style: TextStyle(
                           fontFamily: 'Montserrat',
-                          fontSize: 11,
+                          fontSize: 14,
                           height: 1.2,
                           fontWeight: FontWeight.w600,
                           color: selected ? primaryColor : pingColor,

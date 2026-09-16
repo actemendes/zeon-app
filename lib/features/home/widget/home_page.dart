@@ -221,7 +221,7 @@ class _HomeSecureCaption extends ConsumerWidget {
             child: Text(
               t.connection.secure,
               textAlign: TextAlign.center,
-              style: TextStyle(fontFamily: 'Montserrat', fontSize: 12, height: 1.5, color: cs.secondary),
+              style: TextStyle(fontFamily: 'Montserrat', fontSize: 14, height: 1.5, color: cs.secondary),
             ),
           ),
         ],
@@ -267,7 +267,7 @@ class _HomeMobileStatus extends ConsumerWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: 'Montserrat',
-                      fontSize: 13,
+                      fontSize: 14,
                       height: 1.5,
                       fontWeight: FontWeight.w600,
                       color: cs.onSurface,
@@ -307,51 +307,51 @@ class _HomeConnectionPanel extends ConsumerWidget {
     );
     final quickSettings = _HomeQuickSettingsButton(label: t.pages.home.quickSettings, embedded: true);
 
+    final content = Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 40),
+            child: Row(
+              children: isConnected
+                  ? [
+                      const Expanded(
+                        child: Align(alignment: Alignment.centerLeft, child: ActiveProxyDelayIndicator(compact: true)),
+                      ),
+                      Expanded(flex: 2, child: status),
+                      Expanded(
+                        child: Align(alignment: Alignment.centerRight, child: quickSettings),
+                      ),
+                    ]
+                  : [const SizedBox(width: 40), Expanded(child: status), SizedBox(width: 40, child: quickSettings)],
+            ),
+          ),
+          if (isConnected) ...[
+            const SizedBox(height: 12),
+            ActiveProxyFooter(desktop: true, margin: EdgeInsets.zero, backgroundColor: theme.colorScheme.surface),
+          ],
+          const SizedBox(height: 12),
+          const HomePremiumAccessButton(padding: EdgeInsets.zero),
+        ],
+      ),
+    );
+
     return Material(
       key: const ValueKey('home_desktop_connection_panel'),
       color: theme.colorScheme.secondaryContainer,
       borderRadius: BorderRadius.circular(34),
       clipBehavior: Clip.antiAlias,
-      child: AnimatedSize(
-        key: ValueKey(reduceMotion),
-        duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 240),
-        curve: Curves.easeInOutCubic,
-        alignment: Alignment.topCenter,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 40),
-                child: Row(
-                  children: isConnected
-                      ? [
-                          const Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: FittedBox(fit: BoxFit.scaleDown, child: ActiveProxyDelayIndicator(compact: true)),
-                            ),
-                          ),
-                          Expanded(flex: 2, child: status),
-                          Expanded(
-                            child: Align(alignment: Alignment.centerRight, child: quickSettings),
-                          ),
-                        ]
-                      : [const SizedBox(width: 40), Expanded(child: status), SizedBox(width: 40, child: quickSettings)],
-                ),
-              ),
-              if (isConnected) ...[
-                const SizedBox(height: 12),
-                ActiveProxyFooter(desktop: true, margin: EdgeInsets.zero, backgroundColor: theme.colorScheme.surface),
-              ],
-              const SizedBox(height: 12),
-              const HomePremiumAccessButton(padding: EdgeInsets.zero),
-            ],
-          ),
-        ),
-      ),
+      child: reduceMotion
+          ? content
+          : AnimatedSize(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeInOutCubic,
+              alignment: Alignment.topCenter,
+              child: content,
+            ),
     );
   }
 }

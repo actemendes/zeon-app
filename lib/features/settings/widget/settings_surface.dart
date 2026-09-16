@@ -32,7 +32,7 @@ class SettingsGroup extends StatelessWidget {
                 title!,
                 style: TextStyle(
                   fontFamily: 'Montserrat',
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: cs.onSurfaceVariant,
                 ),
@@ -77,7 +77,7 @@ class SettingsHint extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: TextStyle(fontFamily: 'Montserrat', fontSize: 12, height: 1.6, color: color),
+              style: TextStyle(fontFamily: 'Montserrat', fontSize: 14, height: 1.6, color: color),
             ),
           ),
         ],
@@ -128,7 +128,7 @@ class SettingsTile extends StatelessWidget {
                     DefaultTextStyle(
                       style: TextStyle(
                         fontFamily: 'Montserrat',
-                        fontSize: 13,
+                        fontSize: 14,
                         height: 1.4,
                         fontWeight: FontWeight.w600,
                         color: cs.onSurface,
@@ -141,7 +141,7 @@ class SettingsTile extends StatelessWidget {
                         style: TextStyle(
                           fontFamily: 'Montserrat',
                           fontWeight: FontWeight.w600,
-                          fontSize: 11,
+                          fontSize: 14,
                           height: 1.5,
                           color: cs.onSurfaceVariant,
                         ),

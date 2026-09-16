@@ -172,7 +172,7 @@ class AppTheme {
             navLargeTitleTextStyle: def.textTheme.navLargeTitleTextStyle.copyWith(fontFamily: fontFamily),
             pickerTextStyle: def.textTheme.pickerTextStyle.copyWith(fontFamily: fontFamily),
             dateTimePickerTextStyle: def.textTheme.dateTimePickerTextStyle.copyWith(fontFamily: fontFamily),
-            tabLabelTextStyle: def.textTheme.tabLabelTextStyle.copyWith(fontFamily: fontFamily),
+            tabLabelTextStyle: def.textTheme.tabLabelTextStyle.copyWith(fontFamily: fontFamily, fontSize: 14),
           ).copyWith(),
           barBackgroundColor: defaultMaterialTheme.colorScheme.surface,
           scaffoldBackgroundColor: defaultMaterialTheme.scaffoldBackgroundColor,
@@ -205,6 +205,7 @@ class AppTheme {
 
     return base.copyWith(
       textTheme: textTheme,
+      primaryTextTheme: _withHeadingFont(_withReadableBody(base.primaryTextTheme)),
       iconTheme: scheme.brightness == Brightness.light ? IconThemeData(color: scheme.onSurface) : base.iconTheme,
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.background,
@@ -283,10 +284,17 @@ class AppTheme {
   }
 
   TextTheme _withReadableBody(TextTheme theme) {
-    if (fontFamily != 'Montserrat') return theme;
-    TextStyle? readable(TextStyle? style) => style?.copyWith(fontWeight: FontWeight.w600);
+    TextStyle? readable(TextStyle? style, {double fallbackSize = 14}) {
+      if (style == null) return null;
+      final size = style.fontSize ?? fallbackSize;
+      return style.copyWith(
+        fontSize: size < 14 ? 14 : size,
+        fontWeight: fontFamily == 'Montserrat' ? FontWeight.w600 : style.fontWeight,
+      );
+    }
+
     return theme.copyWith(
-      bodyLarge: readable(theme.bodyLarge),
+      bodyLarge: readable(theme.bodyLarge, fallbackSize: 16),
       bodyMedium: readable(theme.bodyMedium),
       bodySmall: readable(theme.bodySmall),
       labelLarge: readable(theme.labelLarge),

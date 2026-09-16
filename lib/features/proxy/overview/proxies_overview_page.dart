@@ -61,7 +61,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontFamily: 'Montserrat',
-                                fontSize: 12,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -101,7 +101,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                           itemCount: group.items.length,
                           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: crossAxisCount,
-                            mainAxisExtent: 88 + max(0, MediaQuery.textScalerOf(context).scale(13) - 13) * 3.8,
+                            mainAxisExtent: 88 + max(0, MediaQuery.textScalerOf(context).scale(14) - 14) * 3.8,
                             mainAxisSpacing: 10,
                             crossAxisSpacing: 10,
                           ),

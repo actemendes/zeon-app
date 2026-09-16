@@ -59,7 +59,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                     key: const ValueKey(UiNames.textProfileLinkHint),
                     style: TextStyle(
                       fontFamily: 'Montserrat',
-                      fontSize: 13,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                       height: 1.65,
                       color: cs.onSurfaceVariant,
@@ -83,7 +83,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                                 key: const ValueKey(UiNames.textProfileLinkLabel),
                                 style: TextStyle(
                                   fontFamily: 'Montserrat',
-                                  fontSize: 12,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color: cs.onSurfaceVariant,
                                 ),
@@ -121,7 +121,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                             textStyle: const TextStyle(
                               fontFamily: 'Montserrat',
-                              fontSize: 13,
+                              fontSize: 14,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -152,7 +152,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                                 t.deleteAccount,
                                 style: TextStyle(
                                   fontFamily: 'Montserrat',
-                                  fontSize: 13,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color: cs.onSurface,
                                 ),

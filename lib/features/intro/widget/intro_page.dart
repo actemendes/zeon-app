@@ -574,7 +574,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: 'Montserrat',
                   fontWeight: FontWeight.w600,
-                  fontSize: 13,
+                  fontSize: 14,
                   color: titleColor,
                 ),
                 decoration: InputDecoration(
@@ -582,7 +582,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
                   hintStyle: theme.textTheme.bodySmall?.copyWith(
                     fontFamily: 'Montserrat',
                     fontWeight: FontWeight.w600,
-                    fontSize: 12,
+                    fontSize: 14,
                     color: helperTextColor.withValues(alpha: 0.6),
                   ),
                   filled: true,

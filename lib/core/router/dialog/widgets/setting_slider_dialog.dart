@@ -76,13 +76,13 @@ class SettingsSliderDialog extends HookConsumerWidget with PresLogger {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Flexible(child: Text(labelGen?.call(min) ?? '$min', style: const TextStyle(fontSize: 11))),
+                Flexible(child: Text(labelGen?.call(min) ?? '$min', style: const TextStyle(fontSize: 14))),
                 const SizedBox(width: 12),
                 Flexible(
                   child: Text(
                     labelGen?.call(max) ?? '$max',
                     textAlign: TextAlign.end,
-                    style: const TextStyle(fontSize: 11),
+                    style: const TextStyle(fontSize: 14),
                   ),
                 ),
               ],

@@ -1,6 +1,5 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
@@ -41,8 +40,10 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
         borderRadius: BorderRadius.circular(24),
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: compact ? 0 : 8, horizontal: compact ? 0 : 16),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               if (compact)
                 QualityBars.fromOutbound(
@@ -53,18 +54,16 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
                 )
               else
                 const Icon(FluentIcons.wifi_1_24_regular),
-              const Gap(8),
               Text(
                 pingText,
                 style: (compact ? theme.textTheme.bodyMedium : theme.textTheme.titleMedium)?.copyWith(
-                  fontSize: compact ? 12 : null,
+                  fontSize: compact ? 14 : null,
                   fontFamily: compact ? 'Montserrat' : null,
                   fontWeight: compact ? FontWeight.w600 : FontWeight.bold,
                   color: failedPing ? theme.colorScheme.error : null,
                 ),
               ),
               if (!compact) ...[
-                const Gap(8),
                 QualityBars.fromOutbound(
                   proxy,
                   isActive: !failedPing,
