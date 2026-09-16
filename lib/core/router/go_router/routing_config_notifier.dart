@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/router/adaptive_layout/animated_branch_container.dart';
 import 'package:zeon/core/router/adaptive_layout/my_adaptive_layout.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/custom_transition.dart';
@@ -87,7 +88,9 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
         return null;
       },
       routes: <RouteBase>[
-        StatefulShellRoute.indexedStack(
+        StatefulShellRoute(
+          navigatorContainerBuilder: (_, navigationShell, children) =>
+              AnimatedBranchContainer(currentIndex: navigationShell.currentIndex, children: children),
           builder: (_, _, navigationShell) => MyAdaptiveLayout(
             navigationShell: navigationShell,
             isMobileBreakpoint: isMobileBreakpoint,
