@@ -59,7 +59,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
             ? LayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
-                  final crossAxisCount = PlatformUtils.isMobile && width < 600 ? 1 : max(1, (width / 268).floor());
+                  final crossAxisCount = PlatformUtils.isMobile && width < 600 ? 1 : max(1, (width / 536).floor());
                   return GridView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 86),
                     itemCount: group.items.length,
