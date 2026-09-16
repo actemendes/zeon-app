@@ -110,6 +110,26 @@ void main() {
       });
     }
   }
+  for (final (width, scale) in [(393.0, 1.0), (393.0, 2.0), (768.0, 1.0), (1000.0, 1.0)]) {
+    testWidgets('home caption follows name wrapping at width $width scale $scale', (tester) async {
+      final container = await pumpPage(tester, const HomePage(), size: Size(width, 852), scale: scale);
+      final profile = container.read(activeProfileProvider).requireValue! as RemoteProfileEntity;
+      final t = TranslationsRu();
+      final caption = find.text('${t.pages.home.internet} ${t.pages.home.forYou}'.toUpperCase());
+      for (final name in ['A', 'DEMO PROFILE WITH A VERY LONG NAME', 'A']) {
+        container.read(activeProfileProvider.notifier).state = AsyncData(profile.copyWith(name: name));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(caption, width < 600 && name != 'A' ? findsNothing : findsOneWidget);
+        expect(find.text(name), findsOneWidget);
+        expect(
+          tester.getRect(find.byKey(const ValueKey('home_header_text'))).right,
+          lessThan(tester.getRect(find.byKey(const ValueKey('home_refresh'))).left),
+        );
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
   for (final light in [false, true]) {
     testWidgets('about copies complete app info with enlarged text light=$light', (tester) async {
       String? clipboard;

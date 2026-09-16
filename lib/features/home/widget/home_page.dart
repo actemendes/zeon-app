@@ -453,34 +453,49 @@ class _HomeAppBarTitle extends StatelessWidget {
       fontWeight: FontWeight.w600,
       color: cs.onSurface,
     );
-    return Column(
-      key: const ValueKey('home_header_text'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$internetLabel $forYouLabel'.toUpperCase(),
-          style: mobile ? headerStyle.copyWith(fontSize: 14, fontWeight: FontWeight.w400) : headerStyle,
-        ),
-        SizedBox(
-          height: mobile
-              ? 2
-              : activeBreakpoint == Breakpoints.desktop
-              ? 3
-              : 8,
-        ),
-        CompositedTransformTarget(
-          link: tipAnchor,
-          child: Text(
-            subscriptionName.toUpperCase(),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: mobile
-                ? headerStyle.copyWith(fontSize: 20, fontWeight: FontWeight.w700)
-                : headerStyle.copyWith(fontSize: 32, height: 1.05, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ],
+    final name = subscriptionName.toUpperCase();
+    final nameStyle = mobile
+        ? headerStyle.copyWith(fontSize: 20, fontWeight: FontWeight.w700)
+        : headerStyle.copyWith(fontSize: 32, height: 1.05, fontWeight: FontWeight.w700);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        var nameWraps = false;
+        if (mobile && constraints.hasBoundedWidth) {
+          final painter = TextPainter(
+            text: TextSpan(text: name, style: DefaultTextStyle.of(context).style.merge(nameStyle)),
+            maxLines: 1,
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+            locale: Localizations.maybeLocaleOf(context),
+          )..layout(maxWidth: constraints.maxWidth);
+          nameWraps = painter.didExceedMaxLines;
+          painter.dispose();
+        }
+        return Column(
+          key: const ValueKey('home_header_text'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!nameWraps) ...[
+              Text(
+                '$internetLabel $forYouLabel'.toUpperCase(),
+                style: mobile ? headerStyle.copyWith(fontSize: 14, fontWeight: FontWeight.w400) : headerStyle,
+              ),
+              SizedBox(
+                height: mobile
+                    ? 2
+                    : activeBreakpoint == Breakpoints.desktop
+                    ? 3
+                    : 8,
+              ),
+            ],
+            CompositedTransformTarget(
+              link: tipAnchor,
+              child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
+            ),
+          ],
+        );
+      },
     );
   }
 }
