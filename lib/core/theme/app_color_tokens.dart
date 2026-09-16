@@ -5,7 +5,7 @@ class AppColorTokens {
 
   static const Color lightBackground = Color(0xFFFAFBFC);
   static const Color lightSurfaceAlt = Color(0xFFE3E8ED);
-  static const Color lightControlSurface = Color(0xFFD4DCE4);
+  static const Color lightControlSurface = lightSurfaceAlt;
   static const Color lightText = Color(0xFF454D58);
   static const Color lightTextMuted = Color(0xFF58626E);
   static const Color lightMapDots = Color(0xFFEEF1F4);
