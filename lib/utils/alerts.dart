@@ -1,18 +1,18 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:zeon/core/router/dialog/widgets/custom_alert_dialog.dart';
-import 'package:zeon/core/router/go_router/go_router_notifier.dart';
-import 'package:toastification/toastification.dart';
+import 'package:zeon/core/notification/app_notice.dart';
+import 'package:zeon/core/notification/app_notice_host.dart';
+import 'package:zeon/core/notification/in_app_notification_controller.dart';
 
 enum AlertType {
   info,
   error,
   success;
 
-  ToastificationType get _toastificationType => switch (this) {
-    success => ToastificationType.success,
-    error => ToastificationType.error,
-    info => ToastificationType.info,
+  AppNoticeKind get _noticeKind => switch (this) {
+    success => AppNoticeKind.success,
+    error => AppNoticeKind.error,
+    info => AppNoticeKind.info,
   };
 }
 
@@ -41,59 +41,20 @@ class CustomToast extends StatelessWidget {
   final String? diagnosticText;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final color = switch (type) {
-      AlertType.info => null,
-      AlertType.error => scheme.error,
-      AlertType.success => scheme.tertiary,
-    };
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: const BorderRadius.all(Radius.circular(4)),
-        color: Theme.of(context).colorScheme.surface,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[Icon(icon, color: color), const SizedBox(width: 8)],
-          Flexible(child: Text(message)),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => AppNoticeCard(
+    entry: AppNoticeEntry(0, AppNotice(title: message, kind: type._noticeKind, identity: message, icon: icon)),
+    onTap: () {},
+    onClose: () {},
+  );
 
   void show(BuildContext context) {
-    toastification.show(
+    InAppNotificationController().showToast(
+      message,
+      kind: type._noticeKind,
+      duration: duration,
+      diagnosticText: type == AlertType.error ? diagnosticText ?? message : null,
       context: context,
-      title: Text(message),
-      type: type._toastificationType,
-      alignment: Alignment.bottomLeft,
-      autoCloseDuration: duration,
-      style: ToastificationStyle.fillColored,
-      pauseOnHover: true,
-      showProgressBar: false,
-      dragToClose: true,
-      closeOnClick: true,
-      closeButtonShowType: CloseButtonShowType.onHover,
-      callbacks: ToastificationCallbacks(
-        onTap: type != AlertType.error
-            ? null
-            : (item) {
-                toastification.dismiss(item);
-                final context = rootNavKey.currentContext;
-                if (context == null) return;
-                final details = diagnosticText ?? message;
-                Navigator.of(context, rootNavigator: true).push<void>(
-                  DialogRoute(
-                    context: context,
-                    builder: (context) => CustomAlertDialog(title: message, message: details, diagnosticText: details),
-                  ),
-                );
-              },
-      ),
+      icon: icon,
     );
   }
 }

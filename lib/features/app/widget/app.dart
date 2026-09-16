@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:toastification/toastification.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/localization/locale_extensions.dart';
@@ -15,6 +14,7 @@ import 'package:zeon/core/localization/locale_preferences.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
 import 'package:zeon/core/model/environment.dart';
+import 'package:zeon/core/notification/app_notice_host.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/router/go_router/go_router_notifier.dart';
@@ -110,37 +110,35 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
     }, [appInfo.release]);
     return WindowWrapper(
       ShortcutWrapper(
-        ToastificationWrapper(
-          child: ConnectionWrapper(
-            MaterialApp.router(
-              routerConfig: router,
-              locale: locale.flutterLocale,
-              supportedLocales: AppLocaleUtils.supportedLocales,
-              localizationsDelegates: GlobalMaterialLocalizations.delegates,
-              debugShowCheckedModeBanner: false,
-              themeMode: themeMode.flutterThemeMode,
-              theme: theme.lightTheme(null),
-              darkTheme: theme.darkTheme(null),
-              title: Constants.appName,
-              builder: (context, child) {
-                final theme = Theme.of(context);
-                var appChild = child ?? const SizedBox();
-                if (upgrader != null) {
-                  appChild = UpgradeAlert(
-                    upgrader: upgrader,
-                    navigatorKey: router.routerDelegate.navigatorKey,
-                    child: appChild,
-                  );
-                }
-                if (kDebugMode && _debugAccessibility) {
-                  return AccessibilityTools(checkFontOverflows: true, child: appChild);
-                }
-                return AnnotatedRegion<SystemUiOverlayStyle>(
-                  value: systemBarsStyleFor(theme.brightness),
+        ConnectionWrapper(
+          MaterialApp.router(
+            routerConfig: router,
+            locale: locale.flutterLocale,
+            supportedLocales: AppLocaleUtils.supportedLocales,
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            debugShowCheckedModeBanner: false,
+            themeMode: themeMode.flutterThemeMode,
+            theme: theme.lightTheme(null),
+            darkTheme: theme.darkTheme(null),
+            title: Constants.appName,
+            builder: (context, child) {
+              final theme = Theme.of(context);
+              Widget appChild = AppNoticeHost(child: child ?? const SizedBox());
+              if (upgrader != null) {
+                appChild = UpgradeAlert(
+                  upgrader: upgrader,
+                  navigatorKey: router.routerDelegate.navigatorKey,
                   child: appChild,
                 );
-              },
-            ),
+              }
+              if (kDebugMode && _debugAccessibility) {
+                return AccessibilityTools(checkFontOverflows: true, child: appChild);
+              }
+              return AnnotatedRegion<SystemUiOverlayStyle>(
+                value: systemBarsStyleFor(theme.brightness),
+                child: appChild,
+              );
+            },
           ),
         ),
       ),

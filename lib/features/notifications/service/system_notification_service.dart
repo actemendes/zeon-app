@@ -170,6 +170,7 @@ class SystemNotificationServiceImpl with InfraLogger implements SystemNotificati
     final fallback = _fallback;
     if (fallback == null) return false;
     final item = fallback.showRemoteNotificationFallback(
+      notificationId: notification.id,
       title: _trimForDisplay(notification.title, 160),
       body: _trimForDisplay(notification.body, 600),
       actionUrl: notification.actionUrl,
