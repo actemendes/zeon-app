@@ -257,7 +257,7 @@ class _HomeConnectionPanel extends ConsumerWidget {
         textAlign: TextAlign.center,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.titleSmall?.copyWith(fontFamily: 'Montserrat', fontWeight: FontWeight.w500),
+        style: theme.textTheme.titleSmall?.copyWith(fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
       ),
     );
     final quickSettings = _HomeQuickSettingsButton(label: t.pages.home.quickSettings, embedded: true);
