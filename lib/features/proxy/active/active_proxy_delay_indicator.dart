@@ -23,6 +23,9 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
     final proxy = activeProxy.value!;
     final pingText = formatOutboundPing(proxy);
     final failedPing = proxyPingFailed(proxy);
+    final isLightTheme = theme.brightness == Brightness.light;
+    final activeBarColor = failedPing ? theme.colorScheme.error : (isLightTheme ? theme.colorScheme.onSurface : null);
+    final inactiveBarColor = isLightTheme ? theme.colorScheme.onSurface.withValues(alpha: 0.35) : null;
 
     return Center(
       widthFactor: compact ? 1 : null,
@@ -45,7 +48,8 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
                 QualityBars.fromOutbound(
                   proxy,
                   isActive: !failedPing,
-                  activeColor: failedPing ? theme.colorScheme.error : null,
+                  activeColor: activeBarColor,
+                  inactiveColor: inactiveBarColor,
                 )
               else
                 const Icon(FluentIcons.wifi_1_24_regular),
@@ -62,7 +66,8 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
                 QualityBars.fromOutbound(
                   proxy,
                   isActive: !failedPing,
-                  activeColor: failedPing ? theme.colorScheme.error : null,
+                  activeColor: activeBarColor,
+                  inactiveColor: inactiveBarColor,
                 ),
               ],
             ],
