@@ -24,6 +24,7 @@ class HomePremiumAccessView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final trackColor = colors.brightness == Brightness.dark ? const Color(0xFF26292F) : const Color(0xFFEDF1F4);
     final gradient = LinearGradient(colors: [colors.secondary, colors.primary]);
     final days = remainingDays;
     if (days == null || days < 1) {
@@ -75,7 +76,7 @@ class HomePremiumAccessView extends StatelessWidget {
                       progress: value,
                       direction: direction,
                       gradient: gradient,
-                      trackColor: colors.tertiaryContainer,
+                      trackColor: trackColor,
                       contourColor: colors.onSurface.withValues(alpha: 0.12),
                     ),
                   ),
