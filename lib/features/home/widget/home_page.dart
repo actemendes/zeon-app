@@ -57,7 +57,8 @@ class HomePage extends HookConsumerWidget {
       return null;
     }, [isUpdatingProfile, refreshAnimationController]);
     final breakpoint = Breakpoint(context);
-    final compactHeight = breakpoint.isCompactHeight();
+    final mediaSize = MediaQuery.sizeOf(context);
+    final compactHeight = mediaSize.width > mediaSize.height && mediaSize.height < Breakpoint.compactHeight;
     final subscriptionName = switch (activeProfile) {
       AsyncData(value: final profile?) when parseProfileName(profile.name).isNotBlank => parseProfileName(profile.name),
       _ => "anonymous",
@@ -77,6 +78,7 @@ class HomePage extends HookConsumerWidget {
                 child: _HomeConnectionBody(
                   buttonFaceKey: buttonFaceKey,
                   desktop: breakpoint.isDesktop(),
+                  compactHeight: compactHeight,
                   secure: _hasSecureConnection(ref),
                   tablet: breakpoint.isTablet(),
                   header: _HomeHeaderFrame(
@@ -87,6 +89,7 @@ class HomePage extends HookConsumerWidget {
                         Expanded(
                           child: _HomeAppBarTitle(
                             activeBreakpoint: breakpoint.activeBreakpoint,
+                            compact: compactHeight,
                             internetLabel: t.pages.home.internet,
                             forYouLabel: t.pages.home.forYou,
                             subscriptionName: subscriptionName,
@@ -151,12 +154,14 @@ class _HomeConnectionBody extends StatelessWidget {
   const _HomeConnectionBody({
     required this.buttonFaceKey,
     required this.desktop,
+    required this.compactHeight,
     required this.secure,
     required this.tablet,
     required this.header,
   });
   final GlobalKey buttonFaceKey;
   final bool desktop;
+  final bool compactHeight;
   final bool secure;
   final bool tablet;
   final Widget header;
@@ -170,17 +175,29 @@ class _HomeConnectionBody extends StatelessWidget {
           key: const ValueKey('home_canvas'),
           viewportHeight: constraints.maxHeight,
           desktop: desktop,
+          compact: compactHeight,
           header: header,
-          dial: ConnectionButton(faceKey: buttonFaceKey, showStatus: false),
-          status: desktop
-              ? const _HomeConnectionPanel()
+          dial: compactHeight
+              ? SizedBox.square(
+                  dimension: constraints.maxHeight < 340 ? 140 : 180,
+                  child: FittedBox(child: ConnectionButton(faceKey: buttonFaceKey, showStatus: false)),
+                )
+              : ConnectionButton(faceKey: buttonFaceKey, showStatus: false),
+          status: desktop || compactHeight
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _HomeConnectionPanel(showPremium: desktop || tablet),
+                    if (compactHeight && secure) const _HomeSecureCaption(),
+                  ],
+                )
               : Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [const _HomeMobileStatus(), if (secure) const _HomeSecureCaption()],
                   ),
                 ),
-          footer: desktop
+          footer: desktop || compactHeight
               ? const SizedBox.shrink()
               : Column(
                   mainAxisSize: MainAxisSize.min,
@@ -292,7 +309,8 @@ class _HomeMobileStatus extends ConsumerWidget {
 }
 
 class _HomeConnectionPanel extends ConsumerWidget {
-  const _HomeConnectionPanel();
+  const _HomeConnectionPanel({this.showPremium = true});
+  final bool showPremium;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -340,8 +358,7 @@ class _HomeConnectionPanel extends ConsumerWidget {
             const SizedBox(height: 12),
             ActiveProxyFooter(desktop: true, margin: EdgeInsets.zero, backgroundColor: theme.colorScheme.surface),
           ],
-          const SizedBox(height: 12),
-          const HomePremiumAccessButton(padding: EdgeInsets.zero),
+          if (showPremium) ...[const SizedBox(height: 12), const HomePremiumAccessButton(padding: EdgeInsets.zero)],
         ],
       ),
     );
@@ -436,7 +453,9 @@ class _HomeAppBarTitle extends StatelessWidget {
     required this.forYouLabel,
     required this.subscriptionName,
     required this.tipAnchor,
+    this.compact = false,
   });
+  final bool compact;
   final Breakpoints activeBreakpoint;
   final String internetLabel;
   final String forYouLabel;
@@ -456,11 +475,11 @@ class _HomeAppBarTitle extends StatelessWidget {
     final name = subscriptionName.toUpperCase();
     final nameStyle = mobile
         ? headerStyle.copyWith(fontSize: 20, fontWeight: FontWeight.w700)
-        : headerStyle.copyWith(fontSize: 32, height: 1.05, fontWeight: FontWeight.w700);
+        : headerStyle.copyWith(fontSize: compact ? 22 : 32, height: 1.05, fontWeight: FontWeight.w700);
     return LayoutBuilder(
       builder: (context, constraints) {
         var nameWraps = false;
-        if (mobile && constraints.hasBoundedWidth) {
+        if ((mobile || compact) && constraints.hasBoundedWidth) {
           final painter = TextPainter(
             text: TextSpan(text: name, style: DefaultTextStyle.of(context).style.merge(nameStyle)),
             maxLines: 1,
@@ -479,10 +498,14 @@ class _HomeAppBarTitle extends StatelessWidget {
             if (!nameWraps) ...[
               Text(
                 '$internetLabel $forYouLabel'.toUpperCase(),
-                style: mobile ? headerStyle.copyWith(fontSize: 14, fontWeight: FontWeight.w400) : headerStyle,
+                style: mobile
+                    ? headerStyle.copyWith(fontSize: 14, fontWeight: FontWeight.w400)
+                    : compact
+                    ? headerStyle.copyWith(fontSize: 14)
+                    : headerStyle,
               ),
               SizedBox(
-                height: mobile
+                height: mobile || compact
                     ? 2
                     : activeBreakpoint == Breakpoints.desktop
                     ? 3

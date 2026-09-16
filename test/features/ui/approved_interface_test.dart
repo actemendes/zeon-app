@@ -110,6 +110,24 @@ void main() {
       });
     }
   }
+  for (final size in [const Size(740, 336), const Size(852, 393), const Size(1024, 450)]) {
+    testWidgets('landscape home keeps dial left of server without scrolling $size', (tester) async {
+      await pumpPage(
+        tester,
+        const Padding(padding: EdgeInsets.only(left: 72), child: HomePage()),
+        size: size,
+      );
+      final scroll = tester.state<ScrollableState>(find.byType(Scrollable).first);
+      expect(scroll.position.maxScrollExtent, 0);
+      final dial = tester.getRect(find.byKey(const ValueKey('home_connection_button')));
+      final server = tester.getRect(find.byKey(const ValueKey('home_server_picker')));
+      expect(dial.right, lessThan(server.left));
+      expect(dial.width, lessThan(230));
+      expect(server.bottom, lessThanOrEqualTo(size.height));
+      expect(tester.takeException(), isNull);
+      await capture(tester, 'landscape-${size.width.toInt()}');
+    });
+  }
   for (final (width, scale) in [(393.0, 1.0), (393.0, 2.0), (768.0, 1.0), (1000.0, 1.0)]) {
     testWidgets('home caption follows name wrapping at width $width scale $scale', (tester) async {
       final container = await pumpPage(tester, const HomePage(), size: Size(width, 852), scale: scale);
