@@ -12,7 +12,9 @@ const _debugSeedProfileEnabled = bool.fromEnvironment("debug_seed_profile_enable
 const _debugSeedProfileRemainingDays = int.fromEnvironment("debug_seed_profile_remaining_days", defaultValue: -1);
 
 class HomePremiumAccessButton extends ConsumerWidget {
-  const HomePremiumAccessButton({super.key});
+  const HomePremiumAccessButton({super.key, this.padding = const EdgeInsets.fromLTRB(16, 0, 16, 16)});
+
+  final EdgeInsetsGeometry padding;
 
   static const _activeBackgroundPrefix = 'assets/images/1x/count-days-';
   static const _activeBackgroundMaxDay = 10;
@@ -37,7 +39,7 @@ class HomePremiumAccessButton extends ConsumerWidget {
     final iconAndTextColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: padding,
       child: isPremiumActive
           ? _ActivePremiumState(
               textColor: iconAndTextColor,

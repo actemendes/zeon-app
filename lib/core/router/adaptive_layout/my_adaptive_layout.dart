@@ -109,7 +109,10 @@ class MyAdaptiveLayout extends HookConsumerWidget {
                         const SafeArea(
                           top: false,
                           bottom: false,
-                          child: Padding(padding: EdgeInsets.only(top: 18), child: HomePremiumAccessButton()),
+                          child: Padding(
+                            padding: EdgeInsets.only(top: 18),
+                            child: HomePremiumAccessButton(padding: EdgeInsets.symmetric(horizontal: 16)),
+                          ),
                         ),
                         NavigationBar(
                           backgroundColor: Colors.transparent,
