@@ -97,7 +97,7 @@ class MyAdaptiveLayout extends HookConsumerWidget {
             ? FocusScope(
                 node: navScopeNode,
                 child: AnnotatedRegion<SystemUiOverlayStyle>(
-                  value: navigationBarStyleFor(Brightness.dark),
+                  value: navigationBarStyleFor(Theme.of(context).brightness),
                   child: Material(
                     color:
                         Theme.of(context).navigationBarTheme.backgroundColor ?? Theme.of(context).colorScheme.surface,

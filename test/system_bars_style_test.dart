@@ -33,6 +33,7 @@ void main() {
       expect(style.systemNavigationBarColor, isNull);
       expect(style.systemNavigationBarDividerColor, isNull);
       expect(style.systemNavigationBarIconBrightness, Brightness.light);
+      expect(navigationBarStyleFor(Brightness.light).systemNavigationBarIconBrightness, Brightness.dark);
     });
   });
 

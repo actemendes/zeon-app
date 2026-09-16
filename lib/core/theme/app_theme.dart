@@ -9,8 +9,7 @@ const Color _lightBackground = AppColorTokens.lightBackground;
 const Color _lightSurfaceAlt = AppColorTokens.lightSurfaceAlt;
 const Color _lightAccentPrimary = Color(0xFF3CE74F);
 const Color _lightAccentSecondary = Color(0xFFBFDD71);
-const Color _lightText = Color(0xFF3B444D);
-const Color _lightNavigationIndicator = Color(0xFF586972);
+const Color _lightText = AppColorTokens.lightText;
 
 const Color _darkBackground = AppColorTokens.darkBackground;
 const Color _darkSurfaceAlt = AppColorTokens.darkSurfaceAlt;
@@ -22,15 +21,15 @@ const Color _darkNavigationIndicator = Color(0xFF333333);
 const ColorScheme _lightColorScheme = ColorScheme(
   brightness: Brightness.light,
   primary: _lightAccentPrimary,
-  onPrimary: Color(0xFF091B0D),
+  onPrimary: _lightText,
   primaryContainer: _lightAccentSecondary,
   onPrimaryContainer: _lightText,
   secondary: _lightAccentSecondary,
-  onSecondary: Color(0xFF1E2429),
-  secondaryContainer: _lightSurfaceAlt,
+  onSecondary: _lightText,
+  secondaryContainer: AppColorTokens.lightControlSurface,
   onSecondaryContainer: _lightText,
   tertiary: _lightAccentSecondary,
-  onTertiary: Color(0xFF1E2429),
+  onTertiary: _lightText,
   tertiaryContainer: _lightSurfaceAlt,
   onTertiaryContainer: _lightText,
   error: Color(0xFFB3261E),
@@ -42,7 +41,7 @@ const ColorScheme _lightColorScheme = ColorScheme(
   surface: _lightBackground,
   onSurface: _lightText,
   surfaceVariant: _lightSurfaceAlt,
-  onSurfaceVariant: _lightText,
+  onSurfaceVariant: AppColorTokens.lightTextMuted,
   outline: Color(0xFF6A757E),
   outlineVariant: _lightSurfaceAlt,
   shadow: Colors.black,
@@ -95,10 +94,10 @@ class AppTheme {
   ThemeData lightTheme(ColorScheme? _) {
     return _buildThemeData(
       scheme: _lightColorScheme,
-      navBarColor: _lightText,
-      navBarSelectedColor: _lightAccentPrimary,
-      navBarUnselectedColor: _lightBackground.withValues(alpha: .82),
-      navBarIndicatorColor: _lightNavigationIndicator,
+      navBarColor: _lightSurfaceAlt,
+      navBarSelectedColor: _lightText,
+      navBarUnselectedColor: AppColorTokens.lightTextMuted,
+      navBarIndicatorColor: _lightAccentPrimary,
     );
   }
 
@@ -167,6 +166,7 @@ class AppTheme {
 
     return base.copyWith(
       textTheme: textTheme,
+      iconTheme: scheme.brightness == Brightness.light ? IconThemeData(color: scheme.onSurface) : base.iconTheme,
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.background,
         foregroundColor: scheme.onSurface,
@@ -194,7 +194,9 @@ class AppTheme {
           final color = states.contains(MaterialState.selected) ? navBarSelectedColor : navBarUnselectedColor;
           return textTheme.labelMedium?.copyWith(
             color: color,
-            fontWeight: states.contains(MaterialState.selected) ? FontWeight.w600 : FontWeight.w500,
+            fontWeight: states.contains(MaterialState.selected)
+                ? (scheme.brightness == Brightness.light ? FontWeight.w700 : FontWeight.w600)
+                : FontWeight.w500,
           );
         }),
       ),
@@ -205,7 +207,7 @@ class AppTheme {
         unselectedIconTheme: IconThemeData(color: navBarUnselectedColor),
         selectedLabelTextStyle: textTheme.labelMedium?.copyWith(
           color: navBarSelectedColor,
-          fontWeight: FontWeight.w600,
+          fontWeight: scheme.brightness == Brightness.light ? FontWeight.w700 : FontWeight.w600,
         ),
         unselectedLabelTextStyle: textTheme.labelMedium?.copyWith(
           color: navBarUnselectedColor,
@@ -221,7 +223,7 @@ class AppTheme {
       switchTheme: SwitchThemeData(
         thumbColor: MaterialStateProperty.resolveWith((states) {
           if (states.contains(MaterialState.selected) && scheme.brightness == Brightness.light) {
-            return navBarColor;
+            return scheme.onPrimary;
           }
           return null;
         }),

@@ -254,8 +254,8 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
     final remainingDays = _resolveUiRemainingDays(subInfo);
     final title = (remainingDays > 0 ? t.pages.profileDetails.cta.renew : t.pages.profileDetails.cta.updatePlan)
         .toUpperCase();
-    final arrowColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
-    final titleColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
+    final arrowColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : theme.colorScheme.onSurface;
+    final titleColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : theme.colorScheme.onSurface;
 
     return Material(
       color: Colors.transparent,

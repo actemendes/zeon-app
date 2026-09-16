@@ -155,13 +155,14 @@ class _ConnectionContentOpacity extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final isLightTheme = Theme.of(context).brightness == Brightness.light;
     return AnimatedOpacity(
       // Settle an in-flight fade when reduced motion is enabled.
       key: ValueKey(reduceMotion),
       opacity: switch (visualState) {
         MainVpnButtonVisualState.connected => 1,
-        MainVpnButtonVisualState.loading when !isStopping => .7,
-        _ => .45,
+        MainVpnButtonVisualState.loading when !isStopping => isLightTheme ? .92 : .7,
+        _ => isLightTheme ? .85 : .45,
       },
       duration: reduceMotion ? Duration.zero : _connectionTransitionDuration,
       curve: Curves.easeInOutCubic,
@@ -341,7 +342,12 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
             animation: _animation,
             child: SizedBox.square(
               dimension: _ConnectionButtonFace.glyphDiameter,
-              child: widget.useImage ? widget.image.image(fit: BoxFit.contain) : SvgPicture.asset(logoAssetPath),
+              child: widget.useImage
+                  ? widget.image.image(fit: BoxFit.contain)
+                  : SvgPicture.asset(
+                      logoAssetPath,
+                      colorFilter: isDarkTheme ? null : ColorFilter.mode(theme.colorScheme.onSurface, BlendMode.srcIn),
+                    ),
             ),
             builder: (context, child) {
               final frame = _frame;

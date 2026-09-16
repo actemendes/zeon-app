@@ -36,7 +36,9 @@ class HomePremiumAccessButton extends ConsumerWidget {
 
     final rawRemainingDays = _resolveRemainingDays(subInfo);
     final isPremiumActive = rawRemainingDays != null && rawRemainingDays >= 1;
-    final iconAndTextColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
+    final iconAndTextColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : theme.colorScheme.onSurface;
 
     return Padding(
       padding: padding,

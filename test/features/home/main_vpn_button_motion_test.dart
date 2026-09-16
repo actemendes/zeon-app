@@ -17,23 +17,27 @@ void main() {
         .opacity
         .value;
 
-    for (final reduceMotion in [false, true]) {
-      for (final (phase, opacity) in [
-        (VpnSessionPhase.disconnected, .45),
-        (VpnSessionPhase.verifying, .7),
-        (VpnSessionPhase.connected, 1.0),
-        (VpnSessionPhase.stopping, .45),
-        (VpnSessionPhase.failed, .45),
-      ]) {
-        await showPhase(tester, phase, reduceMotion: reduceMotion);
-        for (var frame = 0; frame < 2; frame++) {
-          await tester.pump(const Duration(milliseconds: 230));
-          expect(
-            opacityUnder('home_connection_label_opacity'),
-            closeTo(opacityUnder('home_connection_button_center'), .00001),
-          );
+    for (final brightness in Brightness.values) {
+      await tester.pumpWidget(const SizedBox.shrink());
+      final isLight = brightness == Brightness.light;
+      for (final reduceMotion in [false, true]) {
+        for (final (phase, opacity) in [
+          (VpnSessionPhase.disconnected, isLight ? .85 : .45),
+          (VpnSessionPhase.verifying, isLight ? .92 : .7),
+          (VpnSessionPhase.connected, 1.0),
+          (VpnSessionPhase.stopping, isLight ? .85 : .45),
+          (VpnSessionPhase.failed, isLight ? .85 : .45),
+        ]) {
+          await showPhase(tester, phase, reduceMotion: reduceMotion, brightness: brightness);
+          for (var frame = 0; frame < 2; frame++) {
+            await tester.pump(const Duration(milliseconds: 230));
+            expect(
+              opacityUnder('home_connection_label_opacity'),
+              closeTo(opacityUnder('home_connection_button_center'), .00001),
+            );
+          }
+          expect(opacityUnder('home_connection_label_opacity'), opacity);
         }
-        expect(opacityUnder('home_connection_label_opacity'), opacity);
       }
     }
   });
@@ -210,7 +214,7 @@ void main() {
         matching: find.byType(FadeTransition),
       ),
     );
-    expect(logoFade.opacity.value, .7);
+    expect(logoFade.opacity.value, .92);
     await showPhase(tester, VpnSessionPhase.connected, reduceMotion: true);
     expect(ring(tester).sweep, math.pi * 2);
     expect(centerSize(tester), 135);

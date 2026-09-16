@@ -238,9 +238,9 @@ class _IntroStartButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final titleColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
-    final subtitleColor = theme.brightness == Brightness.dark ? const Color(0xFF0F2218) : const Color(0xFF3B444D);
-    final arrowColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3B444D);
+    final titleColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : theme.colorScheme.onSurface;
+    final subtitleColor = theme.brightness == Brightness.dark ? const Color(0xFF0F2218) : theme.colorScheme.onSurface;
+    final arrowColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : theme.colorScheme.onSurface;
     final crownColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : const Color(0xFF3A444D);
 
     return Material(
@@ -334,7 +334,7 @@ class _IntroSecondaryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final surfaceColor = theme.colorScheme.secondaryContainer;
-    final textColor = theme.brightness == Brightness.dark ? const Color(0xFFD8DEE6) : const Color(0xFF3B444D);
+    final textColor = theme.brightness == Brightness.dark ? const Color(0xFFD8DEE6) : theme.colorScheme.onSurface;
     return Material(
       color: surfaceColor,
       borderRadius: BorderRadius.circular(16),
