@@ -39,6 +39,13 @@ const ColorScheme _lightColorScheme = ColorScheme(
   background: _lightBackground,
   onBackground: _lightText,
   surface: _lightBackground,
+  surfaceDim: _lightBackground,
+  surfaceBright: _lightBackground,
+  surfaceContainerLowest: _lightBackground,
+  surfaceContainerLow: _lightBackground,
+  surfaceContainer: _lightSurfaceAlt,
+  surfaceContainerHigh: _lightSurfaceAlt,
+  surfaceContainerHighest: _lightSurfaceAlt,
   onSurface: _lightText,
   surfaceVariant: _lightSurfaceAlt,
   onSurfaceVariant: AppColorTokens.lightTextMuted,
@@ -273,7 +280,7 @@ class AppTheme {
         trackOutlineWidth: const MaterialStatePropertyAll<double>(0),
       ),
       dividerColor: scheme.outlineVariant,
-      cardColor: scheme.surface,
+      cardColor: scheme.brightness == Brightness.light ? _lightSurfaceAlt : scheme.surface,
     );
   }
 
