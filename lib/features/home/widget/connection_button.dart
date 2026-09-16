@@ -15,6 +15,8 @@ import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/gen/assets.gen.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 
+const _connectionTransitionDuration = Duration(milliseconds: 460);
+
 class ConnectionButton extends ConsumerWidget {
   const ConnectionButton({super.key, this.faceKey});
 
@@ -103,11 +105,16 @@ class MainVpnButtonView extends StatelessWidget {
             children: [
               DefaultTextStyle.merge(
                 textAlign: TextAlign.center,
-                child: AnimatedText(
-                  presentation.label,
-                  style: Theme.of(context).textTheme.titleMedium,
-                  size: false,
-                  slide: false,
+                child: _ConnectionContentOpacity(
+                  key: const ValueKey('home_connection_label_opacity'),
+                  visualState: state.visualState,
+                  isStopping: state.isStopping,
+                  child: AnimatedText(
+                    presentation.label,
+                    style: Theme.of(context).textTheme.titleMedium,
+                    size: false,
+                    slide: false,
+                  ),
                 ),
               ),
               if (secureLabel.isNotEmpty) ...[
@@ -129,6 +136,36 @@ class MainVpnButtonView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ConnectionContentOpacity extends StatelessWidget {
+  const _ConnectionContentOpacity({
+    super.key,
+    required this.visualState,
+    required this.isStopping,
+    required this.child,
+  });
+
+  final MainVpnButtonVisualState visualState;
+  final bool isStopping;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return AnimatedOpacity(
+      // Settle an in-flight fade when reduced motion is enabled.
+      key: ValueKey(reduceMotion),
+      opacity: switch (visualState) {
+        MainVpnButtonVisualState.connected => 1,
+        MainVpnButtonVisualState.loading when !isStopping => .7,
+        _ => .45,
+      },
+      duration: reduceMotion ? Duration.zero : _connectionTransitionDuration,
+      curve: Curves.easeInOutCubic,
+      child: child,
     );
   }
 }
@@ -160,7 +197,7 @@ class _ConnectionButtonFace extends StatefulWidget {
 // Geometry, rather than opacity, carries every transition. The current frame is
 // the starting point of a new transition, including cancel/retry and fast starts.
 class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with TickerProviderStateMixin {
-  static const _duration = Duration(milliseconds: 460);
+  static const _duration = _connectionTransitionDuration;
   static const _rotationDuration = Duration(milliseconds: 1500);
   static const _restRadius = 99.0;
   static const _connectedRadius = 67.5;
@@ -346,18 +383,10 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
                           ],
                         ),
                         child: Center(
-                          child: AnimatedOpacity(
-                            // Settle an in-flight fade immediately when the
-                            // accessibility preference changes without a phase change.
-                            key: ValueKey(_reduceMotion),
-                            opacity: widget.visualState == MainVpnButtonVisualState.connected
-                                ? 1
-                                : _spinning
-                                ? .7
-                                : .45,
-                            duration: _reduceMotion ? Duration.zero : _duration,
-                            curve: Curves.easeInOutCubic,
-                            child: child,
+                          child: _ConnectionContentOpacity(
+                            visualState: widget.visualState,
+                            isStopping: widget.isStopping,
+                            child: child!,
                           ),
                         ),
                       ),

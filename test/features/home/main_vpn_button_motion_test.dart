@@ -9,6 +9,35 @@ import 'package:zeon/gen/translations_ru.g.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 void main() {
+  testWidgets('caption and logo fade together across connection states', (tester) async {
+    double opacityUnder(String key) => tester
+        .widget<FadeTransition>(
+          find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(FadeTransition)).first,
+        )
+        .opacity
+        .value;
+
+    for (final reduceMotion in [false, true]) {
+      for (final (phase, opacity) in [
+        (VpnSessionPhase.disconnected, .45),
+        (VpnSessionPhase.verifying, .7),
+        (VpnSessionPhase.connected, 1.0),
+        (VpnSessionPhase.stopping, .45),
+        (VpnSessionPhase.failed, .45),
+      ]) {
+        await showPhase(tester, phase, reduceMotion: reduceMotion);
+        for (var frame = 0; frame < 2; frame++) {
+          await tester.pump(const Duration(milliseconds: 230));
+          expect(
+            opacityUnder('home_connection_label_opacity'),
+            closeTo(opacityUnder('home_connection_button_center'), .00001),
+          );
+        }
+        expect(opacityUnder('home_connection_label_opacity'), opacity);
+      }
+    }
+  });
+
   testWidgets('center contracts, rotating arc closes from its current phase, then center absorbs it', (tester) async {
     await showPhase(tester, VpnSessionPhase.disconnected);
     final off = ring(tester);
@@ -176,7 +205,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     await showPhase(tester, VpnSessionPhase.verifying, reduceMotion: true);
     final logoFade = tester.widget<FadeTransition>(
-      find.descendant(of: find.byType(AnimatedOpacity), matching: find.byType(FadeTransition)),
+      find.descendant(
+        of: find.byKey(const ValueKey('home_connection_button_center')),
+        matching: find.byType(FadeTransition),
+      ),
     );
     expect(logoFade.opacity.value, .7);
     await showPhase(tester, VpnSessionPhase.connected, reduceMotion: true);
