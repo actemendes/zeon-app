@@ -32,6 +32,7 @@ class SideBarStatsOverview extends HookConsumerWidget {
             padding: const EdgeInsets.all(2.0),
             child: TextButton.icon(
               style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 textStyle: Theme.of(context).textTheme.labelSmall,
               ),
@@ -73,12 +74,12 @@ class SideBarStatsOverview extends HookConsumerWidget {
                   title: t.components.stats.trafficLive,
                   stats: [
                     (
-                      label: const Text("↑", style: TextStyle(color: Colors.white)),
+                      label: const Text("↑"),
                       data: Text(stats.uplink.toInt().speed()),
                       semanticLabel: t.components.stats.uplink,
                     ),
                     (
-                      label: Text("↓", style: TextStyle(color: Colors.white)),
+                      label: const Text("↓"),
                       data: Text(stats.downlink.toInt().speed()),
                       semanticLabel: t.components.stats.downlink,
                     ),
@@ -89,12 +90,12 @@ class SideBarStatsOverview extends HookConsumerWidget {
                   title: t.components.stats.trafficTotal,
                   stats: [
                     (
-                      label: const Text("↑", style: TextStyle(color: Colors.white)),
+                      label: const Text("↑"),
                       data: Text(stats.uplinkTotal.toInt().size()),
                       semanticLabel: t.components.stats.uplink,
                     ),
                     (
-                      label: Text("↓", style: TextStyle(color: Colors.white)),
+                      label: const Text("↓"),
                       data: Text(stats.downlinkTotal.toInt().size()),
                       semanticLabel: t.components.stats.downlink,
                     ),

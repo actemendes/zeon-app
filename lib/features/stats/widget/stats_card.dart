@@ -3,7 +3,6 @@ import 'package:gap/gap.dart';
 import 'package:zeon/core/widget/spaced_list_widget.dart';
 
 typedef PresentableStat = ({Widget label, Widget data, String? semanticLabel});
-const Color _lightStatsCardBackground = Color(0xFF586972);
 
 class StatsCard extends StatelessWidget {
   const StatsCard({
@@ -27,17 +26,27 @@ class StatsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isLightTheme = theme.brightness == Brightness.light;
-    final lightContentColor = isLightTheme ? theme.colorScheme.onInverseSurface : null;
+    final lightContentColor = isLightTheme ? theme.colorScheme.onSurface : null;
 
-    final effectiveTitleStyle = titleStyle ?? theme.textTheme.bodySmall?.copyWith(color: lightContentColor);
+    final effectiveTitleStyle =
+        titleStyle ??
+        theme.textTheme.bodySmall?.copyWith(color: isLightTheme ? theme.colorScheme.onSurfaceVariant : null);
     final effectiveLabelStyle =
-        labelStyle ?? theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w300, color: lightContentColor);
+        labelStyle ??
+        theme.textTheme.bodySmall?.copyWith(
+          fontWeight: isLightTheme ? FontWeight.w500 : FontWeight.w300,
+          color: isLightTheme ? theme.colorScheme.onSurfaceVariant : null,
+        );
     final effectiveDataStyle =
-        dataStyle ?? theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w300, color: lightContentColor);
+        dataStyle ??
+        theme.textTheme.bodySmall?.copyWith(
+          fontWeight: isLightTheme ? FontWeight.w600 : FontWeight.w300,
+          color: lightContentColor,
+        );
 
     return Card(
       margin: EdgeInsets.zero,
-      color: isLightTheme ? _lightStatsCardBackground : null,
+      color: isLightTheme ? theme.colorScheme.surface : null,
       shadowColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       child: Padding(

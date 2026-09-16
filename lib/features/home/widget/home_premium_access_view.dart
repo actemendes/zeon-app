@@ -26,6 +26,7 @@ class HomePremiumAccessView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final accentText = colors.brightness == Brightness.light ? colors.onSurface : _accentText;
     final trackColor =
         theme.extension<HomeVisualTheme>()?.premiumTrackColor ??
         (colors.brightness == Brightness.dark ? HomeVisualTheme.amoled : HomeVisualTheme.light).premiumTrackColor;
@@ -85,9 +86,9 @@ class HomePremiumAccessView extends StatelessWidget {
                     ),
                   ),
                   text(colors.onSurface),
-                  // Both copies have identical layout. Only the part over the
-                  // accent is dark, keeping the label legible in either theme.
-                  ClipPath(clipper: _PremiumFillClipper(value, direction), child: text(_accentText)),
+                  // Identical layout lets dark themes use a dark label over
+                  // the accent; light themes keep their regular text color.
+                  ClipPath(clipper: _PremiumFillClipper(value, direction), child: text(accentText)),
                   Material(
                     color: Colors.transparent,
                     child: InkWell(onTap: onPressed),
