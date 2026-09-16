@@ -199,14 +199,14 @@ class _IntroFooter extends ConsumerWidget {
           t.intro.termsAndPolicyCaution(
             tap: (text) => TextSpan(
               text: text,
-              style: theme.textTheme.bodySmall?.copyWith(color: linkColor, fontWeight: FontWeight.w500),
+              style: theme.textTheme.bodySmall?.copyWith(color: linkColor, fontWeight: FontWeight.w600),
               recognizer: TapGestureRecognizer()..onTap = onTermsTap,
             ),
           ),
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.brightness == Brightness.dark ? const Color(0xFF989CA3) : const Color(0xFF63707B),
             fontFamily: 'Montserrat',
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -290,7 +290,7 @@ class _IntroStartButton extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontFamily: 'Montserrat',
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         fontSize: 14,
                         color: subtitleColor,
                         height: 1,
@@ -550,7 +550,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: helperTextColor,
                 fontFamily: 'Montserrat',
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const Gap(16),
@@ -573,7 +573,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
                 enableSuggestions: false,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: 'Montserrat',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                   fontSize: 13,
                   color: titleColor,
                 ),
@@ -581,7 +581,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
                   hintText: _sampleBindLink,
                   hintStyle: theme.textTheme.bodySmall?.copyWith(
                     fontFamily: 'Montserrat',
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                     fontSize: 12,
                     color: helperTextColor.withValues(alpha: 0.6),
                   ),

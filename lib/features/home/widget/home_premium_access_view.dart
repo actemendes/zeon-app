@@ -203,12 +203,15 @@ class _InactivePremiumState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final textHeight = scaler.scale(16) + 7 + scaler.scale(14) + 28;
+    final height = textHeight > _height ? textHeight : _height;
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: Ink(
-        height: _height,
+        height: height,
         decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), gradient: gradient),
         child: InkWell(
           onTap: onPressed,
@@ -246,7 +249,7 @@ class _InactivePremiumState extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontFamily: 'Montserrat',
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         fontSize: 14,
                         color: textColor,
                         height: 1,

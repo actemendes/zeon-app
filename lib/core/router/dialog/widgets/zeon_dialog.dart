@@ -117,7 +117,13 @@ class ZeonDialog extends StatelessWidget {
                   ],
                 );
                 final body = DefaultTextStyle(
-                  style: TextStyle(fontFamily: 'Montserrat', fontSize: 13, height: 1.65, color: cs.onSurfaceVariant),
+                  style: TextStyle(
+                    fontFamily: 'Montserrat',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1.65,
+                    color: cs.onSurfaceVariant,
+                  ),
                   child: content ?? const SizedBox.shrink(),
                 );
                 final buttons = footer ?? _DialogActions(actions: actions ?? const [], primaryAction: primaryAction);
@@ -251,7 +257,13 @@ class DialogChoice extends StatelessWidget {
                   Expanded(
                     child: Text(
                       title,
-                      style: TextStyle(fontFamily: 'Montserrat', fontSize: 13, height: 1.5, color: cs.onSurface),
+                      style: TextStyle(
+                        fontFamily: 'Montserrat',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.5,
+                        color: cs.onSurface,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),

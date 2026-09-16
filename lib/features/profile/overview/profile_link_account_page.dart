@@ -60,7 +60,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                     style: TextStyle(
                       fontFamily: 'Montserrat',
                       fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                       height: 1.65,
                       color: cs.onSurfaceVariant,
                     ),
@@ -153,7 +153,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                                 style: TextStyle(
                                   fontFamily: 'Montserrat',
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w600,
                                   color: cs.onSurface,
                                 ),
                               ),

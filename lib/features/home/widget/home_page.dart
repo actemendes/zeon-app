@@ -8,6 +8,7 @@ import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dar
 import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/features/home/notifier/home_connection_state_provider.dart';
 import 'package:zeon/features/home/widget/connection_button.dart';
+import 'package:zeon/features/home/widget/home_connection_layout.dart';
 import 'package:zeon/features/home/widget/home_premium_access_button.dart';
 import 'package:zeon/features/home/widget/world_map_background.dart';
 import 'package:zeon/features/home_tips/home_tip_card.dart';
@@ -156,69 +157,37 @@ class _HomeConnectionBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 3.0);
-      final minimumHeight =
-          (tablet && secure
-              ? 780.0
-              : desktop || tablet
-              ? 720.0
-              : 660.0) +
-          (scale - 1) * (desktop ? 500 : 300);
-      final height = constraints.maxHeight < minimumHeight ? minimumHeight : constraints.maxHeight;
       return SingleChildScrollView(
-        child: SizedBox(
+        physics: const ClampingScrollPhysics(),
+        child: HomeConnectionLayout(
           key: const ValueKey('home_canvas'),
-          height: height,
-          child: Stack(
-            children: [
-              Positioned(top: 24, left: 16, right: 16, child: header),
-              Center(child: ConnectionButton(faceKey: buttonFaceKey, showStatus: false)),
-              if (desktop)
-                Positioned(
-                  top: height / 2 + 115 + 16,
-                  left: 16,
-                  right: 16,
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 440),
-                      child: const _HomeConnectionPanel(),
-                    ),
-                  ),
-                )
-              else ...[
-                Positioned(
-                  top: height / 2 + 115 + 24,
-                  left: 16,
-                  right: 16,
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [const _HomeMobileStatus(), if (secure) const _HomeSecureCaption()],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 16,
-                  left: 16,
-                  right: 16,
+          viewportHeight: constraints.maxHeight,
+          desktop: desktop,
+          header: header,
+          dial: ConnectionButton(faceKey: buttonFaceKey, showStatus: false),
+          status: desktop
+              ? const _HomeConnectionPanel()
+              : Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Windows keeps quick settings accessible when resized to a tablet/phone.
-                      if (PlatformUtils.isWindows)
-                        _HomeQuickSettingsButton(label: MaterialLocalizations.of(context).showMenuTooltip),
-                      const ActiveProxyFooter(margin: EdgeInsets.zero),
-                      if (tablet) ...[
-                        const SizedBox(height: 12),
-                        const HomePremiumAccessButton(padding: EdgeInsets.zero),
-                      ],
-                    ],
+                    children: [const _HomeMobileStatus(), if (secure) const _HomeSecureCaption()],
                   ),
                 ),
-              ],
-            ],
-          ),
+          footer: desktop
+              ? const SizedBox.shrink()
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (PlatformUtils.isWindows)
+                      _HomeQuickSettingsButton(label: MaterialLocalizations.of(context).showMenuTooltip),
+                    const ActiveProxyFooter(margin: EdgeInsets.zero),
+                    if (tablet) ...[
+                      const SizedBox(height: 12),
+                      const HomePremiumAccessButton(padding: EdgeInsets.zero),
+                    ],
+                  ],
+                ),
         ),
       );
     },

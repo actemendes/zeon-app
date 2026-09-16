@@ -130,7 +130,7 @@ class SettingsTile extends StatelessWidget {
                         fontFamily: 'Montserrat',
                         fontSize: 13,
                         height: 1.4,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         color: cs.onSurface,
                       ),
                       child: title,
@@ -140,6 +140,7 @@ class SettingsTile extends StatelessWidget {
                       DefaultTextStyle(
                         style: TextStyle(
                           fontFamily: 'Montserrat',
+                          fontWeight: FontWeight.w600,
                           fontSize: 11,
                           height: 1.5,
                           color: cs.onSurfaceVariant,

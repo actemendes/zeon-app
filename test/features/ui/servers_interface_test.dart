@@ -61,6 +61,9 @@ void main() {
         await ui.capture(tester, '$device-servers-${light ? 'light' : 'dark'}');
         final tile = find.byWidgetPredicate((w) => w is ProxyTile && w.proxy.tag == 'de');
         await tester.ensureVisible(tile);
+        expect(find.byIcon(Icons.check_circle_rounded), findsNothing);
+        final ping = find.descendant(of: tile, matching: find.byKey(const ValueKey('proxy-ping')));
+        expect(tester.getRect(ping).left, greaterThan(tester.getRect(find.text('Германия')).right));
         await tester.tap(tile);
         await tester.pump();
         expect(container.read(proxiesOverviewNotifierProvider).requireValue?.selected, 'de');

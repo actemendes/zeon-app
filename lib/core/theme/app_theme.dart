@@ -198,11 +198,9 @@ class AppTheme {
       extensions: <ThemeExtension<dynamic>>{ConnectionButtonTheme.light, homeVisualTheme},
     );
     final textTheme = _withHeadingFont(
-      base.textTheme.apply(
-        bodyColor: scheme.onSurface,
-        displayColor: scheme.onSurface,
-        decorationColor: scheme.onSurface,
-      ),
+      _withReadableBody(
+        base.textTheme,
+      ).apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface, decorationColor: scheme.onSurface),
     );
 
     return base.copyWith(
@@ -239,7 +237,7 @@ class AppTheme {
             color: color,
             fontWeight: states.contains(MaterialState.selected)
                 ? (scheme.brightness == Brightness.light ? FontWeight.w700 : FontWeight.w600)
-                : FontWeight.w500,
+                : FontWeight.w600,
           );
         }),
       ),
@@ -254,7 +252,7 @@ class AppTheme {
         ),
         unselectedLabelTextStyle: textTheme.labelMedium?.copyWith(
           color: navBarUnselectedColor,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
       ),
       listTileTheme: ListTileThemeData(
@@ -281,6 +279,19 @@ class AppTheme {
       ),
       dividerColor: scheme.outlineVariant,
       cardColor: scheme.brightness == Brightness.light ? _lightSurfaceAlt : scheme.surface,
+    );
+  }
+
+  TextTheme _withReadableBody(TextTheme theme) {
+    if (fontFamily != 'Montserrat') return theme;
+    TextStyle? readable(TextStyle? style) => style?.copyWith(fontWeight: FontWeight.w600);
+    return theme.copyWith(
+      bodyLarge: readable(theme.bodyLarge),
+      bodyMedium: readable(theme.bodyMedium),
+      bodySmall: readable(theme.bodySmall),
+      labelLarge: readable(theme.labelLarge),
+      labelMedium: readable(theme.labelMedium),
+      labelSmall: readable(theme.labelSmall),
     );
   }
 

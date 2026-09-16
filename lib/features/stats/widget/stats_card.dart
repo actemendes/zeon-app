@@ -34,13 +34,13 @@ class StatsCard extends StatelessWidget {
     final effectiveLabelStyle =
         labelStyle ??
         theme.textTheme.bodySmall?.copyWith(
-          fontWeight: isLightTheme ? FontWeight.w500 : FontWeight.w300,
+          fontWeight: FontWeight.w600,
           color: isLightTheme ? theme.colorScheme.onSurfaceVariant : null,
         );
     final effectiveDataStyle =
         dataStyle ??
         theme.textTheme.bodySmall?.copyWith(
-          fontWeight: isLightTheme ? FontWeight.w600 : FontWeight.w300,
+          fontWeight: FontWeight.w600,
           color: lightContentColor,
         );
 

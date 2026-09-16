@@ -86,66 +86,52 @@ class ProxyTile extends StatelessWidget with PresLogger {
                 ),
                 const SizedBox(width: 14),
                 Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        displayTitle ?? formatOutboundTitle(proxy),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Montserrat',
-                          fontFamilyFallback: const ['Emoji'],
-                          fontSize: 13,
-                          height: 1.3,
-                          fontWeight: FontWeight.w600,
-                          color: primaryColor,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          QualityBars.fromOutbound(
-                            proxy,
-                            isActive: isActive,
-                            activeColor: selected ? primaryColor : null,
-                            inactiveColor: primaryColor.withValues(alpha: .16),
-                          ),
-                          const SizedBox(width: 8),
-                          if (showIpv6Unavailable || failedPing)
-                            Icon(
-                              Icons.close_rounded,
-                              key: ValueKey(showIpv6Unavailable ? 'proxy-ipv6-unavailable-cross' : 'proxy-ping'),
-                              size: 16,
-                              color: selected ? primaryColor : cs.error,
-                              semanticLabel: showIpv6Unavailable ? ipv6StatusText : pingText,
-                            )
-                          else
-                            Flexible(
-                              child: Text(
-                                pingText,
-                                key: const ValueKey('proxy-ping'),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontFamily: 'Montserrat',
-                                  fontSize: failedPing ? 14 : 11,
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.2,
-                                  color: selected ? primaryColor : pingColor,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
+                  child: Text(
+                    displayTitle ?? formatOutboundTitle(proxy),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'Montserrat',
+                      fontFamilyFallback: const ['Emoji'],
+                      fontSize: 13,
+                      height: 1.3,
+                      fontWeight: FontWeight.w600,
+                      color: primaryColor,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: 22,
-                  child: selected ? Icon(Icons.check_circle_rounded, size: 22, color: primaryColor) : null,
+                const SizedBox(width: 12),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (showIpv6Unavailable || failedPing)
+                      Icon(
+                        Icons.close_rounded,
+                        key: ValueKey(showIpv6Unavailable ? 'proxy-ipv6-unavailable-cross' : 'proxy-ping'),
+                        size: 16,
+                        color: selected ? primaryColor : cs.error,
+                        semanticLabel: showIpv6Unavailable ? ipv6StatusText : pingText,
+                      )
+                    else
+                      Text(
+                        pingText,
+                        key: const ValueKey('proxy-ping'),
+                        style: TextStyle(
+                          fontFamily: 'Montserrat',
+                          fontSize: 11,
+                          height: 1.2,
+                          fontWeight: FontWeight.w600,
+                          color: selected ? primaryColor : pingColor,
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                    QualityBars.fromOutbound(
+                      proxy,
+                      isActive: isActive,
+                      activeColor: selected ? primaryColor : null,
+                      inactiveColor: primaryColor.withValues(alpha: .16),
+                    ),
+                  ],
                 ),
               ],
             ),

@@ -312,7 +312,7 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
                       daysLabel,
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontFamily: 'Montserrat',
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -352,7 +352,7 @@ class _ProfileMenuSection extends StatelessWidget {
             Icon(icon, size: 23),
             const SizedBox(width: 14),
             Expanded(
-              child: Text(title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
+              child: Text(title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
             ),
             const SizedBox(width: 8),
             Icon(trailingIcon, size: 19, color: theme.colorScheme.onSurfaceVariant),
