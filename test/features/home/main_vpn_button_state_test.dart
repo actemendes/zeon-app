@@ -105,12 +105,6 @@ void main() {
   });
 
   group('MainVpnButtonView semantics and callback', () {
-    test('CONNECTED keeps the ring fully active even when its animation is stale', () {
-      expect(resolveConnectedRingProgress(MainVpnButtonVisualState.connected, 0), 1);
-      expect(resolveConnectedRingProgress(MainVpnButtonVisualState.connected, .42), 1);
-      expect(resolveConnectedRingProgress(MainVpnButtonVisualState.off, .42), .42);
-    });
-
     testWidgets('CONNECTED semantics and tap invoke the supplied STOP callback exactly once', (tester) async {
       final semantics = tester.ensureSemantics();
       var stopCalls = 0;

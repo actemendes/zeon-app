@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gap/gap.dart';
@@ -16,12 +15,6 @@ import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/gen/assets.gen.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/utils/platform_utils.dart';
-
-@visibleForTesting
-double resolveConnectedRingProgress(MainVpnButtonVisualState visualState, double animatedProgress) {
-  if (visualState == MainVpnButtonVisualState.connected) return 1;
-  return animatedProgress;
-}
 
 class ConnectionButton extends ConsumerWidget {
   const ConnectionButton({super.key});
@@ -98,8 +91,9 @@ class MainVpnButtonView extends StatelessWidget {
               image: image,
               useImage: useImage,
               visualState: state.visualState,
-            ).animate(target: state.enabled ? 0 : 1).blurXY(end: 1),
-          ).animate(target: state.enabled ? 0 : 1).scaleXY(end: .88, curve: Curves.easeIn),
+              isStopping: state.isStopping,
+            ),
+          ),
         ),
         const Gap(16),
         ExcludeSemantics(
@@ -137,10 +131,10 @@ class _ConnectionButtonFace extends StatefulWidget {
     required this.image,
     required this.useImage,
     required this.visualState,
+    required this.isStopping,
   });
 
   static const double outerSize = 230;
-  static const double innerCircleDiameter = 135;
   static const double glyphDiameter = 47;
 
   final VoidCallback? onTap;
@@ -148,99 +142,123 @@ class _ConnectionButtonFace extends StatefulWidget {
   final AssetGenImage image;
   final bool useImage;
   final MainVpnButtonVisualState visualState;
+  final bool isStopping;
 
   @override
   State<_ConnectionButtonFace> createState() => _ConnectionButtonFaceState();
 }
 
+// Geometry, rather than opacity, carries every transition. The current frame is
+// the starting point of a new transition, including cancel/retry and fast starts.
 class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with TickerProviderStateMixin {
-  late final AnimationController _rotationController;
-  late final AnimationController _loadingController;
-  late final AnimationController _connectedController;
+  static const _duration = Duration(milliseconds: 460);
+  static const _rotationDuration = Duration(milliseconds: 1500);
+  static const _restRadius = 99.0;
+  static const _connectedRadius = 67.5;
+  static const _outerRadius = 115.0;
+  static const _loadingSweep = math.pi * 1.2;
 
+  late final AnimationController _morph;
+  late final AnimationController _rotation;
+  late final Listenable _animation;
+  late _DialFrame _from;
+  late _DialFrame _to;
+  bool _reduceMotion = false;
   bool _pressed = false;
+
+  bool get _spinning => widget.visualState == MainVpnButtonVisualState.loading && !widget.isStopping;
 
   @override
   void initState() {
     super.initState();
-    _rotationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1320));
-    _loadingController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 220),
-      reverseDuration: const Duration(milliseconds: 180),
-    )..addStatusListener(_handleLoadingAnimationStatus);
-    _connectedController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 380),
-      reverseDuration: const Duration(milliseconds: 260),
-    );
+    _morph = AnimationController(vsync: this, duration: _duration, value: 1);
+    _rotation = AnimationController(vsync: this, duration: _rotationDuration);
+    _animation = Listenable.merge([_morph, _rotation]);
+    _from = _to = _targetFrame(-math.pi / 2);
+  }
 
-    _applyVisualState(widget.visualState, animate: false);
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (reduceMotion != _reduceMotion) {
+      _reduceMotion = reduceMotion;
+      _retarget(animate: false);
+    } else if (_spinning && !_reduceMotion && !_rotation.isAnimating) {
+      _rotation.repeat();
+    }
   }
 
   @override
   void didUpdateWidget(covariant _ConnectionButtonFace oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.visualState != widget.visualState) {
-      _applyVisualState(widget.visualState, animate: true);
+    if (oldWidget.visualState != widget.visualState || oldWidget.isStopping != widget.isStopping) {
+      _retarget(animate: !_reduceMotion);
     }
-    if (!widget.enabled && _pressed) {
-      setState(() {
-        _pressed = false;
-      });
-    }
+    if (!widget.enabled) _pressed = false;
   }
 
-  void _applyVisualState(MainVpnButtonVisualState state, {required bool animate}) {
-    final loadingTarget = state == MainVpnButtonVisualState.loading ? 1.0 : 0.0;
-    final connectedTarget = state == MainVpnButtonVisualState.connected ? 1.0 : 0.0;
+  _DialFrame _targetFrame(double angle) {
+    if (widget.isStopping ||
+        widget.visualState == MainVpnButtonVisualState.off ||
+        widget.visualState == MainVpnButtonVisualState.failed) {
+      return _DialFrame(innerRadius: _restRadius, outerRadius: _restRadius - 1, sweep: 0, angle: angle);
+    }
+    return _DialFrame(
+      innerRadius: _connectedRadius,
+      outerRadius: _outerRadius,
+      sweep: _spinning ? _loadingSweep : math.pi * 2,
+      angle: angle,
+    );
+  }
 
+  _DialFrame get _frame {
+    final t = Curves.easeInOutCubic.transform(_morph.value);
+    return _DialFrame(
+      innerRadius: _mix(_from.innerRadius, _to.innerRadius, t),
+      outerRadius: _mix(_from.outerRadius, _to.outerRadius, t),
+      sweep: _mix(_from.sweep, _to.sweep, t),
+      // Keep the spinner's phase at completion, then let it coast to rest.
+      angle: _mix(_from.angle, _to.angle, Curves.easeOutCubic.transform(_morph.value)) + _rotation.value * math.pi * 2,
+    );
+  }
+
+  void _retarget({required bool animate}) {
+    var current = _frame;
+    _rotation.stop();
+    _rotation.value = 0;
+    var target = _targetFrame(current.angle);
+    if (target.outerRadius < target.innerRadius) {
+      // Preserve the arc while the expanding center swallows it radially.
+      target = target.copyWith(sweep: current.sweep);
+    } else if (current.outerRadius <= current.innerRadius) {
+      current = current.copyWith(sweep: 0);
+    }
+    if (widget.visualState == MainVpnButtonVisualState.connected && animate) {
+      // easeOutCubic starts at 3x its mean velocity: match the running
+      // spinner's velocity at the seam instead of accelerating on success.
+      final coast = math.pi * 2 * _duration.inMilliseconds / _rotationDuration.inMilliseconds / 3;
+      target = target.copyWith(angle: current.angle + coast);
+    }
+    _from = animate ? current : target;
+    _to = target;
     if (animate) {
-      if (loadingTarget > _loadingController.value) {
-        if (!_rotationController.isAnimating) {
-          _rotationController.repeat();
-        }
-        _loadingController.forward();
-      } else {
-        _loadingController.reverse();
-      }
-      if (connectedTarget > _connectedController.value) {
-        _connectedController.forward();
-      } else {
-        _connectedController.reverse();
-      }
-      return;
-    }
-    _loadingController.value = loadingTarget;
-    _connectedController.value = connectedTarget;
-    if (state == MainVpnButtonVisualState.loading) {
-      _rotationController.repeat();
+      _morph.forward(from: 0);
     } else {
-      _rotationController
-        ..stop()
-        ..value = 0;
+      _morph.value = 1;
     }
-  }
-
-  void _handleLoadingAnimationStatus(AnimationStatus status) {
-    if (status == AnimationStatus.dismissed && widget.visualState != MainVpnButtonVisualState.loading) {
-      _rotationController
-        ..stop()
-        ..value = 0;
-    }
+    if (_spinning && !_reduceMotion) _rotation.repeat();
   }
 
   @override
   void dispose() {
-    _rotationController.dispose();
-    _loadingController.dispose();
-    _connectedController.dispose();
+    _morph.dispose();
+    _rotation.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final animation = Listenable.merge([_rotationController, _loadingController, _connectedController]);
     final theme = Theme.of(context);
     final isDarkTheme = theme.brightness == Brightness.dark;
     final logoAssetPath = isDarkTheme ? 'assets/images/SVG/logo-black.svg' : 'assets/images/SVG/logo-white.svg';
@@ -249,163 +267,142 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
       color: Colors.transparent,
       shape: const CircleBorder(),
       child: InkWell(
-        key: const ValueKey("home_connection_button"),
+        key: const ValueKey('home_connection_button'),
         customBorder: const CircleBorder(),
-        splashColor: Colors.white.withValues(alpha: .12),
+        splashFactory: NoSplash.splashFactory,
         highlightColor: Colors.transparent,
         onTap: widget.enabled ? widget.onTap : null,
-        onTapDown: widget.enabled
-            ? (_) => setState(() {
-                _pressed = true;
-              })
-            : null,
-        onTapUp: widget.enabled
-            ? (_) => setState(() {
-                _pressed = false;
-              })
-            : null,
-        onTapCancel: widget.enabled
-            ? () => setState(() {
-                _pressed = false;
-              })
-            : null,
-        child: AnimatedBuilder(
-          animation: animation,
-          builder: (context, child) {
-            const innerDiameter = _ConnectionButtonFace.innerCircleDiameter;
-            return SizedBox(
-              width: _ConnectionButtonFace.outerSize,
-              height: _ConnectionButtonFace.outerSize,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  CustomPaint(
-                    size: const Size.square(_ConnectionButtonFace.outerSize),
-                    painter: _ConnectionRingPainter(
-                      offColor: theme.colorScheme.secondaryContainer,
-                      loadingProgress: _loadingController.value,
-                      connectedProgress: resolveConnectedRingProgress(widget.visualState, _connectedController.value),
-                      rotationTurns: _rotationController.value,
-                    ),
-                  ),
-                  AnimatedScale(
-                    scale: _pressed && widget.enabled ? 0.94 : 1,
-                    duration: const Duration(milliseconds: 110),
-                    curve: Curves.easeOutCubic,
-                    child: Container(
-                      width: innerDiameter,
-                      height: innerDiameter,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                            color: isDarkTheme
-                                ? Colors.black.withValues(alpha: .5)
-                                : Colors.white.withValues(alpha: .5),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: widget.useImage
-                            ? Padding(
-                                padding: const EdgeInsets.all(
-                                  (_ConnectionButtonFace.innerCircleDiameter - _ConnectionButtonFace.glyphDiameter) / 2,
-                                ),
-                                child: widget.image.image(fit: BoxFit.contain),
-                              )
-                            : SizedBox.square(
-                                dimension: _ConnectionButtonFace.glyphDiameter,
-                                child: SvgPicture.asset(logoAssetPath),
-                              ),
+        onTapDown: widget.enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: widget.enabled ? (_) => setState(() => _pressed = false) : null,
+        onTapCancel: widget.enabled ? () => setState(() => _pressed = false) : null,
+        child: RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: _animation,
+            child: SizedBox.square(
+              dimension: _ConnectionButtonFace.glyphDiameter,
+              child: widget.useImage ? widget.image.image(fit: BoxFit.contain) : SvgPicture.asset(logoAssetPath),
+            ),
+            builder: (context, child) {
+              final frame = _frame;
+              return SizedBox.square(
+                dimension: _ConnectionButtonFace.outerSize,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CustomPaint(
+                      size: const Size.square(_ConnectionButtonFace.outerSize),
+                      painter: ConnectionRingPainter(
+                        offColor: theme.colorScheme.secondaryContainer,
+                        innerRadius: frame.innerRadius,
+                        activeOuterRadius: frame.outerRadius,
+                        sweep: frame.sweep,
+                        angle: frame.angle,
                       ),
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
+                    AnimatedScale(
+                      scale: _pressed && widget.enabled ? .96 : 1,
+                      duration: _reduceMotion ? Duration.zero : const Duration(milliseconds: 140),
+                      curve: Curves.easeOutCubic,
+                      child: Container(
+                        key: const ValueKey('home_connection_button_center'),
+                        width: frame.innerRadius * 2,
+                        height: frame.innerRadius * 2,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                              color: isDarkTheme
+                                  ? Colors.black.withValues(alpha: .5)
+                                  : Colors.white.withValues(alpha: .5),
+                            ),
+                          ],
+                        ),
+                        child: Center(child: child),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
   }
 }
 
-class _ConnectionRingPainter extends CustomPainter {
-  const _ConnectionRingPainter({
+double _mix(double a, double b, double t) => a + (b - a) * t;
+
+class _DialFrame {
+  const _DialFrame({required this.innerRadius, required this.outerRadius, required this.sweep, required this.angle});
+
+  final double innerRadius;
+  final double outerRadius;
+  final double sweep;
+  final double angle;
+
+  _DialFrame copyWith({double? sweep, double? angle}) => _DialFrame(
+    innerRadius: innerRadius,
+    outerRadius: outerRadius,
+    sweep: sweep ?? this.sweep,
+    angle: angle ?? this.angle,
+  );
+}
+
+/// The same opaque green arc grows into the connected ring; no cross-fade or
+/// success timer can override runtime state. Public for rendered-frame tests.
+@visibleForTesting
+class ConnectionRingPainter extends CustomPainter {
+  const ConnectionRingPainter({
     required this.offColor,
-    required this.loadingProgress,
-    required this.connectedProgress,
-    required this.rotationTurns,
+    required this.innerRadius,
+    required this.activeOuterRadius,
+    required this.sweep,
+    required this.angle,
   });
 
   final Color offColor;
-  final double loadingProgress;
-  final double connectedProgress;
-  final double rotationTurns;
+  final double innerRadius;
+  final double activeOuterRadius;
+  final double sweep;
+  final double angle;
 
-  static const double _viewBoxSize = 230.65;
-  static const double _outerRadius = 115.32;
-  static const double _innerRadius = 68.13;
-  static const double _ringWidth = _outerRadius - _innerRadius;
-  static const double _ringRadius = (_outerRadius + _innerRadius) / 2;
-  static const double _spinnerSweep = math.pi * 1.2;
-  static const double _spinnerStartAngle = -math.pi / 2;
-
-  static const LinearGradient _connectionGradient = LinearGradient(colors: [Color(0xFF3CE74F), Color(0xFFBFDD71)]);
+  static const _connectionGradient = LinearGradient(colors: [Color(0xFF3CE74F), Color(0xFFBFDD71)]);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final scale = math.min(size.width, size.height) / _viewBoxSize;
-    final dx = (size.width - (_viewBoxSize * scale)) / 2;
-    final dy = (size.height - (_viewBoxSize * scale)) / 2;
-
+    final scale = math.min(size.width, size.height) / 230;
     canvas.save();
-    canvas.translate(dx, dy);
+    canvas.translate((size.width - 230 * scale) / 2, (size.height - 230 * scale) / 2);
     canvas.scale(scale);
+    const center = Offset(115, 115);
+    canvas.drawCircle(center, 115, Paint()..color = offColor);
 
-    const center = Offset(115.32, 115.32);
-    const gradientRect = Rect.fromLTWH(0, 0, _viewBoxSize, _viewBoxSize);
-    final connectedOpacity = Curves.easeOutCubic.transform(connectedProgress.clamp(0, 1));
-    final loadingOpacity = Curves.easeOutCubic.transform(loadingProgress.clamp(0, 1));
-    final arcRect = Rect.fromCircle(center: center, radius: _ringRadius);
-    final rotation = rotationTurns * (2 * math.pi);
-
-    final basePaint = Paint()
-      ..isAntiAlias = true
-      ..color = offColor;
-    canvas.drawCircle(center, _outerRadius, basePaint);
-
-    if (connectedOpacity > 0.001) {
-      final connectedPaint = Paint()
-        ..isAntiAlias = true
-        ..shader = _connectionGradient.createShader(gradientRect)
-        ..colorFilter = ColorFilter.mode(Colors.white.withValues(alpha: connectedOpacity), BlendMode.modulate);
-      canvas.drawCircle(center, _outerRadius, connectedPaint);
-    }
-
-    final spinnerOpacity = (loadingOpacity * (1 - connectedOpacity)).clamp(0.0, 1.0);
-    if (spinnerOpacity > 0.001) {
-      final loadingPaint = Paint()
-        ..isAntiAlias = true
+    final width = activeOuterRadius - innerRadius;
+    if (width > 0 && sweep > 0) {
+      final paint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = _ringWidth
+        ..strokeWidth = width
         ..strokeCap = StrokeCap.round
-        ..shader = _connectionGradient.createShader(gradientRect)
-        ..colorFilter = ColorFilter.mode(Colors.white.withValues(alpha: spinnerOpacity), BlendMode.modulate);
-      canvas.drawArc(arcRect, _spinnerStartAngle + rotation, _spinnerSweep, false, loadingPaint);
+        ..shader = _connectionGradient.createShader(const Rect.fromLTWH(0, 0, 230, 230));
+      final radius = (activeOuterRadius + innerRadius) / 2;
+      if (sweep >= math.pi * 2 - .001) {
+        canvas.drawCircle(center, radius, paint);
+      } else {
+        canvas.drawArc(Rect.fromCircle(center: center, radius: radius), angle, sweep, false, paint);
+      }
     }
-
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _ConnectionRingPainter oldDelegate) {
-    return offColor != oldDelegate.offColor ||
-        loadingProgress != oldDelegate.loadingProgress ||
-        connectedProgress != oldDelegate.connectedProgress ||
-        rotationTurns != oldDelegate.rotationTurns;
-  }
+  bool shouldRepaint(covariant ConnectionRingPainter oldDelegate) =>
+      offColor != oldDelegate.offColor ||
+      innerRadius != oldDelegate.innerRadius ||
+      activeOuterRadius != oldDelegate.activeOuterRadius ||
+      sweep != oldDelegate.sweep ||
+      angle != oldDelegate.angle;
 }
