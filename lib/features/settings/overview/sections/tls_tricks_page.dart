@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/optional_range.dart';
 import 'package:zeon/core/ui/ui_names.dart';
-import 'package:zeon/core/widget/tip_card.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/features/settings/widget/preference_tile.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/features/settings/widget/settings_surface.dart';
 
 class TlsTricksPage extends HookConsumerWidget {
   const TlsTricksPage({super.key});
@@ -26,66 +26,84 @@ class TlsTricksPage extends HookConsumerWidget {
     final canChangeOption = ref.watch(ConfigOptions.enableTlsFragment);
     return Scaffold(
       key: const ValueKey(UiNames.screenTlsTricks),
-      appBar: AppBar(title: Text(t.pages.settings.tlsTricks.title.toUpperCase())),
-      body: ListView(
+      appBar: AppBar(
+        centerTitle: false,
+        titleTextStyle: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 17, fontWeight: FontWeight.w600),
+        title: Text(t.pages.settings.tlsTricks.title.toUpperCase()),
+      ),
+      body: SettingsList(
         children: [
-          TipCard(message: t.pages.settings.tlsTricks.hint),
-          SwitchListTile.adaptive(
-            title: Text(t.pages.settings.tlsTricks.enable),
-            value: ref.watch(ConfigOptions.enableTlsFragment),
-            secondary: const Icon(Icons.content_cut_rounded),
-            onChanged: ref.read(ConfigOptions.enableTlsFragment.notifier).update,
+          SettingsHint(message: t.pages.settings.tlsTricks.hint),
+          SettingsGroup(
+            children: [
+              SettingsSwitch(
+                title: Text(t.pages.settings.tlsTricks.enable),
+                value: ref.watch(ConfigOptions.enableTlsFragment),
+                secondary: const Icon(Icons.content_cut_rounded),
+                onChanged: ref.read(ConfigOptions.enableTlsFragment.notifier).update,
+              ),
+            ],
           ),
-          ChoicePreferenceWidget(
-            selected: ref.watch(ConfigOptions.fragmentPackets),
-            preferences: ref.watch(ConfigOptions.fragmentPackets.notifier),
-            choices: const ["tlshello", "1-1", "1-2", "1-3", "1-4", "1-5"],
-            title: t.pages.settings.tlsTricks.packets,
-            icon: Icons.layers_rounded,
-            presentChoice: (value) => _presentFragmentPackets(t, value),
-            enabled: canChangeOption,
+          SettingsGroup(
+            title: t.pages.settings.groups.fragmentation,
+            children: [
+              ChoicePreferenceWidget(
+                selected: ref.watch(ConfigOptions.fragmentPackets),
+                preferences: ref.watch(ConfigOptions.fragmentPackets.notifier),
+                choices: const ["tlshello", "1-1", "1-2", "1-3", "1-4", "1-5"],
+                title: t.pages.settings.tlsTricks.packets,
+                icon: Icons.layers_rounded,
+                presentChoice: (value) => _presentFragmentPackets(t, value),
+                enabled: canChangeOption,
+              ),
+              ValuePreferenceWidget(
+                value: ref.watch(ConfigOptions.tlsFragmentSize),
+                preferences: ref.watch(ConfigOptions.tlsFragmentSize.notifier),
+                title: t.pages.settings.tlsTricks.size,
+                icon: Icons.straighten_rounded,
+                inputToValue: OptionalRange.tryParse,
+                presentValue: (value) => value.present(t),
+                formatInputValue: (value) => value.format(),
+                enabled: canChangeOption,
+              ),
+              ValuePreferenceWidget(
+                value: ref.watch(ConfigOptions.tlsFragmentSleep),
+                preferences: ref.watch(ConfigOptions.tlsFragmentSleep.notifier),
+                title: t.pages.settings.tlsTricks.sleep,
+                icon: Icons.snooze_rounded,
+                inputToValue: OptionalRange.tryParse,
+                presentValue: (value) => value.present(t),
+                formatInputValue: (value) => value.format(),
+                enabled: canChangeOption,
+              ),
+            ],
           ),
-          ValuePreferenceWidget(
-            value: ref.watch(ConfigOptions.tlsFragmentSize),
-            preferences: ref.watch(ConfigOptions.tlsFragmentSize.notifier),
-            title: t.pages.settings.tlsTricks.size,
-            icon: Icons.straighten_rounded,
-            inputToValue: OptionalRange.tryParse,
-            presentValue: (value) => value.present(t),
-            formatInputValue: (value) => value.format(),
-            enabled: canChangeOption,
-          ),
-          ValuePreferenceWidget(
-            value: ref.watch(ConfigOptions.tlsFragmentSleep),
-            preferences: ref.watch(ConfigOptions.tlsFragmentSleep.notifier),
-            title: t.pages.settings.tlsTricks.sleep,
-            icon: Icons.snooze_rounded,
-            inputToValue: OptionalRange.tryParse,
-            presentValue: (value) => value.present(t),
-            formatInputValue: (value) => value.format(),
-            enabled: canChangeOption,
-          ),
-          SwitchListTile.adaptive(
-            title: Text(t.pages.settings.tlsTricks.mixedSniCase.enable),
-            value: ref.watch(ConfigOptions.enableTlsMixedSniCase),
-            secondary: const Icon(Icons.text_fields_rounded),
-            onChanged: canChangeOption ? ref.read(ConfigOptions.enableTlsMixedSniCase.notifier).update : null,
-          ),
-          SwitchListTile.adaptive(
-            title: Text(t.pages.settings.tlsTricks.padding.enable),
-            value: ref.watch(ConfigOptions.enableTlsPadding),
-            secondary: const Icon(Icons.expand_rounded),
-            onChanged: canChangeOption ? ref.read(ConfigOptions.enableTlsPadding.notifier).update : null,
-          ),
-          ValuePreferenceWidget(
-            value: ref.watch(ConfigOptions.tlsPaddingSize),
-            preferences: ref.watch(ConfigOptions.tlsPaddingSize.notifier),
-            title: t.pages.settings.tlsTricks.padding.size,
-            icon: Icons.straighten_rounded,
-            inputToValue: OptionalRange.tryParse,
-            presentValue: (value) => value.format(),
-            formatInputValue: (value) => value.format(),
-            enabled: canChangeOption,
+          SettingsGroup(
+            title: 'TLS',
+            children: [
+              SettingsSwitch(
+                title: Text(t.pages.settings.tlsTricks.mixedSniCase.enable),
+                value: ref.watch(ConfigOptions.enableTlsMixedSniCase),
+                secondary: const Icon(Icons.text_fields_rounded),
+                onChanged: canChangeOption ? ref.read(ConfigOptions.enableTlsMixedSniCase.notifier).update : null,
+              ),
+              SettingsSwitch(
+                title: Text(t.pages.settings.tlsTricks.padding.enable),
+                value: ref.watch(ConfigOptions.enableTlsPadding),
+                secondary: const Icon(Icons.expand_rounded),
+                onChanged: canChangeOption ? ref.read(ConfigOptions.enableTlsPadding.notifier).update : null,
+              ),
+              ValuePreferenceWidget(
+                value: ref.watch(ConfigOptions.tlsPaddingSize),
+                preferences: ref.watch(ConfigOptions.tlsPaddingSize.notifier),
+                title: t.pages.settings.tlsTricks.padding.size,
+                icon: Icons.straighten_rounded,
+                inputToValue: OptionalRange.tryParse,
+                presentValue: (value) => value.format(),
+                formatInputValue: (value) => value.format(),
+                enabled: canChangeOption,
+              ),
+            ],
           ),
         ],
       ),

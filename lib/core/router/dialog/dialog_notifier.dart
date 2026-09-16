@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:protobuf/protobuf.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/preferences/actions_at_closing.dart';
 import 'package:zeon/core/router/dialog/widgets/action_at_closing_dialog.dart';
 import 'package:zeon/core/router/dialog/widgets/confirmation_dialog.dart';
@@ -20,14 +22,13 @@ import 'package:zeon/core/router/dialog/widgets/sort_profiles_dialog.dart';
 import 'package:zeon/core/router/dialog/widgets/unknown_domains_warning_dialog.dart';
 import 'package:zeon/core/router/dialog/widgets/warp_license_dialog.dart';
 import 'package:zeon/core/router/dialog/widgets/window_closing_dialog.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/core/router/go_router/go_router_notifier.dart';
 import 'package:zeon/features/app_update/model/remote_version_entity.dart';
 import 'package:zeon/features/common/qr_code_dialog.dart';
 import 'package:zeon/features/common/qr_code_scanner_screen.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
-import 'package:protobuf/protobuf.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'dialog_notifier.g.dart';
 
@@ -39,13 +40,10 @@ class DialogNotifier extends _$DialogNotifier {
   Future<T?> _show<T>(Widget child) async {
     final context = rootNavKey.currentContext;
     if (context == null) return null;
-    // ref.read(popupCountNotifierProvider.notifier).increase();
-    return await Navigator.of(context).push<T>(DialogRoute(context: context, builder: (context) => child)).then((
-      value,
-    ) {
-      // ref.read(popupCountNotifierProvider.notifier).decrease();
-      return value;
-    });
+    if (child is QrCodeDialog || child is QrCodeScannerDialog) {
+      return showDialog<T>(context: context, builder: (_) => child);
+    }
+    return showZeonDialog<T>(context, child);
   }
 
   Future<String?> showQrScanner() async {

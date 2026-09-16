@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class SettingsSliderDialog extends HookConsumerWidget with PresLogger {
   const SettingsSliderDialog({
@@ -32,7 +33,7 @@ class SettingsSliderDialog extends HookConsumerWidget with PresLogger {
     final t = ref.watch(translationsProvider).requireValue;
     final localizations = MaterialLocalizations.of(context);
 
-    final sliderValue = useState(initialValue);
+    final sliderValue = useState(initialValue.clamp(min, max));
     final sliderFocusNode = useFocusNode(
       onKeyEvent: (node, event) {
         if (KeyboardConst.verticalArrows.contains(event.logicalKey) && event is KeyDownEvent) {
@@ -45,17 +46,48 @@ class SettingsSliderDialog extends HookConsumerWidget with PresLogger {
       },
     );
 
-    return AlertDialog(
+    return ZeonDialog(
       title: Text(title),
-      content: IntrinsicHeight(
-        child: Slider(
-          focusNode: sliderFocusNode,
-          value: sliderValue.value,
-          min: min,
-          max: max,
-          divisions: divisions,
-          onChanged: (value) => sliderValue.value = value,
-          label: labelGen?.call(sliderValue.value),
+      icon: const Icon(Icons.timer_outlined),
+      content: Container(
+        padding: const EdgeInsets.fromLTRB(12, 24, 12, 16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              labelGen?.call(sliderValue.value) ?? sliderValue.value.toStringAsFixed(0),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 34, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 14),
+            Slider(
+              focusNode: sliderFocusNode,
+              value: sliderValue.value,
+              min: min,
+              max: max,
+              divisions: divisions,
+              onChanged: (value) => sliderValue.value = value,
+              label: labelGen?.call(sliderValue.value),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(child: Text(labelGen?.call(min) ?? '$min', style: const TextStyle(fontSize: 11))),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    labelGen?.call(max) ?? '$max',
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
       actions: [

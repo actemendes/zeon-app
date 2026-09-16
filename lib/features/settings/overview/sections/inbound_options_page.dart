@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/features/settings/widget/preference_tile.dart';
+import 'package:zeon/features/settings/widget/settings_surface.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class InboundOptionsPage extends HookConsumerWidget {
   const InboundOptionsPage({super.key});
@@ -19,58 +20,71 @@ class InboundOptionsPage extends HookConsumerWidget {
 
     return Scaffold(
       key: const ValueKey(UiNames.screenInboundOptions),
-      appBar: AppBar(title: Text(t.pages.settings.inbound.title.toUpperCase())),
-      body: ListView(
+      appBar: AppBar(
+        centerTitle: false,
+        titleTextStyle: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 17, fontWeight: FontWeight.w600),
+        title: Text(t.pages.settings.inbound.title.toUpperCase()),
+      ),
+      body: SettingsList(
         children: [
           if (serviceModeChoices.length > 1)
-            ChoicePreferenceWidget(
-              selected: serviceMode,
-              preferences: ref.watch(ConfigOptions.serviceMode.notifier),
-              choices: serviceModeChoices,
-              title: t.pages.settings.inbound.serviceMode,
-              icon: Icons.tune_rounded,
-              presentChoice: (value) => value.present(t),
+            SettingsGroup(
+              children: [
+                ChoicePreferenceWidget(
+                  selected: serviceMode,
+                  preferences: ref.watch(ConfigOptions.serviceMode.notifier),
+                  choices: serviceModeChoices,
+                  title: t.pages.settings.inbound.serviceMode,
+                  icon: Icons.tune_rounded,
+                  presentChoice: (value) => value.present(t),
+                ),
+              ],
             ),
-          SwitchListTile.adaptive(
-            title: Text(t.pages.settings.inbound.strictRoute),
-            secondary: const Icon(Icons.merge_rounded),
-            value: ref.watch(ConfigOptions.strictRoute),
-            onChanged: isTunMode
-                ? (value) async {
-                    await ref.read(ConfigOptions.strictRoute.notifier).update(value);
-                  }
-                : null,
+          SettingsGroup(
+            title: 'TUN',
+            children: [
+              SettingsSwitch(
+                title: Text(t.pages.settings.inbound.strictRoute),
+                secondary: const Icon(Icons.merge_rounded),
+                value: ref.watch(ConfigOptions.strictRoute),
+                onChanged: isTunMode
+                    ? (value) async {
+                        await ref.read(ConfigOptions.strictRoute.notifier).update(value);
+                      }
+                    : null,
+              ),
+              if (!PlatformUtils.isApple)
+                ChoicePreferenceWidget(
+                  selected: ref.watch(ConfigOptions.tunImplementation),
+                  preferences: ref.watch(ConfigOptions.tunImplementation.notifier),
+                  choices: TunImplementation.values,
+                  title: t.pages.settings.inbound.tunImplementation,
+                  icon: Icons.trip_origin_rounded,
+                  presentChoice: (value) => value.present(t),
+                  enabled: isTunMode,
+                ),
+              if (PlatformUtils.isLinux)
+                ValuePreferenceWidget(
+                  value: ref.watch(ConfigOptions.tproxyPort),
+                  preferences: ref.watch(ConfigOptions.tproxyPort.notifier),
+                  title: t.pages.settings.inbound.tproxyPort,
+                  icon: Icons.device_hub_rounded,
+                  inputToValue: int.tryParse,
+                  digitsOnly: true,
+                  validateInput: isPort,
+                ),
+              if (PlatformUtils.isLinux || PlatformUtils.isMacOS)
+                ValuePreferenceWidget(
+                  value: ref.watch(ConfigOptions.redirectPort),
+                  preferences: ref.watch(ConfigOptions.redirectPort.notifier),
+                  title: t.pages.settings.inbound.redirectPort,
+                  icon: Icons.device_hub_rounded,
+                  inputToValue: int.tryParse,
+                  digitsOnly: true,
+                  validateInput: isPort,
+                ),
+            ],
           ),
-          if (!PlatformUtils.isApple)
-            ChoicePreferenceWidget(
-              selected: ref.watch(ConfigOptions.tunImplementation),
-              preferences: ref.watch(ConfigOptions.tunImplementation.notifier),
-              choices: TunImplementation.values,
-              title: t.pages.settings.inbound.tunImplementation,
-              icon: Icons.trip_origin_rounded,
-              presentChoice: (value) => value.present(t),
-              enabled: isTunMode,
-            ),
-          if (PlatformUtils.isLinux)
-            ValuePreferenceWidget(
-              value: ref.watch(ConfigOptions.tproxyPort),
-              preferences: ref.watch(ConfigOptions.tproxyPort.notifier),
-              title: t.pages.settings.inbound.tproxyPort,
-              icon: Icons.device_hub_rounded,
-              inputToValue: int.tryParse,
-              digitsOnly: true,
-              validateInput: isPort,
-            ),
-          if (PlatformUtils.isLinux || PlatformUtils.isMacOS)
-            ValuePreferenceWidget(
-              value: ref.watch(ConfigOptions.redirectPort),
-              preferences: ref.watch(ConfigOptions.redirectPort.notifier),
-              title: t.pages.settings.inbound.redirectPort,
-              icon: Icons.device_hub_rounded,
-              inputToValue: int.tryParse,
-              digitsOnly: true,
-              validateInput: isPort,
-            ),
         ],
       ),
     );

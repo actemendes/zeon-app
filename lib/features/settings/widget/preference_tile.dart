@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/utils/preferences_utils.dart';
 import 'package:zeon/features/settings/notifier/battery_optimization/battery_optimizations_notifier.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/features/settings/widget/settings_surface.dart';
 
 class ValuePreferenceWidget<T> extends HookConsumerWidget {
   const ValuePreferenceWidget({
@@ -33,7 +34,7 @@ class ValuePreferenceWidget<T> extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ListTile(
+    return SettingsTile(
       title: Text(title),
       subtitle: Text(presentValue?.call(value) ?? value.toString()),
       leading: icon != null ? Icon(icon) : null,
@@ -47,6 +48,7 @@ class ValuePreferenceWidget<T> extends HookConsumerWidget {
             .showSettingInput(
               title: title,
               initialValue: value,
+              icon: icon,
               validator: validateInput,
               valueFormatter: formatInputValue,
               onReset: preferences.reset,
@@ -90,7 +92,7 @@ class ChoicePreferenceWidget<T> extends HookConsumerWidget {
   final ValueChanged<T>? onChanged;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ListTile(
+    return SettingsTile(
       title: Text(title),
       subtitle: Text(presentChoice(selected)),
       leading: icon != null ? Icon(icon) : null,
@@ -127,7 +129,7 @@ class BatteryOptimizationWidget extends HookConsumerWidget {
     return isIgnoringBatteryOptimizations.when(
       data: (isIgnored) => isIgnored
           ? const SizedBox()
-          : ListTile(
+          : SettingsTile(
               title: Text(t.pages.settings.general.ignoreBatteryOptimizations),
               subtitle: Text(t.pages.settings.general.ignoreBatteryOptimizationsMsg),
               leading: const Icon(Icons.battery_saver_rounded),

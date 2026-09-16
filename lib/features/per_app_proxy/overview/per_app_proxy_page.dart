@@ -261,7 +261,6 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(8),
                             color: theme.colorScheme.surface,
-                            border: Border.all(color: theme.colorScheme.outlineVariant),
                           ),
                           child: Row(
                             children: [
@@ -276,6 +275,7 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
                       ),
                       const Gap(8),
                       ChoiceChip(
+                        side: BorderSide.none,
                         label: Text(t.pages.settings.routing.perAppProxy.hideSysApps),
                         selected: hideSystemApps.value,
                         onSelected: (value) => hideSystemApps.value = value,
@@ -295,44 +295,59 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
           : null,
       body: displayedApps.when(
         data: (packages) => ListView.builder(
-          padding: const EdgeInsets.only(bottom: 88),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
           controller: scrollController,
           itemBuilder: (context, index) {
             final package = packages[index];
             final flag = selectedApps.requireValue[package.packageName];
-            return CheckboxListTile.adaptive(
-              title: Row(
-                children: [
-                  Flexible(child: Text(package.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                  if (flag != null && PkgFlag.forceDeselection.check(flag)) ...[
-                    const Gap(6),
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle),
-                    ),
-                  ],
-                ],
+            return Material(
+              color: theme.colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(index == 0 ? 20 : 0),
+                bottom: Radius.circular(index == packages.length - 1 ? 20 : 0),
               ),
-              subtitle: Text(
-                package.packageName,
-                style: Theme.of(context).textTheme.bodySmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              clipBehavior: Clip.antiAlias,
+              child: ListTileTheme(
+                data: ListTileThemeData(
+                  titleTextStyle: theme.textTheme.bodyMedium?.copyWith(fontSize: 13, fontWeight: FontWeight.w500),
+                  subtitleTextStyle: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                ),
+                child: CheckboxListTile.adaptive(
+                  title: Row(
+                    children: [
+                      Flexible(child: Text(package.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      if (flag != null && PkgFlag.forceDeselection.check(flag)) ...[
+                        const Gap(6),
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle),
+                        ),
+                      ],
+                    ],
+                  ),
+                  subtitle: Text(
+                    package.packageName,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  value: flag == null ? false : PkgFlag.checkboxValue(flag),
+                  tristate: true,
+                  onChanged: (_) => ref.read(PerAppProxyProvider(mode).notifier).updatePkg(package.packageName),
+                  secondary: package.icon == null
+                      ? null
+                      : Image.memory(
+                          package.icon!,
+                          width: applicationIconLogicalSize,
+                          height: applicationIconLogicalSize,
+                          cacheWidth: applicationIconPhysicalSize,
+                          cacheHeight: applicationIconPhysicalSize,
+                          filterQuality: FilterQuality.high,
+                        ),
+                ),
               ),
-              value: flag == null ? false : PkgFlag.checkboxValue(flag),
-              tristate: true,
-              onChanged: (_) => ref.read(PerAppProxyProvider(mode).notifier).updatePkg(package.packageName),
-              secondary: package.icon == null
-                  ? null
-                  : Image.memory(
-                      package.icon!,
-                      width: applicationIconLogicalSize,
-                      height: applicationIconLogicalSize,
-                      cacheWidth: applicationIconPhysicalSize,
-                      cacheHeight: applicationIconPhysicalSize,
-                      filterQuality: FilterQuality.high,
-                    ),
             );
           },
           itemCount: packages.length,

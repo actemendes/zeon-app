@@ -1,59 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:gap/gap.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-class QuickSettingsModal extends HookConsumerWidget {
+class QuickSettingsModal extends ConsumerWidget {
   const QuickSettingsModal({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
-    final serviceModeChoices = ServiceMode.choices;
-
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
-            if (serviceModeChoices.length > 1)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16).copyWith(top: 16),
-                child: SegmentedButton(
-                  showSelectedIcon: false,
-                  segments: serviceModeChoices
-                      .map(
-                        (e) => ButtonSegment(
-                          value: e,
-                          label: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Text(e.presentShort(t), textAlign: TextAlign.center),
-                          ),
-                          // tooltip: e.isExperimental ? t.settings.experimental : null,
-                        ),
-                      )
-                      .toList(),
-                  selected: {ref.watch(ConfigOptions.serviceMode)},
-                  onSelectionChanged: (newSet) => ref.read(ConfigOptions.serviceMode.notifier).update(newSet.first),
-                ),
-              ),
-            // ListTile(
-
-            //   leading: const Icon(Icons.content_cut_rounded),
-            //   title: Text(t.pages.settings.tlsTricks.title),
-            //   onTap: () {
-            //     context.pop();
-            //     context.goNamed('tlsTricks');
-            //   },
-            //   trailing: Switch.adaptive(
-            //     value: ref.watch(ConfigOptions.enableTlsFragment),
-            //     onChanged: ref.read(ConfigOptions.enableTlsFragment.notifier).update,
-            //   ),
-            // ),
-            const Gap(16),
-          ],
-        ),
+    return ZeonDialog(
+      title: Text(t.pages.home.quickSettings),
+      icon: const Icon(Icons.vpn_key_rounded),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final mode in ServiceMode.choices)
+            DialogChoice(
+              title: mode.present(t),
+              selected: ref.watch(ConfigOptions.serviceMode) == mode,
+              onTap: () => ref.read(ConfigOptions.serviceMode.notifier).update(mode),
+            ),
+        ],
       ),
     );
   }

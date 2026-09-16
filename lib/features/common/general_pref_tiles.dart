@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/locale_extensions.dart';
 import 'package:zeon/core/localization/locale_preferences.dart';
 import 'package:zeon/core/localization/translations.dart';
@@ -6,7 +7,7 @@ import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/theme/app_theme_mode.dart';
 import 'package:zeon/core/theme/theme_preferences.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/features/settings/widget/settings_surface.dart';
 
 class LocalePrefTile extends ConsumerWidget {
   const LocalePrefTile({super.key});
@@ -16,7 +17,7 @@ class LocalePrefTile extends ConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
 
     final locale = ref.watch(localePreferencesProvider);
-    return ListTile(
+    return SettingsTile(
       title: Text(t.pages.settings.general.locale),
       subtitle: Text(locale.localeName),
       leading: const Icon(Icons.translate_rounded),
@@ -47,7 +48,7 @@ class ThemeModePrefTile extends ConsumerWidget {
 
     final themeMode = ref.watch(themePreferencesProvider);
 
-    return ListTile(
+    return SettingsTile(
       title: Text(t.pages.settings.general.themeMode),
       subtitle: Text(themeMode.present(t)),
       leading: Icon(switch (ref.watch(themePreferencesProvider)) {
@@ -83,7 +84,7 @@ class ClosingPrefTile extends ConsumerWidget {
 
     final action = ref.watch(Preferences.actionAtClose);
 
-    return ListTile(
+    return SettingsTile(
       title: Text(t.pages.settings.general.actionAtClosing),
       subtitle: Text(action.present(t)),
       leading: const Icon(Icons.logout_rounded),

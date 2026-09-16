@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/model/constants.dart';
 import 'package:zeon/core/router/bottom_sheets/widgets/auto_apps_selection_modal.dart';
 import 'package:zeon/core/router/bottom_sheets/widgets/quick_settings_modal.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/core/router/go_router/go_router_notifier.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/features/profile/overview/profiles_modal.dart';
@@ -43,7 +44,11 @@ class BottomSheetsNotifier extends _$BottomSheetsNotifier {
 
   Future<void> showProfilesOverview() async => await _show(isScrollControlled: true, child: const ProfilesModal());
 
-  Future<void> showQuickSettings() async => await _show(isScrollControlled: false, child: const QuickSettingsModal());
+  Future<void> showQuickSettings() async {
+    final context = rootNavKey.currentContext;
+    if (context != null) await showZeonDialog<void>(context, const QuickSettingsModal());
+  }
+
   Future<void> showAutoAppsSelection({required AppProxyMode mode}) async =>
       await _show(isScrollControlled: false, child: AutoAppsSelectionModal(mode: mode));
 }

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:zeon/core/localization/translations.dart';
-import 'package:zeon/features/route_rules/notifier/rule_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:protobuf/protobuf.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
+import 'package:zeon/features/route_rules/notifier/rule_notifier.dart';
 
 class SettingCheckboxDialog extends ConsumerWidget {
   const SettingCheckboxDialog({
@@ -32,7 +33,7 @@ class SettingCheckboxDialog extends ConsumerWidget {
     final checkboxNotififier = dialogCheckboxNotifierProvider(selectedValues);
     final current = ref.watch(checkboxNotififier);
 
-    return AlertDialog(
+    return ZeonDialog(
       title: Text(title),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 300),
@@ -41,10 +42,10 @@ class SettingCheckboxDialog extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: values
                 .map(
-                  (e) => CheckboxListTile(
-                    title: Text(textWithTranslation(e)),
-                    value: current.contains(e),
-                    onChanged: (_) => ref.read(checkboxNotififier.notifier).update(e),
+                  (e) => DialogChoice(
+                    title: textWithTranslation(e),
+                    selected: current.contains(e),
+                    onTap: () => ref.read(checkboxNotififier.notifier).update(e),
                   ),
                 )
                 .toList(),

@@ -269,6 +269,18 @@
       "privacyPolicy": "Privacy policy"
     },
     "settings": {
+      "groups": {
+        "application": "Application",
+        "connection": "Connection",
+        "appearance": "Appearance",
+        "startup": "Startup and notifications",
+        "feedback": "Notifications and feedback",
+        "behavior": "Application behavior",
+        "connectionTest": "Connection test",
+        "traffic": "Traffic rules",
+        "fragmentation": "Fragmentation parameters",
+        "noise": "Noise"
+      },
       "title": "Settings",
       "resetTunnel": "Reset VPN profile",
       "options": {

@@ -277,6 +277,18 @@
       "privacyPolicy": "Политика конфиденциальности"
     },
     "settings": {
+      "groups": {
+        "application": "Приложение",
+        "connection": "Соединение",
+        "appearance": "Оформление",
+        "startup": "Запуск и уведомления",
+        "feedback": "Уведомления и отклик",
+        "behavior": "Работа приложения",
+        "connectionTest": "Проверка соединения",
+        "traffic": "Правила трафика",
+        "fragmentation": "Параметры фрагментации",
+        "noise": "Шум"
+      },
       "title": "Настройки",
       "resetTunnel": "Сбросить профиль VPN",
       "options": {

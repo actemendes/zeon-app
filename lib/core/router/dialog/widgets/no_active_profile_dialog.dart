@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:zeon/core/localization/translations.dart';
-import 'package:zeon/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
+import 'package:zeon/utils/utils.dart';
 
 class NoActiveProfileDialog extends HookConsumerWidget {
   const NoActiveProfileDialog({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
-    return AlertDialog(
+    return ZeonDialog(
       title: Text(t.dialogs.noActiveProfile.title),
       content: Text(t.dialogs.noActiveProfile.msg),
       actions: [

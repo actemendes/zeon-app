@@ -3,9 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
-import 'package:zeon/core/localization/translations.dart';
-import 'package:zeon/core/utils/preferences_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
+import 'package:zeon/core/utils/preferences_utils.dart';
 
 bool _testExperimentalNotice = false;
 
@@ -23,7 +24,7 @@ class ExperimentalFeatureNoticeDialog extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final disableNotice = ref.watch(disableExperimentalFeatureNoticeProvider);
 
-    return AlertDialog(
+    return ZeonDialog(
       title: Text(t.dialogs.experimentalNotice.title),
       content: SingleChildScrollView(
         child: SizedBox(

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/preferences/actions_at_closing.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/features/window/notifier/window_notifier.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class WindowClosingDialog extends ConsumerStatefulWidget {
   const WindowClosingDialog({super.key});
@@ -20,7 +21,7 @@ class _WindowClosingDialogState extends ConsumerState<WindowClosingDialog> {
   Widget build(BuildContext context) {
     final t = ref.watch(translationsProvider).requireValue;
 
-    return AlertDialog(
+    return ZeonDialog(
       title: Text(t.dialogs.windowClosing.alertMessage),
       content: GestureDetector(
         onTap: () => setState(() {

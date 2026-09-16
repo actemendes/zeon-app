@@ -4,10 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/utils/uri_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class WarpLicenseDialog extends HookConsumerWidget {
   const WarpLicenseDialog({super.key});
@@ -39,7 +40,7 @@ class WarpLicenseDialog extends HookConsumerWidget {
       }
       return null;
     }, []);
-    return AlertDialog(
+    return ZeonDialog(
       title: Text(t.dialogs.warpLicense.title),
       content: ConstrainedBox(
         constraints: AlertDialogConst.boxConstraints,

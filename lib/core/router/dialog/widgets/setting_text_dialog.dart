@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 
 class SettingTextDialog extends HookConsumerWidget {
   const SettingTextDialog({super.key, required this.lable, this.value = '', this.defaultValue, this.validator});
@@ -18,7 +19,8 @@ class SettingTextDialog extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final formKey = useMemoized(() => GlobalKey<FormState>());
     final tController = useTextEditingController(text: value);
-    return AlertDialog(
+    return ZeonDialog(
+      title: Text(lable),
       content: ConstrainedBox(
         constraints: AlertDialogConst.boxConstraints,
         child: Form(

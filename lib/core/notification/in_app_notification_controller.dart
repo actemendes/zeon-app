@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/notification/app_notice.dart';
 import 'package:zeon/core/router/dialog/widgets/custom_alert_dialog.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/core/router/go_router/go_router_notifier.dart';
 
 part 'in_app_notification_controller.g.dart';
@@ -68,11 +69,9 @@ class InAppNotificationController {
   void _showDiagnosticDialog(String title, String diagnosticText, BuildContext? sourceContext) {
     final context = rootNavKey.currentContext ?? sourceContext;
     if (context == null || !context.mounted) return;
-    Navigator.of(context, rootNavigator: true).push<void>(
-      DialogRoute(
-        context: context,
-        builder: (context) => CustomAlertDialog(title: title, message: diagnosticText, diagnosticText: diagnosticText),
-      ),
+    showZeonDialog<void>(
+      context,
+      CustomAlertDialog(title: title, message: diagnosticText, diagnosticText: diagnosticText),
     );
   }
 }

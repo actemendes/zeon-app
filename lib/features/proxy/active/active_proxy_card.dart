@@ -15,12 +15,14 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
     super.key,
     this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
     this.backgroundColor,
+    this.desktop = false,
   });
 
   final EdgeInsetsGeometry margin;
   final Color? backgroundColor;
+  final bool desktop;
 
-  static const _panelRadius = 16.0;
+  static const _panelRadius = 20.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,7 +39,6 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
 
     final theme = Theme.of(context);
     final displayInfo = proxy == null ? null : resolveOutboundDisplayInfo(proxy);
-    final navBarBackground = theme.navigationBarTheme.backgroundColor ?? theme.colorScheme.surface;
     final navBarTextColor =
         theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
     final navBarIconColor =
@@ -58,7 +59,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
       key: const ValueKey('home_server_picker'),
       margin: margin,
       decoration: BoxDecoration(
-        color: backgroundColor ?? navBarBackground,
+        color: backgroundColor ?? theme.colorScheme.secondaryContainer,
         borderRadius: BorderRadius.circular(_panelRadius),
         // boxShadow: [
         //   BoxShadow(
@@ -74,7 +75,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
           borderRadius: BorderRadius.circular(_panelRadius),
           onTap: () => context.goNamed('proxies'),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             child: proxy == null
                 ? Semantics(
                     label: '${t.pages.proxies.activeProxy}\n${t.pages.proxies.title}',
@@ -102,7 +103,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                           size: 40,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: SizedBox(
                           height: 40,
@@ -112,10 +113,10 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                               label: t.pages.proxies.activeProxy,
                               child: Text(
                                 displayInfo?.title ?? proxy.tagDisplay,
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: navBarTextColor,
-                                ),
+                                style:
+                                    (theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{}) ??
+                                            theme.textTheme.labelMedium)
+                                        ?.copyWith(color: navBarTextColor),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -123,8 +124,8 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Icon(Icons.apps, color: navBarIconColor, size: 20),
+                      const SizedBox(width: 14),
+                      Icon(desktop ? Icons.apps : Icons.chevron_right_rounded, color: navBarIconColor, size: 19),
                     ],
                   ),
           ),
@@ -150,7 +151,7 @@ class _ServerPickerPlaceholder extends StatelessWidget {
           dimension: 40,
           child: Center(child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 14),
         Expanded(
           child: Text(
             label,
@@ -159,7 +160,7 @@ class _ServerPickerPlaceholder extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600, color: foregroundColor),
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 14),
         Icon(Icons.apps, color: iconColor, size: 20),
       ],
     );

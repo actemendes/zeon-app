@@ -1,10 +1,7 @@
 import 'package:dartx/dartx.dart';
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:sliver_tools/sliver_tools.dart';
-import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
@@ -21,6 +18,9 @@ import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/profile/notifier/profile_notifier.dart';
 import 'package:zeon/features/proxy/active/active_proxy_card.dart';
 import 'package:zeon/features/proxy/active/active_proxy_delay_indicator.dart';
+import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
+import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/utils/platform_utils.dart';
 
 class HomePage extends HookConsumerWidget {
@@ -57,7 +57,6 @@ class HomePage extends HookConsumerWidget {
     }, [isUpdatingProfile, refreshAnimationController]);
     final breakpoint = Breakpoint(context);
     final compactHeight = breakpoint.isCompactHeight();
-    final textScaler = MediaQuery.textScalerOf(context);
     final subscriptionName = switch (activeProfile) {
       AsyncData(value: final profile?) when parseProfileName(profile.name).isNotBlank => parseProfileName(profile.name),
       _ => "anonymous",
@@ -73,114 +72,49 @@ class HomePage extends HookConsumerWidget {
             Scaffold(
               key: const ValueKey(UiNames.screenHome),
               backgroundColor: Colors.transparent,
-              appBar: AppBar(
-                backgroundColor: Colors.transparent,
-                surfaceTintColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                elevation: 0,
-                scrolledUnderElevation: 0,
-                toolbarHeight: compactHeight
-                    ? (30 + textScaler.scale(14) * 1.1 + textScaler.scale(22) * 1.1)
-                          .clamp(72.0, double.infinity)
-                          .toDouble()
-                    : switch (breakpoint.activeBreakpoint) {
-                        Breakpoints.mobile => 164,
-                        Breakpoints.tablet => 132,
-                        Breakpoints.desktop => 132,
-                      },
-                centerTitle: false,
-                titleSpacing: 0,
-                actionsPadding: EdgeInsets.zero,
-                // leading: (RootScaffold.stateKey.currentState?.hasDrawer ?? false) && showDrawerButton(context)
-                //     ? DrawerButton(
-                //         onPressed: () {
-                //           RootScaffold.stateKey.currentState?.openDrawer();
-                //         },
-                //       )
-                //     : null,
-                title: const SizedBox.shrink(),
-                flexibleSpace: SafeArea(
-                  bottom: false,
-                  child: Stack(
-                    fit: StackFit.expand,
+              body: SafeArea(
+                child: _HomeConnectionBody(
+                  buttonFaceKey: buttonFaceKey,
+                  desktop: breakpoint.isDesktop(),
+                  secure: _hasSecureConnection(ref),
+                  tablet: breakpoint.isTablet(),
+                  header: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Align(
-                        alignment: Alignment.topLeft,
+                      Expanded(
                         child: _HomeAppBarTitle(
                           activeBreakpoint: breakpoint.activeBreakpoint,
                           internetLabel: t.pages.home.internet,
                           forYouLabel: t.pages.home.forYou,
                           subscriptionName: subscriptionName,
-                          compact: compactHeight,
                           tipAnchor: tipAnchor,
                         ),
                       ),
-                      Positioned(
-                        top: 20,
-                        right: 20,
-                        child: IconButton(
-                          tooltip: 'Обновить подписку',
-                          padding: EdgeInsets.zero,
-                          iconSize: 24,
-                          constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-                          onPressed: isUpdatingProfile
-                              ? null
-                              : () async {
-                                  final active = await ref.read(activeProfileProvider.future);
-                                  if (active is! RemoteProfileEntity) return;
-                                  await ref
-                                      .read(updateProfileNotifierProvider(active.id).notifier)
-                                      .updateProfile(active);
-                                },
-                          icon: RotationTransition(
-                            turns: refreshAnimationController,
-                            child: SizedBox.square(
-                              dimension: 24,
-                              child: Icon(FluentIcons.arrow_sync_24_regular, color: theme.colorScheme.onSurface),
-                            ),
-                          ),
+                      const SizedBox(width: 16),
+                      IconButton(
+                        key: const ValueKey('home_refresh'),
+                        tooltip: t.common.update,
+                        style: IconButton.styleFrom(
+                          backgroundColor: theme.colorScheme.secondaryContainer,
+                          fixedSize: const Size(48, 48),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: isUpdatingProfile
+                            ? null
+                            : () async {
+                                final active = await ref.read(activeProfileProvider.future);
+                                if (active is! RemoteProfileEntity) return;
+                                await ref.read(updateProfileNotifierProvider(active.id).notifier).updateProfile(active);
+                              },
+                        icon: RotationTransition(
+                          turns: refreshAnimationController,
+                          child: Icon(Icons.refresh_rounded, size: 22, color: theme.colorScheme.onSurfaceVariant),
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-              body: breakpoint.isDesktop() || compactHeight
-                  ? _HomeConnectionBody(buttonFaceKey: buttonFaceKey, compactHeight: compactHeight)
-                  : Center(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: breakpoint.isDesktop() ? 600 : double.infinity),
-                        child: CustomScrollView(
-                          slivers: [
-                            MultiSliver(
-                              children: [
-                                SliverFillRemaining(
-                                  hasScrollBody: false,
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            ConnectionButton(faceKey: buttonFaceKey),
-                                            const ActiveProxyDelayIndicator(),
-                                          ],
-                                        ),
-                                      ),
-                                      _HomeQuickSettingsButton(label: t.pages.home.quickSettings),
-                                      const ActiveProxyFooter(),
-                                      if (!breakpoint.isMobile()) const HomePremiumAccessButton(),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
             ),
             if (tip != null)
               Positioned.fill(
@@ -206,61 +140,177 @@ class HomePage extends HookConsumerWidget {
 }
 
 class _HomeConnectionBody extends StatelessWidget {
-  const _HomeConnectionBody({required this.buttonFaceKey, required this.compactHeight});
-
+  const _HomeConnectionBody({
+    required this.buttonFaceKey,
+    required this.desktop,
+    required this.secure,
+    required this.tablet,
+    required this.header,
+  });
   final GlobalKey buttonFaceKey;
-  final bool compactHeight;
+  final bool desktop;
+  final bool secure;
+  final bool tablet;
+  final Widget header;
 
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final padding = compactHeight ? 16.0 : 24.0;
-        final availableWidth = constraints.maxWidth - padding * 2;
-        final textScale = (MediaQuery.textScalerOf(context).scale(14) / 14).clamp(1.0, double.infinity);
-        final minimumPanelWidth = 320 * textScale;
-        final buttonSize = constraints.maxHeight >= 192 && availableWidth >= 160 + 24 + minimumPanelWidth
-            ? 160.0
-            : 140.0;
-        final horizontal = compactHeight && availableWidth >= buttonSize + 24 + minimumPanelWidth;
-        final button = compactHeight
-            ? SizedBox.square(
-                dimension: buttonSize,
-                child: FittedBox(child: ConnectionButton(faceKey: buttonFaceKey, showStatus: false)),
-              )
-            : ConnectionButton(faceKey: buttonFaceKey, showStatus: false);
-
-        return SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(padding),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: horizontal ? buttonSize + 24 + 440 : 440),
-                  child: horizontal
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            button,
-                            const SizedBox(width: 24),
-                            const Flexible(child: _HomeConnectionPanel()),
-                          ],
-                        )
-                      : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            button,
-                            SizedBox(height: compactHeight ? 16 : 32),
-                            const _HomeConnectionPanel(),
-                          ],
-                        ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 3.0);
+      final minimumHeight =
+          (tablet && secure
+              ? 780.0
+              : desktop || tablet
+              ? 720.0
+              : 660.0) +
+          (scale - 1) * (desktop ? 500 : 300);
+      final height = constraints.maxHeight < minimumHeight ? minimumHeight : constraints.maxHeight;
+      return SingleChildScrollView(
+        child: SizedBox(
+          key: const ValueKey('home_canvas'),
+          height: height,
+          child: Stack(
+            children: [
+              Positioned(top: 24, left: 16, right: 16, child: header),
+              Center(child: ConnectionButton(faceKey: buttonFaceKey, showStatus: false)),
+              if (desktop)
+                Positioned(
+                  top: height / 2 + 115 + 16,
+                  left: 16,
+                  right: 16,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 440),
+                      child: const _HomeConnectionPanel(),
+                    ),
+                  ),
+                )
+              else ...[
+                Positioned(
+                  top: height / 2 + 115 + 24,
+                  left: 16,
+                  right: 16,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [const _HomeMobileStatus(), if (secure) const _HomeSecureCaption()],
+                    ),
+                  ),
                 ),
-              ),
+                Positioned(
+                  bottom: 16,
+                  left: 16,
+                  right: 16,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Windows keeps quick settings accessible when resized to a tablet/phone.
+                      if (PlatformUtils.isWindows)
+                        _HomeQuickSettingsButton(label: MaterialLocalizations.of(context).showMenuTooltip),
+                      const ActiveProxyFooter(margin: EdgeInsets.zero),
+                      if (tablet) ...[
+                        const SizedBox(height: 12),
+                        const HomePremiumAccessButton(padding: EdgeInsets.zero),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+bool _hasSecureConnection(WidgetRef ref) {
+  final delay = ref.watch(activeProxyNotifierProvider).valueOrNull?.urlTestDelay ?? 0;
+  return ref.watch(homeConnectionStateProvider).isConnected &&
+      delay > 0 &&
+      delay < 65000 &&
+      ref.watch(ConfigOptions.enableWarp) &&
+      ref.watch(ConfigOptions.warpDetourMode) == WarpDetourMode.warpOverProxy;
+}
+
+class _HomeSecureCaption extends ConsumerWidget {
+  const _HomeSecureCaption();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final t = ref.watch(translationsProvider).requireValue;
+    return Padding(
+      key: const ValueKey('home_secure_caption'),
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.shield_outlined, size: 16, color: cs.secondary),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              t.connection.secure,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontFamily: 'Montserrat', fontSize: 12, height: 1.5, color: cs.secondary),
             ),
           ),
-        );
-      },
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeMobileStatus extends ConsumerWidget {
+  const _HomeMobileStatus();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final state = ref.watch(homeConnectionStateProvider);
+    final t = ref.watch(translationsProvider).requireValue;
+    return Container(
+      key: const ValueKey('home_mobile_status'),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(99)),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 14,
+        runSpacing: 8,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: state.isConnected ? cs.primary : cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 9),
+              Flexible(
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    state.present(t).label.replaceAll('\n', ' '),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Montserrat',
+                      fontSize: 13,
+                      height: 1.5,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (state.isConnected) const ActiveProxyDelayIndicator(compact: true),
+        ],
+      ),
     );
   }
 }
@@ -282,14 +332,19 @@ class _HomeConnectionPanel extends ConsumerWidget {
         textAlign: TextAlign.center,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.titleSmall?.copyWith(fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
+        style: theme.textTheme.titleSmall?.copyWith(
+          fontFamily: 'Montserrat',
+          fontSize: 13,
+          height: 1.5,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
     final quickSettings = _HomeQuickSettingsButton(label: t.pages.home.quickSettings, embedded: true);
 
     return Material(
       key: const ValueKey('home_desktop_connection_panel'),
-      color: theme.navigationBarTheme.backgroundColor ?? theme.colorScheme.surface,
+      color: theme.colorScheme.secondaryContainer,
       borderRadius: BorderRadius.circular(34),
       clipBehavior: Clip.antiAlias,
       child: AnimatedSize(
@@ -324,7 +379,7 @@ class _HomeConnectionPanel extends ConsumerWidget {
               ),
               if (isConnected) ...[
                 const SizedBox(height: 12),
-                ActiveProxyFooter(margin: EdgeInsets.zero, backgroundColor: theme.colorScheme.surface),
+                ActiveProxyFooter(desktop: true, margin: EdgeInsets.zero, backgroundColor: theme.colorScheme.surface),
               ],
               const SizedBox(height: 12),
               const HomePremiumAccessButton(padding: EdgeInsets.zero),
@@ -390,118 +445,47 @@ class _HomeAppBarTitle extends StatelessWidget {
     required this.forYouLabel,
     required this.subscriptionName,
     required this.tipAnchor,
-    this.compact = false,
   });
-
   final Breakpoints activeBreakpoint;
   final String internetLabel;
   final String forYouLabel;
   final String subscriptionName;
   final LayerLink tipAnchor;
-  final bool compact;
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    const headingLineHeight = 27 / 32;
-    const subscriptionTopSpacing = 6.0;
-    final headingStyle = theme.textTheme.titleLarge?.copyWith(
-      fontFamily: "Unbounded",
-      fontWeight: FontWeight.w300,
-      fontSize: 18,
-      height: headingLineHeight,
-    );
-    final nameStyle = theme.textTheme.titleLarge?.copyWith(
-      fontFamily: "Unbounded",
-      fontWeight: FontWeight.w700,
-      fontSize: 32,
-      height: headingLineHeight,
-    );
-    final subscriptionUpper = subscriptionName.toUpperCase();
-
-    if (compact) {
-      return Padding(
-        padding: const EdgeInsets.only(left: 16, top: 12, right: 56),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '$internetLabel $forYouLabel',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: headingStyle?.copyWith(fontSize: 14, height: 1.1),
-            ),
-            const SizedBox(height: subscriptionTopSpacing),
-            CompositedTransformTarget(
-              link: tipAnchor,
-              child: Text(
-                subscriptionUpper,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: nameStyle?.copyWith(fontSize: 22, height: 1.1),
-              ),
-            ),
-          ],
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      key: const ValueKey('home_header_text'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$internetLabel $forYouLabel'.toUpperCase(),
+          style: TextStyle(
+            fontFamily: 'Unbounded',
+            fontSize: 18,
+            height: 1.15,
+            fontWeight: FontWeight.w300,
+            color: cs.onSurface,
+          ),
         ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, top: 20),
-      child: switch (activeBreakpoint) {
-        Breakpoints.mobile => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('$internetLabel $forYouLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
-            const SizedBox(height: subscriptionTopSpacing),
-            CompositedTransformTarget(
-              link: tipAnchor,
-              child: Text(subscriptionUpper, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
+        SizedBox(height: activeBreakpoint == Breakpoints.desktop ? 3 : 8),
+        CompositedTransformTarget(
+          link: tipAnchor,
+          child: Text(
+            subscriptionName.toUpperCase(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'Unbounded',
+              fontSize: 32,
+              height: 1.05,
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
             ),
-          ],
+          ),
         ),
-        Breakpoints.tablet || Breakpoints.desktop => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('$internetLabel $forYouLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
-            const SizedBox(height: subscriptionTopSpacing),
-            CompositedTransformTarget(
-              link: tipAnchor,
-              child: Text(subscriptionUpper, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
-            ),
-          ],
-        ),
-      },
-    );
-  }
-}
-
-class AppVersionLabel extends HookConsumerWidget {
-  const AppVersionLabel({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = ref.watch(translationsProvider).requireValue;
-    final theme = Theme.of(context);
-
-    final version = ref.watch(appInfoProvider).requireValue.presentVersion;
-    if (version.isBlank) return const SizedBox();
-
-    return Semantics(
-      label: t.common.version,
-      button: false,
-      child: Container(
-        decoration: BoxDecoration(color: theme.colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(4)),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-        child: Text(
-          version,
-          textDirection: TextDirection.ltr,
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSecondaryContainer),
-        ),
-      ),
+      ],
     );
   }
 }

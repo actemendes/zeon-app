@@ -141,7 +141,7 @@ class ProfileMenuPage extends HookConsumerWidget {
       (
         title: t.pages.profileDetails.menu.community,
         icon: Icons.groups_rounded,
-        trailingIcon: Icons.open_in_new,
+        trailingIcon: Icons.arrow_outward_rounded,
         onTap: () {
           unawaited(launchUrl(_communityUri, mode: LaunchMode.externalApplication));
         },
@@ -149,7 +149,7 @@ class ProfileMenuPage extends HookConsumerWidget {
       (
         title: t.pages.profileDetails.menu.support,
         icon: Icons.support_agent_rounded,
-        trailingIcon: Icons.open_in_new,
+        trailingIcon: Icons.arrow_outward_rounded,
         onTap: () {
           unawaited(launchUrl(_supportUri, mode: LaunchMode.externalApplication));
         },
@@ -159,84 +159,49 @@ class ProfileMenuPage extends HookConsumerWidget {
     return Scaffold(
       key: const ValueKey(UiNames.screenProfileMenu),
       appBar: AppBar(centerTitle: false, title: Text(t.pages.profileDetails.title.toUpperCase())),
-      body: CustomMultiChildLayout(
-        delegate: _ProfileMenuLayoutDelegate(),
-        children: [
-          LayoutId(id: _ProfileMenuSlot.summary, child: const _ProfileSummaryBlock()),
-          LayoutId(
-            id: _ProfileMenuSlot.actions,
-            child: ListView.builder(
-              padding: const EdgeInsets.only(bottom: 12),
-              itemCount: sections.length,
-              itemBuilder: (context, index) {
-                final section = sections[index];
-                return _ProfileMenuSection(
-                  title: section.title,
-                  icon: section.icon,
-                  trailingIcon: section.trailingIcon,
-                  onTap: section.onTap,
-                );
-              },
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _ProfileSummaryBlock(),
+            const SizedBox(height: 24),
+            Material(
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(20),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  for (var i = 0; i < sections.length; i++) ...[
+                    if (i > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 54, right: 18),
+                        child: Divider(
+                          height: 1,
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .09),
+                        ),
+                      ),
+                    _ProfileMenuSection(
+                      title: sections[i].title,
+                      icon: sections[i].icon,
+                      trailingIcon: sections[i].trailingIcon,
+                      onTap: sections[i].onTap,
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
-          LayoutId(id: _ProfileMenuSlot.cta, child: const _ProfileMenuCtaPanel()),
-        ],
+            const SizedBox(height: 20),
+            const _ProfileMenuCtaPanel(),
+          ],
+        ),
       ),
     );
   }
 }
 
-enum _ProfileMenuSlot { summary, actions, cta }
-
-class _ProfileMenuLayoutDelegate extends MultiChildLayoutDelegate {
-  static const _horizontalPadding = 16.0;
-  static const _topPadding = 12.0;
-  static const _bottomPadding = 16.0;
-  static const _sectionSpacing = 12.0;
-
-  @override
-  void performLayout(Size size) {
-    var contentTop = 0.0;
-    var contentBottom = size.height;
-
-    if (hasChild(_ProfileMenuSlot.summary)) {
-      final summaryWidth = (size.width - (_horizontalPadding * 2)).clamp(0.0, size.width);
-      layoutChild(
-        _ProfileMenuSlot.summary,
-        BoxConstraints.tightFor(width: summaryWidth, height: _ProfileSummaryBlock.height),
-      );
-      positionChild(_ProfileMenuSlot.summary, const Offset(_horizontalPadding, _topPadding));
-      contentTop = _topPadding + _ProfileSummaryBlock.height + _sectionSpacing;
-    }
-
-    if (hasChild(_ProfileMenuSlot.cta)) {
-      final ctaWidth = (size.width - (_horizontalPadding * 2)).clamp(0.0, size.width);
-      layoutChild(_ProfileMenuSlot.cta, BoxConstraints.tightFor(width: ctaWidth, height: _ProfileMenuCtaPanel.height));
-      final desiredTop = size.height - _bottomPadding - _ProfileMenuCtaPanel.height;
-      final ctaTop = desiredTop < contentTop ? contentTop : desiredTop;
-      positionChild(_ProfileMenuSlot.cta, Offset(_horizontalPadding, ctaTop));
-      contentBottom = ctaTop - _sectionSpacing;
-    }
-
-    if (hasChild(_ProfileMenuSlot.actions)) {
-      final remainingHeight = contentBottom > contentTop ? contentBottom - contentTop : 0.0;
-      layoutChild(_ProfileMenuSlot.actions, BoxConstraints.tightFor(width: size.width, height: remainingHeight));
-      positionChild(_ProfileMenuSlot.actions, Offset(0, contentTop));
-    }
-  }
-
-  @override
-  bool shouldRelayout(covariant _ProfileMenuLayoutDelegate oldDelegate) => false;
-}
-
 class _ProfileMenuCtaPanel extends HookConsumerWidget {
   const _ProfileMenuCtaPanel();
-
-  static const double height = _ProfileSummaryBlock.height;
-  static const _backgroundAsset = 'assets/images/1x/cta-background.png';
-  static const _textHorizontalPadding = 20.0;
-  static const _arrowSize = 24.0;
-  static const _arrowVisualScale = 1.18;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -254,52 +219,30 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
     final remainingDays = _resolveUiRemainingDays(subInfo);
     final title = (remainingDays > 0 ? t.pages.profileDetails.cta.renew : t.pages.profileDetails.cta.updatePlan)
         .toUpperCase();
-    final arrowColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : theme.colorScheme.onSurface;
-    final titleColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : theme.colorScheme.onSurface;
-
     return Material(
-      color: Colors.transparent,
+      color: theme.colorScheme.primary,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
-      child: Ink(
-        height: height,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          image: const DecorationImage(image: AssetImage(_backgroundAsset), fit: BoxFit.cover),
-        ),
-        child: InkWell(
-          onTap: () =>
-              unawaited(openExternalSubscriptionAccount(context, ref, profile is RemoteProfileEntity ? profile : null)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: _textHorizontalPadding),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: titleColor,
-                      ),
-                    ),
+      child: InkWell(
+        onTap: () =>
+            unawaited(openExternalSubscriptionAccount(context, ref, profile is RemoteProfileEntity ? profile : null)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onPrimary,
                   ),
                 ),
-                SizedBox.square(
-                  dimension: _arrowSize,
-                  child: Center(
-                    child: Transform.scale(
-                      scale: _arrowVisualScale,
-                      child: Icon(Icons.arrow_outward, size: _arrowSize, color: arrowColor),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Icon(Icons.arrow_outward_rounded, size: 22, color: theme.colorScheme.onPrimary),
+            ],
           ),
         ),
       ),
@@ -309,12 +252,6 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
 
 class _ProfileSummaryBlock extends HookConsumerWidget {
   const _ProfileSummaryBlock();
-
-  static const double height = 65;
-  static const double _textHorizontalPadding = 20;
-  static const double _textVerticalPadding = 12;
-  static const double _avatarSize = 36;
-  static const double _avatarGap = 20;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -344,60 +281,48 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
     final daysLabel = effectiveDays == 0
         ? t.components.subscriptionInfo.premiumInactive
         : '${t.components.subscriptionInfo.remainingUsage} ${t.common.interval.day(n: effectiveDays)}';
-    final surfaceColor = theme.colorScheme.secondaryContainer;
-    final subtitleColor = theme.brightness == Brightness.dark ? const Color(0xFF8B8B8B) : const Color(0xFF969696);
-
-    return Container(
-      height: height,
-      decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(16)),
-      clipBehavior: Clip.antiAlias,
-      child: Row(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: _textHorizontalPadding, vertical: _textVerticalPadding),
-              child: Row(
+    return Row(
+      children: [
+        SizedBox.square(
+          dimension: 52,
+          child: Image.asset(
+            avatarEmojiAsset,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => FittedBox(child: Text(avatarEmoji)),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                profileName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(fontSize: 19, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Row(
                 children: [
-                  SizedBox.square(
-                    dimension: _avatarSize,
-                    child: Image.asset(
-                      avatarEmojiAsset,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) =>
-                          FittedBox(child: Text(avatarEmoji, textAlign: TextAlign.center)),
-                    ),
-                  ),
-                  const SizedBox(width: _avatarGap),
+                  Icon(Icons.schedule_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 7),
                   Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          profileName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          daysLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontFamily: 'Montserrat',
-                            fontWeight: FontWeight.w500,
-                            color: subtitleColor,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      daysLabel,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'Montserrat',
+                        fontWeight: FontWeight.w500,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -417,6 +342,23 @@ class _ProfileMenuSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(leading: Icon(icon), title: Text(title), trailing: Icon(trailingIcon), onTap: onTap ?? () {});
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(icon, size: 23),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
+            ),
+            const SizedBox(width: 8),
+            Icon(trailingIcon, size: 19, color: theme.colorScheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
   }
 }

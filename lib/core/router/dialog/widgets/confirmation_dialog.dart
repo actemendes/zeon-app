@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 
 class ConfirmationDialog extends HookConsumerWidget {
   const ConfirmationDialog({super.key, required this.title, required this.message, this.icon, this.positiveBtnTxt});
@@ -14,7 +15,7 @@ class ConfirmationDialog extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
-    return AlertDialog(
+    return ZeonDialog(
       icon: icon != null ? Icon(icon) : null,
       title: Text(title),
       content: ConstrainedBox(constraints: AlertDialogConst.boxConstraints, child: Text(message)),

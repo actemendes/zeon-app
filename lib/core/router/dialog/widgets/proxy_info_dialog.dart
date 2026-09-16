@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ProxyInfoDialog extends HookConsumerWidget {
   const ProxyInfoDialog({super.key, required this.outboundInfo});
@@ -14,7 +15,7 @@ class ProxyInfoDialog extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
-    return AlertDialog(
+    return ZeonDialog(
       title: SelectionArea(child: Text(formatOutboundTitle(outboundInfo))),
       content: OutboundInfoWidget(outboundInfo: outboundInfo),
       actions: [TextButton(onPressed: context.pop, child: Text(t.common.close))],

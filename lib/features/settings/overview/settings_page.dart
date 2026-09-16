@@ -12,6 +12,7 @@ import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/features/app_update/notifier/app_update_state.dart';
 import 'package:zeon/features/settings/notifier/config_option/config_option_notifier.dart';
+import 'package:zeon/features/settings/widget/settings_surface.dart';
 import 'package:zeon/utils/utils.dart';
 
 enum ConfigOptionSection {
@@ -68,6 +69,8 @@ class SettingsPage extends HookConsumerWidget {
     return Scaffold(
       key: const ValueKey(UiNames.screenSettings),
       appBar: AppBar(
+        centerTitle: false,
+        titleTextStyle: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 17, fontWeight: FontWeight.w600),
         title: Text(t.pages.settings.title.toUpperCase()),
         actions: [
           MenuAnchor(
@@ -150,49 +153,63 @@ class SettingsPage extends HookConsumerWidget {
           const Gap(8),
         ],
       ),
-      body: ListView(
+      body: SettingsList(
         children: [
-          // TipCard(message: t.settings.experimentalMsg),
-          SettingsSection(
-            title: t.pages.settings.general.title,
-            icon: Icons.layers_rounded,
-            namedLocation: context.namedLocation('general'),
-          ),
-          SettingsSection(
-            title: t.pages.settings.routing.title,
-            icon: Icons.route_rounded,
-            namedLocation: context.namedLocation('routeOptions'),
-          ),
-          SettingsSection(
-            title: t.pages.settings.tlsTricks.title,
-            icon: Icons.content_cut_rounded,
-            namedLocation: context.namedLocation('tlsTricks'),
-          ),
-          if (!PlatformUtils.isApple)
-            SettingsSection(
-              title: t.pages.settings.inbound.title,
-              icon: Icons.input_rounded,
-              namedLocation: context.namedLocation('inboundOptions'),
-            ),
-          if (Breakpoint(context).isMobile()) ...[
-            SettingsSection(
-              title: t.pages.about.title,
-              icon: Icons.info_rounded,
-              namedLocation: context.namedLocation('about'),
-            ),
-          ],
-          if (shouldShowManualAppUpdate(appInfo.release, isIOS: PlatformUtils.isIOS))
-            Material(
-              child: ListTile(
-                leading: const Icon(Icons.system_update_alt_rounded),
-                title: Text(t.pages.about.checkForUpdate),
-                subtitle: Text("${t.common.version} ${appInfo.presentVersion}"),
-                trailing: appUpdateState is AppUpdateStateChecking
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh_rounded),
-                onTap: appUpdateState is AppUpdateStateChecking ? null : () => _checkForUpdate(context, ref),
+          SettingsGroup(
+            title: t.pages.settings.groups.application,
+            children: [
+              // SettingsHint(message: t.settings.experimentalMsg),
+              SettingsSection(
+                title: t.pages.settings.general.title,
+                icon: Icons.layers_rounded,
+                namedLocation: context.namedLocation('general'),
+                subtitle: '${t.pages.settings.general.locale} · ${t.pages.settings.general.themeMode}',
               ),
-            ),
+            ],
+          ),
+          SettingsGroup(
+            title: t.pages.settings.groups.connection,
+            children: [
+              SettingsSection(
+                title: t.pages.settings.routing.title,
+                icon: Icons.route_rounded,
+                namedLocation: context.namedLocation('routeOptions'),
+                subtitle: '${t.pages.settings.routing.region} · ${t.pages.settings.routing.ipv6Route}',
+              ),
+              SettingsSection(
+                title: t.pages.settings.tlsTricks.title,
+                icon: Icons.content_cut_rounded,
+                namedLocation: context.namedLocation('tlsTricks'),
+              ),
+              if (!PlatformUtils.isApple)
+                SettingsSection(
+                  title: t.pages.settings.inbound.title,
+                  icon: Icons.input_rounded,
+                  namedLocation: context.namedLocation('inboundOptions'),
+                ),
+            ],
+          ),
+          SettingsGroup(
+            children: [
+              if (Breakpoint(context).isMobile()) ...[
+                SettingsSection(
+                  title: t.pages.about.title,
+                  icon: Icons.info_rounded,
+                  namedLocation: context.namedLocation('about'),
+                ),
+              ],
+              if (shouldShowManualAppUpdate(appInfo.release, isIOS: PlatformUtils.isIOS))
+                SettingsTile(
+                  leading: const Icon(Icons.system_update_alt_rounded),
+                  title: Text(t.pages.about.checkForUpdate),
+                  subtitle: Text("${t.common.version} ${appInfo.presentVersion}"),
+                  trailing: appUpdateState is AppUpdateStateChecking
+                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.refresh_rounded),
+                  onTap: appUpdateState is AppUpdateStateChecking ? null : () => _checkForUpdate(context, ref),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -222,17 +239,25 @@ Future<void> _checkForUpdate(BuildContext context, WidgetRef ref) async {
 }
 
 class SettingsSection extends HookConsumerWidget {
-  const SettingsSection({super.key, required this.title, required this.icon, required this.namedLocation});
+  const SettingsSection({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.namedLocation,
+    this.subtitle,
+  });
 
   final String title;
   final IconData icon;
   final String namedLocation;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ListTile(
+    return SettingsTile(
       leading: Icon(icon),
       title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle!),
       trailing: const Icon(Icons.chevron_right_rounded),
       onTap: () => context.go(namedLocation),
     );

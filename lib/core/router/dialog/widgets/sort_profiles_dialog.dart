@@ -1,10 +1,11 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/features/profile/model/profile_sort_enum.dart';
 import 'package:zeon/features/profile/overview/profiles_notifier.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class SortProfilesDialog extends HookConsumerWidget {
   const SortProfilesDialog({super.key});
@@ -14,7 +15,7 @@ class SortProfilesDialog extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final sort = ref.watch(profilesSortNotifierProvider);
 
-    return AlertDialog(
+    return ZeonDialog(
       title: Text(t.dialogs.sortProfiles.title),
       content: ConstrainedBox(
         constraints: AlertDialogConst.boxConstraints,

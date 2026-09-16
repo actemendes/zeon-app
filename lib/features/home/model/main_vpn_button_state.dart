@@ -160,7 +160,7 @@ class MainVpnButtonState {
       VpnSessionPhase.failed when !recoverable => t.errors.connection.connectionError,
       _ => t.connection.tapToConnect,
     };
-    return MainVpnButtonPresentation(state: this, label: label, semanticsLabel: semanticsLabel);
+    return MainVpnButtonPresentation(state: this, label: label, semanticsLabel: semanticsLabel.replaceAll('\n', ' '));
   }
 
   @override

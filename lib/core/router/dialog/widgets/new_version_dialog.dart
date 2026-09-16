@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/features/app_update/model/remote_version_entity.dart';
 import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class NewVersionDialog extends HookConsumerWidget with PresLogger {
   NewVersionDialog(this.currentVersion, this.newVersion, {super.key, this.canIgnore = true});
@@ -19,7 +20,7 @@ class NewVersionDialog extends HookConsumerWidget with PresLogger {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
 
-    return AlertDialog(
+    return ZeonDialog(
       title: Text(t.dialogs.newVersion.title),
       content: Column(
         mainAxisSize: MainAxisSize.min,

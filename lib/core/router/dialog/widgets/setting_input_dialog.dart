@@ -3,10 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
+import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class SettingInputDialog<T> extends HookConsumerWidget with PresLogger {
   const SettingInputDialog({
@@ -52,7 +53,7 @@ class SettingInputDialog<T> extends HookConsumerWidget with PresLogger {
       return KeyEventResult.ignored;
     }
 
-    return AlertDialog(
+    return ZeonDialog(
       title: Text(title),
       icon: icon != null ? Icon(icon) : null,
       // material: (context, platform) => MaterialAlertDialogData(
