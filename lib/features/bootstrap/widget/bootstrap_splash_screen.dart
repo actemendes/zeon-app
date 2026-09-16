@@ -64,11 +64,15 @@ class _BootstrapSplashScreenState extends State<BootstrapSplashScreen> with Tick
   Widget build(BuildContext context) {
     final platformBrightness = MediaQuery.platformBrightnessOf(context);
     final isDark = switch (widget.themeMode) {
-      AppThemeMode.dark => true,
+      AppThemeMode.dark || AppThemeMode.amoled => true,
       AppThemeMode.light => false,
       AppThemeMode.system => platformBrightness == Brightness.dark,
     };
-    final backgroundColor = isDark ? _darkBackground : _lightBackground;
+    final backgroundColor = !isDark
+        ? _lightBackground
+        : widget.themeMode == AppThemeMode.amoled
+        ? AppColorTokens.amoledBackground
+        : _darkBackground;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: systemBarsStyleFor(isDark ? Brightness.dark : Brightness.light),

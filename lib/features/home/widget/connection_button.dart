@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/theme/theme_extensions.dart';
 import 'package:zeon/core/widget/animated_text.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
@@ -156,13 +157,14 @@ class _ConnectionContentOpacity extends StatelessWidget {
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final isLightTheme = Theme.of(context).brightness == Brightness.light;
+    final visualTheme = Theme.of(context).extension<HomeVisualTheme>();
     return AnimatedOpacity(
       // Settle an in-flight fade when reduced motion is enabled.
       key: ValueKey(reduceMotion),
       opacity: switch (visualState) {
         MainVpnButtonVisualState.connected => 1,
-        MainVpnButtonVisualState.loading when !isStopping => isLightTheme ? .92 : .7,
-        _ => isLightTheme ? .85 : .45,
+        MainVpnButtonVisualState.loading when !isStopping => visualTheme?.loadingOpacity ?? (isLightTheme ? .92 : .7),
+        _ => visualTheme?.idleOpacity ?? (isLightTheme ? .85 : .45),
       },
       duration: reduceMotion ? Duration.zero : _connectionTransitionDuration,
       curve: Curves.easeInOutCubic,
@@ -324,6 +326,9 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
     final theme = Theme.of(context);
     final isDarkTheme = theme.brightness == Brightness.dark;
     final logoAssetPath = isDarkTheme ? 'assets/images/SVG/logo-black.svg' : 'assets/images/SVG/logo-white.svg';
+    final logoColor =
+        theme.extension<HomeVisualTheme>()?.connectionLogoColor ??
+        (isDarkTheme ? Colors.white : theme.colorScheme.onSurface);
 
     return Material(
       color: Colors.transparent,
@@ -344,10 +349,7 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
               dimension: _ConnectionButtonFace.glyphDiameter,
               child: widget.useImage
                   ? widget.image.image(fit: BoxFit.contain)
-                  : SvgPicture.asset(
-                      logoAssetPath,
-                      colorFilter: isDarkTheme ? null : ColorFilter.mode(theme.colorScheme.onSurface, BlendMode.srcIn),
-                    ),
+                  : SvgPicture.asset(logoAssetPath, colorFilter: ColorFilter.mode(logoColor, BlendMode.srcIn)),
             ),
             builder: (context, child) {
               final frame = _frame;

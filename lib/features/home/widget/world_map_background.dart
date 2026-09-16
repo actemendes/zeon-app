@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:zeon/core/theme/app_color_tokens.dart';
+import 'package:zeon/core/theme/theme_extensions.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
 import 'package:zeon/features/home/model/world_map_geometry.dart';
 import 'package:zeon/features/home/model/world_map_motion.dart';
@@ -98,7 +99,9 @@ class _WorldMapBackgroundState extends State<WorldMapBackground>
             painter: WorldMapPainter(
               motion: _motion,
               background: theme.colorScheme.surface,
-              dotColor: theme.brightness == Brightness.dark ? worldMapDarkColor : AppColorTokens.lightMapDots,
+              dotColor:
+                  theme.extension<HomeVisualTheme>()?.mapDotColor ??
+                  (theme.brightness == Brightness.dark ? worldMapDarkColor : AppColorTokens.lightMapDots),
             ),
             child: const SizedBox.expand(),
           ),

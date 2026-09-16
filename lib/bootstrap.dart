@@ -135,11 +135,7 @@ class _BootstrapHostState extends State<_BootstrapHost> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final persisted = prefs.getString("theme_mode");
-      final themeMode = switch (persisted) {
-        null => AppThemeMode.system,
-        "black" => AppThemeMode.dark,
-        _ => AppThemeMode.values.firstWhere((mode) => mode.name == persisted, orElse: () => AppThemeMode.system),
-      };
+      final themeMode = AppThemeMode.fromStored(persisted);
       if (!mounted) return;
       setState(() {
         _initialThemeMode = themeMode;

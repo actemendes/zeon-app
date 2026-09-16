@@ -11,8 +11,8 @@ const Color _lightAccentPrimary = Color(0xFF3CE74F);
 const Color _lightAccentSecondary = Color(0xFFBFDD71);
 const Color _lightText = AppColorTokens.lightText;
 
-const Color _darkBackground = AppColorTokens.darkBackground;
-const Color _darkSurfaceAlt = AppColorTokens.darkSurfaceAlt;
+const Color _amoledBackground = AppColorTokens.amoledBackground;
+const Color _amoledSurfaceAlt = AppColorTokens.amoledSurfaceAlt;
 const Color _darkAccentPrimary = Color(0xFF3CE74F);
 const Color _darkAccentSecondary = Color(0xFFBFDD71);
 const Color _darkText = Color(0xFFD8DEE6);
@@ -51,36 +51,36 @@ const ColorScheme _lightColorScheme = ColorScheme(
   inversePrimary: _lightAccentSecondary,
 );
 
-const ColorScheme _darkColorScheme = ColorScheme(
+const ColorScheme _amoledColorScheme = ColorScheme(
   brightness: Brightness.dark,
   primary: _darkAccentPrimary,
   onPrimary: Color(0xFF001A05),
   primaryContainer: _darkAccentSecondary,
-  onPrimaryContainer: _darkSurfaceAlt,
+  onPrimaryContainer: _amoledSurfaceAlt,
   secondary: _darkAccentSecondary,
-  onSecondary: _darkSurfaceAlt,
-  secondaryContainer: _darkSurfaceAlt,
+  onSecondary: _amoledSurfaceAlt,
+  secondaryContainer: _amoledSurfaceAlt,
   onSecondaryContainer: _darkText,
   tertiary: _darkAccentSecondary,
-  onTertiary: _darkSurfaceAlt,
-  tertiaryContainer: _darkSurfaceAlt,
+  onTertiary: _amoledSurfaceAlt,
+  tertiaryContainer: _amoledSurfaceAlt,
   onTertiaryContainer: _darkText,
   error: Color(0xFFF2B8B5),
   onError: Color(0xFF601410),
   errorContainer: Color(0xFF8C1D18),
   onErrorContainer: Color(0xFFF9DEDC),
-  background: _darkBackground,
+  background: _amoledBackground,
   onBackground: _darkText,
-  surface: _darkBackground,
+  surface: _amoledBackground,
   onSurface: _darkText,
-  surfaceVariant: _darkSurfaceAlt,
+  surfaceVariant: _amoledSurfaceAlt,
   onSurfaceVariant: _darkText,
   outline: Color(0xFF4D5058),
-  outlineVariant: _darkSurfaceAlt,
+  outlineVariant: _amoledSurfaceAlt,
   shadow: Colors.black,
   scrim: Colors.black,
   inverseSurface: _darkText,
-  onInverseSurface: _darkBackground,
+  onInverseSurface: _amoledBackground,
   inversePrimary: _darkAccentPrimary,
 );
 
@@ -98,16 +98,48 @@ class AppTheme {
       navBarSelectedColor: _lightText,
       navBarUnselectedColor: AppColorTokens.lightTextMuted,
       navBarIndicatorColor: _lightAccentPrimary,
+      homeVisualTheme: HomeVisualTheme.light,
     );
   }
 
   ThemeData darkTheme(ColorScheme? _) {
+    if (mode != AppThemeMode.amoled) {
+      return _buildThemeData(
+        scheme: _amoledColorScheme.copyWith(
+          background: AppColorTokens.darkBackground,
+          surface: AppColorTokens.darkBackground,
+          surfaceDim: AppColorTokens.darkBackground,
+          surfaceBright: AppColorTokens.darkSurfaceAlt,
+          surfaceContainerLowest: AppColorTokens.darkBackground,
+          surfaceContainerLow: AppColorTokens.darkMapDots,
+          surfaceContainer: AppColorTokens.darkSurfaceAlt,
+          surfaceContainerHigh: AppColorTokens.darkSurfaceAlt,
+          surfaceContainerHighest: AppColorTokens.darkSurfaceAlt,
+          onSecondary: AppColorTokens.darkSurfaceAlt,
+          onTertiary: AppColorTokens.darkSurfaceAlt,
+          onPrimaryContainer: AppColorTokens.darkSurfaceAlt,
+          secondaryContainer: AppColorTokens.darkSurfaceAlt,
+          tertiaryContainer: AppColorTokens.darkSurfaceAlt,
+          surfaceVariant: AppColorTokens.darkSurfaceAlt,
+          onSurfaceVariant: AppColorTokens.darkTextMuted,
+          outlineVariant: AppColorTokens.darkSurfaceAlt,
+          onInverseSurface: AppColorTokens.darkBackground,
+        ),
+        navBarColor: AppColorTokens.darkSurfaceAlt,
+        navBarSelectedColor: _darkAccentPrimary,
+        navBarSelectedIconColor: AppColorTokens.amoledSurfaceAlt,
+        navBarUnselectedColor: AppColorTokens.darkTextMuted,
+        navBarIndicatorColor: _darkAccentPrimary,
+        homeVisualTheme: HomeVisualTheme.graphite,
+      );
+    }
     return _buildThemeData(
-      scheme: _darkColorScheme,
-      navBarColor: _darkSurfaceAlt,
+      scheme: _amoledColorScheme,
+      navBarColor: _amoledSurfaceAlt,
       navBarSelectedColor: _darkAccentPrimary,
       navBarUnselectedColor: _darkText.withValues(alpha: .82),
       navBarIndicatorColor: _darkNavigationIndicator,
+      homeVisualTheme: HomeVisualTheme.amoled,
     );
   }
 
@@ -115,7 +147,7 @@ class AppTheme {
     final bool isDark = switch (mode) {
       AppThemeMode.system => sysDark,
       AppThemeMode.light => false,
-      AppThemeMode.dark => true,
+      AppThemeMode.dark || AppThemeMode.amoled => true,
     };
     final def = CupertinoThemeData(brightness: isDark ? Brightness.dark : Brightness.light);
     // final def = CupertinoThemeData(brightness: Brightness.dark);
@@ -135,8 +167,8 @@ class AppTheme {
             dateTimePickerTextStyle: def.textTheme.dateTimePickerTextStyle.copyWith(fontFamily: fontFamily),
             tabLabelTextStyle: def.textTheme.tabLabelTextStyle.copyWith(fontFamily: fontFamily),
           ).copyWith(),
-          barBackgroundColor: def.barBackgroundColor,
-          scaffoldBackgroundColor: def.scaffoldBackgroundColor,
+          barBackgroundColor: defaultMaterialTheme.colorScheme.surface,
+          scaffoldBackgroundColor: defaultMaterialTheme.scaffoldBackgroundColor,
         ),
       ),
     );
@@ -148,13 +180,15 @@ class AppTheme {
     required Color navBarSelectedColor,
     required Color navBarUnselectedColor,
     required Color navBarIndicatorColor,
+    required HomeVisualTheme homeVisualTheme,
+    Color? navBarSelectedIconColor,
   }) {
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.background,
       fontFamily: fontFamily,
-      extensions: const <ThemeExtension<dynamic>>{ConnectionButtonTheme.light},
+      extensions: <ThemeExtension<dynamic>>{ConnectionButtonTheme.light, homeVisualTheme},
     );
     final textTheme = _withHeadingFont(
       base.textTheme.apply(
@@ -187,7 +221,9 @@ class AppTheme {
         indicatorColor: navBarIndicatorColor,
         surfaceTintColor: Colors.transparent,
         iconTheme: MaterialStateProperty.resolveWith((states) {
-          final color = states.contains(MaterialState.selected) ? navBarSelectedColor : navBarUnselectedColor;
+          final color = states.contains(MaterialState.selected)
+              ? (navBarSelectedIconColor ?? navBarSelectedColor)
+              : navBarUnselectedColor;
           return IconThemeData(color: color);
         }),
         labelTextStyle: MaterialStateProperty.resolveWith((states) {
@@ -203,7 +239,7 @@ class AppTheme {
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: navBarColor,
         indicatorColor: navBarIndicatorColor,
-        selectedIconTheme: IconThemeData(color: navBarSelectedColor),
+        selectedIconTheme: IconThemeData(color: navBarSelectedIconColor ?? navBarSelectedColor),
         unselectedIconTheme: IconThemeData(color: navBarUnselectedColor),
         selectedLabelTextStyle: textTheme.labelMedium?.copyWith(
           color: navBarSelectedColor,
@@ -229,7 +265,7 @@ class AppTheme {
         }),
         trackColor: MaterialStateProperty.resolveWith((states) {
           if (!states.contains(MaterialState.selected)) {
-            return scheme.brightness == Brightness.light ? _lightSurfaceAlt : _darkSurfaceAlt;
+            return navBarColor;
           }
           return null;
         }),

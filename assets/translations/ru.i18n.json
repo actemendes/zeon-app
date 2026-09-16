@@ -297,6 +297,8 @@
         "locale": "Язык",
         "themeMode": "Тема оформления",
         "themeModes": {
+          "graphite": "Графит",
+          "amoled": "AMOLED",
           "system": "Системная",
           "dark": "Темная",
           "light": "Светлая",

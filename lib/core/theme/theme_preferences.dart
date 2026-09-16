@@ -9,12 +9,7 @@ class ThemePreferences extends _$ThemePreferences {
   @override
   AppThemeMode build() {
     final persisted = ref.watch(sharedPreferencesProvider).requireValue.getString("theme_mode");
-    if (persisted == null) return AppThemeMode.system;
-    if (persisted == "black") return AppThemeMode.dark;
-    return AppThemeMode.values.firstWhere(
-      (mode) => mode.name == persisted,
-      orElse: () => AppThemeMode.system,
-    );
+    return AppThemeMode.fromStored(persisted);
   }
 
   Future<void> changeThemeMode(AppThemeMode value) async {
