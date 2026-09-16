@@ -238,7 +238,7 @@ class _HomeAppBarTitle extends StatelessWidget {
     final headingStyle = theme.textTheme.titleLarge?.copyWith(
       fontFamily: "Unbounded",
       fontWeight: FontWeight.w300,
-      fontSize: 32,
+      fontSize: 18,
       height: headingLineHeight,
     );
     final nameStyle = theme.textTheme.titleLarge?.copyWith(
@@ -256,8 +256,7 @@ class _HomeAppBarTitle extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(internetLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
-            Text(forYouLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
+            Text('$internetLabel $forYouLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
             const SizedBox(height: subscriptionTopSpacing),
             Text(subscriptionUpper, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
           ],
