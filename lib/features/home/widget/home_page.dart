@@ -419,6 +419,13 @@ class _HomeAppBarTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final headerStyle = TextStyle(
+      fontFamily: 'Unbounded',
+      fontSize: 18,
+      height: 1.15,
+      fontWeight: FontWeight.w600,
+      color: cs.onSurface,
+    );
     return Column(
       key: const ValueKey('home_header_text'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -426,13 +433,7 @@ class _HomeAppBarTitle extends StatelessWidget {
       children: [
         Text(
           '$internetLabel $forYouLabel'.toUpperCase(),
-          style: TextStyle(
-            fontFamily: 'Unbounded',
-            fontSize: 18,
-            height: 1.15,
-            fontWeight: FontWeight.w600,
-            color: cs.onSurface,
-          ),
+          style: headerStyle,
         ),
         SizedBox(height: activeBreakpoint == Breakpoints.desktop ? 3 : 8),
         CompositedTransformTarget(
@@ -441,13 +442,7 @@ class _HomeAppBarTitle extends StatelessWidget {
             subscriptionName.toUpperCase(),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: 'Unbounded',
-              fontSize: 32,
-              height: 1.05,
-              fontWeight: FontWeight.w700,
-              color: cs.onSurface,
-            ),
+            style: headerStyle,
           ),
         ),
       ],
