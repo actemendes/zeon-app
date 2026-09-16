@@ -155,7 +155,7 @@ class HomePage extends HookConsumerWidget {
                                 ),
                                 _HomeQuickSettingsButton(label: t.pages.home.quickSettings),
                                 const ActiveProxyFooter(),
-                                const HomePremiumAccessButton(),
+                                if (!breakpoint.isMobile()) const HomePremiumAccessButton(),
                               ],
                             ),
                           ),

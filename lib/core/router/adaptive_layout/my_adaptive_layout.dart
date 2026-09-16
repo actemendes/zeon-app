@@ -9,6 +9,7 @@ import 'package:zeon/core/router/adaptive_layout/shell_route_action.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/router/go_router/routing_config_notifier.dart';
 import 'package:zeon/core/theme/system_bars_style.dart';
+import 'package:zeon/features/home/widget/home_premium_access_button.dart';
 import 'package:zeon/features/stats/widget/side_bar_stats_overview.dart';
 
 class MyAdaptiveLayout extends HookConsumerWidget {
@@ -97,11 +98,29 @@ class MyAdaptiveLayout extends HookConsumerWidget {
                 node: navScopeNode,
                 child: AnnotatedRegion<SystemUiOverlayStyle>(
                   value: navigationBarStyleFor(Brightness.dark),
-                  child: NavigationBar(
-                    maintainBottomViewPadding: true,
-                    selectedIndex: navSelectedIndex,
-                    destinations: _navDests(actions),
-                    onDestinationSelected: (index) => _onTap(index, actionBranchNames),
+                  child: Material(
+                    color:
+                        Theme.of(context).navigationBarTheme.backgroundColor ?? Theme.of(context).colorScheme.surface,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(34)),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SafeArea(
+                          top: false,
+                          bottom: false,
+                          child: Padding(padding: EdgeInsets.only(top: 18), child: HomePremiumAccessButton()),
+                        ),
+                        NavigationBar(
+                          backgroundColor: Colors.transparent,
+                          elevation: 0,
+                          maintainBottomViewPadding: true,
+                          selectedIndex: navSelectedIndex,
+                          destinations: _navDests(actions),
+                          onDestinationSelected: (index) => _onTap(index, actionBranchNames),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               )
