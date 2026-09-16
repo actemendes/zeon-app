@@ -100,7 +100,15 @@ class MainVpnButtonView extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AnimatedText(presentation.label, style: Theme.of(context).textTheme.titleMedium),
+              DefaultTextStyle.merge(
+                textAlign: TextAlign.center,
+                child: AnimatedText(
+                  presentation.label,
+                  style: Theme.of(context).textTheme.titleMedium,
+                  size: false,
+                  slide: false,
+                ),
+              ),
               if (secureLabel.isNotEmpty) ...[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
