@@ -5,14 +5,20 @@ import 'package:zeon/features/home_tips/home_tip_provider.dart';
 import 'package:zeon/utils/uri_utils.dart';
 
 class HomeTipCard extends ConsumerWidget {
-  const HomeTipCard({super.key, required this.content, this.maxHeight = double.infinity});
+  const HomeTipCard({
+    super.key,
+    required this.content,
+    this.maxHeight = double.infinity,
+    this.padding = const EdgeInsets.fromLTRB(16, 0, 16, 12),
+  });
   final HomeTipContent content;
   final double maxHeight;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: padding,
       child: Align(
         alignment: Alignment.topCenter,
         heightFactor: 1,

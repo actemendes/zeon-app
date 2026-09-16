@@ -35,6 +35,7 @@ class HomePage extends HookConsumerWidget {
       return null;
     }, const []);
     final buttonFaceKey = useMemoized(() => GlobalKey());
+    final tipAnchor = useMemoized(() => LayerLink());
     final connectionState = ref.watch(homeConnectionStateProvider);
     final t = ref.watch(translationsProvider).requireValue;
     // final hasAnyProfile = ref.watch(hasAnyProfileProvider);
@@ -111,6 +112,7 @@ class HomePage extends HookConsumerWidget {
                           forYouLabel: t.pages.home.forYou,
                           subscriptionName: subscriptionName,
                           compact: compactHeight,
+                          tipAnchor: tipAnchor,
                         ),
                       ),
                       Positioned(
@@ -143,52 +145,59 @@ class HomePage extends HookConsumerWidget {
                   ),
                 ),
               ),
-              body: LayoutBuilder(
-                builder: (context, bodyConstraints) => Column(
-                  children: [
-                    if (tip != null) HomeTipCard(content: tip, maxHeight: bodyConstraints.maxHeight * .35),
-                    Expanded(
-                      child: breakpoint.isDesktop() || compactHeight
-                          ? _HomeConnectionBody(buttonFaceKey: buttonFaceKey, compactHeight: compactHeight)
-                          : Center(
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(maxWidth: breakpoint.isDesktop() ? 600 : double.infinity),
-                                child: CustomScrollView(
-                                  slivers: [
-                                    MultiSliver(
-                                      children: [
-                                        SliverFillRemaining(
-                                          hasScrollBody: false,
-                                          child: Column(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Expanded(
-                                                child: Column(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    ConnectionButton(faceKey: buttonFaceKey),
-                                                    const ActiveProxyDelayIndicator(),
-                                                  ],
-                                                ),
-                                              ),
-                                              _HomeQuickSettingsButton(label: t.pages.home.quickSettings),
-                                              const ActiveProxyFooter(),
-                                              if (!breakpoint.isMobile()) const HomePremiumAccessButton(),
-                                            ],
-                                          ),
+              body: breakpoint.isDesktop() || compactHeight
+                  ? _HomeConnectionBody(buttonFaceKey: buttonFaceKey, compactHeight: compactHeight)
+                  : Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: breakpoint.isDesktop() ? 600 : double.infinity),
+                        child: CustomScrollView(
+                          slivers: [
+                            MultiSliver(
+                              children: [
+                                SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            ConnectionButton(faceKey: buttonFaceKey),
+                                            const ActiveProxyDelayIndicator(),
+                                          ],
                                         ),
-                                      ],
-                                    ),
-                                  ],
+                                      ),
+                                      _HomeQuickSettingsButton(label: t.pages.home.quickSettings),
+                                      const ActiveProxyFooter(),
+                                      if (!breakpoint.isMobile()) const HomePremiumAccessButton(),
+                                    ],
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ],
+            ),
+            if (tip != null)
+              Positioned.fill(
+                child: CompositedTransformFollower(
+                  link: tipAnchor,
+                  showWhenUnlinked: false,
+                  targetAnchor: Alignment.bottomLeft,
+                  offset: const Offset(0, 8),
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: SizedBox(
+                      width: (constraints.maxWidth - 32).clamp(0.0, compactHeight ? 240.0 : 360.0),
+                      child: HomeTipCard(content: tip, padding: EdgeInsets.zero),
+                    ),
+                  ),
                 ),
               ),
-            ),
           ],
         );
       },
@@ -380,6 +389,7 @@ class _HomeAppBarTitle extends StatelessWidget {
     required this.internetLabel,
     required this.forYouLabel,
     required this.subscriptionName,
+    required this.tipAnchor,
     this.compact = false,
   });
 
@@ -387,6 +397,7 @@ class _HomeAppBarTitle extends StatelessWidget {
   final String internetLabel;
   final String forYouLabel;
   final String subscriptionName;
+  final LayerLink tipAnchor;
   final bool compact;
 
   @override
@@ -422,11 +433,14 @@ class _HomeAppBarTitle extends StatelessWidget {
               style: headingStyle?.copyWith(fontSize: 14, height: 1.1),
             ),
             const SizedBox(height: subscriptionTopSpacing),
-            Text(
-              subscriptionUpper,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: nameStyle?.copyWith(fontSize: 22, height: 1.1),
+            CompositedTransformTarget(
+              link: tipAnchor,
+              child: Text(
+                subscriptionUpper,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: nameStyle?.copyWith(fontSize: 22, height: 1.1),
+              ),
             ),
           ],
         ),
@@ -442,7 +456,10 @@ class _HomeAppBarTitle extends StatelessWidget {
           children: [
             Text('$internetLabel $forYouLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
             const SizedBox(height: subscriptionTopSpacing),
-            Text(subscriptionUpper, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
+            CompositedTransformTarget(
+              link: tipAnchor,
+              child: Text(subscriptionUpper, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
+            ),
           ],
         ),
         Breakpoints.tablet || Breakpoints.desktop => Column(
@@ -451,7 +468,10 @@ class _HomeAppBarTitle extends StatelessWidget {
           children: [
             Text('$internetLabel $forYouLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: headingStyle),
             const SizedBox(height: subscriptionTopSpacing),
-            Text(subscriptionUpper, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
+            CompositedTransformTarget(
+              link: tipAnchor,
+              child: Text(subscriptionUpper, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
+            ),
           ],
         ),
       },
