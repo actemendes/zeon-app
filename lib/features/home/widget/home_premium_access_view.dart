@@ -24,7 +24,7 @@ class HomePremiumAccessView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final trackColor = colors.brightness == Brightness.dark ? const Color(0xFF26292F) : const Color(0xFFEDF1F4);
+    final trackColor = colors.brightness == Brightness.dark ? const Color(0xFF26292F) : Colors.white;
     final gradient = LinearGradient(colors: [colors.secondary, colors.primary]);
     final days = remainingDays;
     if (days == null || days < 1) {
