@@ -5,6 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
 import 'package:zeon/core/model/region.dart';
@@ -12,11 +13,13 @@ import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/features/home/model/main_vpn_button_state.dart';
+import 'package:zeon/features/home/widget/world_map_background.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_device_rebind_service.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 class IntroPage extends HookConsumerWidget with PresLogger {
   const IntroPage({super.key});
@@ -25,15 +28,22 @@ class IntroPage extends HookConsumerWidget with PresLogger {
   static const bool _bindFeatureEnabled = bool.fromEnvironment('mobile_bind_enabled', defaultValue: true);
   static bool locationInfoLoaded = false;
 
+  // Onboarding uses the map's quiet idle motion without starting VPN observers.
+  static final _backgroundState = MainVpnButtonState.fromSnapshot(
+    const VpnSessionSnapshot(
+      generation: 0,
+      runtimeEpoch: 'intro-background',
+      sequenceNumber: 0,
+      snapshotVersion: 1,
+      phase: VpnSessionPhase.idle,
+    ),
+  );
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
     final breakpoint = Breakpoint(context);
-    final baseBackgroundColor = theme.colorScheme.surface;
-    final backgroundMapAsset = theme.brightness == Brightness.dark
-        ? 'assets/images/2x/dark-back@2x.png'
-        : 'assets/images/2x/light-back@2x.png';
     final logoAsset = theme.brightness == Brightness.dark
         ? 'assets/images/SVG/big-logo-dark.svg'
         : 'assets/images/SVG/big-logo-light.svg';
@@ -54,15 +64,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
         };
         return Stack(
           children: [
-            Positioned.fill(child: ColoredBox(color: baseBackgroundColor)),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: Image.asset(backgroundMapAsset, height: constraints.maxHeight, fit: BoxFit.fitHeight),
-                ),
-              ),
-            ),
+            Positioned.fill(child: WorldMapBackground(state: _backgroundState)),
             Scaffold(
               key: const ValueKey(UiNames.screenIntro),
               backgroundColor: Colors.transparent,
