@@ -24,6 +24,7 @@ import 'package:zeon/core/router/dialog/widgets/setting_picker_dialog.dart';
 import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/core/theme/app_theme.dart';
 import 'package:zeon/core/theme/app_theme_mode.dart';
+import 'package:zeon/features/about/widget/about_page.dart';
 import 'package:zeon/features/auto_start/notifier/auto_start_notifier.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
@@ -76,6 +77,7 @@ void main() {
       ('profile', const ProfileMenuPage()),
       ('link', const ProfileLinkAccountPage()),
       ('settings', SettingsPage()),
+      ('about', const AboutPage()),
       ('general', const GeneralPage()),
       ('routing', const RouteOptionsPage()),
       ('tls', const TlsTricksPage()),
@@ -106,6 +108,22 @@ void main() {
         await capture(tester, '$device-$name');
       });
     }
+  }
+  for (final light in [false, true]) {
+    testWidgets('about copies complete app info with enlarged text light=$light', (tester) async {
+      String? clipboard;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') clipboard = (call.arguments as Map)['text'] as String;
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      final container = await pumpPage(tester, const AboutPage(), size: const Size(320, 740), scale: 2, light: light);
+      await tester.tap(find.byKey(const ValueKey('about_copy_info')));
+      await tester.pump();
+      expect(clipboard, container.read(appInfoProvider).requireValue.format());
+      expect(tester.takeException(), isNull);
+      await capture(tester, 'about-enlarged-$light');
+    });
   }
   for (final size in [const Size(393, 740), const Size(768, 650)]) {
     testWidgets('secure caption remains visible above expired server footer $size', (tester) async {

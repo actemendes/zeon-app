@@ -1,15 +1,13 @@
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
 import 'package:zeon/core/ui/ui_names.dart';
-import 'package:zeon/core/widget/adaptive_icon.dart';
+import 'package:zeon/features/settings/widget/settings_surface.dart';
 import 'package:zeon/utils/utils.dart';
 
 class AboutPage extends HookConsumerWidget {
@@ -20,85 +18,88 @@ class AboutPage extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final appInfo = ref.watch(appInfoProvider).requireValue;
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final logoAsset = theme.brightness == Brightness.dark
         ? 'assets/images/SVG/big-logo-dark.svg'
         : 'assets/images/SVG/big-logo-light.svg';
 
-    final conditionalTiles = [
-      if (PlatformUtils.isDesktop)
-        ListTile(
-          title: Text(t.pages.about.openWorkingDir),
-          trailing: const Icon(FluentIcons.open_folder_24_regular),
-          onTap: () async {
-            final path = ref.watch(appDirectoriesProvider).requireValue.workingDir.uri;
-            await UriUtils.tryLaunch(path);
-          },
-        ),
-    ];
-
     return Scaffold(
       key: const ValueKey(UiNames.screenAbout),
       appBar: AppBar(
+        centerTitle: false,
+        titleTextStyle: theme.textTheme.titleMedium?.copyWith(fontSize: 17, fontWeight: FontWeight.w600),
         title: Text(t.pages.about.title.toUpperCase()),
-        actions: [
-          PopupMenuButton(
-            icon: Icon(AdaptiveIcon(context).more),
-            itemBuilder: (context) {
-              return [
-                PopupMenuItem(
-                  child: Text(t.common.addToClipboard),
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: appInfo.format()));
-                  },
-                ),
-              ];
-            },
-          ),
-          const Gap(8),
-        ],
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SvgPicture.asset(logoAsset, width: 140),
-                  const Gap(16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(t.common.appTitle, style: Theme.of(context).textTheme.titleLarge),
-                      const Gap(4),
-                      Text("${t.common.version} ${appInfo.presentVersion}"),
-                    ],
-                  ),
-                ],
-              ),
+      body: SettingsList(
+        children: [
+          Container(
+            key: const ValueKey('about_identity'),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(34)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: SvgPicture.asset(logoAsset, width: 156, semanticsLabel: t.common.appTitle),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    IconButton.filledTonal(
+                      key: const ValueKey('about_copy_info'),
+                      tooltip: t.common.addToClipboard,
+                      onPressed: () => Clipboard.setData(ClipboardData(text: appInfo.format())),
+                      style: IconButton.styleFrom(
+                        backgroundColor: cs.surface,
+                        foregroundColor: cs.onSurface,
+                        minimumSize: const Size(48, 48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      icon: const Icon(Icons.copy_rounded, size: 21),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Text(t.common.version, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                const SizedBox(height: 6),
+                Text(appInfo.presentVersion, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+              ],
             ),
           ),
-          SliverList(
-            delegate: SliverChildListDelegate([
-              ...conditionalTiles,
-              if (conditionalTiles.isNotEmpty) const Divider(),
-              ListTile(
+          const SizedBox(height: 24),
+          SettingsGroup(
+            children: [
+              SettingsTile(
                 title: Text(t.pages.about.termsAndConditions),
-                trailing: const Icon(FluentIcons.open_24_regular),
-                onTap: () async {
-                  await UriUtils.tryLaunch(Uri.parse(Constants.termsAndConditionsUrl));
-                },
+                leading: const Icon(Icons.description_outlined),
+                trailing: const Icon(Icons.arrow_outward_rounded),
+                onTap: () => UriUtils.tryLaunch(Uri.parse(Constants.termsAndConditionsUrl)),
               ),
-              ListTile(
+              SettingsTile(
                 title: Text(t.pages.about.privacyPolicy),
-                trailing: const Icon(FluentIcons.open_24_regular),
-                onTap: () async {
-                  await UriUtils.tryLaunch(Uri.parse(Constants.privacyPolicyUrl));
-                },
+                leading: const Icon(Icons.shield_outlined),
+                trailing: const Icon(Icons.arrow_outward_rounded),
+                onTap: () => UriUtils.tryLaunch(Uri.parse(Constants.privacyPolicyUrl)),
               ),
-            ]),
+            ],
           ),
+          if (PlatformUtils.isDesktop)
+            SettingsGroup(
+              children: [
+                SettingsTile(
+                  title: Text(t.pages.about.openWorkingDir),
+                  leading: const Icon(Icons.folder_outlined),
+                  trailing: const Icon(Icons.open_in_new_rounded),
+                  onTap: () async {
+                    final path = ref.read(appDirectoriesProvider).requireValue.workingDir.uri;
+                    await UriUtils.tryLaunch(path);
+                  },
+                ),
+              ],
+            ),
         ],
       ),
     );
