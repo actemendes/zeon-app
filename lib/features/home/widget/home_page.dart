@@ -131,8 +131,8 @@ class HomePage extends HookConsumerWidget {
               ),
               body: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: 600, // Set the maximum width here
+                  constraints: BoxConstraints(
+                    maxWidth: breakpoint.isDesktop() ? 600 : double.infinity,
                   ),
                   child: CustomScrollView(
                     slivers: [
