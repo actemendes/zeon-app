@@ -111,7 +111,7 @@ class MyAdaptiveLayout extends HookConsumerWidget {
                           bottom: false,
                           child: Padding(
                             padding: EdgeInsets.only(top: 18),
-                            child: HomePremiumAccessButton(padding: EdgeInsets.symmetric(horizontal: 16)),
+                            child: HomePremiumAccessButton(padding: EdgeInsets.fromLTRB(16, 0, 16, 4)),
                           ),
                         ),
                         NavigationBar(
