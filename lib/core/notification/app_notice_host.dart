@@ -123,10 +123,10 @@ class _AppNoticeHostState extends State<AppNoticeHost> with WidgetsBindingObserv
                                       layoutBuilder: (current, previous) => Stack(
                                         alignment: Alignment.bottomCenter,
                                         children: [
-                                          if (previous.isNotEmpty)
-                                            Positioned.fill(
-                                              child: IgnorePointer(child: ExcludeSemantics(child: previous.last)),
-                                            ),
+                                          // Outgoing cards must retain their own size until
+                                          // the fade completes, including the last card.
+                                          for (final outgoing in previous)
+                                            IgnorePointer(child: ExcludeSemantics(child: outgoing)),
                                           if (current != null) current,
                                         ],
                                       ),

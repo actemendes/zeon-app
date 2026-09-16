@@ -155,6 +155,39 @@ void main() {
     expect(taps, 1);
   });
 
+  for (final dismissal in ['close', 'expiry', 'swipe']) {
+    testWidgets('last notice keeps its visible size while fading after $dismissal', (tester) async {
+      final notices = await mountNotices(tester);
+      notices.show(localNotice('Fade away'));
+      await finishMotion(tester);
+      final card = find.byType(AppNoticeCard);
+      final height = tester.getSize(card).height;
+      switch (dismissal) {
+        case 'close':
+          await tester.tap(find.byTooltip('Закрыть'));
+        case 'expiry':
+          await tester.pump(const Duration(seconds: 3));
+        case 'swipe':
+          await tester.drag(card, const Offset(180, 0));
+      }
+      await tester.pump();
+      expect(notices.entries, isEmpty);
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(card, findsOneWidget);
+      expect(tester.getSize(card).height, closeTo(height, .01));
+      final opacity = tester.widget<Opacity>(find.ancestor(of: card, matching: find.byType(Opacity)).first).opacity;
+      expect(opacity, greaterThan(0));
+      expect(opacity, lessThan(1));
+      expect(
+        find.ancestor(of: card, matching: find.byWidgetPredicate((w) => w is IgnorePointer && w.ignoring)),
+        findsWidgets,
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(card, findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('covered notices get their full interval when promoted', (tester) async {
     final notices = await mountNotices(tester, reduced: true);
     notices.show(localNotice('Old', duration: const Duration(milliseconds: 700)));
