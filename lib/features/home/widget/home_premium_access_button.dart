@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/features/home/widget/home_premium_access_view.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/profile/overview/external_subscription_account.dart';
@@ -16,14 +16,9 @@ class HomePremiumAccessButton extends ConsumerWidget {
 
   final EdgeInsetsGeometry padding;
 
-  static const _activeBackgroundPrefix = 'assets/images/1x/count-days-';
-  static const _activeBackgroundMaxDay = 10;
-  static const _inactiveBackgroundAsset = 'assets/images/1x/cta-background.png';
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
-    final theme = Theme.of(context);
 
     final profile = switch (ref.watch(activeProfileProvider)) {
       AsyncData(value: final profile?) => profile,
@@ -35,244 +30,20 @@ class HomePremiumAccessButton extends ConsumerWidget {
     };
 
     final rawRemainingDays = _resolveRemainingDays(subInfo);
-    final isPremiumActive = rawRemainingDays != null && rawRemainingDays >= 1;
-    final iconAndTextColor = theme.brightness == Brightness.dark
-        ? const Color(0xFF000000)
-        : theme.colorScheme.onSurface;
-
     return Padding(
       padding: padding,
-      child: isPremiumActive
-          ? _ActivePremiumState(
-              textColor: iconAndTextColor,
-              backgroundAsset: '$_activeBackgroundPrefix${rawRemainingDays.clamp(0, _activeBackgroundMaxDay)}.png',
-              onPressed: () => unawaited(
-                openExternalSubscriptionAccount(context, ref, profile is RemoteProfileEntity ? profile : null),
-              ),
-              label: _buildPremiumLabel(context, t, rawRemainingDays),
-            )
-          : _InactivePremiumState(
-              title: t.pages.profileDetails.specialServers.headerLineOne,
-              subtitle: _localizedInternetEverywhere(context),
-              textColor: iconAndTextColor,
-              backgroundAsset: _inactiveBackgroundAsset,
-              onPressed: () => unawaited(
-                openExternalSubscriptionAccount(context, ref, profile is RemoteProfileEntity ? profile : null),
-              ),
-            ),
-    );
-  }
-}
-
-class _InactivePremiumState extends StatelessWidget {
-  const _InactivePremiumState({
-    required this.title,
-    required this.subtitle,
-    required this.textColor,
-    required this.backgroundAsset,
-    required this.onPressed,
-  });
-
-  static const double _height = 65;
-  static const double _leftSegmentWidth = 65;
-  static const double _crownPadding = 18;
-  static const double _crownSize = 29;
-  static const double _arrowSize = 24;
-  static const double _arrowVisualScale = 1.18;
-
-  final String title;
-  final String subtitle;
-  final Color textColor;
-  final String backgroundAsset;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(16),
-      clipBehavior: Clip.antiAlias,
-      child: Ink(
-        height: _height,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          image: DecorationImage(image: AssetImage(backgroundAsset), fit: BoxFit.cover),
-        ),
-        child: InkWell(
-          onTap: onPressed,
-          child: Row(
-            children: [
-              Container(
-                width: _leftSegmentWidth,
-                height: _height,
-                color: Colors.transparent,
-                padding: const EdgeInsets.all(_crownPadding),
-                child: _PremiumCrownIcon(size: _crownSize, color: textColor),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontFamily: 'Unbounded',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                        color: textColor,
-                        height: 1,
-                      ),
-                    ),
-                    const Gap(7),
-                    Text(
-                      subtitle.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'Montserrat',
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                        color: textColor,
-                        height: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox.square(
-                dimension: 44,
-                child: Center(
-                  child: Transform.scale(
-                    scale: _arrowVisualScale,
-                    child: Icon(Icons.arrow_outward, size: _arrowSize, color: textColor),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      child: HomePremiumAccessView(
+        remainingDays: rawRemainingDays,
+        label: rawRemainingDays != null && rawRemainingDays >= 1
+            ? _buildPremiumLabel(context, t, rawRemainingDays)
+            : '',
+        title: t.pages.profileDetails.specialServers.headerLineOne,
+        subtitle: _localizedInternetEverywhere(context),
+        onPressed: () =>
+            unawaited(openExternalSubscriptionAccount(context, ref, profile is RemoteProfileEntity ? profile : null)),
       ),
     );
   }
-}
-
-class _ActivePremiumState extends StatelessWidget {
-  const _ActivePremiumState({
-    required this.textColor,
-    required this.backgroundAsset,
-    required this.onPressed,
-    required this.label,
-  });
-
-  static const _height = 35.19;
-
-  final Color textColor;
-  final String backgroundAsset;
-  final VoidCallback onPressed;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(16),
-      clipBehavior: Clip.antiAlias,
-      child: Ink(
-        height: _height,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          image: DecorationImage(image: AssetImage(backgroundAsset), fit: BoxFit.cover),
-        ),
-        child: InkWell(
-          onTap: onPressed,
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                label.toUpperCase(),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontFamily: 'Unbounded',
-                  fontWeight: FontWeight.w500,
-                  fontSize: 18,
-                  height: 1,
-                  color: textColor,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PremiumCrownIcon extends StatelessWidget {
-  const _PremiumCrownIcon({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(painter: _PremiumCrownPainter(color)),
-    );
-  }
-}
-
-class _PremiumCrownPainter extends CustomPainter {
-  const _PremiumCrownPainter(this.color);
-
-  static const _viewBox = 31.15;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final scale = size.shortestSide / _viewBox;
-    final dx = (size.width - (_viewBox * scale)) / 2;
-    final dy = (size.height - (_viewBox * scale)) / 2;
-
-    canvas.save();
-    canvas.translate(dx, dy);
-    canvas.scale(scale);
-
-    final crownPath = Path()
-      ..moveTo(1, 30.15)
-      ..lineTo(30.15, 30.15)
-      ..moveTo(1, 1)
-      ..lineTo(1, 23.9)
-      ..lineTo(30.15, 23.9)
-      ..lineTo(30.15, 1)
-      ..lineTo(22.86, 9.33)
-      ..lineTo(15.57, 1)
-      ..lineTo(8.28, 9.33)
-      ..close();
-
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = color;
-
-    canvas.drawPath(crownPath, paint);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _PremiumCrownPainter oldDelegate) => oldDelegate.color != color;
 }
 
 int? _resolveRemainingDays(SubscriptionInfo? subInfo) {
