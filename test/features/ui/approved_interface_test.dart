@@ -39,6 +39,7 @@ import 'package:zeon/features/profile/overview/profile_link_account_page.dart';
 import 'package:zeon/features/profile/overview/profile_menu_page.dart';
 import 'package:zeon/features/profile/overview/profiles_notifier.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
+import 'package:zeon/features/proxy/overview/proxies_overview_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/features/settings/overview/sections/dns_options_page.dart';
 import 'package:zeon/features/settings/overview/sections/general_page.dart';
@@ -109,7 +110,7 @@ void main() {
   for (final size in [const Size(393, 740), const Size(768, 650)]) {
     testWidgets('secure caption remains visible above expired server footer $size', (tester) async {
       final container = await pumpPage(tester, const HomePage(), size: size);
-      final profile = container.read(activeProfileProvider).requireValue as RemoteProfileEntity;
+      final profile = container.read(activeProfileProvider).requireValue! as RemoteProfileEntity;
       container.read(activeProfileProvider.notifier).state = AsyncData(
         profile.copyWith(
           subInfo: SubscriptionInfo(
@@ -256,6 +257,8 @@ Future<ProviderContainer> pumpPage(
   Size size = const Size(393, 852),
   double scale = 1,
   double keyboard = 0,
+  bool light = false,
+  ProxiesOverviewNotifier Function()? proxies,
 }) async {
   await tester.pumpWidget(const SizedBox.shrink());
   tester.view.devicePixelRatio = 1;
@@ -275,6 +278,7 @@ Future<ProviderContainer> pumpPage(
       profilesNotifierProvider.overrideWith(FakeProfiles.new),
       connectionNotifierProvider.overrideWith(FakeConnection.new),
       activeProxyNotifierProvider.overrideWith(FakeProxy.new),
+      if (proxies != null) proxiesOverviewNotifierProvider.overrideWith(proxies),
       homeConnectionStateProvider.overrideWithValue(MainVpnButtonState.fromLegacyConnectionStatus(const Connected())),
       homeTipProvider.overrideWith(
         (ref) => HomeTipController(
@@ -294,6 +298,7 @@ Future<ProviderContainer> pumpPage(
   await container.read(profilesNotifierProvider.future);
   await container.read(connectionNotifierProvider.future);
   await container.read(activeProxyNotifierProvider.future);
+  if (proxies != null) await container.read(proxiesOverviewNotifierProvider.future);
   final router = GoRouter(
     routes: [
       GoRoute(path: '/', builder: (_, _) => page),
@@ -320,8 +325,11 @@ Future<ProviderContainer> pumpPage(
       child: RepaintBoundary(
         key: const ValueKey('capture'),
         child: MaterialApp.router(
+          debugShowCheckedModeBanner: false,
           routerConfig: router,
-          theme: AppTheme(AppThemeMode.dark, 'Montserrat').darkTheme(null),
+          theme: light
+              ? AppTheme(AppThemeMode.light, 'Montserrat').lightTheme(null)
+              : AppTheme(AppThemeMode.dark, 'Montserrat').darkTheme(null),
           locale: const Locale('ru'),
           supportedLocales: const [Locale('ru')],
           localizationsDelegates: GlobalMaterialLocalizations.delegates,

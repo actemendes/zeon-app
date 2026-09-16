@@ -284,7 +284,7 @@ class _ProfileSummaryBlock extends HookConsumerWidget {
     return Row(
       children: [
         SizedBox.square(
-          dimension: 52,
+          dimension: 40,
           child: Image.asset(
             avatarEmojiAsset,
             fit: BoxFit.contain,

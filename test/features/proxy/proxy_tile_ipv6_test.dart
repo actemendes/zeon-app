@@ -39,14 +39,14 @@ void main() {
   }
 
   for (final mode in IPv6Mode.values) {
-    testWidgets('${mode.key}: supported uses a one pixel green flag outline only when IPv6 is enabled', (tester) async {
+    testWidgets('${mode.key}: supported retains the green status frame only when IPv6 is enabled', (tester) async {
       await pumpTile(tester, mode: mode, status: 'supported');
 
       final border = flagDecoration(tester)?.border as Border?;
       if (mode == IPv6Mode.disable) {
         expect(border, isNull);
       } else {
-        expect(border?.top.width, 1);
+        expect(border?.top.width, 2);
         expect(border?.top.color, const Color(0xFF3CE74F));
       }
       expect(find.byKey(const ValueKey('proxy-ping')), findsOneWidget);

@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:gap/gap.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/failures.dart';
@@ -21,94 +20,135 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
-    final fabForegroundColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : null;
 
     final proxies = ref.watch(proxiesOverviewNotifierProvider);
     final sortBy = ref.watch(proxiesSortNotifierProvider);
     final ipv6Mode = ref.watch(ConfigOptions.ipv6Mode);
 
-    // final selectActiveProxyMutation = useMutation(
-    //   initialOnFailure: (error) => CustomToast.error(t.presentShortError(error)).show(context),
-    // );
-
     return Scaffold(
       key: const ValueKey(UiNames.screenProxiesOverview),
-      appBar: AppBar(
-        title: Text(t.pages.proxies.title.toUpperCase()),
-        actions: [
-          PopupMenuButton<ProxiesSort>(
-            initialValue: sortBy,
-            onSelected: ref.read(proxiesSortNotifierProvider.notifier).update,
-            icon: const Icon(FluentIcons.arrow_sort_24_regular),
-            tooltip: t.pages.proxies.sort,
-            itemBuilder: (context) {
-              return [...ProxiesSort.values.map((e) => PopupMenuItem(value: e, child: Text(e.present(t))))];
-            },
-          ),
-          const Gap(8),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        foregroundColor: fabForegroundColor,
-        onPressed: () async => await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
-        tooltip: t.pages.proxies.testDelay,
-        child: Icon(Icons.speed, color: fabForegroundColor),
-      ),
-      body: proxies.when(
-        data: (group) => group != null
-            ? LayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  final crossAxisCount = PlatformUtils.isMobile && width < 600 ? 1 : max(1, (width / 536).floor());
-                  return GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 86),
-                    itemCount: group.items.length,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: crossAxisCount,
-                      mainAxisExtent: 64,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
+      appBar: AppBar(title: Text(t.pages.proxies.title.toUpperCase())),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: PopupMenuButton<ProxiesSort>(
+                    initialValue: sortBy,
+                    onSelected: ref.read(proxiesSortNotifierProvider.notifier).update,
+                    tooltip: t.pages.proxies.sort,
+                    itemBuilder: (context) => [
+                      for (final value in ProxiesSort.values)
+                        PopupMenuItem(value: value, child: Text(value.present(t))),
+                    ],
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(FluentIcons.arrow_sort_24_regular, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              sortBy.present(t),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontFamily: 'Montserrat',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                        ],
+                      ),
                     ),
-                    itemBuilder: (context, index) {
-                      final proxy = group.items[index];
-                      final selectedProxy = findOutboundByTagOrDisplay(group.items, group.selected);
-                      final isAutoSelected = selectedProxy != null && isAutoSelectedOutbound(selectedProxy);
-                      final realAutoTag = isAutoSelected
-                          ? resolveRealOutboundTag(autoOutbound: selectedProxy, allOutbounds: group.items)
-                          : null;
-                      final isActive = proxy.tag == group.selected || (isAutoSelected && proxy.tag == realAutoTag);
-                      final displayInfo = resolveOutboundDisplayInfo(proxy, allOutbounds: group.items);
-                      final ipv6Status = proxy.isGroup ? "not_tested" : proxy.ipv6Status;
-                      final ipv6StatusText = ipv6Mode == IPv6Mode.disable
-                          ? null
-                          : switch (ipv6Status) {
-                              "supported" => t.pages.proxies.ipv6.supported,
-                              "unavailable" => t.pages.proxies.ipv6.unavailable,
-                              "checking" => t.pages.proxies.ipv6.checking,
-                              _ => t.pages.proxies.ipv6.notTested,
-                            };
-                      return ProxyTile(
-                        proxy,
-                        selected: group.selected == proxy.tag,
-                        isActive: isActive,
-                        countryCode: displayInfo.countryCode,
-                        ipv6Status: ipv6Status,
-                        ipv6StatusText: ipv6StatusText,
-                        ipv6Mode: ipv6Mode,
-                        onTap: () async {
-                          await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
-                          // if (selectActiveProxyMutation.state.isInProgress) return;
-                          // selectActiveProxyMutation.setFuture(
-                          // );
-                        },
-                      );
-                    },
-                  );
-                },
-              )
-            : Center(child: Text(t.pages.proxies.empty)),
-        error: (error, stackTrace) => Center(child: Text(t.presentShortError(error))),
-        loading: () => const Center(child: CircularProgressIndicator()),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IconButton.filledTonal(
+                  key: const ValueKey('proxies_test_delay'),
+                  onPressed: () => ref.read(proxiesOverviewNotifierProvider.notifier).urlTest('select'),
+                  tooltip: t.pages.proxies.testDelay,
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.speed_rounded, size: 22),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: proxies.when(
+              data: (group) => group != null
+                  ? LayoutBuilder(
+                      builder: (context, constraints) {
+                        final width = constraints.maxWidth;
+                        final crossAxisCount = PlatformUtils.isMobile && width < 600
+                            ? 1
+                            : max(1, (width / 536).floor());
+                        return GridView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          itemCount: group.items.length,
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            mainAxisExtent: 88 + max(0, MediaQuery.textScalerOf(context).scale(13) - 13) * 3.8,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                          ),
+                          itemBuilder: (context, index) {
+                            final proxy = group.items[index];
+                            final selectedProxy = findOutboundByTagOrDisplay(group.items, group.selected);
+                            final isAutoSelected = selectedProxy != null && isAutoSelectedOutbound(selectedProxy);
+                            final realAutoTag = isAutoSelected
+                                ? resolveRealOutboundTag(autoOutbound: selectedProxy, allOutbounds: group.items)
+                                : null;
+                            final isActive =
+                                proxy.tag == group.selected || (isAutoSelected && proxy.tag == realAutoTag);
+                            final displayInfo = resolveOutboundDisplayInfo(proxy, allOutbounds: group.items);
+                            final ipv6Status = proxy.isGroup ? "not_tested" : proxy.ipv6Status;
+                            final ipv6StatusText = ipv6Mode == IPv6Mode.disable
+                                ? null
+                                : switch (ipv6Status) {
+                                    "supported" => t.pages.proxies.ipv6.supported,
+                                    "unavailable" => t.pages.proxies.ipv6.unavailable,
+                                    "checking" => t.pages.proxies.ipv6.checking,
+                                    _ => t.pages.proxies.ipv6.notTested,
+                                  };
+                            return ProxyTile(
+                              proxy,
+                              selected: group.selected == proxy.tag,
+                              isActive: isActive,
+                              countryCode: displayInfo.countryCode,
+                              displayTitle: displayInfo.title,
+                              ipv6Status: ipv6Status,
+                              ipv6StatusText: ipv6StatusText,
+                              ipv6Mode: ipv6Mode,
+                              onTap: () async {
+                                await ref
+                                    .read(proxiesOverviewNotifierProvider.notifier)
+                                    .changeProxy(group.tag, proxy.tag);
+                              },
+                            );
+                          },
+                        );
+                      },
+                    )
+                  : Center(child: Text(t.pages.proxies.empty)),
+              error: (error, stackTrace) => Center(child: Text(t.presentShortError(error))),
+              loading: () => const Center(child: CircularProgressIndicator()),
+            ),
+          ),
+        ],
       ),
     );
   }

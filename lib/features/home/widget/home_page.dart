@@ -332,12 +332,8 @@ class _HomeConnectionPanel extends ConsumerWidget {
         textAlign: TextAlign.center,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.titleSmall?.copyWith(
-          fontFamily: 'Montserrat',
-          fontSize: 13,
-          height: 1.5,
-          fontWeight: FontWeight.w600,
-        ),
+        style: (theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{}) ?? theme.textTheme.labelMedium)
+            ?.copyWith(fontFamily: 'Montserrat', height: 1.5, fontWeight: FontWeight.w600),
       ),
     );
     final quickSettings = _HomeQuickSettingsButton(label: t.pages.home.quickSettings, embedded: true);
@@ -465,7 +461,7 @@ class _HomeAppBarTitle extends StatelessWidget {
             fontFamily: 'Unbounded',
             fontSize: 18,
             height: 1.15,
-            fontWeight: FontWeight.w300,
+            fontWeight: FontWeight.w600,
             color: cs.onSurface,
           ),
         ),
