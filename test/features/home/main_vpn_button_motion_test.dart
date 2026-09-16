@@ -174,6 +174,11 @@ void main() {
     await showPhase(tester, VpnSessionPhase.disconnected);
     await showPhase(tester, VpnSessionPhase.verifying);
     await tester.pump(const Duration(milliseconds: 100));
+    await showPhase(tester, VpnSessionPhase.verifying, reduceMotion: true);
+    final logoFade = tester.widget<FadeTransition>(
+      find.descendant(of: find.byType(AnimatedOpacity), matching: find.byType(FadeTransition)),
+    );
+    expect(logoFade.opacity.value, .7);
     await showPhase(tester, VpnSessionPhase.connected, reduceMotion: true);
     expect(ring(tester).sweep, math.pi * 2);
     expect(centerSize(tester), 135);

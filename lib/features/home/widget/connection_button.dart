@@ -344,7 +344,21 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
                             ),
                           ],
                         ),
-                        child: Center(child: child),
+                        child: Center(
+                          child: AnimatedOpacity(
+                            // Settle an in-flight fade immediately when the
+                            // accessibility preference changes without a phase change.
+                            key: ValueKey(_reduceMotion),
+                            opacity: widget.visualState == MainVpnButtonVisualState.connected
+                                ? 1
+                                : _spinning
+                                ? .7
+                                : .45,
+                            duration: _reduceMotion ? Duration.zero : _duration,
+                            curve: Curves.easeInOutCubic,
+                            child: child,
+                          ),
+                        ),
                       ),
                     ),
                   ],
