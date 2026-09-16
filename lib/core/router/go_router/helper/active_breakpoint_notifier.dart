@@ -31,9 +31,12 @@ class Breakpoint {
   static const eTable = 840.0;
   static const sDesktop = 841.0;
   static const eDesktop = double.infinity;
+  static const compactHeight = 500.0;
 
   Breakpoint(BuildContext context) {
-    _width = MediaQuery.of(context).size.width;
+    final size = MediaQuery.sizeOf(context);
+    _width = size.width;
+    _height = size.height;
     if (_width < eMobile) {
       activeBreakpoint = Breakpoints.mobile;
     } else if (_width < eTable) {
@@ -45,10 +48,14 @@ class Breakpoint {
 
   late Breakpoints activeBreakpoint;
   late double _width;
+  late double _height;
 
   bool isMobile() => activeBreakpoint == Breakpoints.mobile;
   bool isTablet() => activeBreakpoint == Breakpoints.tablet;
   bool isDesktop() => activeBreakpoint == Breakpoints.desktop;
+
+  // Keep routing based on width; short windows only change presentation.
+  bool isCompactHeight() => !isMobile() && _height < compactHeight;
 
   @override
   String toString() {

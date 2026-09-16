@@ -27,6 +27,8 @@ class MyAdaptiveLayout extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    final breakpoint = Breakpoint(context);
+    final extendedNavigation = breakpoint.isDesktop() && !breakpoint.isCompactHeight();
     final actions = _actions(t, isMobileBreakpoint);
     final actionBranchNames = _actionBranchNames(isMobileBreakpoint);
     final currentBranchName = getNameOfBranch(isMobileBreakpoint, showProfilesAction, navigationShell.currentIndex);
@@ -75,11 +77,12 @@ class MyAdaptiveLayout extends HookConsumerWidget {
                     FocusScope(
                       node: navScopeNode,
                       child: NavigationRail(
-                        extended: Breakpoint(context).isDesktop(),
+                        extended: extendedNavigation,
+                        scrollable: breakpoint.isCompactHeight(),
                         destinations: _navRailDests(actions),
                         selectedIndex: navSelectedIndex,
                         onDestinationSelected: (index) => _onTap(index, actionBranchNames),
-                        trailing: Breakpoint(context).isDesktop()
+                        trailing: extendedNavigation
                             ? const Expanded(
                                 child: Align(
                                   alignment: Alignment.bottomCenter,

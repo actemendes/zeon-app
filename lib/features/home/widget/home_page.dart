@@ -48,6 +48,8 @@ class HomePage extends HookConsumerWidget {
       return null;
     }, [isUpdatingProfile, refreshAnimationController]);
     final breakpoint = Breakpoint(context);
+    final compactHeight = breakpoint.isCompactHeight();
+    final textScaler = MediaQuery.textScalerOf(context);
     final subscriptionName = switch (activeProfile) {
       AsyncData(value: final profile?) when parseProfileName(profile.name).isNotBlank => parseProfileName(profile.name),
       _ => "anonymous",
@@ -69,11 +71,15 @@ class HomePage extends HookConsumerWidget {
                 shadowColor: Colors.transparent,
                 elevation: 0,
                 scrolledUnderElevation: 0,
-                toolbarHeight: switch (breakpoint.activeBreakpoint) {
-                  Breakpoints.mobile => 164,
-                  Breakpoints.tablet => 132,
-                  Breakpoints.desktop => 132,
-                },
+                toolbarHeight: compactHeight
+                    ? (30 + textScaler.scale(14) * 1.1 + textScaler.scale(22) * 1.1)
+                          .clamp(72.0, double.infinity)
+                          .toDouble()
+                    : switch (breakpoint.activeBreakpoint) {
+                        Breakpoints.mobile => 164,
+                        Breakpoints.tablet => 132,
+                        Breakpoints.desktop => 132,
+                      },
                 centerTitle: false,
                 titleSpacing: 0,
                 actionsPadding: EdgeInsets.zero,
@@ -97,6 +103,7 @@ class HomePage extends HookConsumerWidget {
                           internetLabel: t.pages.home.internet,
                           forYouLabel: t.pages.home.forYou,
                           subscriptionName: subscriptionName,
+                          compact: compactHeight,
                         ),
                       ),
                       Positioned(
@@ -129,8 +136,8 @@ class HomePage extends HookConsumerWidget {
                   ),
                 ),
               ),
-              body: breakpoint.isDesktop()
-                  ? _HomeDesktopBody(buttonFaceKey: buttonFaceKey)
+              body: breakpoint.isDesktop() || compactHeight
+                  ? _HomeConnectionBody(buttonFaceKey: buttonFaceKey, compactHeight: compactHeight)
                   : Center(
                       child: ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: breakpoint.isDesktop() ? 600 : double.infinity),
@@ -173,41 +180,68 @@ class HomePage extends HookConsumerWidget {
   }
 }
 
-class _HomeDesktopBody extends StatelessWidget {
-  const _HomeDesktopBody({required this.buttonFaceKey});
+class _HomeConnectionBody extends StatelessWidget {
+  const _HomeConnectionBody({required this.buttonFaceKey, required this.compactHeight});
 
   final GlobalKey buttonFaceKey;
+  final bool compactHeight;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ConnectionButton(faceKey: buttonFaceKey, showStatus: false),
-                    const SizedBox(height: 32),
-                    const _HomeDesktopConnectionPanel(),
-                  ],
+      builder: (context, constraints) {
+        final padding = compactHeight ? 16.0 : 24.0;
+        final availableWidth = constraints.maxWidth - padding * 2;
+        final textScale = (MediaQuery.textScalerOf(context).scale(14) / 14).clamp(1.0, double.infinity);
+        final minimumPanelWidth = 320 * textScale;
+        final buttonSize = constraints.maxHeight >= 192 && availableWidth >= 160 + 24 + minimumPanelWidth
+            ? 160.0
+            : 140.0;
+        final horizontal = compactHeight && availableWidth >= buttonSize + 24 + minimumPanelWidth;
+        final button = compactHeight
+            ? SizedBox.square(
+                dimension: buttonSize,
+                child: FittedBox(child: ConnectionButton(faceKey: buttonFaceKey, showStatus: false)),
+              )
+            : ConnectionButton(faceKey: buttonFaceKey, showStatus: false);
+
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(padding),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: horizontal ? buttonSize + 24 + 440 : 440),
+                  child: horizontal
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            button,
+                            const SizedBox(width: 24),
+                            const Flexible(child: _HomeConnectionPanel()),
+                          ],
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            button,
+                            SizedBox(height: compactHeight ? 16 : 32),
+                            const _HomeConnectionPanel(),
+                          ],
+                        ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
-class _HomeDesktopConnectionPanel extends ConsumerWidget {
-  const _HomeDesktopConnectionPanel();
+class _HomeConnectionPanel extends ConsumerWidget {
+  const _HomeConnectionPanel();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -330,12 +364,14 @@ class _HomeAppBarTitle extends StatelessWidget {
     required this.internetLabel,
     required this.forYouLabel,
     required this.subscriptionName,
+    this.compact = false,
   });
 
   final Breakpoints activeBreakpoint;
   final String internetLabel;
   final String forYouLabel;
   final String subscriptionName;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -355,6 +391,31 @@ class _HomeAppBarTitle extends StatelessWidget {
       height: headingLineHeight,
     );
     final subscriptionUpper = subscriptionName.toUpperCase();
+
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.only(left: 16, top: 12, right: 56),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$internetLabel $forYouLabel',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: headingStyle?.copyWith(fontSize: 14, height: 1.1),
+            ),
+            const SizedBox(height: subscriptionTopSpacing),
+            Text(
+              subscriptionUpper,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: nameStyle?.copyWith(fontSize: 22, height: 1.1),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.only(left: 16, top: 20),
