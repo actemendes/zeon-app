@@ -495,6 +495,13 @@ class BoxService(
                         ),
                     )
                 }
+                if (!VpnSessionCoordinator.isCurrent(generation)) {
+                    VpnSessionCoordinator.stale(generation, "manual_refresh_selection")
+                    return@launch
+                }
+                if (!Settings.persistAutoProxySelection()) {
+                    throw IOException("Unable to persist automatic proxy selection")
+                }
 
                 // Testing the selector recursively schedules tests for all of
                 // its children, including the automatic balancer's servers.

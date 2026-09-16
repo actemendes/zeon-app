@@ -1072,7 +1072,7 @@ class ZeonCoreService with InfraLogger {
       // latestOptions = options;
       final payload = await _buildCoreOptionsPayload(options);
       final preferences = ref.read(sharedPreferencesProvider).valueOrNull;
-      final selection = preferences == null ? null : ProxySelectionPersistence(preferences).readPending();
+      final selection = preferences == null ? null : await ProxySelectionPersistence(preferences).readPendingFresh();
       // Native BuildConfig creates the selector and Auto group from profile
       // leaves. Apply intent there, after composition and before cache restore.
       payload['preferred-selector-outbound'] = selection?.groupTag == 'select' ? selection!.outboundTag : '';

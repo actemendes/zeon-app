@@ -50,6 +50,7 @@ class VpnTestInstrumentation : Instrumentation() {
         val snapshotTests = VpnSessionSnapshotInstrumentedTest()
         val shutdownTests = CoreShutdownDispatcherInstrumentedTest()
         val notificationTests = ServiceNotificationInstrumentedTest()
+        val proxySelectionTests = ProxySelectionPersistenceInstrumentedTest(targetContext)
         val routePolicyTests = VpnRoutePolicyInstrumentedTest()
         val bitmapTests = SampledBitmapDecoderInstrumentedTest(targetContext)
         val tests = mutableListOf(
@@ -247,6 +248,9 @@ class VpnTestInstrumentation : Instrumentation() {
                 "notificationStopUsesOneExplicitProcessReceiverAndOneGeneration",
             ) {
                 notificationTests.notificationStopUsesOneExplicitProcessReceiverAndOneGeneration()
+            },
+            TestCase(proxySelectionTests.javaClass.name, "notificationAutoReplacesDurableManualChoice") {
+                proxySelectionTests.notificationAutoReplacesDurableManualChoice()
             },
         )
         listOf(

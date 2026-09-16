@@ -41,6 +41,13 @@ class ProxySelectionPersistence {
   PendingProxySelection? readPending() =>
       PendingProxySelection.decode(preferences.getString(pendingProxySelectionPreferenceKey));
 
+  Future<PendingProxySelection?> readPendingFresh() async {
+    // Android's notification service can update this preference while Flutter
+    // still holds an older SharedPreferences cache in the same app process.
+    await preferences.reload();
+    return readPending();
+  }
+
   Future<bool> stage(PendingProxySelection selection) =>
       preferences.setString(pendingProxySelectionPreferenceKey, selection.encode());
 

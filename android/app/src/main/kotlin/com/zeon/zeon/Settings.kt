@@ -6,6 +6,7 @@ import com.zeon.zeon.bg.VPNService
 import com.zeon.zeon.constant.PerAppProxyMode
 import com.zeon.zeon.constant.ServiceMode
 import com.zeon.zeon.constant.SettingsKey
+import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ObjectInputStream
 
@@ -62,6 +63,12 @@ object Settings {
     var activeProfileName: String
         get() = preferences.getString(SettingsKey.ACTIVE_PROFILE_NAME, "")!!
         set(value) = preferences.edit().putString(SettingsKey.ACTIVE_PROFILE_NAME, value).apply()
+
+    /** Keep notification Auto selection as the next-start Flutter selector intent. */
+    fun persistAutoProxySelection(): Boolean = preferences.edit().putString(
+        SettingsKey.PENDING_PROXY_SELECTION,
+        JSONObject().put("group_tag", "select").put("outbound_tag", "balance").toString(),
+    ).commit()
 
     var serviceMode: String
         get() {
