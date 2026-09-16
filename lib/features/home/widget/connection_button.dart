@@ -168,6 +168,7 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
 
   late final AnimationController _morph;
   late final AnimationController _rotation;
+  late final AnimationController _gradientFlow;
   late final Listenable _animation;
   late _DialFrame _from;
   late _DialFrame _to;
@@ -181,6 +182,7 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
     super.initState();
     _morph = AnimationController(vsync: this, duration: _duration, value: 1);
     _rotation = AnimationController(vsync: this, duration: _rotationDuration);
+    _gradientFlow = AnimationController(vsync: this, duration: const Duration(seconds: 6));
     _animation = Listenable.merge([_morph, _rotation]);
     _from = _to = _targetFrame(-math.pi / 2);
   }
@@ -194,6 +196,17 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
       _retarget(animate: false);
     } else if (_spinning && !_reduceMotion && !_rotation.isAnimating) {
       _rotation.repeat();
+    }
+    _syncGradientFlow();
+  }
+
+  void _syncGradientFlow() {
+    final active = _spinning || widget.visualState == MainVpnButtonVisualState.connected;
+    if (active && !_reduceMotion) {
+      if (!_gradientFlow.isAnimating) _gradientFlow.repeat();
+    } else {
+      // Keep the current colors when stopping or enabling reduced motion.
+      _gradientFlow.stop();
     }
   }
 
@@ -256,12 +269,14 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
       _morph.value = 1;
     }
     if (_spinning && !_reduceMotion) _rotation.repeat();
+    _syncGradientFlow();
   }
 
   @override
   void dispose() {
     _morph.dispose();
     _rotation.dispose();
+    _gradientFlow.dispose();
     super.dispose();
   }
 
@@ -305,6 +320,7 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
                         activeOuterRadius: frame.outerRadius,
                         sweep: frame.sweep,
                         angle: frame.angle,
+                        gradientPhase: _gradientFlow,
                       ),
                     ),
                     AnimatedScale(
@@ -370,15 +386,17 @@ class ConnectionRingPainter extends CustomPainter {
     required this.activeOuterRadius,
     required this.sweep,
     required this.angle,
-  });
+    required this.gradientPhase,
+  }) : super(repaint: gradientPhase);
 
   final Color offColor;
   final double innerRadius;
   final double activeOuterRadius;
   final double sweep;
   final double angle;
-
-  static const _connectionGradient = LinearGradient(colors: [Color(0xFF3CE74F), Color(0xFFBFDD71)]);
+  // Repaint the ring directly: the resting center, logo and label do not rebuild
+  // on each gradient tick. This phase is independent of the spinner's rotation.
+  final Animation<double> gradientPhase;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -395,7 +413,10 @@ class ConnectionRingPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = width
         ..strokeCap = StrokeCap.round
-        ..shader = _connectionGradient.createShader(const Rect.fromLTWH(0, 0, 230, 230));
+        ..shader = LinearGradient(
+          colors: const [Color(0xFF3CE74F), Color(0xFFBFDD71)],
+          transform: GradientRotation(gradientPhase.value * math.pi * 2),
+        ).createShader(const Rect.fromLTWH(0, 0, 230, 230));
       final radius = (activeOuterRadius + innerRadius) / 2;
       if (sweep >= math.pi * 2 - .001) {
         canvas.drawCircle(center, radius, paint);
@@ -412,5 +433,6 @@ class ConnectionRingPainter extends CustomPainter {
       innerRadius != oldDelegate.innerRadius ||
       activeOuterRadius != oldDelegate.activeOuterRadius ||
       sweep != oldDelegate.sweep ||
-      angle != oldDelegate.angle;
+      angle != oldDelegate.angle ||
+      gradientPhase != oldDelegate.gradientPhase;
 }

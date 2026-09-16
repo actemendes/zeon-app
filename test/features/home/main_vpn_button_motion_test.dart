@@ -36,7 +36,7 @@ void main() {
     expect(ring(tester).sweep, math.pi * 2);
     expect(ring(tester).activeOuterRadius, 115);
     await tester.pump(const Duration(milliseconds: 40));
-    expect(tester.binding.transientCallbackCount, 0);
+    expect(tester.binding.transientCallbackCount, greaterThan(0));
 
     await showPhase(tester, VpnSessionPhase.stopRequested);
     expect(centerSize(tester), 135);
@@ -80,12 +80,8 @@ void main() {
     await showPhase(tester, VpnSessionPhase.connected, brightness: Brightness.dark);
     expect(ring(tester).sweep, math.pi * 2);
     await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle(
-      const Duration(milliseconds: 20),
-      EnginePhase.sendSemanticsUpdate,
-      const Duration(seconds: 1),
-    );
-    expect(tester.binding.transientCallbackCount, 0);
+    expect(ring(tester).sweep, math.pi * 2);
+    expect(tester.binding.transientCallbackCount, greaterThan(0));
   });
 
   testWidgets('cancel, failure and retry retarget the current geometry without a snap', (tester) async {
@@ -112,7 +108,40 @@ void main() {
     }
     await tester.pump(const Duration(milliseconds: 500));
     expect(ring(tester).sweep, math.pi * 2);
+    expect(tester.binding.transientCallbackCount, greaterThan(0));
+  });
+
+  testWidgets('connected gradient flows without rebuilding or moving the closed ring', (tester) async {
+    await showPhase(tester, VpnSessionPhase.connected);
+    final connected = ring(tester);
+    final phase = connected.gradientPhase.value;
+    await tester.pump(const Duration(seconds: 2));
+    expect(ring(tester), same(connected));
+    expect(connected.gradientPhase.value, isNot(phase));
+    expect(connected.sweep, math.pi * 2);
+    expect(centerSize(tester), 135);
+
+    final beforeStop = connected.gradientPhase.value;
+    await showPhase(tester, VpnSessionPhase.stopping);
+    await tester.pump(const Duration(seconds: 1));
+    expect(ring(tester).gradientPhase.value, beforeStop);
     expect(tester.binding.transientCallbackCount, 0);
+  });
+
+  testWidgets('gradient phase survives connection completion and reduced motion toggles', (tester) async {
+    await showPhase(tester, VpnSessionPhase.verifying);
+    await tester.pump(const Duration(seconds: 1));
+    final phase = ring(tester).gradientPhase.value;
+    await showPhase(tester, VpnSessionPhase.connected);
+    expect(ring(tester).gradientPhase.value, phase);
+    await showPhase(tester, VpnSessionPhase.connected, reduceMotion: true);
+    await tester.pump(const Duration(seconds: 1));
+    expect(ring(tester).gradientPhase.value, phase);
+    expect(tester.binding.transientCallbackCount, 0);
+    await showPhase(tester, VpnSessionPhase.connected);
+    await tester.pump(const Duration(seconds: 1));
+    expect(ring(tester).gradientPhase.value, isNot(phase));
+    expect(ring(tester).sweep, math.pi * 2);
   });
 
   testWidgets('failure during connection returns to the idle geometry and stops ticking', (tester) async {

@@ -154,7 +154,7 @@ void main() {
       semantics.dispose();
     });
 
-    testWidgets('spinner schedules frames only while loading is visible', (tester) async {
+    testWidgets('active visuals animate during loading and connected, then stop when disconnected', (tester) async {
       final disconnected = MainVpnButtonState.fromSnapshot(snapshot(VpnSessionPhase.disconnected));
       final loading = MainVpnButtonState.fromSnapshot(snapshot(VpnSessionPhase.verifying));
       final connected = MainVpnButtonState.fromSnapshot(snapshot(VpnSessionPhase.connected));
@@ -168,6 +168,10 @@ void main() {
       expect(tester.binding.transientCallbackCount, greaterThan(0));
 
       await pumpButton(tester, connected, onTap: () {});
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.binding.transientCallbackCount, greaterThan(0));
+
+      await pumpButton(tester, disconnected, onTap: () {});
       await tester.pump(const Duration(milliseconds: 500));
       expect(tester.binding.transientCallbackCount, 0);
     });
