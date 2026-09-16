@@ -475,7 +475,9 @@ class _HomeAppBarTitle extends StatelessWidget {
             subscriptionName.toUpperCase(),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: mobile ? headerStyle.copyWith(fontSize: 20, fontWeight: FontWeight.w700) : headerStyle,
+            style: mobile
+                ? headerStyle.copyWith(fontSize: 20, fontWeight: FontWeight.w700)
+                : headerStyle.copyWith(fontSize: 32, height: 1.05, fontWeight: FontWeight.w700),
           ),
         ),
       ],
