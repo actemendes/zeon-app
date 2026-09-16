@@ -267,7 +267,7 @@ class _HomeMobileStatus extends ConsumerWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: 'Montserrat',
-                      fontSize: 14,
+                      fontSize: 16,
                       height: 1.5,
                       fontWeight: FontWeight.w600,
                       color: cs.onSurface,

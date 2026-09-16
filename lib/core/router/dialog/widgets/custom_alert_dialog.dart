@@ -29,7 +29,7 @@ class CustomAlertDialog extends HookConsumerWidget {
           color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: SelectableText(message, style: const TextStyle(fontFamily: 'Montserrat', fontSize: 14, height: 1.65)),
+        child: SelectableText(message, style: const TextStyle(fontFamily: 'Montserrat', fontSize: 16, height: 1.65)),
       ),
       footer: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -39,7 +39,7 @@ class CustomAlertDialog extends HookConsumerWidget {
             style: FilledButton.styleFrom(
               minimumSize: const Size(double.infinity, 48),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              textStyle: const TextStyle(fontFamily: 'Montserrat', fontSize: 14, fontWeight: FontWeight.w600),
+              textStyle: const TextStyle(fontFamily: 'Montserrat', fontSize: 16, fontWeight: FontWeight.w600),
             ),
             child: Text(t.common.ok),
           ),
@@ -48,7 +48,7 @@ class CustomAlertDialog extends HookConsumerWidget {
             onPressed: () => Clipboard.setData(ClipboardData(text: copyText)),
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-              textStyle: const TextStyle(fontFamily: 'Montserrat', fontSize: 14),
+              textStyle: const TextStyle(fontFamily: 'Montserrat', fontSize: 16),
             ),
             icon: const Icon(Icons.copy_rounded, size: 16),
             label: const Text('Копировать ошибку'),

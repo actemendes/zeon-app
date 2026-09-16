@@ -303,7 +303,7 @@ class AppNoticeCard extends StatelessWidget {
                                     maxLines: remote ? 2 : 4,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      fontSize: 14,
+                                      fontSize: 16,
                                       height: 1.3,
                                       fontWeight: FontWeight.w600,
                                       color: scheme.onSurface,
@@ -342,7 +342,7 @@ class AppNoticeCard extends StatelessWidget {
                                 children: [
                                   Text(
                                     Localizations.localeOf(context).languageCode == 'ru' ? 'Открыть' : 'Open',
-                                    style: TextStyle(color: accent, fontSize: 14, fontWeight: FontWeight.w600),
+                                    style: TextStyle(color: accent, fontSize: 16, fontWeight: FontWeight.w600),
                                   ),
                                   const SizedBox(width: 5),
                                   Icon(Icons.arrow_forward_rounded, color: accent, size: 14),

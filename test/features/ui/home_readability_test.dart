@@ -59,21 +59,22 @@ void main() {
     });
   }
 
-  test('Montserrat body and labels use semibold and at least 14px in every palette', () {
+  test('primary text is at least 16px and secondary text is 14px in every palette', () {
     for (final mode in [AppThemeMode.light, AppThemeMode.dark, AppThemeMode.amoled]) {
       final app = AppTheme(mode, 'Montserrat');
       final theme = mode == AppThemeMode.light ? app.lightTheme(null) : app.darkTheme(null);
-      for (final style in [
-        theme.textTheme.bodyLarge,
-        theme.textTheme.bodyMedium,
-        theme.textTheme.bodySmall,
-        theme.textTheme.labelLarge,
-        theme.textTheme.labelMedium,
-        theme.textTheme.labelSmall,
-      ]) {
-        expect(style?.fontWeight, FontWeight.w600);
-        expect(style?.fontSize, greaterThanOrEqualTo(14));
+      for (final textTheme in [theme.textTheme, theme.primaryTextTheme]) {
+        for (final style in [textTheme.bodyLarge, textTheme.bodyMedium, textTheme.labelLarge]) {
+          expect(style?.fontWeight, FontWeight.w600);
+          expect(style?.fontSize, greaterThanOrEqualTo(16));
+        }
+        for (final style in [textTheme.bodySmall, textTheme.labelMedium, textTheme.labelSmall]) {
+          expect(style?.fontWeight, FontWeight.w600);
+          expect(style?.fontSize, 14);
+        }
+        expect(textTheme.titleSmall?.fontSize, greaterThanOrEqualTo(16));
       }
+      expect(theme.navigationBarTheme.labelTextStyle?.resolve({})?.fontSize, greaterThanOrEqualTo(16));
     }
   });
 }

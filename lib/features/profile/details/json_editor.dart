@@ -1409,7 +1409,7 @@ class _Options<T> extends StatelessWidget {
                   SizedBox(width: 5),
                   Icon(Icons.add),
                   SizedBox(width: 10),
-                  Text("Insert", style: TextStyle(fontSize: 14)),
+                  Text("Insert", style: TextStyle(fontSize: 16)),
                 ],
               ),
             ),
@@ -1421,7 +1421,7 @@ class _Options<T> extends StatelessWidget {
                   SizedBox(width: 5),
                   Icon(Icons.add),
                   SizedBox(width: 10),
-                  Text("Append", style: TextStyle(fontSize: 14)),
+                  Text("Append", style: TextStyle(fontSize: 16)),
                 ],
               ),
             ),
@@ -1437,7 +1437,7 @@ class _Options<T> extends StatelessWidget {
                     children: [
                       const Icon(Icons.data_object),
                       const SizedBox(width: 10),
-                      Text(key, style: const TextStyle(fontSize: 14)),
+                      Text(key, style: const TextStyle(fontSize: 16)),
                     ],
                   ),
                 ),
@@ -1457,7 +1457,7 @@ class _Options<T> extends StatelessWidget {
                         children: [
                           const Icon(Icons.data_object),
                           const SizedBox(width: 10),
-                          Text(key2, style: const TextStyle(fontSize: 14)),
+                          Text(key2, style: const TextStyle(fontSize: 16)),
                         ],
                       ),
                     ),
@@ -1476,7 +1476,7 @@ class _Options<T> extends StatelessWidget {
                   children: [
                     Icon(Icons.abc),
                     SizedBox(width: 10),
-                    Text("String", style: TextStyle(fontSize: 14)),
+                    Text("String", style: TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
@@ -1489,7 +1489,7 @@ class _Options<T> extends StatelessWidget {
                   children: [
                     Icon(Icons.onetwothree),
                     SizedBox(width: 10),
-                    Text("Number", style: TextStyle(fontSize: 14)),
+                    Text("Number", style: TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
@@ -1502,7 +1502,7 @@ class _Options<T> extends StatelessWidget {
                   children: [
                     Icon(Icons.check_rounded),
                     SizedBox(width: 10),
-                    Text("Boolean", style: TextStyle(fontSize: 14)),
+                    Text("Boolean", style: TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
@@ -1515,7 +1515,7 @@ class _Options<T> extends StatelessWidget {
                   children: [
                     Icon(Icons.data_object),
                     SizedBox(width: 10),
-                    Text("object", style: TextStyle(fontSize: 14)),
+                    Text("object", style: TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
@@ -1528,7 +1528,7 @@ class _Options<T> extends StatelessWidget {
                   children: [
                     Icon(Icons.data_array),
                     SizedBox(width: 10),
-                    Text("List", style: TextStyle(fontSize: 14)),
+                    Text("List", style: TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
@@ -1545,7 +1545,7 @@ class _Options<T> extends StatelessWidget {
                 children: [
                   Icon(Icons.delete),
                   SizedBox(width: 10),
-                  Text("Delete", style: TextStyle(fontSize: 14)),
+                  Text("Delete", style: TextStyle(fontSize: 16)),
                 ],
               ),
             ),

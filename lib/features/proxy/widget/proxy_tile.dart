@@ -93,7 +93,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
                     style: TextStyle(
                       fontFamily: 'Montserrat',
                       fontFamilyFallback: const ['Emoji'],
-                      fontSize: 14,
+                      fontSize: 16,
                       height: 1.3,
                       fontWeight: FontWeight.w600,
                       color: primaryColor,

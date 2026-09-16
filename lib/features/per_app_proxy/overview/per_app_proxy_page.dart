@@ -309,7 +309,7 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
               clipBehavior: Clip.antiAlias,
               child: ListTileTheme(
                 data: ListTileThemeData(
-                  titleTextStyle: theme.textTheme.bodyMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+                  titleTextStyle: theme.textTheme.bodyMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600),
                   subtitleTextStyle: theme.textTheme.bodySmall?.copyWith(fontSize: 14),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 ),

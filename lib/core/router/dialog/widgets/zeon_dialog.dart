@@ -47,7 +47,7 @@ class ZeonDialog extends StatelessWidget {
       minimumSize: const Size(48, 48),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      textStyle: const TextStyle(fontFamily: 'Montserrat', fontSize: 14, fontWeight: FontWeight.w600),
+      textStyle: const TextStyle(fontFamily: 'Montserrat', fontSize: 16, fontWeight: FontWeight.w600),
     );
     final contents = ConstrainedBox(
       constraints: BoxConstraints(
@@ -119,7 +119,7 @@ class ZeonDialog extends StatelessWidget {
                 final body = DefaultTextStyle(
                   style: TextStyle(
                     fontFamily: 'Montserrat',
-                    fontSize: 14,
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
                     height: 1.65,
                     color: cs.onSurfaceVariant,
@@ -259,7 +259,7 @@ class DialogChoice extends StatelessWidget {
                       title,
                       style: TextStyle(
                         fontFamily: 'Montserrat',
-                        fontSize: 14,
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
                         height: 1.5,
                         color: cs.onSurface,

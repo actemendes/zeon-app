@@ -172,7 +172,7 @@ class AppTheme {
             navLargeTitleTextStyle: def.textTheme.navLargeTitleTextStyle.copyWith(fontFamily: fontFamily),
             pickerTextStyle: def.textTheme.pickerTextStyle.copyWith(fontFamily: fontFamily),
             dateTimePickerTextStyle: def.textTheme.dateTimePickerTextStyle.copyWith(fontFamily: fontFamily),
-            tabLabelTextStyle: def.textTheme.tabLabelTextStyle.copyWith(fontFamily: fontFamily, fontSize: 14),
+            tabLabelTextStyle: def.textTheme.tabLabelTextStyle.copyWith(fontFamily: fontFamily, fontSize: 16),
           ).copyWith(),
           barBackgroundColor: defaultMaterialTheme.colorScheme.surface,
           scaffoldBackgroundColor: defaultMaterialTheme.scaffoldBackgroundColor,
@@ -234,7 +234,7 @@ class AppTheme {
         }),
         labelTextStyle: MaterialStateProperty.resolveWith((states) {
           final color = states.contains(MaterialState.selected) ? navBarSelectedColor : navBarUnselectedColor;
-          return textTheme.labelMedium?.copyWith(
+          return textTheme.labelLarge?.copyWith(
             color: color,
             fontWeight: states.contains(MaterialState.selected)
                 ? (scheme.brightness == Brightness.light ? FontWeight.w700 : FontWeight.w600)
@@ -247,16 +247,18 @@ class AppTheme {
         indicatorColor: navBarIndicatorColor,
         selectedIconTheme: IconThemeData(color: navBarSelectedIconColor ?? navBarSelectedColor),
         unselectedIconTheme: IconThemeData(color: navBarUnselectedColor),
-        selectedLabelTextStyle: textTheme.labelMedium?.copyWith(
+        selectedLabelTextStyle: textTheme.labelLarge?.copyWith(
           color: navBarSelectedColor,
           fontWeight: scheme.brightness == Brightness.light ? FontWeight.w700 : FontWeight.w600,
         ),
-        unselectedLabelTextStyle: textTheme.labelMedium?.copyWith(
+        unselectedLabelTextStyle: textTheme.labelLarge?.copyWith(
           color: navBarUnselectedColor,
           fontWeight: FontWeight.w600,
         ),
       ),
       listTileTheme: ListTileThemeData(
+        titleTextStyle: textTheme.bodyMedium,
+        subtitleTextStyle: textTheme.bodySmall,
         iconColor: scheme.onSurface,
         textColor: scheme.onSurface,
         selectedColor: scheme.onSurface,
@@ -284,20 +286,20 @@ class AppTheme {
   }
 
   TextTheme _withReadableBody(TextTheme theme) {
-    TextStyle? readable(TextStyle? style, {double fallbackSize = 14}) {
+    TextStyle? readable(TextStyle? style, {double minimumSize = 14}) {
       if (style == null) return null;
-      final size = style.fontSize ?? fallbackSize;
+      final size = style.fontSize ?? minimumSize;
       return style.copyWith(
-        fontSize: size < 14 ? 14 : size,
+        fontSize: size < minimumSize ? minimumSize : size,
         fontWeight: fontFamily == 'Montserrat' ? FontWeight.w600 : style.fontWeight,
       );
     }
 
     return theme.copyWith(
-      bodyLarge: readable(theme.bodyLarge, fallbackSize: 16),
-      bodyMedium: readable(theme.bodyMedium),
+      bodyLarge: readable(theme.bodyLarge, minimumSize: 16),
+      bodyMedium: readable(theme.bodyMedium, minimumSize: 16),
       bodySmall: readable(theme.bodySmall),
-      labelLarge: readable(theme.labelLarge),
+      labelLarge: readable(theme.labelLarge, minimumSize: 16),
       labelMedium: readable(theme.labelMedium),
       labelSmall: readable(theme.labelSmall),
     );
@@ -313,7 +315,7 @@ class AppTheme {
       headlineSmall: _headingStyle(textTheme.headlineSmall),
       titleLarge: _titleStyle(textTheme.titleLarge),
       titleMedium: _titleStyle(textTheme.titleMedium),
-      titleSmall: _headingStyle(textTheme.titleSmall),
+      titleSmall: _headingStyle(textTheme.titleSmall)?.copyWith(fontSize: 16),
     );
   }
 

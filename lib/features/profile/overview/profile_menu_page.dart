@@ -234,7 +234,7 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
                 child: Text(
                   title,
                   style: theme.textTheme.titleSmall?.copyWith(
-                    fontSize: 14,
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
                     color: theme.colorScheme.onPrimary,
                   ),
