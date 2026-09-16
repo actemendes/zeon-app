@@ -113,7 +113,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                               child: Text(
                                 displayInfo?.title ?? proxy.tagDisplay,
                                 style: theme.textTheme.bodyLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w600,
                                   color: navBarTextColor,
                                 ),
                                 maxLines: 1,
@@ -156,7 +156,7 @@ class _ServerPickerPlaceholder extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold, color: foregroundColor),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600, color: foregroundColor),
           ),
         ),
         const SizedBox(width: 12),

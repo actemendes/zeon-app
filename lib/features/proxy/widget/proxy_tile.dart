@@ -60,7 +60,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: theme.textTheme.bodyLarge?.copyWith(
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w500,
           color: primaryColor,
           fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
         ),

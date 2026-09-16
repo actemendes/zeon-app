@@ -57,7 +57,8 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
               Text(
                 pingText,
                 style: (compact ? theme.textTheme.bodyMedium : theme.textTheme.titleMedium)?.copyWith(
-                  fontWeight: FontWeight.bold,
+                  fontFamily: compact ? 'Montserrat' : null,
+                  fontWeight: compact ? FontWeight.w500 : FontWeight.bold,
                   color: failedPing ? theme.colorScheme.error : null,
                 ),
               ),
