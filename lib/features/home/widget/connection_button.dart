@@ -9,24 +9,21 @@ import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/widget/animated_text.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
-import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
+import 'package:zeon/features/home/notifier/home_connection_state_provider.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/gen/assets.gen.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
-import 'package:zeon/utils/platform_utils.dart';
 
 class ConnectionButton extends ConsumerWidget {
-  const ConnectionButton({super.key});
+  const ConnectionButton({super.key, this.faceKey});
+
+  final GlobalKey? faceKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
-    final connectionStatus = ref.watch(connectionNotifierProvider);
-    final snapshotButtonState = ref.watch(mainVpnButtonStateProvider);
-    final buttonState = PlatformUtils.isAndroid
-        ? snapshotButtonState.valueOrNull ?? const MainVpnButtonState.loading()
-        : MainVpnButtonState.fromLegacyConnectionStatus(connectionStatus.valueOrNull);
+    final buttonState = ref.watch(homeConnectionStateProvider);
     final activeProxy = ref.watch(activeProxyNotifierProvider);
     final delay = activeProxy.valueOrNull?.urlTestDelay ?? 0;
     final hasValidDelay = delay > 0 && delay < 65000;
@@ -44,6 +41,7 @@ class ConnectionButton extends ConsumerWidget {
     final presentation = buttonState.present(t);
 
     return MainVpnButtonView(
+      faceKey: faceKey,
       onTap: buttonState.enabled
           ? () => ref.read(connectionNotifierProvider.notifier).handleMainVpnButtonTap(buttonState)
           : null,
@@ -58,6 +56,7 @@ class ConnectionButton extends ConsumerWidget {
 class MainVpnButtonView extends StatelessWidget {
   const MainVpnButtonView({
     super.key,
+    this.faceKey,
     required this.onTap,
     required this.presentation,
     required this.image,
@@ -66,6 +65,7 @@ class MainVpnButtonView extends StatelessWidget {
   });
 
   final VoidCallback? onTap;
+  final GlobalKey? faceKey;
   final MainVpnButtonPresentation presentation;
   final AssetGenImage image;
   final bool useImage;
@@ -82,6 +82,7 @@ class MainVpnButtonView extends StatelessWidget {
           enabled: state.enabled,
           label: presentation.semanticsLabel,
           child: Container(
+            key: faceKey,
             decoration: const BoxDecoration(shape: BoxShape.circle),
             width: _ConnectionButtonFace.outerSize,
             height: _ConnectionButtonFace.outerSize,

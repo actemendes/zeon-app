@@ -2,13 +2,17 @@ import 'package:dartx/dartx.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:sliver_tools/sliver_tools.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/features/home/notifier/home_connection_state_provider.dart';
 import 'package:zeon/features/home/widget/connection_button.dart';
 import 'package:zeon/features/home/widget/home_premium_access_button.dart';
+import 'package:zeon/features/home/widget/world_map_background.dart';
 import 'package:zeon/features/profile/data/profile_name_parser.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
@@ -16,8 +20,6 @@ import 'package:zeon/features/profile/notifier/profile_notifier.dart';
 import 'package:zeon/features/proxy/active/active_proxy_card.dart';
 import 'package:zeon/features/proxy/active/active_proxy_delay_indicator.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:sliver_tools/sliver_tools.dart';
 
 class HomePage extends HookConsumerWidget {
   const HomePage({super.key});
@@ -25,9 +27,8 @@ class HomePage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final backgroundMapAsset = theme.brightness == Brightness.dark
-        ? 'assets/images/2x/dark-back@2x.png'
-        : 'assets/images/2x/light-back@2x.png';
+    final buttonFaceKey = useMemoized(() => GlobalKey());
+    final connectionState = ref.watch(homeConnectionStateProvider);
     final t = ref.watch(translationsProvider).requireValue;
     // final hasAnyProfile = ref.watch(hasAnyProfileProvider);
     final activeProfile = ref.watch(activeProfileProvider);
@@ -57,15 +58,7 @@ class HomePage extends HookConsumerWidget {
         return Stack(
           children: [
             Positioned.fill(
-              child: IgnorePointer(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: Opacity(
-                    opacity: 1,
-                    child: Image.asset(backgroundMapAsset, height: constraints.maxHeight, fit: BoxFit.fitHeight),
-                  ),
-                ),
-              ),
+              child: WorldMapBackground(state: connectionState, buttonKey: buttonFaceKey),
             ),
             Scaffold(
               key: const ValueKey(UiNames.screenHome),
@@ -150,11 +143,14 @@ class HomePage extends HookConsumerWidget {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Expanded(
+                                Expanded(
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [ConnectionButton(), ActiveProxyDelayIndicator()],
+                                    children: [
+                                      ConnectionButton(faceKey: buttonFaceKey),
+                                      const ActiveProxyDelayIndicator(),
+                                    ],
                                   ),
                                 ),
                                 _HomeQuickSettingsButton(label: t.pages.home.quickSettings),
