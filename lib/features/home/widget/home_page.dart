@@ -13,6 +13,8 @@ import 'package:zeon/features/home/notifier/home_connection_state_provider.dart'
 import 'package:zeon/features/home/widget/connection_button.dart';
 import 'package:zeon/features/home/widget/home_premium_access_button.dart';
 import 'package:zeon/features/home/widget/world_map_background.dart';
+import 'package:zeon/features/home_tips/home_tip_card.dart';
+import 'package:zeon/features/home_tips/home_tip_provider.dart';
 import 'package:zeon/features/profile/data/profile_name_parser.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
@@ -27,6 +29,11 @@ class HomePage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final tip = ref.watch(homeTipProvider);
+    useEffect(() {
+      Future.microtask(() => ref.read(homeTipProvider.notifier).refresh());
+      return null;
+    }, const []);
     final buttonFaceKey = useMemoized(() => GlobalKey());
     final connectionState = ref.watch(homeConnectionStateProvider);
     final t = ref.watch(translationsProvider).requireValue;
@@ -136,42 +143,51 @@ class HomePage extends HookConsumerWidget {
                   ),
                 ),
               ),
-              body: breakpoint.isDesktop() || compactHeight
-                  ? _HomeConnectionBody(buttonFaceKey: buttonFaceKey, compactHeight: compactHeight)
-                  : Center(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: breakpoint.isDesktop() ? 600 : double.infinity),
-                        child: CustomScrollView(
-                          slivers: [
-                            MultiSliver(
-                              children: [
-                                SliverFillRemaining(
-                                  hasScrollBody: false,
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            ConnectionButton(faceKey: buttonFaceKey),
-                                            const ActiveProxyDelayIndicator(),
-                                          ],
+              body: LayoutBuilder(
+                builder: (context, bodyConstraints) => Column(
+                  children: [
+                    if (tip != null) HomeTipCard(content: tip, maxHeight: bodyConstraints.maxHeight * .35),
+                    Expanded(
+                      child: breakpoint.isDesktop() || compactHeight
+                          ? _HomeConnectionBody(buttonFaceKey: buttonFaceKey, compactHeight: compactHeight)
+                          : Center(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(maxWidth: breakpoint.isDesktop() ? 600 : double.infinity),
+                                child: CustomScrollView(
+                                  slivers: [
+                                    MultiSliver(
+                                      children: [
+                                        SliverFillRemaining(
+                                          hasScrollBody: false,
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Expanded(
+                                                child: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    ConnectionButton(faceKey: buttonFaceKey),
+                                                    const ActiveProxyDelayIndicator(),
+                                                  ],
+                                                ),
+                                              ),
+                                              _HomeQuickSettingsButton(label: t.pages.home.quickSettings),
+                                              const ActiveProxyFooter(),
+                                              if (!breakpoint.isMobile()) const HomePremiumAccessButton(),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                      _HomeQuickSettingsButton(label: t.pages.home.quickSettings),
-                                      const ActiveProxyFooter(),
-                                      if (!breakpoint.isMobile()) const HomePremiumAccessButton(),
-                                    ],
-                                  ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
                     ),
+                  ],
+                ),
+              ),
             ),
           ],
         );

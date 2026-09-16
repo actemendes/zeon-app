@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -61,7 +62,9 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
     required ProfileConfigStore profileConfigStore,
     required ManagedRuleSetSyncService managedRuleSetSyncService,
     required ManagedApplicationSyncService managedApplicationSyncService,
-  }) : _profileParser = profileParser,
+    Future<void> Function()? refreshHomeTip,
+  }) : _refreshHomeTip = refreshHomeTip,
+       _profileParser = profileParser,
        _configOptionRepo = configOptionRepository,
        _singbox = singbox,
        _profilePathResolver = profilePathResolver,
@@ -71,6 +74,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
        _profileDataSource = profileDataSource;
 
   final ProfileDataSource _profileDataSource;
+  final Future<void> Function()? _refreshHomeTip;
   final ProfilePathResolver _profilePathResolver;
   final ZeonCoreService _singbox;
   final ConfigOptionRepository _configOptionRepo;
@@ -230,6 +234,11 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
         await _profileDataSource.edit(id, profEntity);
       } else {
         await _profileDataSource.insert(profEntity);
+      }
+      final refreshHomeTip = _refreshHomeTip;
+      if (refreshHomeTip != null) {
+        // Includes manual, scheduled and bootstrap refresh; never blocks VPN work.
+        unawaited(Future<void>.sync(refreshHomeTip).catchError((Object _) {}));
       }
       return unit;
     } finally {

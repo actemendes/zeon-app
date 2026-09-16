@@ -174,10 +174,12 @@ class DioHttpClient with InfraLogger {
     bool directOnly = false,
     bool disableRetry = false,
     String? operation,
+    bool allowVpnRecovery = true,
   }) {
     return _sendAdaptive(
       url: url,
       operation: operation ?? 'http_get',
+      allowVpnRecovery: allowVpnRecovery,
       directOnly: directOnly,
       proxyOnly: proxyOnly,
       send: (mode) => _dio[mode]!.get<T>(
@@ -202,6 +204,27 @@ class DioHttpClient with InfraLogger {
     );
   }
 
+  /// Binary first-party content uses the same VPN-aware transport as API calls.
+  Future<Uint8List> getBytes(String url, {CancelToken? cancelToken}) {
+    return _sendAdaptive(
+      url: url,
+      operation: 'http_get_bytes',
+      allowVpnRecovery: false,
+      directOnly: false,
+      proxyOnly: false,
+      send: (mode) async {
+        final response = await _dio[mode]!.get<List<int>>(
+          url,
+          cancelToken: cancelToken,
+          options: _options(url, disableRetry: true)..responseType = ResponseType.bytes,
+        );
+        return Uint8List.fromList(response.data ?? const <int>[]);
+      },
+      sendSystem: () async =>
+          (await _sendSystem<Uint8List>(method: 'GET', url: url, cancelToken: cancelToken)).data ?? Uint8List(0),
+    );
+  }
+
   Future<Response<T>> post<T>(
     String url, {
     dynamic data,
@@ -213,10 +236,12 @@ class DioHttpClient with InfraLogger {
     bool directOnly = false,
     bool disableRetry = false,
     String? operation,
+    bool allowVpnRecovery = true,
   }) {
     return _sendAdaptive(
       url: url,
       operation: operation ?? 'http_post',
+      allowVpnRecovery: allowVpnRecovery,
       directOnly: directOnly,
       proxyOnly: proxyOnly,
       send: (mode) => _dio[mode]!.post<T>(
@@ -284,6 +309,7 @@ class DioHttpClient with InfraLogger {
   }
 
   Future<T> _sendAdaptive<T>({
+    bool allowVpnRecovery = true,
     required String url,
     required String operation,
     required bool directOnly,
@@ -322,7 +348,10 @@ class DioHttpClient with InfraLogger {
         );
       }
       final recovered =
-          !directOnly && mode != HttpRouteMode.localZeonProxy && await recoverWithVpnAfterFailure(url, error);
+          allowVpnRecovery &&
+          !directOnly &&
+          mode != HttpRouteMode.localZeonProxy &&
+          await recoverWithVpnAfterFailure(url, error);
       if (recovered && await waitForProxyAvailable()) {
         loggy.info("retrying control-plane request through VPN proxy");
         return send("proxy");

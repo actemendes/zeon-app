@@ -11,6 +11,8 @@ class NotificationDeviceAuth {
     required DioHttpClient httpClient,
     required SharedPreferences preferences,
     MobileSensitiveStorage? sensitiveStorage,
+    this.directOnly = true,
+    this.allowVpnRecovery = true,
   }) : _httpClient = httpClient,
        _preferences = preferences,
        _sensitiveStorage = sensitiveStorage ?? MobileSensitiveStorage(preferences: preferences),
@@ -25,6 +27,8 @@ class NotificationDeviceAuth {
   static const _prefUserId = MobileConnLinkImportService.prefUserId;
 
   final DioHttpClient _httpClient;
+  final bool directOnly;
+  final bool allowVpnRecovery;
   final SharedPreferences _preferences;
   final MobileSensitiveStorage _sensitiveStorage;
   final StableDeviceIdService _stableDeviceId;
@@ -62,7 +66,8 @@ class NotificationDeviceAuth {
       uri,
       data: payload,
       headers: {'x-api-key': _mobileApiKey, 'Content-Type': 'application/json'},
-      directOnly: true,
+      directOnly: directOnly,
+      allowVpnRecovery: allowVpnRecovery,
       disableRetry: true,
     );
     final body = response.data;

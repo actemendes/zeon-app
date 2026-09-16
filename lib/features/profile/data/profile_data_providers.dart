@@ -5,6 +5,7 @@ import 'package:zeon/core/db/provider/db_providers.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/home_tips/home_tip_provider.dart';
 import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
 import 'package:zeon/features/profile/data/profile_config_store.dart';
 import 'package:zeon/features/profile/data/profile_data_source.dart';
@@ -29,6 +30,7 @@ Future<ProfileRepository> profileRepository(Ref ref) async {
     profileConfigStore: ref.watch(profileConfigStoreProvider),
     managedRuleSetSyncService: ref.watch(managedRuleSetSyncServiceProvider),
     managedApplicationSyncService: ref.watch(managedApplicationSyncServiceProvider),
+    refreshHomeTip: () => ref.read(homeTipProvider.notifier).refresh(),
   );
   await repo.init().getOrElse((l) => throw l).run();
   return repo;

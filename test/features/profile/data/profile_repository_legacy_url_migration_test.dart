@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -35,7 +36,11 @@ void main() {
   late _RecordingRuleSetRemoteDataSource ruleSetRemote;
   late _RecordingApplicationRemoteDataSource applicationRemote;
 
-  Future<ProfileRepositoryImpl> createRepository({required bool failDownload, bool invalidMetadata = false}) async {
+  Future<ProfileRepositoryImpl> createRepository({
+    required bool failDownload,
+    bool invalidMetadata = false,
+    Future<void> Function()? refreshHomeTip,
+  }) async {
     final pathResolver = ProfilePathResolver(Directory('${root.path}/work'), Directory('${root.path}/temp'));
     final client = _RecordingDioHttpClient(failDownload: failDownload, invalidMetadata: invalidMetadata);
     final parserProvider = Provider<ProfileParser>((ref) => ProfileParser(ref: ref, httpClient: client));
@@ -46,6 +51,7 @@ void main() {
       ..contents['profile-id'] = cachedConfig;
 
     return ProfileRepositoryImpl(
+      refreshHomeTip: refreshHomeTip,
       profileDataSource: dataSource,
       profilePathResolver: pathResolver,
       singbox: core,
@@ -106,6 +112,25 @@ void main() {
     expect(configStore.contents['profile-id'], isNot(cachedConfig));
     expect(configStore.lastWrittenProfileId, 'profile-id');
     expect(_RecordingDioHttpClient.lastCreated.requests, [canonicalUrl]);
+  });
+
+  test('successful subscription refresh starts tips without waiting for the tips service', () async {
+    var called = false;
+    final pending = Completer<void>();
+    final repository = await createRepository(
+      failDownload: false,
+      refreshHomeTip: () {
+        called = true;
+        return pending.future;
+      },
+    );
+    final result = await repository
+        .upsertRemote(legacyUrl, validateConfigOnImport: false, syncManagedRouting: false)
+        .run();
+    expect(result.isRight(), isTrue);
+    expect(called, isTrue);
+    pending.completeError(StateError('optional tips offline'));
+    await Future<void>.delayed(Duration.zero);
   });
 
   test('failed canonical request leaves the persisted URL and cached config intact', () async {
