@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zeon/core/theme/theme_extensions.dart';
 
 /// Presentation shared by the home entry point and isolated visual previews.
 class HomePremiumAccessView extends StatelessWidget {
@@ -23,8 +24,11 @@ class HomePremiumAccessView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final trackColor = colors.brightness == Brightness.dark ? const Color(0xFF26292F) : Colors.white;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final trackColor =
+        theme.extension<HomeVisualTheme>()?.premiumTrackColor ??
+        (colors.brightness == Brightness.dark ? HomeVisualTheme.amoled : HomeVisualTheme.light).premiumTrackColor;
     final gradient = LinearGradient(colors: [colors.secondary, colors.primary]);
     final days = remainingDays;
     if (days == null || days < 1) {

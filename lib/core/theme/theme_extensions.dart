@@ -6,30 +6,35 @@ class HomeVisualTheme extends ThemeExtension<HomeVisualTheme> {
   const HomeVisualTheme({
     required this.mapDotColor,
     required this.connectionLogoColor,
+    required this.premiumTrackColor,
     required this.idleOpacity,
     required this.loadingOpacity,
   });
 
   final Color mapDotColor;
   final Color connectionLogoColor;
+  final Color premiumTrackColor;
   final double idleOpacity;
   final double loadingOpacity;
 
   static const light = HomeVisualTheme(
     mapDotColor: AppColorTokens.lightMapDots,
     connectionLogoColor: AppColorTokens.lightText,
+    premiumTrackColor: Colors.white,
     idleOpacity: .85,
     loadingOpacity: .92,
   );
   static const graphite = HomeVisualTheme(
     mapDotColor: AppColorTokens.darkMapDots,
     connectionLogoColor: Color(0xFFD8DEE6),
+    premiumTrackColor: AppColorTokens.darkMapDots,
     idleOpacity: .65,
     loadingOpacity: .8,
   );
   static const amoled = HomeVisualTheme(
     mapDotColor: Color(0xFF181818),
     connectionLogoColor: Colors.white,
+    premiumTrackColor: Color(0xFF26292F),
     idleOpacity: .45,
     loadingOpacity: .7,
   );
@@ -38,11 +43,13 @@ class HomeVisualTheme extends ThemeExtension<HomeVisualTheme> {
   HomeVisualTheme copyWith({
     Color? mapDotColor,
     Color? connectionLogoColor,
+    Color? premiumTrackColor,
     double? idleOpacity,
     double? loadingOpacity,
   }) => HomeVisualTheme(
     mapDotColor: mapDotColor ?? this.mapDotColor,
     connectionLogoColor: connectionLogoColor ?? this.connectionLogoColor,
+    premiumTrackColor: premiumTrackColor ?? this.premiumTrackColor,
     idleOpacity: idleOpacity ?? this.idleOpacity,
     loadingOpacity: loadingOpacity ?? this.loadingOpacity,
   );
@@ -53,6 +60,7 @@ class HomeVisualTheme extends ThemeExtension<HomeVisualTheme> {
     return HomeVisualTheme(
       mapDotColor: Color.lerp(mapDotColor, other.mapDotColor, t)!,
       connectionLogoColor: Color.lerp(connectionLogoColor, other.connectionLogoColor, t)!,
+      premiumTrackColor: Color.lerp(premiumTrackColor, other.premiumTrackColor, t)!,
       idleOpacity: idleOpacity + (other.idleOpacity - idleOpacity) * t,
       loadingOpacity: loadingOpacity + (other.loadingOpacity - loadingOpacity) * t,
     );
