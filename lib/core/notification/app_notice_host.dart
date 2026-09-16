@@ -88,10 +88,8 @@ class _AppNoticeHostState extends State<AppNoticeHost> with WidgetsBindingObserv
                           child: Focus(
                             canRequestFocus: false,
                             onFocusChange: (focused) => controller.pause(AppNoticePause.focus, paused: focused),
-                            child: AnimatedSize(
+                            child: _NoticeSize(
                               duration: duration,
-                              alignment: Alignment.bottomCenter,
-                              curve: Curves.easeOutCubic,
                               child: Padding(
                                 padding: EdgeInsets.only(top: front == null ? 0 : 24),
                                 child: Stack(
@@ -180,6 +178,20 @@ class _AppNoticeHostState extends State<AppNoticeHost> with WidgetsBindingObserv
       ),
     );
   }
+}
+
+// A zero-duration AnimatedSize can notify its layout listener during layout.
+// Reduced motion must skip the size animation entirely.
+class _NoticeSize extends StatelessWidget {
+  const _NoticeSize({required this.duration, required this.child});
+
+  final Duration duration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => duration == Duration.zero
+      ? child
+      : AnimatedSize(duration: duration, alignment: Alignment.bottomCenter, curve: Curves.easeOutCubic, child: child);
 }
 
 // Unlike Dismissible, this can remain in AnimatedSwitcher's outgoing layer.

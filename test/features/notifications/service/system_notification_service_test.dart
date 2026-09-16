@@ -4,6 +4,7 @@ import 'package:zeon/features/notifications/model/notification_category.dart';
 import 'package:zeon/features/notifications/model/notification_entity.dart';
 import 'package:zeon/features/notifications/model/notification_priority.dart';
 import 'package:zeon/features/notifications/service/system_notification_service.dart';
+import 'package:zeon/utils/platform_utils.dart';
 
 void main() {
   test('falls back without calling native show when platform initialization returns false', () async {
@@ -27,7 +28,7 @@ void main() {
 
     expect(result.displayed, isFalse);
     expect(result.fallbackUsed, isTrue);
-    expect(result.errorCode, contains('notification_init_failed'));
+    expect(result.errorCode, PlatformUtils.isWindows ? 'windows_notification_init_failed' : 'stateerror');
   });
 
   test('maps Android notification channels by category', () {
