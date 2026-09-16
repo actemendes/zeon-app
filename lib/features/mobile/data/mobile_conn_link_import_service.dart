@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,6 +12,7 @@ import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/http_client/windows_system_http_transport.dart';
 import 'package:zeon/core/model/failures.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
+import 'package:zeon/features/home_tips/home_tip_provider.dart';
 import 'package:zeon/features/mobile/data/mobile_sensitive_storage.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/data/profile_data_source.dart';
@@ -27,6 +29,7 @@ final mobileConnLinkImportServiceProvider = Provider<MobileConnLinkImportService
     profileRepository: ref.read(profileRepositoryProvider).requireValue,
     profileDataSource: ref.read(profileDataSourceProvider),
     preferences: ref.read(sharedPreferencesProvider).requireValue,
+    onIdentityReady: () => ref.read(homeTipProvider.notifier).refresh(),
   );
 });
 
@@ -39,7 +42,9 @@ class MobileConnLinkImportService with InfraLogger {
     required ProfileDataSource profileDataSource,
     required SharedPreferences preferences,
     MobileSensitiveStorage? sensitiveStorage,
-  }) : _httpClient = httpClient,
+    Future<void> Function()? onIdentityReady,
+  }) : _onIdentityReady = onIdentityReady,
+       _httpClient = httpClient,
        _profileRepository = profileRepository,
        _profileDataSource = profileDataSource,
        _preferences = preferences,
@@ -58,6 +63,7 @@ class MobileConnLinkImportService with InfraLogger {
   static const prefManagedProfileId = "mobile_managed_profile_id";
 
   final DioHttpClient _httpClient;
+  final Future<void> Function()? _onIdentityReady;
   final ProfileRepository _profileRepository;
   final ProfileDataSource _profileDataSource;
   final SharedPreferences _preferences;
@@ -188,6 +194,13 @@ class MobileConnLinkImportService with InfraLogger {
       await _preferences.setString(prefUserId, effectiveUserId.toString());
     } else if (clearUserIdWhenMissing) {
       await _preferences.remove(prefUserId);
+    }
+
+    // Profile persistence precedes account metadata during bootstrap/rebind.
+    // Refresh again only after identity is committed, fencing the earlier check.
+    final onIdentityReady = _onIdentityReady;
+    if (onIdentityReady != null) {
+      unawaited(Future<void>.sync(onIdentityReady).catchError((Object _) {}));
     }
 
     loggy.info(

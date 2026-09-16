@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:cryptography/cryptography.dart';
 import 'package:dio/dio.dart';
@@ -13,20 +14,24 @@ import 'package:zeon/features/notifications/data/notification_device_auth.dart';
 final homeTipProvider = StateNotifierProvider<HomeTipController, HomeTipContent?>((ref) {
   final preferences = ref.watch(sharedPreferencesProvider).requireValue;
   final client = ref.watch(httpClientProvider);
-  final auth = NotificationDeviceAuth(
-    httpClient: client,
-    preferences: preferences,
-    directOnly: false,
-    allowVpnRecovery: false,
-  );
   final origin = Uri.parse(MobileConnLinkImportService.apiBaseUrl);
   return HomeTipController(
     preferences: preferences,
     currentUser: () => preferences.getString(MobileConnLinkImportService.prefUserId) ?? '',
     fetchTip: () async {
+      // Secure-storage instances cache tokens in memory. Recreate on every check
+      // so a completed rebind cannot reuse another account's cached bearer.
+      final auth = NotificationDeviceAuth(
+        httpClient: client,
+        preferences: preferences,
+        directOnly: false,
+        allowVpnRecovery: false,
+      );
+      final owner = preferences.getString(MobileConnLinkImportService.prefUserId) ?? '';
       for (var attempt = 0; attempt < 2; attempt++) {
         final token = await auth.resolveDeviceJwt(forceRefresh: attempt > 0).timeout(const Duration(seconds: 10));
         if (token.isEmpty) return null;
+        if (!homeTipTokenMatchesUser(token, owner)) continue;
         final cancel = CancelToken();
         final timeout = Timer(const Duration(seconds: 10), () => cancel.cancel('tips deadline'));
         try {
@@ -70,3 +75,13 @@ final homeTipProvider = StateNotifierProvider<HomeTipController, HomeTipContent?
     },
   );
 });
+
+// This is only a local identity fence; the server verifies the JWT signature.
+bool homeTipTokenMatchesUser(String token, String userId) {
+  try {
+    final payload = jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(token.split('.')[1]))));
+    return payload is Map && payload['user_id']?.toString() == userId;
+  } catch (_) {
+    return false;
+  }
+}

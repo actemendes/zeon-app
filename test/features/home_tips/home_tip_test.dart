@@ -51,6 +51,13 @@ void main() {
     }
   });
 
+  test('old or malformed device bearer cannot request tips for the new account', () {
+    final token = 'header.${base64Url.encode(utf8.encode(jsonEncode({'user_id': 1})))}.signature';
+    expect(homeTipTokenMatchesUser(token, '1'), isTrue);
+    expect(homeTipTokenMatchesUser(token, '2'), isFalse);
+    expect(homeTipTokenMatchesUser('broken', '1'), isFalse);
+  });
+
   test('dismissal survives controller restart; a new revision reappears', () async {
     var remote = HomeTip.parse(payload(), origin);
     HomeTipController create() => HomeTipController(
