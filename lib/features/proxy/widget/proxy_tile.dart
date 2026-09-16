@@ -54,7 +54,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
                 Semantics(

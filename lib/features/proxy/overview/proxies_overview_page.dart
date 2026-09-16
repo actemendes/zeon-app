@@ -101,7 +101,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                           itemCount: group.items.length,
                           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: crossAxisCount,
-                            mainAxisExtent: 88 + max(0, MediaQuery.textScalerOf(context).scale(16) - 16) * 3.8,
+                            mainAxisExtent: 24 + max(42, MediaQuery.textScalerOf(context).scale(16) * 1.3 * 2),
                             mainAxisSpacing: 10,
                             crossAxisSpacing: 10,
                           ),

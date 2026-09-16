@@ -116,7 +116,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                                 style:
                                     (theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{}) ??
                                             theme.textTheme.labelMedium)
-                                        ?.copyWith(color: navBarTextColor),
+                                        ?.copyWith(color: navBarTextColor, fontWeight: FontWeight.w700),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
