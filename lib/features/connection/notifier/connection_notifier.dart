@@ -988,7 +988,15 @@ bool shouldReconnectForActiveProfileChange({
 
 @Riverpod(keepAlive: true)
 Future<bool> serviceRunning(Ref ref) async {
-  // ref.watch(coreRestartSignalProvider);
+  // A recreated Flutter notifier can still say Disconnected while Android's
+  // native VPN survives. Data streams and live selection must use that same
+  // ownership proof as Home, not stage a connected user's choice as offline.
+  final nativeRunning = ref.watch(
+    nativeVpnSessionSnapshotProvider.select((snapshot) {
+      return snapshot == null ? null : snapshot.valueOrNull?.provesConnected ?? false;
+    }),
+  );
+  if (nativeRunning != null) return nativeRunning;
   return await ref
       .watch(connectionNotifierProvider.selectAsync((data) => data.isConnected))
       .onError((error, stackTrace) => false);

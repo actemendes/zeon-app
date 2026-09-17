@@ -117,7 +117,13 @@ evidence. S05 остаётся пользовательским `MANUAL/NOT_RUN`
 Передача тестеру: Task `6a9fbc798f08ecb120d25c30`, Android Home re-entry и полное
 пересоздание UI при живом VPN, Manual → Auto → Manual, native stop при устаревшем
 UI Connected. Проверить имя/флаг против native leaf и свежего трафика; затем SHORT
-по README. Новые device runtime/SHORT/FULL/build проверки — `NOT_RUN`.
+по README. На runtime-кандидате `1.5.0+1050056` карточка пережила пересоздание
+Activity, но выявлен связанный дефект: `serviceRunningProvider` принимал устаревший
+Disconnected за выключенный VPN и откладывал выбор сервера до следующего старта.
+В `1.5.0+1050057` Android gate потоков и live selection переведён на тот же native
+snapshot; 40 регрессионных тестов PASS. Повторная физическая приёмка выполняется;
+FULL — `NOT_RUN`. Evidence текущего прогона:
+`Z:\Zeon-Envelope\Temp\zeon-app-testing\T04-CARD-RUNTIME-20260917`.
 Локальное evidence разработки:
 `Z:\Zeon-Envelope\Temp\zeon-app-testing\T04-ANDROID-CARD-20260917\report.md`.
 Этапы 07 и 09 завершены на `1.5.0+1050021` / `ec3104f4`; P03/R17 и регрессия
