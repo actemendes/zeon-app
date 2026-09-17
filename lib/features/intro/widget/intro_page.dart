@@ -97,7 +97,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                     child: Center(
                       child: Container(
                         constraints: const BoxConstraints(maxWidth: _maxContentWidth),
-                        padding: EdgeInsets.symmetric(horizontal: wide ? 40 : 16, vertical: wide ? 40 : 24),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                         child: wide
                             ? Row(
                                 children: [
@@ -184,13 +184,13 @@ class _IntroFooter extends ConsumerWidget {
         borderRadius: BorderRadius.circular(28),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             _IntroStartButton(isLoading: isStarting, title: startTitle, subtitle: startSubtitle, onPressed: onStart),
             if (showAccountButton) ...[
-              const Gap(16),
+              const Gap(12),
               _IntroSecondaryButton(label: accountLabel),
               const Gap(16),
             ] else
@@ -255,10 +255,10 @@ class _IntroStartButton extends StatelessWidget {
           key: const ValueKey(UiNames.buttonIntroStart),
           onTap: isLoading ? null : onPressed,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                _IntroCrownIcon(size: 26, color: crownColor),
+                _IntroCrownIcon(size: 22, color: crownColor),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -275,7 +275,7 @@ class _IntroStartButton extends StatelessWidget {
                           height: 1,
                         ),
                       ),
-                      const Gap(7),
+                      const Gap(5),
                       Text(
                         subtitle,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -290,7 +290,7 @@ class _IntroStartButton extends StatelessWidget {
                   ),
                 ),
                 SizedBox.square(
-                  dimension: 44,
+                  dimension: 40,
                   child: Center(
                     child: isLoading
                         ? SizedBox(
@@ -336,7 +336,7 @@ class _IntroSecondaryButton extends StatelessWidget {
           showDialog<void>(context: context, builder: (_) => const _BindAccountCodeDialog());
         },
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Center(
             child: Text(
               label,
