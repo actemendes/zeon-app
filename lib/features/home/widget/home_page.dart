@@ -407,7 +407,7 @@ class _HomeQuickSettingsButton extends ConsumerWidget {
         theme.navigationBarTheme.iconTheme?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
 
     return Padding(
-      padding: embedded ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 16),
+      padding: embedded ? EdgeInsets.zero : const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Align(
         alignment: Alignment.centerRight,
         widthFactor: embedded ? 1 : null,
