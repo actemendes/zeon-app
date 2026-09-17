@@ -35,6 +35,7 @@ class InboundOptionsPage extends HookConsumerWidget {
                   preferences: ref.watch(ConfigOptions.serviceMode.notifier),
                   choices: serviceModeChoices,
                   title: t.pages.settings.inbound.serviceMode,
+                  help: t.settingsHelp.serviceMode,
                   icon: Icons.tune_rounded,
                   presentChoice: (value) => value.present(t),
                 ),
@@ -45,6 +46,7 @@ class InboundOptionsPage extends HookConsumerWidget {
             children: [
               SettingsSwitch(
                 title: Text(t.pages.settings.inbound.strictRoute),
+                help: t.settingsHelp.strictRoute,
                 secondary: const Icon(Icons.merge_rounded),
                 value: ref.watch(ConfigOptions.strictRoute),
                 onChanged: isTunMode
@@ -59,6 +61,7 @@ class InboundOptionsPage extends HookConsumerWidget {
                   preferences: ref.watch(ConfigOptions.tunImplementation.notifier),
                   choices: TunImplementation.values,
                   title: t.pages.settings.inbound.tunImplementation,
+                  help: t.settingsHelp.tunStack,
                   icon: Icons.trip_origin_rounded,
                   presentChoice: (value) => value.present(t),
                   enabled: isTunMode,
@@ -68,6 +71,7 @@ class InboundOptionsPage extends HookConsumerWidget {
                   value: ref.watch(ConfigOptions.tproxyPort),
                   preferences: ref.watch(ConfigOptions.tproxyPort.notifier),
                   title: t.pages.settings.inbound.tproxyPort,
+                  help: t.settingsHelp.tproxyPort,
                   icon: Icons.device_hub_rounded,
                   inputToValue: int.tryParse,
                   digitsOnly: true,
@@ -78,6 +82,7 @@ class InboundOptionsPage extends HookConsumerWidget {
                   value: ref.watch(ConfigOptions.redirectPort),
                   preferences: ref.watch(ConfigOptions.redirectPort.notifier),
                   title: t.pages.settings.inbound.redirectPort,
+                  help: t.settingsHelp.redirectPort,
                   icon: Icons.device_hub_rounded,
                   inputToValue: int.tryParse,
                   digitsOnly: true,

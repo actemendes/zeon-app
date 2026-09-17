@@ -41,6 +41,7 @@ class GeneralPage extends HookConsumerWidget {
               if (PlatformUtils.isAndroid) ...[
                 SettingsSwitch(
                   title: Text(t.pages.settings.general.dynamicNotification),
+                  help: t.settingsHelp.dynamicNotification,
                   secondary: const Icon(Icons.speed_rounded),
                   value: ref.watch(Preferences.dynamicNotification),
                   onChanged: ref.read(Preferences.dynamicNotification.notifier).update,
@@ -56,6 +57,7 @@ class GeneralPage extends HookConsumerWidget {
                 const ClosingPrefTile(),
                 SettingsSwitch(
                   title: Text(t.pages.settings.general.autoStart),
+                  help: t.settingsHelp.autoStart,
                   secondary: const Icon(Icons.auto_mode_rounded),
                   value: ref.watch(autoStartNotifierProvider).valueOrNull ?? false,
                   onChanged: !ref.watch(autoStartNotifierProvider).hasValue
@@ -66,6 +68,7 @@ class GeneralPage extends HookConsumerWidget {
                 ),
                 SettingsSwitch(
                   title: Text(t.pages.settings.general.silentStart),
+                  help: t.settingsHelp.silentStart,
                   secondary: const Icon(Icons.visibility_off_rounded),
                   value: ref.watch(Preferences.silentStart),
                   onChanged: ref.read(Preferences.silentStart.notifier).update,
@@ -73,6 +76,7 @@ class GeneralPage extends HookConsumerWidget {
               ],
               SettingsSwitch(
                 title: Text(t.pages.settings.general.notifications),
+                help: t.settingsHelp.notifications,
                 secondary: const Icon(Icons.notifications_active_rounded),
                 value: ref.watch(Preferences.remoteNotifications),
                 onChanged: (value) async {
@@ -91,6 +95,7 @@ class GeneralPage extends HookConsumerWidget {
               SettingsSwitch(
                 key: const ValueKey('settings_low_power_mode'),
                 title: Text(t.pages.settings.general.lowPowerMode),
+                help: t.settingsHelp.lowPower,
                 subtitle: Text(t.pages.settings.general.lowPowerModeMsg),
                 secondary: const Icon(Icons.speed_rounded),
                 value: ref.watch(Preferences.lowPowerMode),
@@ -99,6 +104,7 @@ class GeneralPage extends HookConsumerWidget {
               if (PlatformUtils.isAndroid) const BatteryOptimizationWidget(),
               SettingsSwitch(
                 title: Text(t.pages.settings.general.memoryLimit),
+                help: t.settingsHelp.memory,
                 subtitle: Text(t.pages.settings.general.memoryLimitMsg),
                 secondary: const Icon(Icons.memory_rounded),
                 value: !ref.watch(Preferences.disableMemoryLimit),
@@ -113,10 +119,12 @@ class GeneralPage extends HookConsumerWidget {
                 value: ref.watch(ConfigOptions.connectionTestUrl),
                 preferences: ref.watch(ConfigOptions.connectionTestUrl.notifier),
                 title: t.pages.settings.general.connectionTestUrl,
+                help: t.settingsHelp.testUrl,
                 icon: Icons.link_rounded,
               ),
               SettingsTile(
                 title: Text(t.pages.settings.general.urlTestInterval),
+                help: t.settingsHelp.testInterval,
                 subtitle: Text(ref.watch(ConfigOptions.urlTestInterval).toApproximateTime(isRelativeToNow: false)),
                 leading: const Icon(Icons.timer_rounded),
                 onTap: () async => await ref

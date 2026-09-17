@@ -12,6 +12,7 @@ import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/features/app_update/notifier/app_update_state.dart';
 import 'package:zeon/features/settings/notifier/config_option/config_option_notifier.dart';
+import 'package:zeon/features/settings/widget/settings_help.dart';
 import 'package:zeon/features/settings/widget/settings_surface.dart';
 import 'package:zeon/utils/utils.dart';
 
@@ -161,6 +162,7 @@ class SettingsPage extends HookConsumerWidget {
               // SettingsHint(message: t.settings.experimentalMsg),
               SettingsSection(
                 title: t.pages.settings.general.title,
+                help: t.settingsHelp.general,
                 icon: Icons.layers_rounded,
                 namedLocation: context.namedLocation('general'),
                 subtitle: '${t.pages.settings.general.locale} · ${t.pages.settings.general.themeMode}',
@@ -170,20 +172,25 @@ class SettingsPage extends HookConsumerWidget {
           SettingsGroup(
             title: t.pages.settings.groups.connection,
             children: [
-              SettingsSection(
-                title: t.pages.settings.routing.title,
-                icon: Icons.route_rounded,
-                namedLocation: context.namedLocation('routeOptions'),
-                subtitle: '${t.pages.settings.routing.region} · ${t.pages.settings.routing.ipv6Route}',
+              SettingsHelpOnboarding(
+                child: SettingsSection(
+                  title: t.pages.settings.routing.title,
+                  help: t.settingsHelp.routing,
+                  icon: Icons.route_rounded,
+                  namedLocation: context.namedLocation('routeOptions'),
+                  subtitle: '${t.pages.settings.routing.region} · ${t.pages.settings.routing.ipv6Route}',
+                ),
               ),
               SettingsSection(
                 title: t.pages.settings.tlsTricks.title,
+                help: t.settingsHelp.fragment,
                 icon: Icons.content_cut_rounded,
                 namedLocation: context.namedLocation('tlsTricks'),
               ),
               if (!PlatformUtils.isApple)
                 SettingsSection(
                   title: t.pages.settings.inbound.title,
+                  help: t.settingsHelp.system,
                   icon: Icons.input_rounded,
                   namedLocation: context.namedLocation('inboundOptions'),
                 ),
@@ -245,16 +252,19 @@ class SettingsSection extends HookConsumerWidget {
     required this.icon,
     required this.namedLocation,
     this.subtitle,
+    this.help,
   });
 
   final String title;
   final IconData icon;
   final String namedLocation;
   final String? subtitle;
+  final String? help;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SettingsTile(
+      help: help,
       leading: Icon(icon),
       title: Text(title),
       subtitle: subtitle == null ? null : Text(subtitle!),

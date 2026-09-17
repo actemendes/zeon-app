@@ -31,6 +31,7 @@ class WarpOptionsPage extends HookConsumerWidget {
             children: [
               SettingsSwitch(
                 title: Text(t.pages.settings.warp.enable),
+                help: t.settingsHelp.warp,
                 value: isWarpEnabled,
                 secondary: const Icon(Icons.cloud_rounded),
                 onChanged: (value) async {
@@ -40,6 +41,7 @@ class WarpOptionsPage extends HookConsumerWidget {
               ),
               SettingsTile(
                 title: Text(t.pages.settings.warp.generateConfig),
+                help: t.settingsHelp.warpConfig,
                 subtitle: !isWarpEnabled
                     ? null
                     : warpOptions.when(
@@ -70,6 +72,7 @@ class WarpOptionsPage extends HookConsumerWidget {
                 enabled: isWarpEnabled,
                 choices: WarpDetourMode.values,
                 title: t.pages.settings.warp.detourMode,
+                help: t.settingsHelp.warpMode,
                 icon: Icons.alt_route_rounded,
                 presentChoice: (value) => value.present(t),
               ),
@@ -78,6 +81,7 @@ class WarpOptionsPage extends HookConsumerWidget {
                 preferences: ref.watch(ConfigOptions.warpLicenseKey.notifier),
                 enabled: isWarpEnabled,
                 title: t.pages.settings.warp.licenseKey,
+                help: t.settingsHelp.warpLicense,
                 icon: Icons.key_rounded,
                 presentValue: (value) => value.isEmpty ? t.common.notSet : value,
               ),
@@ -86,6 +90,7 @@ class WarpOptionsPage extends HookConsumerWidget {
                 preferences: ref.watch(ConfigOptions.warpCleanIp.notifier),
                 enabled: isWarpEnabled,
                 title: t.pages.settings.warp.cleanIp,
+                help: t.settingsHelp.warpIp,
                 icon: Icons.auto_awesome_rounded,
               ),
               ValuePreferenceWidget(
@@ -93,6 +98,7 @@ class WarpOptionsPage extends HookConsumerWidget {
                 preferences: ref.watch(ConfigOptions.warpPort.notifier),
                 enabled: isWarpEnabled,
                 title: t.pages.settings.warp.port,
+                help: t.settingsHelp.warpPort,
                 icon: Icons.device_hub_rounded,
                 inputToValue: int.tryParse,
                 validateInput: isPort,
@@ -108,6 +114,7 @@ class WarpOptionsPage extends HookConsumerWidget {
                 preferences: ref.watch(ConfigOptions.warpNoise.notifier),
                 enabled: isWarpEnabled,
                 title: t.pages.settings.warp.noise.count,
+                help: t.settingsHelp.noiseCount,
                 icon: Icons.web_stories_rounded,
                 inputToValue: (input) => OptionalRange.tryParse(input, allowEmpty: true),
                 presentValue: (value) => value.present(t),
@@ -118,6 +125,7 @@ class WarpOptionsPage extends HookConsumerWidget {
                 preferences: ref.watch(ConfigOptions.warpNoiseMode.notifier),
                 enabled: isWarpEnabled,
                 title: t.pages.settings.warp.noise.mode,
+                help: t.settingsHelp.noiseMode,
                 icon: Icons.mode_standby_rounded,
               ),
               ValuePreferenceWidget(
@@ -125,6 +133,7 @@ class WarpOptionsPage extends HookConsumerWidget {
                 preferences: ref.watch(ConfigOptions.warpNoiseSize.notifier),
                 enabled: isWarpEnabled,
                 title: t.pages.settings.warp.noise.size,
+                help: t.settingsHelp.noiseSize,
                 icon: Icons.settings_ethernet_rounded,
                 inputToValue: (input) => OptionalRange.tryParse(input, allowEmpty: true),
                 presentValue: (value) => value.present(t),
@@ -135,6 +144,7 @@ class WarpOptionsPage extends HookConsumerWidget {
                 preferences: ref.watch(ConfigOptions.warpNoiseDelay.notifier),
                 enabled: isWarpEnabled,
                 title: t.pages.settings.warp.noise.delay,
+                help: t.settingsHelp.noiseDelay,
                 icon: Icons.schedule_rounded,
                 inputToValue: (input) => OptionalRange.tryParse(input, allowEmpty: true),
                 presentValue: (value) => value.present(t),

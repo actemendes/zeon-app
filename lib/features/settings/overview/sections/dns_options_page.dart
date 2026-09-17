@@ -27,9 +27,11 @@ class DnsOptionsPage extends HookConsumerWidget {
                 icon: Icons.vpn_lock_rounded,
                 preferences: ref.watch(ConfigOptions.remoteDnsAddress.notifier),
                 title: t.pages.settings.dns.remoteDns,
+                help: t.settingsHelp.remoteDns,
               ),
               SettingsSwitch(
                 title: Text(t.pages.settings.dns.enableFakeDns),
+                help: t.settingsHelp.fakeDns,
                 secondary: const Icon(Icons.private_connectivity_rounded),
                 value: ref.watch(ConfigOptions.enableFakeDns),
                 onChanged: ref.read(ConfigOptions.enableFakeDns.notifier).update,
@@ -40,6 +42,7 @@ class DnsOptionsPage extends HookConsumerWidget {
             children: [
               ValuePreferenceWidget(
                 title: t.pages.settings.dns.directDns,
+                help: t.settingsHelp.directDns,
                 icon: Icons.public_rounded,
                 value: ref.watch(ConfigOptions.directDnsAddress),
                 preferences: ref.watch(ConfigOptions.directDnsAddress.notifier),

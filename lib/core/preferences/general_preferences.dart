@@ -14,6 +14,8 @@ bool _debugIntroPage = false;
 const _defaultWindowSize = Size(868, 668);
 
 abstract class Preferences {
+  static final settingsHelpLearned = PreferencesNotifier.create<bool, bool>("settings_help_learned", false);
+
   static final lowPowerMode = PreferencesNotifier.create<bool, bool>("low_power_mode", false);
 
   static final introCompleted = PreferencesNotifier.create(

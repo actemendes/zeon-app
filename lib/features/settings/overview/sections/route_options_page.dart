@@ -45,6 +45,7 @@ class RouteOptionsPage extends HookConsumerWidget {
               if (PlatformUtils.isAndroid)
                 SettingsTile(
                   title: Text(t.pages.settings.routing.perAppProxy.title),
+                  help: t.settingsHelp.apps,
                   leading: const Icon(Icons.apps_rounded),
                   trailing: Switch(
                     value: perAppProxy,
@@ -66,6 +67,7 @@ class RouteOptionsPage extends HookConsumerWidget {
                 preferences: ref.watch(ConfigOptions.region.notifier),
                 choices: _regionChoices,
                 title: t.pages.settings.routing.region,
+                help: t.settingsHelp.region,
                 showFlag: true,
                 icon: Icons.place_rounded,
                 presentChoice: (value) => value.present(t),
@@ -103,6 +105,7 @@ class RouteOptionsPage extends HookConsumerWidget {
                 preferences: ref.watch(ConfigOptions.balancerStrategy.notifier),
                 choices: const [BalancerStrategy.roundRobin, BalancerStrategy.smartActiveAuto],
                 title: t.pages.settings.routing.balancerStrategy.title,
+                help: t.settingsHelp.auto,
                 icon: Icons.auto_awesome_rounded,
                 presentChoice: (value) => value.present(t),
               ),
@@ -113,18 +116,21 @@ class RouteOptionsPage extends HookConsumerWidget {
             children: [
               SettingsSwitch(
                 title: Text(t.pages.settings.routing.blockAds),
+                help: t.settingsHelp.ads,
                 secondary: const Icon(Icons.block_rounded),
                 value: ref.watch(ConfigOptions.blockAds),
                 onChanged: ref.read(ConfigOptions.blockAds.notifier).update,
               ),
               SettingsSwitch(
                 title: Text(t.pages.settings.routing.bypassLan),
+                help: t.settingsHelp.lan,
                 secondary: const Icon(Icons.call_split_rounded),
                 value: ref.watch(ConfigOptions.bypassLan),
                 onChanged: ref.read(ConfigOptions.bypassLan.notifier).update,
               ),
               SettingsSwitch(
                 title: Text(t.pages.settings.routing.resolveDestination),
+                help: t.settingsHelp.resolve,
                 secondary: const Icon(Icons.security_rounded),
                 value: ref.watch(ConfigOptions.resolveDestination),
                 onChanged: ref.read(ConfigOptions.resolveDestination.notifier).update,
@@ -134,6 +140,7 @@ class RouteOptionsPage extends HookConsumerWidget {
                 preferences: ref.watch(ConfigOptions.ipv6Mode.notifier),
                 choices: IPv6Mode.values,
                 title: t.pages.settings.routing.ipv6Route,
+                help: t.settingsHelp.ipv6,
                 icon: Icons.looks_6_rounded,
                 presentChoice: (value) => value.present(t),
               ),

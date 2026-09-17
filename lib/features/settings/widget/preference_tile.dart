@@ -19,6 +19,7 @@ class ValuePreferenceWidget<T> extends HookConsumerWidget {
     this.inputToValue,
     this.digitsOnly = false,
     this.icon,
+    this.help,
   });
 
   final T value;
@@ -31,10 +32,12 @@ class ValuePreferenceWidget<T> extends HookConsumerWidget {
   final T? Function(String input)? inputToValue;
   final bool digitsOnly;
   final IconData? icon;
+  final String? help;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SettingsTile(
+      help: help,
       title: Text(title),
       subtitle: Text(presentValue?.call(value) ?? value.toString()),
       leading: icon != null ? Icon(icon) : null,
@@ -78,6 +81,7 @@ class ChoicePreferenceWidget<T> extends HookConsumerWidget {
     required this.presentChoice,
     this.validateInput,
     this.onChanged,
+    this.help,
   });
 
   final T selected;
@@ -90,9 +94,11 @@ class ChoicePreferenceWidget<T> extends HookConsumerWidget {
   final String Function(T value) presentChoice;
   final bool Function(String value)? validateInput;
   final ValueChanged<T>? onChanged;
+  final String? help;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SettingsTile(
+      help: help,
       title: Text(title),
       subtitle: Text(presentChoice(selected)),
       leading: icon != null ? Icon(icon) : null,
@@ -131,6 +137,7 @@ class BatteryOptimizationWidget extends HookConsumerWidget {
           ? const SizedBox()
           : SettingsTile(
               title: Text(t.pages.settings.general.ignoreBatteryOptimizations),
+              help: t.settingsHelp.battery,
               subtitle: Text(t.pages.settings.general.ignoreBatteryOptimizationsMsg),
               leading: const Icon(Icons.battery_saver_rounded),
               onTap: () async {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zeon/features/settings/widget/settings_help.dart';
 
 /// Shared, full-width settings composition. Each group keeps its own live controls.
 class SettingsList extends StatelessWidget {
@@ -94,6 +95,7 @@ class SettingsTile extends StatelessWidget {
     this.leading,
     this.trailing,
     this.onTap,
+    this.help,
     this.enabled = true,
   });
   final Widget title;
@@ -101,6 +103,7 @@ class SettingsTile extends StatelessWidget {
   final Widget? leading;
   final Widget? trailing;
   final VoidCallback? onTap;
+  final String? help;
   final bool enabled;
 
   @override
@@ -110,6 +113,12 @@ class SettingsTile extends StatelessWidget {
       opacity: enabled ? 1 : .42,
       child: InkWell(
         onTap: enabled ? onTap : null,
+        onLongPress: help == null
+            ? null
+            : () => showSettingsHelp(context, title: title is Text ? (title as Text).data ?? '' : '', message: help!),
+        onSecondaryTap: help == null
+            ? null
+            : () => showSettingsHelp(context, title: title is Text ? (title as Text).data ?? '' : '', message: help!),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
           child: Row(
@@ -172,17 +181,20 @@ class SettingsSwitch extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.secondary,
+    this.help,
     required this.value,
     required this.onChanged,
   });
   final Widget title;
   final Widget? subtitle;
   final Widget? secondary;
+  final String? help;
   final bool value;
   final ValueChanged<bool>? onChanged;
   @override
   Widget build(BuildContext context) => SettingsTile(
     title: title,
+    help: help,
     subtitle: subtitle,
     leading: secondary,
     enabled: onChanged != null,

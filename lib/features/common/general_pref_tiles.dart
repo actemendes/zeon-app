@@ -86,6 +86,7 @@ class ClosingPrefTile extends ConsumerWidget {
 
     return SettingsTile(
       title: Text(t.pages.settings.general.actionAtClosing),
+      help: t.settingsHelp.closing,
       subtitle: Text(action.present(t)),
       leading: const Icon(Icons.logout_rounded),
       onTap: () async {
