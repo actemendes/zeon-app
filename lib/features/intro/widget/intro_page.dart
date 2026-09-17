@@ -103,17 +103,14 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               header,
-                              if (landscape)
-                                const Spacer()
-                              else
-                                Expanded(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(minHeight: 160),
-                                    child: Center(
-                                      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: logo),
-                                    ),
+                              Expanded(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(minHeight: 160),
+                                  child: Center(
+                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: logo),
                                   ),
                                 ),
+                              ),
                               footer,
                             ],
                           ),
@@ -135,13 +132,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                                   Expanded(
                                     child: Padding(
                                       padding: const EdgeInsetsDirectional.only(end: 48),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          header,
-                                          if (!landscape) ...[const Gap(64), logo],
-                                        ],
-                                      ),
+                                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [header]),
                                     ),
                                   ),
                                   Expanded(child: footer),
