@@ -16,7 +16,9 @@ class ProxyInfoDialog extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     return ZeonDialog(
-      title: SelectionArea(child: Text(formatOutboundTitle(outboundInfo))),
+      title: SelectionArea(
+        child: Text(formatOutboundTitle(outboundInfo, autoSelectionLabel: t.pages.proxies.autoSelection)),
+      ),
       content: OutboundInfoWidget(outboundInfo: outboundInfo),
       actions: [TextButton(onPressed: context.pop, child: Text(t.common.close))],
     );
@@ -37,7 +39,7 @@ class OutboundInfoWidget extends HookConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildTextRow(t.dialogs.proxyInfo.testDelay, formatOutboundPing(outboundInfo)),
-          _buildWidgetRow('Качество', QualityBars.fromOutbound(outboundInfo)),
+          _buildWidgetRow(t.dialogs.proxyInfo.quality, QualityBars.fromOutbound(outboundInfo)),
         ],
       ),
     );

@@ -35,7 +35,7 @@ class ProfileLinkAccountPage extends ConsumerWidget {
         centerTitle: false,
         toolbarHeight: 76,
         leading: IconButton(
-          tooltip: 'Назад',
+          tooltip: translations.common.back,
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.of(context).maybePop(),
         ),

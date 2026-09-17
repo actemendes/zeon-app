@@ -4,9 +4,13 @@ import 'package:zeon/features/notifications/model/notification_category.dart';
 import 'package:zeon/features/notifications/model/notification_entity.dart';
 import 'package:zeon/features/notifications/model/notification_priority.dart';
 import 'package:zeon/features/notifications/service/system_notification_service.dart';
+import 'package:zeon/gen/translations.g.dart';
 import 'package:zeon/utils/platform_utils.dart';
 
 void main() {
+  setUpAll(() async {
+    await AppLocale.ru.build();
+  });
   test('falls back without calling native show when platform initialization returns false', () async {
     final service = SystemNotificationServiceImpl(initializeSystemNotifications: () async => false);
 
@@ -32,10 +36,10 @@ void main() {
   });
 
   test('maps Android notification channels by category', () {
-    final alert = androidChannelForCategory(NotificationCategory.alert);
-    final system = androidChannelForCategory(NotificationCategory.system);
-    final promotion = androidChannelForCategory(NotificationCategory.promotion);
-    final news = androidChannelForCategory(NotificationCategory.news);
+    final alert = androidChannelForCategory(NotificationCategory.alert, translations: AppLocale.ru.buildSync());
+    final system = androidChannelForCategory(NotificationCategory.system, translations: AppLocale.ru.buildSync());
+    final promotion = androidChannelForCategory(NotificationCategory.promotion, translations: AppLocale.ru.buildSync());
+    final news = androidChannelForCategory(NotificationCategory.news, translations: AppLocale.ru.buildSync());
 
     expect(alert.id, 'zeon_alerts');
     expect(alert.name, 'Важные уведомления');
@@ -67,12 +71,12 @@ void main() {
       expiresAt: null,
     );
 
-    final details = notificationDetailsFor(notification);
+    final details = notificationDetailsFor(notification, translations: AppLocale.en.buildSync());
 
     expect(notificationSystemId(notification.id), isNot(1));
     expect(details.android?.channelId, 'zeon_news');
     expect(details.android?.importance, Importance.low);
-    expect(details.windows?.subtitle, 'news');
+    expect(details.windows?.subtitle, 'News');
     expect(details.windows?.duration, WindowsNotificationDuration.short);
   });
 }

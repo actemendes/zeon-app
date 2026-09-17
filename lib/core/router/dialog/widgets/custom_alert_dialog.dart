@@ -51,7 +51,7 @@ class CustomAlertDialog extends HookConsumerWidget {
               textStyle: const TextStyle(fontFamily: 'Montserrat', fontSize: 16),
             ),
             icon: const Icon(Icons.copy_rounded, size: 16),
-            label: const Text('Копировать ошибку'),
+            label: Text(t.common.copyError),
           ),
         ],
       ),

@@ -11,6 +11,7 @@ import 'package:upgrader/upgrader.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/localization/locale_extensions.dart';
 import 'package:zeon/core/localization/locale_preferences.dart';
+import 'package:zeon/core/localization/translation_context.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
 import 'package:zeon/core/model/environment.dart';
@@ -115,7 +116,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
             routerConfig: router,
             locale: locale.flutterLocale,
             supportedLocales: AppLocaleUtils.supportedLocales,
-            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            localizationsDelegates: const [InterfaceTranslationsDelegate(), ...GlobalMaterialLocalizations.delegates],
             debugShowCheckedModeBanner: false,
             themeMode: themeMode.flutterThemeMode,
             theme: theme.lightTheme(null),

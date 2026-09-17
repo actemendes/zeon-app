@@ -83,7 +83,13 @@
         "success": "匯入成功",
         "failure": "匯入失敗"
       }
-    }
+    },
+    "open": "開啟",
+    "back": "返回",
+    "copy": "複製",
+    "copyError": "複製錯誤",
+    "next": "下一個",
+    "previous": "上一個"
   },
   "intro": {
     "banner": "暢享無限制網路的所需一切",
@@ -94,14 +100,28 @@
     "ctaSubtitle": "並贈送高級會員",
     "alreadyHaveAccount": "我已經有帳號",
     "termsAndPolicyCaution(rich)": "繼續即表示您同意 ${tap(@:pages.about.termsAndConditions)}",
-    "info": "由 ZEON 以 ❤️ 製作"
+    "info": "由 ZEON 以 ❤️ 製作",
+    "bindErrors": {
+      "alreadyBound": "此裝置已綁定。正在載入目前的設定檔…",
+      "linkNotFound": "找不到設定檔連結。請稍後再試。",
+      "unavailable": "帳戶綁定服務暫時無法使用。",
+      "timeout": "伺服器回應時間過長。請檢查網路連線並重試。",
+      "connection": "無法連線至伺服器。",
+      "invalid": "帳戶連結或綁定碼無效。"
+    }
   },
   "pages": {
     "home": {
       "title": "首頁",
       "quickSettings": "快速設定",
       "internet": "INTERNET",
-      "forYou": "FOR YOU"
+      "forYou": "FOR YOU",
+      "hideTip": "隱藏提示",
+      "internetEverywhere": "網路無所不在",
+      "youArePremium": "您是高級會員",
+      "premiumDaysRemaining": {
+        "other": "剩餘 $n 天"
+      }
     },
     "proxies": {
       "title": "代理",
@@ -124,7 +144,8 @@
         "result": "延遲：${delay}毫秒",
         "timeout": "延遲測試超時",
         "testing": "延遲：測試中..."
-      }
+      },
+      "autoSelection": "自動選擇"
     },
     "profiles": {
       "title": "設定檔",
@@ -208,6 +229,25 @@
         "disableAutoUpdate": "停用自動更新",
         "autoUpdateInterval": "自動更新間隔",
         "loading": "正在新增設定檔..."
+      },
+      "editor": {
+        "title": "設定編輯器",
+        "changeEditor": "切換編輯器",
+        "tree": "樹狀",
+        "text": "文字",
+        "format": "格式化",
+        "expandAll": "全部展開",
+        "collapseAll": "全部摺疊",
+        "results": "結果：$n",
+        "select": "選擇 $name",
+        "addObject": "新增物件",
+        "insert": "插入",
+        "append": "附加",
+        "string": "字串",
+        "number": "數字",
+        "boolean": "布林值",
+        "object": "物件",
+        "list": "清單"
       }
     },
     "logs": {
@@ -269,7 +309,8 @@
         "urlTestInterval": "URL 測試間隔",
         "clashApiPort": "Clash API 連接埠",
         "useXrayCoreWhenPossible": "盡可能使用 xray-core",
-        "useXrayCoreWhenPossibleMsg": "解析訂閱連結時使用 xray-core。您需要重新匯入訂閱連結才能啟用此選項"
+        "useXrayCoreWhenPossibleMsg": "解析訂閱連結時使用 xray-core。您需要重新匯入訂閱連結才能啟用此選項",
+        "notifications": "通知"
       },
       "routing": {
         "title": "路由",
@@ -547,6 +588,18 @@
       "premiumInactive": "高級版未啟用",
       "profileSite": "提供商",
       "profileSupport": "支援"
+    },
+    "notifications": {
+      "alerts": "重要通知",
+      "alertsDescription": "重要訊息和警報",
+      "system": "系統通知",
+      "systemDescription": "應用程式系統訊息",
+      "promotions": "優惠活動",
+      "promotionsDescription": "優惠、折扣和推廣訊息",
+      "news": "新聞",
+      "newsDescription": "服務和產品新聞",
+      "testTitle": "ZEON 測試通知",
+      "testBody": "系統通知診斷正常運作。"
     }
   },
   "dialogs": {
@@ -631,7 +684,8 @@
       "asn": "ASN：",
       "organization": "組織：",
       "location": "位置：",
-      "postalCode": "郵遞區號："
+      "postalCode": "郵遞區號：",
+      "quality": "連線品質"
     },
     "windowClosing": {
       "askEachTime": "每次詢問",
@@ -685,6 +739,7 @@
     "warp": {
       "missingLicense": "WARP 授權缺失",
       "missingLicenseMsg": "所選設定檔使用 WARP 功能；要使用此功能，必須同意 WARP 授權條款。"
-    }
+    },
+    "withDetails": "錯誤：$error"
   }
 }

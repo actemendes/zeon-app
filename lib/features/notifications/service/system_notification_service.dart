@@ -6,6 +6,7 @@ import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/features/notifications/model/notification_category.dart';
 import 'package:zeon/features/notifications/model/notification_entity.dart';
 import 'package:zeon/features/notifications/model/notification_priority.dart';
+import 'package:zeon/gen/translations.g.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
 import 'package:zeon/utils/windows_privilege_utils.dart';
@@ -22,9 +23,11 @@ abstract interface class SystemNotificationService {
 class SystemNotificationServiceImpl with InfraLogger implements SystemNotificationService {
   SystemNotificationServiceImpl({
     FlutterLocalNotificationsPlugin? plugin,
+    Future<Translations> Function()? translations,
     InAppNotificationController? fallback,
     Future<bool?> Function()? initializeSystemNotifications,
-  }) : _initializeSystemNotifications = initializeSystemNotifications,
+  }) : _translations = translations ?? (() => AppLocale.en.build()),
+       _initializeSystemNotifications = initializeSystemNotifications,
        _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
        _fallback = fallback;
 
@@ -32,6 +35,7 @@ class SystemNotificationServiceImpl with InfraLogger implements SystemNotificati
   static const windowsActivatorGuid = '6f903538-42b1-4596-a479-bb779f21a65d';
 
   final FlutterLocalNotificationsPlugin _plugin;
+  final Future<Translations> Function() _translations;
   final InAppNotificationController? _fallback;
   final Future<bool?> Function()? _initializeSystemNotifications;
   bool _initialized = false;
@@ -120,7 +124,7 @@ class SystemNotificationServiceImpl with InfraLogger implements SystemNotificati
         id: notificationSystemId(notification.id),
         title: _trimForDisplay(notification.title, 160),
         body: _trimForDisplay(notification.body, PlatformUtils.isWindows ? 600 : 1200),
-        notificationDetails: notificationDetailsFor(notification),
+        notificationDetails: notificationDetailsFor(notification, translations: await _translations()),
         payload: jsonEncode({'notification_id': notification.id, 'action_url': notification.actionUrl}),
       );
       return const SystemNotificationShowResult(displayed: true, fallbackUsed: false);
@@ -135,14 +139,15 @@ class SystemNotificationServiceImpl with InfraLogger implements SystemNotificati
   }
 
   @override
-  Future<SystemNotificationShowResult> showTestNotification() {
+  Future<SystemNotificationShowResult> showTestNotification() async {
+    final t = await _translations();
     return show(
       NotificationEntity(
         id: 'debug-${DateTime.now().microsecondsSinceEpoch}',
         category: NotificationCategory.system,
         priority: NotificationPriority.normal,
-        title: 'ZEON test notification',
-        body: 'System notification diagnostics are working.',
+        title: t.components.notifications.testTitle,
+        body: t.components.notifications.testBody,
         actionUrl: 'zeon://notifications/test',
         publishedAt: DateTime.now().toUtc(),
         expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
@@ -153,8 +158,19 @@ class SystemNotificationServiceImpl with InfraLogger implements SystemNotificati
   Future<void> _createAndroidChannels() async {
     final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     if (android == null) return;
+    final t = await _translations();
     for (final category in NotificationCategory.values) {
-      await android.createNotificationChannel(androidChannelForCategory(category));
+      await android.createNotificationChannel(androidChannelForCategory(category, translations: t));
+    }
+  }
+
+  /// Updates names on the existing channels, preserving IDs and user settings.
+  Future<void> refreshChannelNames() async {
+    if (!_initialized || !_systemNotificationsAvailable) return;
+    try {
+      await _createAndroidChannels();
+    } catch (error, stackTrace) {
+      loggy.warning('notification channel localization failed', error, stackTrace);
     }
   }
 
@@ -218,8 +234,8 @@ class NotificationActionPayload {
   }
 }
 
-NotificationDetails notificationDetailsFor(NotificationEntity notification) {
-  final channel = androidChannelForCategory(notification.category);
+NotificationDetails notificationDetailsFor(NotificationEntity notification, {required Translations translations}) {
+  final channel = androidChannelForCategory(notification.category, translations: translations);
   return NotificationDetails(
     android: AndroidNotificationDetails(
       channel.id,
@@ -233,7 +249,7 @@ NotificationDetails notificationDetailsFor(NotificationEntity notification) {
     iOS: const DarwinNotificationDetails(),
     macOS: const DarwinNotificationDetails(),
     windows: WindowsNotificationDetails(
-      subtitle: notification.category.wireName,
+      subtitle: channel.name,
       duration: notification.priority == NotificationPriority.low
           ? WindowsNotificationDuration.short
           : WindowsNotificationDuration.long,
@@ -242,30 +258,30 @@ NotificationDetails notificationDetailsFor(NotificationEntity notification) {
   );
 }
 
-AndroidNotificationChannel androidChannelForCategory(NotificationCategory category) {
+AndroidNotificationChannel androidChannelForCategory(
+  NotificationCategory category, {
+  required Translations translations,
+}) {
+  final t = translations.components.notifications;
   return switch (category) {
-    NotificationCategory.alert => const AndroidNotificationChannel(
+    NotificationCategory.alert => AndroidNotificationChannel(
       'zeon_alerts',
-      'Важные уведомления',
-      description: 'Важные сообщения и предупреждения',
+      t.alerts,
+      description: t.alertsDescription,
       importance: Importance.high,
     ),
-    NotificationCategory.system => const AndroidNotificationChannel(
+    NotificationCategory.system => AndroidNotificationChannel(
       'zeon_system',
-      'Системные уведомления',
-      description: 'Системные сообщения приложения',
+      t.system,
+      description: t.systemDescription,
     ),
-    NotificationCategory.promotion => const AndroidNotificationChannel(
+    NotificationCategory.promotion => AndroidNotificationChannel(
       'zeon_promotions',
-      'Акции и предложения',
-      description: 'Акции, предложения и промо-сообщения',
+      t.promotions,
+      description: t.promotionsDescription,
       importance: Importance.low,
     ),
-    NotificationCategory.news => const AndroidNotificationChannel(
-      'zeon_news',
-      'Новости',
-      description: 'Новости сервиса и продукта',
-    ),
+    NotificationCategory.news => AndroidNotificationChannel('zeon_news', t.news, description: t.newsDescription),
   };
 }
 

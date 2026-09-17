@@ -83,7 +83,13 @@
         "success": "با موفقیت وارد شد",
         "failure": "وارد کردن ناموفق بود"
       }
-    }
+    },
+    "open": "باز کردن",
+    "back": "بازگشت",
+    "copy": "کپی",
+    "copyError": "کپی خطا",
+    "next": "بعدی",
+    "previous": "قبلی"
   },
   "intro": {
     "banner": "هرآنچه برای اینترنت بدون محدودیت نیاز دارید",
@@ -94,14 +100,29 @@
     "ctaSubtitle": "و پریمیوم هدیه بگیرید",
     "alreadyHaveAccount": "من از قبل حساب دارم",
     "termsAndPolicyCaution(rich)": "با ادامه، شما با ${tap(@:pages.about.termsAndConditions)} موافقت می‌کنید",
-    "info": "ساخته شده با ❤️ توسط ZEON"
+    "info": "ساخته شده با ❤️ توسط ZEON",
+    "bindErrors": {
+      "alreadyBound": "این دستگاه قبلاً پیوند داده شده است. در حال بارگیری پروفایل فعلی…",
+      "linkNotFound": "پیوند پروفایل پیدا نشد. بعداً دوباره تلاش کنید.",
+      "unavailable": "سرویس پیوند حساب موقتاً در دسترس نیست.",
+      "timeout": "پاسخ سرور بیش از حد طول کشید. اتصال اینترنت را بررسی و دوباره تلاش کنید.",
+      "connection": "اتصال به سرور برقرار نشد.",
+      "invalid": "پیوند حساب یا کد پیوند نامعتبر است."
+    }
   },
   "pages": {
     "home": {
       "title": "خانه",
       "quickSettings": "تنظیمات سریع",
       "internet": "INTERNET",
-      "forYou": "FOR YOU"
+      "forYou": "FOR YOU",
+      "hideTip": "پنهان کردن راهنما",
+      "internetEverywhere": "اینترنت همه‌جا",
+      "youArePremium": "شما پریمیوم هستید",
+      "premiumDaysRemaining": {
+        "one": "$n روز باقی مانده",
+        "other": "$n روز باقی مانده"
+      }
     },
     "proxies": {
       "title": "پروکسی‌ها",
@@ -124,7 +145,8 @@
         "result": "تأخیر: ${delay} میلی‌ثانیه",
         "timeout": "تست تأخیر ناموفق بود",
         "testing": "تأخیر: در حال تست..."
-      }
+      },
+      "autoSelection": "انتخاب خودکار"
     },
     "profiles": {
       "title": "پروفایل‌ها",
@@ -208,6 +230,25 @@
         "disableAutoUpdate": "غیرفعال کردن به‌روزرسانی خودکار",
         "autoUpdateInterval": "فاصله زمانی به‌روزرسانی خودکار",
         "loading": "در حال افزودن پروفایل..."
+      },
+      "editor": {
+        "title": "ویرایشگر پیکربندی",
+        "changeEditor": "تغییر ویرایشگر",
+        "tree": "درختی",
+        "text": "متنی",
+        "format": "قالب‌بندی",
+        "expandAll": "باز کردن همه",
+        "collapseAll": "بستن همه",
+        "results": "نتایج: $n",
+        "select": "انتخاب $name",
+        "addObject": "افزودن شیء جدید",
+        "insert": "درج",
+        "append": "افزودن به انتها",
+        "string": "رشته",
+        "number": "عدد",
+        "boolean": "مقدار منطقی",
+        "object": "شیء",
+        "list": "فهرست"
       }
     },
     "logs": {
@@ -269,7 +310,8 @@
         "urlTestInterval": "فاصله زمانی تست URL",
         "clashApiPort": "پورت Clash API",
         "useXrayCoreWhenPossible": "استفاده از xray-core در صورت امکان",
-        "useXrayCoreWhenPossibleMsg": "هنگام پردازش لینک‌های اشتراک از xray-core استفاده شود. برای فعال‌سازی این گزینه باید لینک اشتراک را مجدداً وارد کنید."
+        "useXrayCoreWhenPossibleMsg": "هنگام پردازش لینک‌های اشتراک از xray-core استفاده شود. برای فعال‌سازی این گزینه باید لینک اشتراک را مجدداً وارد کنید.",
+        "notifications": "اعلان‌ها"
       },
       "routing": {
         "title": "مسیریابی",
@@ -547,6 +589,18 @@
       "premiumInactive": "پریمیوم غیرفعال است",
       "profileSite": "سرویس‌دهنده",
       "profileSupport": "پشتیبانی"
+    },
+    "notifications": {
+      "alerts": "اعلان‌های مهم",
+      "alertsDescription": "پیام‌ها و هشدارهای مهم",
+      "system": "اعلان‌های سیستم",
+      "systemDescription": "پیام‌های سیستمی برنامه",
+      "promotions": "پیشنهادها و تخفیف‌ها",
+      "promotionsDescription": "پیشنهادها، تخفیف‌ها و پیام‌های تبلیغاتی",
+      "news": "اخبار",
+      "newsDescription": "اخبار سرویس و محصول",
+      "testTitle": "اعلان آزمایشی ZEON",
+      "testBody": "آزمایش اعلان‌های سیستم کار می‌کند."
     }
   },
   "dialogs": {
@@ -631,7 +685,8 @@
       "asn": "ASN:",
       "organization": "سازمان:",
       "location": "مکان:",
-      "postalCode": "کد پستی:"
+      "postalCode": "کد پستی:",
+      "quality": "کیفیت اتصال"
     },
     "windowClosing": {
       "askEachTime": "هر بار بپرس",
@@ -685,6 +740,7 @@
     "warp": {
       "missingLicense": "لایسنس Warp",
       "missingLicenseMsg": "پروفایل انتخاب‌شده از ویژگی WARP استفاده می‌کند؛ برای استفاده از این قابلیت، باید با لایسنس WARP موافقت شود."
-    }
+    },
+    "withDetails": "خطا: $error"
   }
 }

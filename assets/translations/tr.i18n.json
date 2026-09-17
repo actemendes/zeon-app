@@ -83,7 +83,13 @@
         "success": "Başarıyla içe aktarıldı",
         "failure": "İçe aktarılamadı"
       }
-    }
+    },
+    "open": "Aç",
+    "back": "Geri",
+    "copy": "Kopyala",
+    "copyError": "Hatayı kopyala",
+    "next": "Sonraki",
+    "previous": "Önceki"
   },
   "intro": {
     "banner": "Sınırsız bir internet için ihtiyacınız olan her şey",
@@ -94,14 +100,28 @@
     "ctaSubtitle": "ve premium hediye",
     "alreadyHaveAccount": "Zaten bir hesabım var",
     "termsAndPolicyCaution(rich)": "Devam ederek ${tap(@:pages.about.termsAndConditions)} kabul etmiş olursunuz",
-    "info": "ZEON tarafından ❤️ ile yapıldı"
+    "info": "ZEON tarafından ❤️ ile yapıldı",
+    "bindErrors": {
+      "alreadyBound": "Bu cihaz zaten bağlı. Mevcut profil yükleniyor…",
+      "linkNotFound": "Profil bağlantısı bulunamadı. Daha sonra tekrar deneyin.",
+      "unavailable": "Hesap bağlama hizmeti geçici olarak kullanılamıyor.",
+      "timeout": "Sunucunun yanıt vermesi çok uzun sürüyor. İnternet bağlantınızı kontrol edip tekrar deneyin.",
+      "connection": "Sunucuya bağlanılamıyor.",
+      "invalid": "Geçersiz hesap bağlantısı veya bağlama kodu."
+    }
   },
   "pages": {
     "home": {
       "title": "Ana Sayfa",
       "quickSettings": "Hızlı ayarlar",
       "internet": "INTERNET",
-      "forYou": "FOR YOU"
+      "forYou": "FOR YOU",
+      "hideTip": "İpucunu gizle",
+      "internetEverywhere": "İnternet her yerde",
+      "youArePremium": "Premium üyesisiniz",
+      "premiumDaysRemaining": {
+        "other": "$n gün kaldı"
+      }
     },
     "proxies": {
       "title": "Proxy'ler",
@@ -124,7 +144,8 @@
         "result": "Gecikme: ${delay}ms",
         "timeout": "Gecikme testi zaman aşımına uğradı",
         "testing": "Gecikme: test ediliyor..."
-      }
+      },
+      "autoSelection": "Otomatik seçim"
     },
     "profiles": {
       "title": "Profiller",
@@ -208,6 +229,25 @@
         "disableAutoUpdate": "Otomatik güncellemeyi devre dışı bırak",
         "autoUpdateInterval": "Otomatik güncelleme aralığı",
         "loading": "Profil ekleniyor..."
+      },
+      "editor": {
+        "title": "Yapılandırma düzenleyicisi",
+        "changeEditor": "Düzenleyiciyi değiştir",
+        "tree": "Ağaç",
+        "text": "Metin",
+        "format": "Biçimlendir",
+        "expandAll": "Tümünü genişlet",
+        "collapseAll": "Tümünü daralt",
+        "results": "Sonuçlar: $n",
+        "select": "$name seçin",
+        "addObject": "Yeni nesne ekle",
+        "insert": "Ekle",
+        "append": "Sona ekle",
+        "string": "Dize",
+        "number": "Sayı",
+        "boolean": "Mantıksal değer",
+        "object": "Nesne",
+        "list": "Liste"
       }
     },
     "logs": {
@@ -269,7 +309,8 @@
         "urlTestInterval": "URL testi aralığı",
         "clashApiPort": "Clash API portu",
         "useXrayCoreWhenPossible": "Mümkün olduğunda xray-core kullan",
-        "useXrayCoreWhenPossibleMsg": "Abonelik bağlantılarını ayrıştırırken xray-core kullanın. Bu seçeneği etkinleştirmek için bağlantıyı yeniden içe aktarmanız gerekir."
+        "useXrayCoreWhenPossibleMsg": "Abonelik bağlantılarını ayrıştırırken xray-core kullanın. Bu seçeneği etkinleştirmek için bağlantıyı yeniden içe aktarmanız gerekir.",
+        "notifications": "Bildirimler"
       },
       "routing": {
         "title": "Yönlendirme",
@@ -547,6 +588,18 @@
       "premiumInactive": "Premium aktif değil",
       "profileSite": "Sağlayıcı",
       "profileSupport": "Destek"
+    },
+    "notifications": {
+      "alerts": "Önemli bildirimler",
+      "alertsDescription": "Önemli mesajlar ve uyarılar",
+      "system": "Sistem bildirimleri",
+      "systemDescription": "Uygulama sistem mesajları",
+      "promotions": "Teklifler ve kampanyalar",
+      "promotionsDescription": "Teklifler, indirimler ve tanıtım mesajları",
+      "news": "Haberler",
+      "newsDescription": "Hizmet ve ürün haberleri",
+      "testTitle": "ZEON test bildirimi",
+      "testBody": "Sistem bildirimi tanılaması çalışıyor."
     }
   },
   "dialogs": {
@@ -631,7 +684,8 @@
       "asn": "ASN:",
       "organization": "Kuruluş:",
       "location": "Konum:",
-      "postalCode": "Posta kodu:"
+      "postalCode": "Posta kodu:",
+      "quality": "Bağlantı kalitesi"
     },
     "windowClosing": {
       "askEachTime": "Her seferinde sor",
@@ -685,6 +739,7 @@
     "warp": {
       "missingLicense": "WARP lisansı eksik",
       "missingLicenseMsg": "Seçili profil WARP özelliğini kullanıyor. Bu özelliği kullanmak için WARP lisansını kabul etmeniz gerekir."
-    }
+    },
+    "withDetails": "Hata: $error"
   }
 }

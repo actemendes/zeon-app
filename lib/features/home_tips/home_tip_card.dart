@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/localization/translation_context.dart';
 import 'package:zeon/features/home_tips/home_tip.dart';
 import 'package:zeon/features/home_tips/home_tip_provider.dart';
 import 'package:zeon/utils/uri_utils.dart';
@@ -53,7 +54,7 @@ class HomeTipCard extends ConsumerWidget {
                   right: 0,
                   child: IconButton(
                     key: const ValueKey('home_tip_dismiss'),
-                    tooltip: 'Скрыть подсказку',
+                    tooltip: context.translations.pages.home.hideTip,
                     style: IconButton.styleFrom(
                       foregroundColor: Colors.white,
                       backgroundColor: const Color(0xCC121316),

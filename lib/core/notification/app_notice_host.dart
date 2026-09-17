@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:zeon/core/localization/translation_context.dart';
 import 'package:zeon/core/notification/app_notice.dart';
 
 class AppNoticeHost extends StatefulWidget {
@@ -341,7 +342,7 @@ class AppNoticeCard extends StatelessWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    Localizations.localeOf(context).languageCode == 'ru' ? 'Открыть' : 'Open',
+                                    context.translations.common.open,
                                     style: TextStyle(color: accent, fontSize: 16, fontWeight: FontWeight.w600),
                                   ),
                                   const SizedBox(width: 5),

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="stop">توقف</string>
+    <string name="re_ping">پینگ دوباره</string>
+    <string name="auto_selection">انتخاب خودکار</string>
+    <string name="quick_toggle">تغییر وضعیت</string>
+    <string name="notification_channel_connection">اتصال VPN</string>
+    <string name="notification_channel_connection_description">اعلان دائمی اتصال فعال VPN</string>
+    <string name="status_starting">در حال شروع سرویس…</string>
+    <string name="status_started">سرویس شروع شد</string>
+</resources>

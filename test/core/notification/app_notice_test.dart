@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/localization/translation_context.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/notification/app_notice.dart';
 import 'package:zeon/core/notification/app_notice_host.dart';
@@ -39,7 +40,7 @@ Future<AppNoticeController> mountNotices(
         debugShowCheckedModeBanner: false,
         locale: const Locale('ru'),
         supportedLocales: const [Locale('ru')],
-        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        localizationsDelegates: const [InterfaceTranslationsDelegate(), ...GlobalMaterialLocalizations.delegates],
         theme: mode == AppThemeMode.light ? theme.lightTheme(null) : theme.darkTheme(null),
         builder: (context, child) => Align(
           alignment: Alignment.topLeft,
@@ -67,7 +68,7 @@ Future<AppNoticeController> mountNotices(
       ),
     ),
   );
-  await tester.pump();
+  await tester.pumpAndSettle();
   addTearDown(() async {
     await tester.pumpWidget(const SizedBox.shrink());
     if (!identical(notices, appNoticeController)) notices.dispose();
@@ -86,6 +87,9 @@ Future<void> finishMotion(WidgetTester tester) async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    await AppLocale.ru.build();
+  });
 
   testWidgets('without a mounted host fallback is not reported as delivered', (tester) async {
     final notices = AppNoticeController();

@@ -83,7 +83,13 @@
         "success": "导入成功",
         "failure": "导入失败"
       }
-    }
+    },
+    "open": "打开",
+    "back": "返回",
+    "copy": "复制",
+    "copyError": "复制错误",
+    "next": "下一个",
+    "previous": "上一个"
   },
   "intro": {
     "banner": "畅享无限制网络的所需一切",
@@ -94,14 +100,28 @@
     "ctaSubtitle": "并赠送高级会员",
     "alreadyHaveAccount": "我已经有账号",
     "termsAndPolicyCaution(rich)": "继续即表示您同意 ${tap(@:pages.about.termsAndConditions)}",
-    "info": "由 ZEON 用 ❤️ 制作"
+    "info": "由 ZEON 用 ❤️ 制作",
+    "bindErrors": {
+      "alreadyBound": "此设备已绑定。正在加载当前配置…",
+      "linkNotFound": "未找到配置链接。请稍后重试。",
+      "unavailable": "账户绑定服务暂时不可用。",
+      "timeout": "服务器响应时间过长。请检查网络连接并重试。",
+      "connection": "无法连接到服务器。",
+      "invalid": "账户链接或绑定码无效。"
+    }
   },
   "pages": {
     "home": {
       "title": "主页",
       "quickSettings": "快速设置",
       "internet": "INTERNET",
-      "forYou": "FOR YOU"
+      "forYou": "FOR YOU",
+      "hideTip": "隐藏提示",
+      "internetEverywhere": "网络无处不在",
+      "youArePremium": "您是高级会员",
+      "premiumDaysRemaining": {
+        "other": "剩余 $n 天"
+      }
     },
     "proxies": {
       "title": "代理",
@@ -124,7 +144,8 @@
         "result": "延迟：${delay}毫秒",
         "timeout": "延迟测试超时",
         "testing": "延迟：测试中..."
-      }
+      },
+      "autoSelection": "自动选择"
     },
     "profiles": {
       "title": "配置文件",
@@ -208,6 +229,25 @@
         "disableAutoUpdate": "禁用自动更新",
         "autoUpdateInterval": "自动更新间隔",
         "loading": "正在添加配置文件..."
+      },
+      "editor": {
+        "title": "配置编辑器",
+        "changeEditor": "切换编辑器",
+        "tree": "树状",
+        "text": "文本",
+        "format": "格式化",
+        "expandAll": "全部展开",
+        "collapseAll": "全部折叠",
+        "results": "结果：$n",
+        "select": "选择 $name",
+        "addObject": "添加新对象",
+        "insert": "插入",
+        "append": "追加",
+        "string": "字符串",
+        "number": "数字",
+        "boolean": "布尔值",
+        "object": "对象",
+        "list": "列表"
       }
     },
     "logs": {
@@ -269,7 +309,8 @@
         "urlTestInterval": "URL 测试间隔",
         "clashApiPort": "Clash API 端口",
         "useXrayCoreWhenPossible": "尽可能使用 xray-core",
-        "useXrayCoreWhenPossibleMsg": "解析订阅链接时使用 xray-core。您需要重新导入订阅链接才能启用此选项"
+        "useXrayCoreWhenPossibleMsg": "解析订阅链接时使用 xray-core。您需要重新导入订阅链接才能启用此选项",
+        "notifications": "通知"
       },
       "routing": {
         "title": "路由",
@@ -547,6 +588,18 @@
       "premiumInactive": "高级版未激活",
       "profileSite": "提供商",
       "profileSupport": "支持"
+    },
+    "notifications": {
+      "alerts": "重要通知",
+      "alertsDescription": "重要消息和警报",
+      "system": "系统通知",
+      "systemDescription": "应用系统消息",
+      "promotions": "优惠活动",
+      "promotionsDescription": "优惠、折扣和推广消息",
+      "news": "新闻",
+      "newsDescription": "服务和产品新闻",
+      "testTitle": "ZEON 测试通知",
+      "testBody": "系统通知诊断正常运行。"
     }
   },
   "dialogs": {
@@ -631,7 +684,8 @@
       "asn": "ASN：",
       "organization": "组织：",
       "location": "位置：",
-      "postalCode": "邮政编码："
+      "postalCode": "邮政编码：",
+      "quality": "连接质量"
     },
     "windowClosing": {
       "askEachTime": "每次询问",
@@ -685,6 +739,7 @@
     "warp": {
       "missingLicense": "WARP 许可证缺失",
       "missingLicenseMsg": "所选配置文件使用 WARP 功能；要使用此功能，必须同意 WARP 许可证。"
-    }
+    },
+    "withDetails": "错误：$error"
   }
 }

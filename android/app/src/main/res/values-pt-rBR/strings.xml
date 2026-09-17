@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="stop">Parar</string>
+    <string name="re_ping">Repetir ping</string>
+    <string name="auto_selection">Seleção automática</string>
+    <string name="quick_toggle">Alternar</string>
+    <string name="notification_channel_connection">Conexão VPN</string>
+    <string name="notification_channel_connection_description">Notificação permanente da conexão VPN ativa</string>
+    <string name="status_starting">Iniciando serviço…</string>
+    <string name="status_started">Serviço iniciado</string>
+</resources>

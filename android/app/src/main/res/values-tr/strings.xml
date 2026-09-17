@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="stop">Durdur</string>
+    <string name="re_ping">Yeniden ping</string>
+    <string name="auto_selection">Otomatik seçim</string>
+    <string name="quick_toggle">Aç/kapat</string>
+    <string name="notification_channel_connection">VPN bağlantısı</string>
+    <string name="notification_channel_connection_description">Etkin VPN bağlantısı için kalıcı bildirim</string>
+    <string name="status_starting">Hizmet başlatılıyor…</string>
+    <string name="status_started">Hizmet başlatıldı</string>
+</resources>

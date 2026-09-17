@@ -87,7 +87,13 @@
         "success": "Успешно импортировано",
         "failure": "Не удалось импортировать"
       }
-    }
+    },
+    "open": "Открыть",
+    "back": "Назад",
+    "copy": "Копировать",
+    "copyError": "Копировать ошибку",
+    "next": "Далее",
+    "previous": "Назад"
   },
   "intro": {
     "banner": "Все, что вам нужно для интернета без ограничений",
@@ -101,14 +107,31 @@
     "bindAccountDialogLinkLabel": "Ссылка для привязки",
     "bindAccountDialogInvalidLink": "Вставьте корректную ссылку из бота",
     "termsAndPolicyCaution(rich)": "Продолжая, вы соглашаетесь с ${tap(@:pages.about.termsAndConditions)}",
-    "info": "Сделано с ❤️ ZEON"
+    "info": "Сделано с ❤️ ZEON",
+    "bindErrors": {
+      "alreadyBound": "Устройство уже привязано, загружаем текущий профиль…",
+      "linkNotFound": "Ссылка профиля не найдена. Повторите позже.",
+      "unavailable": "Сервис привязки временно недоступен.",
+      "timeout": "Сервер долго отвечает. Проверьте интернет и повторите.",
+      "connection": "Нет соединения с сервером.",
+      "invalid": "Неверная ссылка или код привязки."
+    }
   },
   "pages": {
     "home": {
       "title": "Главная",
       "quickSettings": "Способ подключения",
       "internet": "ИНТЕРНЕТ",
-      "forYou": "ДЛЯ ВАС"
+      "forYou": "ДЛЯ ВАС",
+      "hideTip": "Скрыть подсказку",
+      "internetEverywhere": "Интернет везде",
+      "youArePremium": "Вы премиум",
+      "premiumDaysRemaining": {
+        "one": "Остался $n день",
+        "few": "Осталось $n дня",
+        "many": "Осталось $n дней",
+        "other": "Осталось $n дня"
+      }
     },
     "proxies": {
       "title": "Сервера",
@@ -138,7 +161,8 @@
         "result": "Задержка: ${delay} мс",
         "timeout": "Тайм-аут теста задержки",
         "testing": "Задержка: тестирование..."
-      }
+      },
+      "autoSelection": "Автовыбор"
     },
     "profiles": {
       "title": "Профили",
@@ -260,6 +284,25 @@
         "disableAutoUpdate": "Отключить автообновление",
         "autoUpdateInterval": "Интервал автообновления",
         "loading": "Добавление профиля..."
+      },
+      "editor": {
+        "title": "Редактор конфигурации",
+        "changeEditor": "Сменить редактор",
+        "tree": "Дерево",
+        "text": "Текст",
+        "format": "Форматировать",
+        "expandAll": "Развернуть всё",
+        "collapseAll": "Свернуть всё",
+        "results": "Результатов: $n",
+        "select": "Выберите $name",
+        "addObject": "Добавить объект",
+        "insert": "Вставить",
+        "append": "Добавить в конец",
+        "string": "Строка",
+        "number": "Число",
+        "boolean": "Логическое значение",
+        "object": "Объект",
+        "list": "Список"
       }
     },
     "logs": {
@@ -335,7 +378,8 @@
         "urlTestInterval": "Интервал теста URL",
         "clashApiPort": "Порт Clash API",
         "useXrayCoreWhenPossible": "Использовать xray-core, если возможно",
-        "useXrayCoreWhenPossibleMsg": "Использовать xray-core при обработке ссылок на подписку. Необходимо повторно импортировать ссылку, чтобы включить эту опцию."
+        "useXrayCoreWhenPossibleMsg": "Использовать xray-core при обработке ссылок на подписку. Необходимо повторно импортировать ссылку, чтобы включить эту опцию.",
+        "notifications": "Уведомления"
       },
       "routing": {
         "title": "Маршрутизация",
@@ -637,6 +681,18 @@
       "premiumInactive": "Премиум не активен",
       "profileSite": "Провайдер",
       "profileSupport": "Поддержка"
+    },
+    "notifications": {
+      "alerts": "Важные уведомления",
+      "alertsDescription": "Важные сообщения и предупреждения",
+      "system": "Системные уведомления",
+      "systemDescription": "Системные сообщения приложения",
+      "promotions": "Акции и предложения",
+      "promotionsDescription": "Акции, предложения и промо-сообщения",
+      "news": "Новости",
+      "newsDescription": "Новости сервиса и продукта",
+      "testTitle": "Тестовое уведомление ZEON",
+      "testBody": "Проверка системных уведомлений работает."
     }
   },
   "dialogs": {
@@ -726,7 +782,8 @@
       "asn": "ASN:",
       "organization": "Организация:",
       "location": "Местоположение:",
-      "postalCode": "Почтовый индекс:"
+      "postalCode": "Почтовый индекс:",
+      "quality": "Качество соединения"
     },
     "windowClosing": {
       "askEachTime": "Спрашивать каждый раз",
@@ -780,6 +837,7 @@
     "warp": {
       "missingLicense": "Отсутствует лицензия Warp",
       "missingLicenseMsg": "Выбранный профиль использует функцию WARP; для использования этой функции необходимо принять лицензию WARP."
-    }
+    },
+    "withDetails": "Ошибка: $error"
   }
 }

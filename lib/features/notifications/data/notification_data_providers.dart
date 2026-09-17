@@ -1,7 +1,11 @@
+import 'dart:async';
+
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/db/provider/db_providers.dart';
 import 'package:zeon/core/http_client/http_client_provider.dart';
 import 'package:zeon/core/localization/locale_preferences.dart';
+import 'package:zeon/core/localization/translation_loader.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
@@ -14,7 +18,6 @@ import 'package:zeon/features/notifications/service/notification_polling_service
 import 'package:zeon/features/notifications/service/notification_receipt_queue.dart';
 import 'package:zeon/features/notifications/service/system_notification_service.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 final notificationLocalDataSourceProvider = Provider<NotificationLocalDataSource>((ref) {
   return NotificationDao(ref.watch(dbProvider));
@@ -54,7 +57,12 @@ final notificationActionHandlerProvider = Provider<NotificationActionHandler>((r
 });
 
 final systemNotificationServiceProvider = Provider<SystemNotificationService>((ref) {
-  return SystemNotificationServiceImpl(fallback: ref.watch(inAppNotificationControllerProvider));
+  final service = SystemNotificationServiceImpl(
+    fallback: ref.watch(inAppNotificationControllerProvider),
+    translations: () => loadTranslations(ref.read(localePreferencesProvider)),
+  );
+  ref.listen(localePreferencesProvider, (_, _) => unawaited(service.refreshChannelNames()));
+  return service;
 });
 
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {

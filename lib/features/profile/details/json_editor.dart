@@ -1,7 +1,7 @@
 library json_editor_flutter;
 
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:ui';
 
@@ -9,6 +9,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:zeon/core/localization/translation_context.dart';
 
 const _space = 18.0;
 const _textStyle = TextStyle(fontSize: 16);
@@ -734,11 +735,16 @@ class _JsonEditorState extends State<JsonEditor> {
                   padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
                   child: Row(
                     children: [
-                      const Text('Config Editor:  '),
+                      Flexible(
+                        child: Text(
+                          context.translations.pages.profileDetails.editor.title,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                       if (!widget.hideEditorsMenuButton)
                         PopupMenuButton<Editors>(
                           initialValue: _editor,
-                          tooltip: 'Change editor',
+                          tooltip: context.translations.pages.profileDetails.editor.changeEditor,
                           padding: EdgeInsets.zero,
                           onSelected: (value) {
                             if (value == Editors.text) {
@@ -758,21 +764,26 @@ class _JsonEditorState extends State<JsonEditor> {
                                 padding: const EdgeInsets.symmetric(horizontal: 12),
                                 enabled: widget.editors.contains(Editors.tree),
                                 value: Editors.tree,
-                                child: const Text("Tree"),
+                                child: Text(context.translations.pages.profileDetails.editor.tree),
                               ),
                               PopupMenuItem<Editors>(
                                 height: _popupMenuHeight,
                                 padding: const EdgeInsets.symmetric(horizontal: 12),
                                 enabled: widget.editors.contains(Editors.text),
                                 value: Editors.text,
-                                child: const Text("Text"),
+                                child: Text(context.translations.pages.profileDetails.editor.text),
                               ),
                             ];
                           },
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(_editor.name, style: _textStyle),
+                              Text(
+                                _editor == Editors.tree
+                                    ? context.translations.pages.profileDetails.editor.tree
+                                    : context.translations.pages.profileDetails.editor.text,
+                                style: _textStyle,
+                              ),
                               const Icon(Icons.arrow_drop_down, size: 20),
                             ],
                           ),
@@ -784,11 +795,17 @@ class _JsonEditorState extends State<JsonEditor> {
                           onTap: () {
                             _controller.text = _stringifyData(_data, 0, true);
                           },
-                          child: const Tooltip(message: 'Format', child: Icon(Icons.format_align_left, size: 20)),
+                          child: Tooltip(
+                            message: context.translations.pages.profileDetails.editor.format,
+                            child: const Icon(Icons.format_align_left, size: 20),
+                          ),
                         ),
                       ] else ...[
                         const SizedBox(width: 20),
-                        if (_results != null) ...[Text("$_results results"), const SizedBox(width: 5)],
+                        if (_results != null) ...[
+                          Text(context.translations.pages.profileDetails.editor.results(n: _results!)),
+                          const SizedBox(width: 5),
+                        ],
                         _SearchField(onSearch, onSearchAction),
                         const SizedBox(width: 20),
                         InkWell(
@@ -797,7 +814,10 @@ class _JsonEditorState extends State<JsonEditor> {
                             expandAllObjects(_data, ["config"]);
                             setState(() {});
                           },
-                          child: const Tooltip(message: 'Expand All', child: Icon(Icons.expand, size: 20)),
+                          child: Tooltip(
+                            message: context.translations.pages.profileDetails.editor.expandAll,
+                            child: const Icon(Icons.expand, size: 20),
+                          ),
                         ),
                         const SizedBox(width: 20),
                         InkWell(
@@ -805,13 +825,19 @@ class _JsonEditorState extends State<JsonEditor> {
                             _expandedObjects.clear();
                             setState(() {});
                           },
-                          child: const Tooltip(message: 'Collapse All', child: Icon(Icons.compress, size: 20)),
+                          child: Tooltip(
+                            message: context.translations.pages.profileDetails.editor.collapseAll,
+                            child: const Icon(Icons.compress, size: 20),
+                          ),
                         ),
                       ],
                       const SizedBox(width: 20),
                       InkWell(
                         onTap: copyData,
-                        child: const Tooltip(message: 'Copy', child: Icon(Icons.copy, size: 20)),
+                        child: Tooltip(
+                          message: context.translations.common.copy,
+                          child: const Icon(Icons.copy, size: 20),
+                        ),
                       ),
                       if (widget.actions.isNotEmpty) const SizedBox(width: 20),
                       ...widget.actions,
@@ -1307,7 +1333,11 @@ class _ReplaceTextWithFieldState extends State<_ReplaceTextWithField> {
           Transform.scale(
             scale: 0.75,
             child: DropdownButton<String>(
-              hint: Text('Select ${widget.keyPath.replaceAll("config.outbounds", "")}'),
+              hint: Text(
+                context.translations.pages.profileDetails.editor.select(
+                  name: widget.keyPath.replaceAll("config.outbounds", ""),
+                ),
+              ),
               value: _text,
               icon: const Icon(Icons.arrow_downward),
               iconSize: 24,
@@ -1396,32 +1426,32 @@ class _Options<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<_OptionItems>(
-      tooltip: 'Add new object',
+      tooltip: context.translations.pages.profileDetails.editor.addObject,
       padding: EdgeInsets.zero,
       onSelected: onSelected,
       itemBuilder: (context) {
         return <PopupMenuEntry<_OptionItems>>[
           if (keyPath != "config" && T == Map)
-            const _PopupMenuWidget(
+            _PopupMenuWidget(
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(width: 5),
-                  Icon(Icons.add),
-                  SizedBox(width: 10),
-                  Text("Insert", style: TextStyle(fontSize: 16)),
+                  const SizedBox(width: 5),
+                  const Icon(Icons.add),
+                  const SizedBox(width: 10),
+                  Text(context.translations.pages.profileDetails.editor.insert, style: const TextStyle(fontSize: 16)),
                 ],
               ),
             ),
           if (keyPath != "config" && T == List)
-            const _PopupMenuWidget(
+            _PopupMenuWidget(
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(width: 5),
-                  Icon(Icons.add),
-                  SizedBox(width: 10),
-                  Text("Append", style: TextStyle(fontSize: 16)),
+                  const SizedBox(width: 5),
+                  const Icon(Icons.add),
+                  const SizedBox(width: 10),
+                  Text(context.translations.pages.profileDetails.editor.append, style: const TextStyle(fontSize: 16)),
                 ],
               ),
             ),
@@ -1467,68 +1497,71 @@ class _Options<T> extends StatelessWidget {
             ],
             if (keyPath != "config" &&
                 !(T == List && (keyPath == "config.outbounds" || keyPath == "config.endpoints"))) ...[
-              const PopupMenuItem<_OptionItems>(
+              PopupMenuItem<_OptionItems>(
                 height: _popupMenuHeight,
-                padding: EdgeInsets.only(left: _popupMenuItemPadding),
+                padding: const EdgeInsets.only(left: _popupMenuItemPadding),
                 value: "string",
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.abc),
-                    SizedBox(width: 10),
-                    Text("String", style: TextStyle(fontSize: 16)),
+                    const Icon(Icons.abc),
+                    const SizedBox(width: 10),
+                    Text(context.translations.pages.profileDetails.editor.string, style: const TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
-              const PopupMenuItem<_OptionItems>(
+              PopupMenuItem<_OptionItems>(
                 height: _popupMenuHeight,
-                padding: EdgeInsets.only(left: _popupMenuItemPadding),
+                padding: const EdgeInsets.only(left: _popupMenuItemPadding),
                 value: "num",
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.onetwothree),
-                    SizedBox(width: 10),
-                    Text("Number", style: TextStyle(fontSize: 16)),
+                    const Icon(Icons.onetwothree),
+                    const SizedBox(width: 10),
+                    Text(context.translations.pages.profileDetails.editor.number, style: const TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
-              const PopupMenuItem<_OptionItems>(
+              PopupMenuItem<_OptionItems>(
                 height: _popupMenuHeight,
-                padding: EdgeInsets.only(left: _popupMenuItemPadding),
+                padding: const EdgeInsets.only(left: _popupMenuItemPadding),
                 value: "bool",
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.check_rounded),
-                    SizedBox(width: 10),
-                    Text("Boolean", style: TextStyle(fontSize: 16)),
+                    const Icon(Icons.check_rounded),
+                    const SizedBox(width: 10),
+                    Text(
+                      context.translations.pages.profileDetails.editor.boolean,
+                      style: const TextStyle(fontSize: 16),
+                    ),
                   ],
                 ),
               ),
-              const PopupMenuItem<_OptionItems>(
+              PopupMenuItem<_OptionItems>(
                 height: _popupMenuHeight,
-                padding: EdgeInsets.only(left: _popupMenuItemPadding),
+                padding: const EdgeInsets.only(left: _popupMenuItemPadding),
                 value: "map",
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.data_object),
-                    SizedBox(width: 10),
-                    Text("object", style: TextStyle(fontSize: 16)),
+                    const Icon(Icons.data_object),
+                    const SizedBox(width: 10),
+                    Text(context.translations.pages.profileDetails.editor.object, style: const TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
-              const PopupMenuItem<_OptionItems>(
+              PopupMenuItem<_OptionItems>(
                 height: _popupMenuHeight,
-                padding: EdgeInsets.only(left: _popupMenuItemPadding),
+                padding: const EdgeInsets.only(left: _popupMenuItemPadding),
                 value: "list",
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.data_array),
-                    SizedBox(width: 10),
-                    Text("List", style: TextStyle(fontSize: 16)),
+                    const Icon(Icons.data_array),
+                    const SizedBox(width: 10),
+                    Text(context.translations.pages.profileDetails.editor.list, style: const TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
@@ -1536,16 +1569,16 @@ class _Options<T> extends StatelessWidget {
           ],
           const PopupMenuDivider(height: 1),
           if (keyPath != "config" && !(T == List && (keyPath == "config.outbounds" || keyPath == "config.endpoints")))
-            const PopupMenuItem<_OptionItems>(
+            PopupMenuItem<_OptionItems>(
               height: _popupMenuHeight,
-              padding: EdgeInsets.only(left: 5),
+              padding: const EdgeInsets.only(left: 5),
               value: "delete",
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.delete),
-                  SizedBox(width: 10),
-                  Text("Delete", style: TextStyle(fontSize: 16)),
+                  const Icon(Icons.delete),
+                  const SizedBox(width: 10),
+                  Text(context.translations.common.delete, style: const TextStyle(fontSize: 16)),
                 ],
               ),
             ),
@@ -1602,7 +1635,7 @@ class _SearchField extends StatelessWidget {
             // style: _textStyle,
             cursorHeight: 12,
             decoration: InputDecoration(
-              hintText: "Search",
+              hintText: context.translations.common.search,
               hintStyle: Theme.of(context).textTheme.bodySmall,
               constraints: const BoxConstraints(maxWidth: 100),
               border: InputBorder.none,
@@ -1619,14 +1652,20 @@ class _SearchField extends StatelessWidget {
             onTap: () {
               onAction(_SearchActions.next);
             },
-            child: const Tooltip(message: 'Next', child: Icon(Icons.keyboard_arrow_down_rounded, size: 20)),
+            child: Tooltip(
+              message: context.translations.common.next,
+              child: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+            ),
           ),
           const SizedBox(width: 2),
           InkWell(
             onTap: () {
               onAction(_SearchActions.prev);
             },
-            child: const Tooltip(message: 'Previous', child: Icon(Icons.keyboard_arrow_up_rounded, size: 20)),
+            child: Tooltip(
+              message: context.translations.common.previous,
+              child: const Icon(Icons.keyboard_arrow_up_rounded, size: 20),
+            ),
           ),
           const SizedBox(width: 5),
         ],

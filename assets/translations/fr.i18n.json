@@ -83,7 +83,13 @@
         "success": "Importé avec succès",
         "failure": "Échec de l'importation"
       }
-    }
+    },
+    "open": "Ouvrir",
+    "back": "Retour",
+    "copy": "Copier",
+    "copyError": "Copier l’erreur",
+    "next": "Suivant",
+    "previous": "Précédent"
   },
   "intro": {
     "banner": "Tout ce dont vous avez besoin pour un internet sans restrictions",
@@ -94,14 +100,29 @@
     "ctaSubtitle": "et premium offert",
     "alreadyHaveAccount": "J'ai déjà un compte",
     "termsAndPolicyCaution(rich)": "En continuant, vous acceptez les ${tap(@:pages.about.termsAndConditions)}",
-    "info": "Fait avec ❤️ par ZEON"
+    "info": "Fait avec ❤️ par ZEON",
+    "bindErrors": {
+      "alreadyBound": "Cet appareil est déjà associé. Chargement du profil actuel…",
+      "linkNotFound": "Lien du profil introuvable. Réessayez plus tard.",
+      "unavailable": "Le service d’association de compte est temporairement indisponible.",
+      "timeout": "Le serveur met trop de temps à répondre. Vérifiez votre connexion et réessayez.",
+      "connection": "Impossible de se connecter au serveur.",
+      "invalid": "Lien ou code d’association non valide."
+    }
   },
   "pages": {
     "home": {
       "title": "Accueil",
       "quickSettings": "Réglages rapides",
       "internet": "INTERNET",
-      "forYou": "FOR YOU"
+      "forYou": "FOR YOU",
+      "hideTip": "Masquer le conseil",
+      "internetEverywhere": "Internet partout",
+      "youArePremium": "Vous êtes premium",
+      "premiumDaysRemaining": {
+        "one": "Il reste $n jour",
+        "other": "Il reste $n jours"
+      }
     },
     "proxies": {
       "title": "Proxys",
@@ -124,7 +145,8 @@
         "result": "Latence : ${delay} ms",
         "timeout": "Délai du test de latence expiré",
         "testing": "Latence : test en cours..."
-      }
+      },
+      "autoSelection": "Sélection automatique"
     },
     "profiles": {
       "title": "Profils",
@@ -208,6 +230,25 @@
         "disableAutoUpdate": "Désactiver la mise à jour automatique",
         "autoUpdateInterval": "Intervalle de mise à jour automatique",
         "loading": "Ajout du profil..."
+      },
+      "editor": {
+        "title": "Éditeur de configuration",
+        "changeEditor": "Changer d’éditeur",
+        "tree": "Arbre",
+        "text": "Texte",
+        "format": "Formater",
+        "expandAll": "Tout développer",
+        "collapseAll": "Tout réduire",
+        "results": "Résultats : $n",
+        "select": "Sélectionner $name",
+        "addObject": "Ajouter un objet",
+        "insert": "Insérer",
+        "append": "Ajouter à la fin",
+        "string": "Chaîne",
+        "number": "Nombre",
+        "boolean": "Booléen",
+        "object": "Objet",
+        "list": "Liste"
       }
     },
     "logs": {
@@ -269,7 +310,8 @@
         "urlTestInterval": "Intervalle de test de l'URL",
         "clashApiPort": "Port de l'API Clash",
         "useXrayCoreWhenPossible": "Utiliser xray-core si possible",
-        "useXrayCoreWhenPossibleMsg": "Utilisez xray-core lors de l'analyse des liens d'abonnement. Vous devez réimporter le lien pour activer cette option"
+        "useXrayCoreWhenPossibleMsg": "Utilisez xray-core lors de l'analyse des liens d'abonnement. Vous devez réimporter le lien pour activer cette option",
+        "notifications": "Notifications"
       },
       "routing": {
         "title": "Routage",
@@ -547,6 +589,18 @@
       "premiumInactive": "Premium inactif",
       "profileSite": "Fournisseur",
       "profileSupport": "Support"
+    },
+    "notifications": {
+      "alerts": "Notifications importantes",
+      "alertsDescription": "Messages et alertes importants",
+      "system": "Notifications système",
+      "systemDescription": "Messages système de l’application",
+      "promotions": "Offres et promotions",
+      "promotionsDescription": "Offres, réductions et messages promotionnels",
+      "news": "Actualités",
+      "newsDescription": "Actualités du service et du produit",
+      "testTitle": "Notification de test ZEON",
+      "testBody": "Le diagnostic des notifications système fonctionne."
     }
   },
   "dialogs": {
@@ -631,7 +685,8 @@
       "asn": "ASN :",
       "organization": "Organisation :",
       "location": "Emplacement :",
-      "postalCode": "Code postal :"
+      "postalCode": "Code postal :",
+      "quality": "Qualité de connexion"
     },
     "windowClosing": {
       "askEachTime": "Demander à chaque fois",
@@ -685,6 +740,7 @@
     "warp": {
       "missingLicense": "Licence WARP manquante",
       "missingLicenseMsg": "Le profil sélectionné utilise la fonctionnalité WARP. Pour utiliser cette fonctionnalité, vous devez accepter la licence WARP."
-    }
+    },
+    "withDetails": "Erreur : $error"
   }
 }

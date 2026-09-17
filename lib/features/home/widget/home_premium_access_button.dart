@@ -34,11 +34,9 @@ class HomePremiumAccessButton extends ConsumerWidget {
       padding: padding,
       child: HomePremiumAccessView(
         remainingDays: rawRemainingDays,
-        label: rawRemainingDays != null && rawRemainingDays >= 1
-            ? _buildPremiumLabel(context, t, rawRemainingDays)
-            : '',
+        label: rawRemainingDays != null && rawRemainingDays >= 1 ? _buildPremiumLabel(t, rawRemainingDays) : '',
         title: t.pages.profileDetails.specialServers.headerLineOne,
-        subtitle: _localizedInternetEverywhere(context),
+        subtitle: t.pages.home.internetEverywhere,
         onPressed: () =>
             unawaited(openExternalSubscriptionAccount(context, ref, profile is RemoteProfileEntity ? profile : null)),
       ),
@@ -57,97 +55,6 @@ int? _resolveRemainingDays(SubscriptionInfo? subInfo) {
   return days < 1 ? 1 : days;
 }
 
-String _buildPremiumLabel(BuildContext context, Translations t, int days) {
-  if (days > 10) {
-    return _localizedYouArePremium(context);
-  }
-  final languageCode = Localizations.localeOf(context).languageCode.toLowerCase();
-  if (languageCode == 'ru') {
-    return '${_russianRemainingVerb(days)} $days ${_russianDayWord(days)}';
-  }
-  return t.components.subscriptionInfo.remainingDuration(duration: days);
-}
-
-String _russianRemainingVerb(int count) {
-  return _isRussianSingleDay(count) ? 'Остался' : 'Осталось';
-}
-
-String _russianDayWord(int count) {
-  final normalized = count.abs() % 100;
-  final lastDigit = normalized % 10;
-  if (normalized >= 11 && normalized <= 14) {
-    return 'дней';
-  }
-  if (lastDigit == 1) {
-    return 'день';
-  }
-  if (lastDigit >= 2 && lastDigit <= 4) {
-    return 'дня';
-  }
-  return 'дней';
-}
-
-bool _isRussianSingleDay(int count) {
-  final normalized = count.abs() % 100;
-  return normalized % 10 == 1 && normalized != 11;
-}
-
-String _localizedInternetEverywhere(BuildContext context) {
-  final locale = Localizations.localeOf(context);
-  final lang = locale.languageCode.toLowerCase();
-  final country = (locale.countryCode ?? '').toUpperCase();
-
-  switch (lang) {
-    case 'ru':
-      return 'Интернет везде';
-    case 'es':
-      return 'Internet en todas partes';
-    case 'fa':
-      return 'اینترنت همه‌جا';
-    case 'fr':
-      return 'Internet partout';
-    case 'id':
-      return 'Internet di mana saja';
-    case 'pt':
-      return country == 'BR' ? 'Internet em todo lugar' : 'Internet em toda parte';
-    case 'tr':
-      return 'İnternet her yerde';
-    case 'zh':
-      return country == 'TW' ? '網路無所不在' : '网络无处不在';
-    case 'ar':
-      return 'الإنترنت في كل مكان';
-    case 'en':
-    default:
-      return 'Internet everywhere';
-  }
-}
-
-String _localizedYouArePremium(BuildContext context) {
-  final locale = Localizations.localeOf(context);
-  final lang = locale.languageCode.toLowerCase();
-  final country = (locale.countryCode ?? '').toUpperCase();
-
-  switch (lang) {
-    case 'ru':
-      return 'Вы премиум';
-    case 'es':
-      return 'Eres premium';
-    case 'fa':
-      return 'شما پریمیوم هستید';
-    case 'fr':
-      return 'Vous etes premium';
-    case 'id':
-      return 'Anda premium';
-    case 'pt':
-      return country == 'BR' ? 'Voce e premium' : 'Voce e premium';
-    case 'tr':
-      return 'Premium uyesisiniz';
-    case 'zh':
-      return country == 'TW' ? '您是高級會員' : '您是高级会员';
-    case 'ar':
-      return 'أنت بريميوم';
-    case 'en':
-    default:
-      return 'You are premium';
-  }
+String _buildPremiumLabel(Translations t, int days) {
+  return days > 10 ? t.pages.home.youArePremium : t.pages.home.premiumDaysRemaining(n: days);
 }

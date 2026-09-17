@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="stop">إيقاف</string>
+    <string name="re_ping">إعادة الاختبار</string>
+    <string name="auto_selection">اختيار تلقائي</string>
+    <string name="quick_toggle">تبديل</string>
+    <string name="notification_channel_connection">اتصال VPN</string>
+    <string name="notification_channel_connection_description">إشعار دائم لاتصال VPN النشط</string>
+    <string name="status_starting">جارٍ بدء الخدمة…</string>
+    <string name="status_started">تم بدء الخدمة</string>
+</resources>

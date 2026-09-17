@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zeon/core/localization/translation_context.dart';
 import 'package:zeon/features/proxy/active/ip_widget.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
@@ -87,7 +88,11 @@ class ProxyTile extends StatelessWidget with PresLogger {
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
-                    displayTitle ?? formatOutboundTitle(proxy),
+                    displayTitle ??
+                        formatOutboundTitle(
+                          proxy,
+                          autoSelectionLabel: context.translations.pages.proxies.autoSelection,
+                        ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

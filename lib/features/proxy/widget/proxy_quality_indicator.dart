@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zeon/core/localization/translation_context.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 /// A compact, presentation-only health indicator for an outbound.
@@ -55,7 +56,7 @@ class QualityBars extends StatelessWidget {
     final emptyColor = inactiveColor ?? scheme.outlineVariant;
 
     return Semantics(
-      label: 'Connection quality',
+      label: context.translations.dialogs.proxyInfo.quality,
       child: ExcludeSemantics(
         child: SizedBox(
           width: 28,

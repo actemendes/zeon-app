@@ -1,21 +1,22 @@
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
-const String autoSelectionDisplayName = 'Автовыбор';
 const String autoSelectionSeparator = '•';
 
 /// Returns the user-facing name exactly as supplied by Core/config.
 ///
 /// This deliberately does not remove flags, subscription labels (such as
 /// `| БЫСТРЫЙ`) or any other portion of a normal proxy display name.
-String formatProxyDisplayName(String raw) {
+String formatProxyDisplayName(String raw, {required String autoSelectionLabel}) {
   final value = raw.trim();
-  return _isAutoSelectionName(value) ? autoSelectionDisplayName : value;
+  return _isAutoSelectionName(value) ? autoSelectionLabel : value;
 }
 
-String formatOutboundTitle(OutboundInfo outbound) => resolveOutboundDisplayInfo(outbound).title;
+String formatOutboundTitle(OutboundInfo outbound, {required String autoSelectionLabel}) =>
+    resolveOutboundDisplayInfo(outbound, autoSelectionLabel: autoSelectionLabel).title;
 
 String formatSelectedServerTitle({
   required bool isAutoSelected,
+  required String autoSelectionLabel,
   required String? selectedName,
   required String? realOutboundName,
   required String? realOutboundFlag,
@@ -26,13 +27,13 @@ String formatSelectedServerTitle({
   }
 
   final realName = displayNameFromRealOutbound(realOutboundName);
-  if (realName == null) return autoSelectionDisplayName;
+  if (realName == null) return autoSelectionLabel;
 
   // Flutter renders the flag in a separate leading widget. This branch keeps
   // the helper usable in notification/text-only contexts as well.
   final flag = _flagEmoji(realOutboundFlag);
   final title =
-      '$autoSelectionDisplayName $autoSelectionSeparator ${flag == null ? realName : _withoutLeadingFlag(realName)}';
+      '$autoSelectionLabel $autoSelectionSeparator ${flag == null ? realName : _withoutLeadingFlag(realName)}';
   return flag == null ? title : '$flag $title';
 }
 
@@ -43,7 +44,11 @@ class ServerDisplayInfo {
   final String? countryCode;
 }
 
-ServerDisplayInfo resolveOutboundDisplayInfo(OutboundInfo outbound, {Iterable<OutboundInfo> allOutbounds = const []}) {
+ServerDisplayInfo resolveOutboundDisplayInfo(
+  OutboundInfo outbound, {
+  required String autoSelectionLabel,
+  Iterable<OutboundInfo> allOutbounds = const [],
+}) {
   final isAuto = isAutoSelectedOutbound(outbound);
   final realOutbound = isAuto ? resolveRealOutbound(outbound, allOutbounds: allOutbounds) : null;
   final realName =
@@ -65,6 +70,7 @@ ServerDisplayInfo resolveOutboundDisplayInfo(OutboundInfo outbound, {Iterable<Ou
     // its text. The real outbound name itself remains untouched.
     title: formatSelectedServerTitle(
       isAutoSelected: isAuto,
+      autoSelectionLabel: autoSelectionLabel,
       selectedName: outbound.tagDisplay,
       realOutboundName: isAuto ? _withoutLeadingFlag(realName ?? '') : realName,
       realOutboundFlag: null,

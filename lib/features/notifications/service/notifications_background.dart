@@ -1,11 +1,15 @@
 import 'dart:ui';
 
 import 'package:flutter/widgets.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workmanager/workmanager.dart';
 import 'package:zeon/core/db/db.dart';
 import 'package:zeon/core/http_client/dio_http_client.dart';
 import 'package:zeon/core/http_client/local_zeon_proxy_readiness.dart';
 import 'package:zeon/core/http_client/windows_system_http_transport.dart';
 import 'package:zeon/core/http_client/windows_system_websocket_transport.dart';
+import 'package:zeon/core/localization/translation_loader.dart';
 import 'package:zeon/features/notifications/data/notification_api_data_source.dart';
 import 'package:zeon/features/notifications/data/notification_device_auth.dart';
 import 'package:zeon/features/notifications/data/notification_local_data_source.dart';
@@ -14,10 +18,8 @@ import 'package:zeon/features/notifications/service/notification_action_handler.
 import 'package:zeon/features/notifications/service/notification_polling_service.dart';
 import 'package:zeon/features/notifications/service/notification_receipt_queue.dart';
 import 'package:zeon/features/notifications/service/system_notification_service.dart';
+import 'package:zeon/gen/translations.g.dart';
 import 'package:zeon/utils/platform_utils.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:workmanager/workmanager.dart';
 
 @pragma('vm:entry-point')
 void notificationWorkmanagerDispatcher() {
@@ -42,7 +44,12 @@ Future<bool> runNotificationsBackgroundSync() async {
         : PlatformUtils.isWindows
         ? 'windows'
         : 'unknown';
-    final locale = PlatformDispatcher.instance.locale.toLanguageTag();
+    final storedLocale = preferences.getString('locale');
+    final appLocale = storedLocale == null
+        ? AppLocaleUtils.findDeviceLocale()
+        : storedLocale == 'zh'
+        ? AppLocale.zhCn
+        : AppLocale.values.where((locale) => locale.name == storedLocale).firstOrNull ?? AppLocale.en;
     final httpClient = DioHttpClient(
       timeout: const Duration(seconds: 8),
       userAgent: 'ZEON/${packageInfo.version} ($platform) like ClashMeta v2ray sing-box',
@@ -61,14 +68,14 @@ Future<bool> runNotificationsBackgroundSync() async {
       deviceAuth: NotificationDeviceAuth(httpClient: httpClient, preferences: preferences),
       appVersion: packageInfo.version,
       platform: platform,
-      locale: locale,
+      locale: appLocale.languageTag,
     );
     final receiptQueue = NotificationReceiptQueue(localDataSource: local, apiDataSource: api);
     final repository = NotificationRepositoryImpl(
       apiDataSource: api,
       localDataSource: local,
       receiptQueue: receiptQueue,
-      systemNotificationService: SystemNotificationServiceImpl(),
+      systemNotificationService: SystemNotificationServiceImpl(translations: () => loadTranslations(appLocale)),
       actionHandler: NotificationActionHandler(),
       notificationsEnabled: () => preferences.getBool('remote_notifications') ?? true,
       categoryEnabled: (_) => true,

@@ -1,12 +1,12 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/widget/shimmer_skeleton.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/proxy/active/ip_widget.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/features/stats/widget/stats_card.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ConnectionStatsCard extends HookConsumerWidget {
   const ConnectionStatsCard({super.key});
@@ -24,7 +24,7 @@ class ConnectionStatsCard extends HookConsumerWidget {
         switch (activeProxy) {
           AsyncData(value: final proxy) => (
             label: const Icon(FluentIcons.arrow_routing_20_regular),
-            data: Text(formatOutboundTitle(proxy)),
+            data: Text(formatOutboundTitle(proxy, autoSelectionLabel: t.pages.proxies.autoSelection)),
             semanticLabel: null,
           ),
           _ => (label: const Icon(FluentIcons.arrow_routing_20_regular), data: const Text("..."), semanticLabel: null),

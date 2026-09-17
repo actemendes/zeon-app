@@ -71,7 +71,7 @@ class GeneralPage extends HookConsumerWidget {
                 ),
               ],
               SettingsSwitch(
-                title: const Text('Уведомления'),
+                title: Text(t.pages.settings.general.notifications),
                 secondary: const Icon(Icons.notifications_active_rounded),
                 value: ref.watch(Preferences.remoteNotifications),
                 onChanged: (value) async {

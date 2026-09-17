@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="stop">Hentikan</string>
+    <string name="re_ping">Ping ulang</string>
+    <string name="auto_selection">Pilihan otomatis</string>
+    <string name="quick_toggle">Alihkan</string>
+    <string name="notification_channel_connection">Koneksi VPN</string>
+    <string name="notification_channel_connection_description">Notifikasi tetap untuk koneksi VPN aktif</string>
+    <string name="status_starting">Memulai layanan…</string>
+    <string name="status_started">Layanan dimulai</string>
+</resources>

@@ -83,7 +83,13 @@
         "success": "Importado con éxito",
         "failure": "Error al importar"
       }
-    }
+    },
+    "open": "Abrir",
+    "back": "Atrás",
+    "copy": "Copiar",
+    "copyError": "Copiar error",
+    "next": "Siguiente",
+    "previous": "Anterior"
   },
   "intro": {
     "banner": "Todo lo que necesitas para un internet sin restricciones",
@@ -94,14 +100,29 @@
     "ctaSubtitle": "y premium de regalo",
     "alreadyHaveAccount": "Ya tengo una cuenta",
     "termsAndPolicyCaution(rich)": "Al continuar, aceptas los ${tap(@:pages.about.termsAndConditions)}",
-    "info": "Hecho con ❤️ por ZEON"
+    "info": "Hecho con ❤️ por ZEON",
+    "bindErrors": {
+      "alreadyBound": "Este dispositivo ya está vinculado. Cargando el perfil actual…",
+      "linkNotFound": "No se encontró el enlace del perfil. Inténtalo más tarde.",
+      "unavailable": "El servicio de vinculación no está disponible temporalmente.",
+      "timeout": "El servidor tarda demasiado en responder. Comprueba tu conexión e inténtalo de nuevo.",
+      "connection": "No se puede conectar con el servidor.",
+      "invalid": "Enlace o código de vinculación no válido."
+    }
   },
   "pages": {
     "home": {
       "title": "Inicio",
       "quickSettings": "Ajustes rápidos",
       "internet": "INTERNET",
-      "forYou": "FOR YOU"
+      "forYou": "FOR YOU",
+      "hideTip": "Ocultar consejo",
+      "internetEverywhere": "Internet en todas partes",
+      "youArePremium": "Eres premium",
+      "premiumDaysRemaining": {
+        "one": "Queda $n día",
+        "other": "Quedan $n días"
+      }
     },
     "proxies": {
       "title": "Proxies",
@@ -124,7 +145,8 @@
         "result": "Latencia: ${delay}ms",
         "timeout": "Tiempo de prueba de latencia agotado",
         "testing": "Latencia: probando..."
-      }
+      },
+      "autoSelection": "Selección automática"
     },
     "profiles": {
       "title": "Perfiles",
@@ -208,6 +230,25 @@
         "disableAutoUpdate": "Desactivar actualización automática",
         "autoUpdateInterval": "Intervalo de actualización automática",
         "loading": "Añadiendo perfil..."
+      },
+      "editor": {
+        "title": "Editor de configuración",
+        "changeEditor": "Cambiar editor",
+        "tree": "Árbol",
+        "text": "Texto",
+        "format": "Formatear",
+        "expandAll": "Expandir todo",
+        "collapseAll": "Contraer todo",
+        "results": "Resultados: $n",
+        "select": "Seleccionar $name",
+        "addObject": "Añadir objeto",
+        "insert": "Insertar",
+        "append": "Añadir al final",
+        "string": "Cadena",
+        "number": "Número",
+        "boolean": "Booleano",
+        "object": "Objeto",
+        "list": "Lista"
       }
     },
     "logs": {
@@ -269,7 +310,8 @@
         "urlTestInterval": "Intervalo de prueba de URL",
         "clashApiPort": "Puerto de la API de Clash",
         "useXrayCoreWhenPossible": "Usar xray-core cuando sea posible",
-        "useXrayCoreWhenPossibleMsg": "Usa xray-core al analizar enlaces de suscripción. Necesitas reimportar el enlace para habilitar esta opción"
+        "useXrayCoreWhenPossibleMsg": "Usa xray-core al analizar enlaces de suscripción. Necesitas reimportar el enlace para habilitar esta opción",
+        "notifications": "Notificaciones"
       },
       "routing": {
         "title": "Enrutamiento",
@@ -547,6 +589,18 @@
       "premiumInactive": "Premium inactivo",
       "profileSite": "Proveedor",
       "profileSupport": "Soporte"
+    },
+    "notifications": {
+      "alerts": "Notificaciones importantes",
+      "alertsDescription": "Mensajes y alertas importantes",
+      "system": "Notificaciones del sistema",
+      "systemDescription": "Mensajes del sistema de la aplicación",
+      "promotions": "Ofertas y promociones",
+      "promotionsDescription": "Ofertas, descuentos y mensajes promocionales",
+      "news": "Noticias",
+      "newsDescription": "Noticias del servicio y del producto",
+      "testTitle": "Notificación de prueba de ZEON",
+      "testBody": "El diagnóstico de notificaciones del sistema funciona."
     }
   },
   "dialogs": {
@@ -631,7 +685,8 @@
       "asn": "ASN:",
       "organization": "Organización:",
       "location": "Ubicación:",
-      "postalCode": "Código postal:"
+      "postalCode": "Código postal:",
+      "quality": "Calidad de conexión"
     },
     "windowClosing": {
       "askEachTime": "Preguntar cada vez",
@@ -685,6 +740,7 @@
     "warp": {
       "missingLicense": "Falta la licencia de WARP",
       "missingLicenseMsg": "El perfil seleccionado utiliza la función WARP. Para usar esta función, debes aceptar la licencia de WARP."
-    }
+    },
+    "withDetails": "Error: $error"
   }
 }

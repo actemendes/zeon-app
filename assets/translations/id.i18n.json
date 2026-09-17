@@ -83,7 +83,13 @@
         "success": "Berhasil diimpor",
         "failure": "Gagal mengimpor"
       }
-    }
+    },
+    "open": "Buka",
+    "back": "Kembali",
+    "copy": "Salin",
+    "copyError": "Salin kesalahan",
+    "next": "Berikutnya",
+    "previous": "Sebelumnya"
   },
   "intro": {
     "banner": "Semua yang Anda butuhkan untuk internet tanpa batasan",
@@ -94,14 +100,28 @@
     "ctaSubtitle": "dan premium sebagai hadiah",
     "alreadyHaveAccount": "Saya sudah punya akun",
     "termsAndPolicyCaution(rich)": "Dengan melanjutkan, Anda menyetujui ${tap(@:pages.about.termsAndConditions)}",
-    "info": "Dibuat dengan ❤️ oleh ZEON"
+    "info": "Dibuat dengan ❤️ oleh ZEON",
+    "bindErrors": {
+      "alreadyBound": "Perangkat ini sudah ditautkan. Memuat profil saat ini…",
+      "linkNotFound": "Tautan profil tidak ditemukan. Coba lagi nanti.",
+      "unavailable": "Layanan penautan akun sementara tidak tersedia.",
+      "timeout": "Server terlalu lama merespons. Periksa koneksi internet dan coba lagi.",
+      "connection": "Tidak dapat terhubung ke server.",
+      "invalid": "Tautan akun atau kode penautan tidak valid."
+    }
   },
   "pages": {
     "home": {
       "title": "Beranda",
       "quickSettings": "Pengaturan cepat",
       "internet": "INTERNET",
-      "forYou": "FOR YOU"
+      "forYou": "FOR YOU",
+      "hideTip": "Sembunyikan tips",
+      "internetEverywhere": "Internet di mana saja",
+      "youArePremium": "Anda premium",
+      "premiumDaysRemaining": {
+        "other": "Tersisa $n hari"
+      }
     },
     "proxies": {
       "title": "Proxy",
@@ -124,7 +144,8 @@
         "result": "Latensi: ${delay}ms",
         "timeout": "Waktu tes latensi habis",
         "testing": "Latensi: sedang menguji..."
-      }
+      },
+      "autoSelection": "Pilihan otomatis"
     },
     "profiles": {
       "title": "Profil",
@@ -208,6 +229,25 @@
         "disableAutoUpdate": "Nonaktifkan pembaruan otomatis",
         "autoUpdateInterval": "Interval pembaruan otomatis",
         "loading": "Menambahkan profil..."
+      },
+      "editor": {
+        "title": "Editor konfigurasi",
+        "changeEditor": "Ganti editor",
+        "tree": "Pohon",
+        "text": "Teks",
+        "format": "Format",
+        "expandAll": "Perluas semua",
+        "collapseAll": "Ciutkan semua",
+        "results": "Hasil: $n",
+        "select": "Pilih $name",
+        "addObject": "Tambah objek baru",
+        "insert": "Sisipkan",
+        "append": "Tambah di akhir",
+        "string": "String",
+        "number": "Angka",
+        "boolean": "Boolean",
+        "object": "Objek",
+        "list": "Daftar"
       }
     },
     "logs": {
@@ -269,7 +309,8 @@
         "urlTestInterval": "Interval uji URL",
         "clashApiPort": "Port API Clash",
         "useXrayCoreWhenPossible": "Gunakan xray-core jika memungkinkan",
-        "useXrayCoreWhenPossibleMsg": "Gunakan xray-core saat mengurai tautan langganan. Anda perlu mengimpor ulang tautan untuk mengaktifkan opsi ini."
+        "useXrayCoreWhenPossibleMsg": "Gunakan xray-core saat mengurai tautan langganan. Anda perlu mengimpor ulang tautan untuk mengaktifkan opsi ini.",
+        "notifications": "Notifikasi"
       },
       "routing": {
         "title": "Perutean",
@@ -547,6 +588,18 @@
       "premiumInactive": "Premium tidak aktif",
       "profileSite": "Penyedia",
       "profileSupport": "Dukungan"
+    },
+    "notifications": {
+      "alerts": "Notifikasi penting",
+      "alertsDescription": "Pesan dan peringatan penting",
+      "system": "Notifikasi sistem",
+      "systemDescription": "Pesan sistem dari aplikasi",
+      "promotions": "Penawaran dan promosi",
+      "promotionsDescription": "Penawaran, diskon, dan pesan promosi",
+      "news": "Berita",
+      "newsDescription": "Berita layanan dan produk",
+      "testTitle": "Notifikasi uji ZEON",
+      "testBody": "Diagnostik notifikasi sistem berfungsi."
     }
   },
   "dialogs": {
@@ -631,7 +684,8 @@
       "asn": "ASN:",
       "organization": "Organisasi:",
       "location": "Lokasi:",
-      "postalCode": "Kode pos:"
+      "postalCode": "Kode pos:",
+      "quality": "Kualitas koneksi"
     },
     "windowClosing": {
       "askEachTime": "Tanyakan setiap kali",
@@ -685,6 +739,7 @@
     "warp": {
       "missingLicense": "Lisensi WARP hilang",
       "missingLicenseMsg": "Profil yang dipilih menggunakan fitur WARP. Untuk menggunakan fitur ini, Anda harus menyetujui lisensi WARP."
-    }
+    },
+    "withDetails": "Kesalahan: $error"
   }
 }

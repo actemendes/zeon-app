@@ -89,7 +89,13 @@
         "success": "تم الاستيراد بنجاح",
         "failure": "فشل الاستيراد"
       }
-    }
+    },
+    "open": "فتح",
+    "back": "رجوع",
+    "copy": "نسخ",
+    "copyError": "نسخ الخطأ",
+    "next": "التالي",
+    "previous": "السابق"
   },
   "intro": {
     "banner": "كل ما تحتاجه لإنترنت بلا قيود",
@@ -100,14 +106,33 @@
     "ctaSubtitle": "وباقة بريميوم هدية",
     "alreadyHaveAccount": "لدي حساب بالفعل",
     "termsAndPolicyCaution(rich)": "بالاستمرار، أنت توافق على ${tap(@:pages.about.termsAndConditions)}",
-    "info": "صُنع بـ ❤️ بواسطة ZEON"
+    "info": "صُنع بـ ❤️ بواسطة ZEON",
+    "bindErrors": {
+      "alreadyBound": "هذا الجهاز مرتبط بالفعل. جارٍ تحميل الملف الشخصي الحالي…",
+      "linkNotFound": "لم يتم العثور على رابط الملف الشخصي. حاول لاحقًا.",
+      "unavailable": "خدمة ربط الحساب غير متاحة مؤقتًا.",
+      "timeout": "يستغرق الخادم وقتًا طويلًا للرد. تحقق من اتصال الإنترنت وحاول مجددًا.",
+      "connection": "تعذر الاتصال بالخادم.",
+      "invalid": "رابط الحساب أو رمز الربط غير صالح."
+    }
   },
   "pages": {
     "home": {
       "title": "الرئيسية",
       "quickSettings": "الإعدادات السريعة",
       "internet": "INTERNET",
-      "forYou": "FOR YOU"
+      "forYou": "FOR YOU",
+      "hideTip": "إخفاء التلميح",
+      "internetEverywhere": "الإنترنت في كل مكان",
+      "youArePremium": "أنت مشترك في بريميوم",
+      "premiumDaysRemaining": {
+        "zero": "لم يتبقَّ أي يوم",
+        "one": "تبقّى يوم واحد",
+        "two": "تبقّى يومان",
+        "few": "تبقّى $n أيام",
+        "many": "تبقّى $n يومًا",
+        "other": "تبقّى $n يوم"
+      }
     },
     "proxies": {
       "title": "البروكسيات",
@@ -130,7 +155,8 @@
         "result": "التأخير: ${delay} مللي ثانية",
         "timeout": "انتهى وقت اختبار التأخير",
         "testing": "التأخير: قيد الاختبار..."
-      }
+      },
+      "autoSelection": "اختيار تلقائي"
     },
     "profiles": {
       "title": "الملفات الشخصية",
@@ -218,6 +244,25 @@
         "disableAutoUpdate": "تعطيل التحديث التلقائي",
         "autoUpdateInterval": "فاصل التحديث التلقائي",
         "loading": "جاري إضافة الملف الشخصي..."
+      },
+      "editor": {
+        "title": "محرر الإعدادات",
+        "changeEditor": "تغيير المحرر",
+        "tree": "شجرة",
+        "text": "نص",
+        "format": "تنسيق",
+        "expandAll": "توسيع الكل",
+        "collapseAll": "طي الكل",
+        "results": "النتائج: $n",
+        "select": "اختر $name",
+        "addObject": "إضافة كائن جديد",
+        "insert": "إدراج",
+        "append": "إضافة إلى النهاية",
+        "string": "سلسلة نصية",
+        "number": "رقم",
+        "boolean": "قيمة منطقية",
+        "object": "كائن",
+        "list": "قائمة"
       }
     },
     "logs": {
@@ -279,7 +324,8 @@
         "urlTestInterval": "فاصل اختبار الرابط",
         "clashApiPort": "منفذ Clash API",
         "useXrayCoreWhenPossible": "استخدام xray-core عند الإمكان",
-        "useXrayCoreWhenPossibleMsg": "استخدم xray-core عند تحليل روابط الاشتراك. تحتاج إلى إعادة استيراد الرابط لتفعيل هذا الخيار"
+        "useXrayCoreWhenPossibleMsg": "استخدم xray-core عند تحليل روابط الاشتراك. تحتاج إلى إعادة استيراد الرابط لتفعيل هذا الخيار",
+        "notifications": "الإشعارات"
       },
       "routing": {
         "title": "التوجيه",
@@ -557,6 +603,18 @@
       "premiumInactive": "البريميوم غير نشط",
       "profileSite": "المزوّد",
       "profileSupport": "الدعم"
+    },
+    "notifications": {
+      "alerts": "إشعارات مهمة",
+      "alertsDescription": "رسائل وتنبيهات مهمة",
+      "system": "إشعارات النظام",
+      "systemDescription": "رسائل النظام من التطبيق",
+      "promotions": "العروض والتخفيضات",
+      "promotionsDescription": "العروض والصفقات والرسائل الترويجية",
+      "news": "الأخبار",
+      "newsDescription": "أخبار الخدمة والمنتج",
+      "testTitle": "إشعار تجريبي من ZEON",
+      "testBody": "اختبار إشعارات النظام يعمل."
     }
   },
   "dialogs": {
@@ -641,7 +699,8 @@
       "asn": "ASN:",
       "organization": "المُنظمة:",
       "location": "الموقع:",
-      "postalCode": "الرمز البريدي:"
+      "postalCode": "الرمز البريدي:",
+      "quality": "جودة الاتصال"
     },
     "windowClosing": {
       "askEachTime": "السؤال كل مرة",
@@ -695,6 +754,7 @@
     "warp": {
       "missingLicense": "رخصة WARP مفقودة",
       "missingLicenseMsg": "الملف الشخصي المحدد يستخدم ميزة WARP. لاستخدام هذه الميزة، يجب الموافقة على شروط رخصة WARP."
-    }
+    },
+    "withDetails": "خطأ: $error"
   }
 }

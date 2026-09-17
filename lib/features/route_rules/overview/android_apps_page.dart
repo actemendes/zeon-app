@@ -132,7 +132,7 @@ class AndroidAppsPage extends HookConsumerWidget {
           },
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(child: Text('Error: $error')),
+        error: (error, stack) => Center(child: Text(t.errors.withDetails(error: error))),
       ),
     );
   }

@@ -83,7 +83,13 @@
         "success": "Imported successfully",
         "failure": "Failed to import"
       }
-    }
+    },
+    "open": "Open",
+    "back": "Back",
+    "copy": "Copy",
+    "copyError": "Copy error",
+    "next": "Next",
+    "previous": "Previous"
   },
   "intro": {
     "banner": "All you need for an unrestricted internet",
@@ -97,14 +103,29 @@
     "bindAccountDialogLinkLabel": "Link for account binding",
     "bindAccountDialogInvalidLink": "Paste a valid link sent by the bot",
     "termsAndPolicyCaution(rich)": "By continuing you agree to ${tap(@:pages.about.termsAndConditions)}",
-    "info": "Made with ❤️ by ZEON"
+    "info": "Made with ❤️ by ZEON",
+    "bindErrors": {
+      "alreadyBound": "This device is already linked. Loading the current profile…",
+      "linkNotFound": "Profile link not found. Try again later.",
+      "unavailable": "The account linking service is temporarily unavailable.",
+      "timeout": "The server is taking too long to respond. Check your internet connection and try again.",
+      "connection": "Unable to connect to the server.",
+      "invalid": "Invalid account link or linking code."
+    }
   },
   "pages": {
     "home": {
       "title": "Home",
       "quickSettings": "Quick settings",
       "internet": "INTERNET",
-      "forYou": "FOR YOU"
+      "forYou": "FOR YOU",
+      "hideTip": "Hide tip",
+      "internetEverywhere": "Internet everywhere",
+      "youArePremium": "You are premium",
+      "premiumDaysRemaining": {
+        "one": "$n day remaining",
+        "other": "$n days remaining"
+      }
     },
     "proxies": {
       "title": "Proxies",
@@ -134,7 +155,8 @@
         "result": "Delay: ${delay}ms",
         "timeout": "Delay test timeout",
         "testing": "Delay: testing..."
-      }
+      },
+      "autoSelection": "Auto selection"
     },
     "profiles": {
       "title": "Profiles",
@@ -252,6 +274,25 @@
         "disableAutoUpdate": "Disable auto update",
         "autoUpdateInterval": "Auto update interval",
         "loading": "Adding profile..."
+      },
+      "editor": {
+        "title": "Config editor",
+        "changeEditor": "Change editor",
+        "tree": "Tree",
+        "text": "Text",
+        "format": "Format",
+        "expandAll": "Expand all",
+        "collapseAll": "Collapse all",
+        "results": "Results: $n",
+        "select": "Select $name",
+        "addObject": "Add new object",
+        "insert": "Insert",
+        "append": "Append",
+        "string": "String",
+        "number": "Number",
+        "boolean": "Boolean",
+        "object": "Object",
+        "list": "List"
       }
     },
     "logs": {
@@ -327,7 +368,8 @@
         "urlTestInterval": "URL test interval",
         "clashApiPort": "Clash API port",
         "useXrayCoreWhenPossible": "Use xray-core when possible",
-        "useXrayCoreWhenPossibleMsg": "Use xray-core during parsing sub links. You need to reimport the sub link to enable this option."
+        "useXrayCoreWhenPossibleMsg": "Use xray-core during parsing sub links. You need to reimport the sub link to enable this option.",
+        "notifications": "Notifications"
       },
       "routing": {
         "title": "Routing",
@@ -629,6 +671,18 @@
       "premiumInactive": "Premium is inactive",
       "profileSite": "Provider",
       "profileSupport": "Support"
+    },
+    "notifications": {
+      "alerts": "Important notifications",
+      "alertsDescription": "Important messages and alerts",
+      "system": "System notifications",
+      "systemDescription": "System messages from the app",
+      "promotions": "Offers and promotions",
+      "promotionsDescription": "Offers, deals and promotional messages",
+      "news": "News",
+      "newsDescription": "Service and product news",
+      "testTitle": "ZEON test notification",
+      "testBody": "System notification diagnostics are working."
     }
   },
   "dialogs": {
@@ -720,7 +774,8 @@
       "location": "Location:",
       "postalCode": "Postal code:",
       "download": "Download:",
-      "upload": "Upload:"
+      "upload": "Upload:",
+      "quality": "Connection quality"
     },
     "windowClosing": {
       "askEachTime": "Ask each time",
@@ -774,6 +829,7 @@
     "warp": {
       "missingLicense": "Warp license",
       "missingLicenseMsg": "The selected profile uses the WARP feature; to use this feature, the WARP license must be agreed to."
-    }
+    },
+    "withDetails": "Error: $error"
   }
 }

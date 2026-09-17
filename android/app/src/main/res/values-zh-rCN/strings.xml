@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="stop">停止</string>
+    <string name="re_ping">重新测速</string>
+    <string name="auto_selection">自动选择</string>
+    <string name="quick_toggle">切换</string>
+    <string name="notification_channel_connection">VPN 连接</string>
+    <string name="notification_channel_connection_description">活动 VPN 连接的常驻通知</string>
+    <string name="status_starting">正在启动服务…</string>
+    <string name="status_started">服务已启动</string>
+</resources>

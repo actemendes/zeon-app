@@ -365,7 +365,7 @@ class _IntroSecondaryButton extends StatelessWidget {
 class _BindAccountCodeDialog extends HookConsumerWidget {
   const _BindAccountCodeDialog();
 
-  static const _sampleBindLink = 'https://zeon-vps.link/open/ХХХХХХ';
+  static const _sampleBindLink = 'https://zeon-vps.link/open/XXXXXX';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -451,17 +451,17 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
     String mapBindError(String code) {
       switch (code.trim()) {
         case "device_already_bound":
-          return "Устройство уже привязано, загружаем текущий профиль...";
+          return t.intro.bindErrors.alreadyBound;
         case "bind_link_not_found":
-          return "Ссылка профиля не найдена. Повторите позже.";
+          return t.intro.bindErrors.linkNotFound;
         case "bind_not_configured":
-          return "Сервис привязки временно недоступен.";
+          return t.intro.bindErrors.unavailable;
         case "network_connectionTimeout":
-          return "Сервер долго отвечает. Проверьте интернет и повторите.";
+          return t.intro.bindErrors.timeout;
         case "network_connectionError":
-          return "Нет соединения с сервером.";
+          return t.intro.bindErrors.connection;
         case "validation_error":
-          return "Неверная ссылка или код привязки.";
+          return t.intro.bindErrors.invalid;
         default:
           return code.isEmpty ? t.errors.unexpected : code;
       }

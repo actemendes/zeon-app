@@ -38,7 +38,9 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
     final t = ref.watch(translationsProvider).requireValue;
 
     final theme = Theme.of(context);
-    final displayInfo = proxy == null ? null : resolveOutboundDisplayInfo(proxy);
+    final displayInfo = proxy == null
+        ? null
+        : resolveOutboundDisplayInfo(proxy, autoSelectionLabel: t.pages.proxies.autoSelection);
     final navBarTextColor =
         theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
     final navBarIconColor =
