@@ -81,7 +81,7 @@ TickTick: `💤ZEON`, parent `6a9fbc3a8f08ecb120d254c7`.
 | 01 / 6a9fbc768f0852d54c2e225f | Завершён 12.09.2026 на runtime-кандидате `6713b98f`: собственный acceptance PASS; независимые SHORT FAIL задач 04/06 сохранены | R03/R04/S06: Windows 3 режима × 2 фазы, Android VPN × 2 фазы; S02 reconnect/cleanup |
 | 02 / 6a9fbc778f08ecb120d25be9 | После crash интернет не зависит от ZEON; корректное восстановление чужого proxy/PAC | R14–R16, ownership/RunOnce; reboot пользовательский |
 | 03 / 6a9fbc788f08ecb120d25c0e | Завершён 13.09.2026 на `1.5.0+1050010` / `9ddff9db`: Android только VPN, legacy Proxy preference мигрирована, внутренние listeners сохранены | Fresh/upgrade и 89/89 instrumentation PASS; физический Android S02/S06 PASS; Windows S02 3/3 PASS |
-| 04 / 6a9fbc798f08ecb120d25c30 | Завершён 15.09.2026 на `1.5.0+1050050` / `afc252b6`: выбор и persistence соответствуют runtime/UI; карточка отсутствует без подключения и сохраняется после возврата/перезапуска UI при живом runtime | R01/R05–R09, обе границы видимости карточки, Android Manual A→B→Auto→A и reconnect, selector-only replay; Windows S02 3/3 + manual/exact Auto System Proxy |
+| 04 / 6a9fbc798f08ecb120d25c30 | Переоткрыт 17.09.2026: Android regression на `1.5.0+1050058` / `3c0e8167` принят; полный cross-platform SHORT пока PARTIAL | Android S01–S04/S06 PASS; Windows runtime S02 3/3 + manual/Auto PASS, но Windows GUI S01, полный UI A→B→Auto→A и настоящий Telegram остаются NOT_RUN |
 | 05 / 6a9fbc7a8f08c18d5f58c270 | Завершён 14.09.2026 на `1.5.0+1050016` / `984d40c4`: после reconnect/Auto есть конкретный native leaf и настоящий трафик | R08 Android Telegram UID flow + HTTPS/MTProto и Windows три режима PASS; Android R13 fault → reconnect → Auto recovery PASS; Android notification `Перевыбор` manual → Auto without VPN restart PASS |
 | 06 / 6a9fbc7c8f0852d54c2e2311 | Завершён 13.09.2026 на `1.5.0+1050010` / `9ddff9db`: domain API сохранён и runtime-подтверждён во всех Windows режимах | P01 targeted + HTTP 200 для доменного health; без IP fallback и TLS/SNI bypass |
 | 07 / 6a9fbc7d8f08c18d5f58c2b7 | Завершён 14.09.2026 на `1.5.0+1050021` / `ec3104f4`: обновление профиля до/во время VPN сохраняет ownership, cache и ручной выбор; после native restart реальный трафик и Auto/concrete leaf PASS | R17 Android + Windows System Proxy/TUN/Local Proxy; domain/TLS без IP fallback и bypass |
@@ -131,7 +131,20 @@ FULL — `NOT_RUN`. Evidence текущего прогона:
 команда по-прежнему резервирует поколение выше wall-clock seed и принятого native.
 Поток выбранного сервера также отделён от разрешения/настройки динамического
 уведомления; при выключенном отображении скорости native snapshot остаётся живым.
-107 unit/widget/lifecycle проверок PASS; физическая приёмка `1050058` ожидается.
+`1050058` / `3c0e8167`: 107 unit/widget/lifecycle и 91/91 native instrumentation PASS,
+scoped analyzer clean. Физический Android S01/S02/S03/S04/S06 PASS: Manual A→B→Auto→A,
+Activity recreation при прежних PID/VPNService, актуальное имя/Auto leaf, независимые
+HTTPS/MTProto через tun0; точный OFF→ON(manual)→Auto с Telegram UID flow. Проверены
+оба значения dynamic notification и native Stop receiver после пересоздания UI.
+Windows runtime S02 во всех трёх режимах и manual/Auto System Proxy PASS на том же
+source SHA. Стенд — Windows Server 2022, не Win10.
+Первый Local Proxy S02 завершился HARNESS_ERROR на gRPC-чтении выбранного сервера
+после успешного reconnect; cleanup PASS. Единственный повтор тем же артефактом PASS,
+исходный сбой сохранён; причина transport close не локализована.
+Полный SHORT остаётся PARTIAL: Windows GUI S01, полный UI A→B→Auto→A и настоящий
+Telegram S04 — NOT_RUN (тестер).
+S05 — MANUAL/NOT_RUN (пользователь), FULL/release/deployment не выполнялись.
+Итоговый отчёт: `Z:\Zeon-Envelope\Temp\zeon-app-testing\T04-CARD-RUNTIME-20260917\report.md`.
 Локальное evidence разработки:
 `Z:\Zeon-Envelope\Temp\zeon-app-testing\T04-ANDROID-CARD-20260917\report.md`.
 Этапы 07 и 09 завершены на `1.5.0+1050021` / `ec3104f4`; P03/R17 и регрессия

@@ -62,8 +62,15 @@ def main():
         return node.get('content-desc') or node.get('text') or ''
 
     def tap(text, prefix=False):
-        matches = [node for node in nodes()
-                   if (label(node).startswith(text) if prefix else label(node) == text)]
+        deadline = time.monotonic() + 20
+        while True:
+            matches = [node for node in nodes()
+                       if (label(node).startswith(text) if prefix else label(node) == text)]
+            if matches or time.monotonic() >= deadline:
+                break
+            time.sleep(.3)
+        if len(matches) > 1:
+            matches = [node for node in matches if node.get('clickable') == 'true']
         if len(matches) != 1:
             raise RuntimeError('Non-unique tap target: ' + text)
         x1, y1, x2, y2 = map(int, re.findall(r'\d+', matches[0].get('bounds')))
@@ -158,6 +165,11 @@ def main():
         wait_home('Нажмите для подключения')
         tap('Нажмите для подключения')
         wait_home('Нажмите для отключения')
+        reconnected = result['manual_reconnected'] = snapshot('manual_reconnect_native_before_auto')
+        if (reconnected.get('auto_selected') is not False
+                or reconnected.get('selected_id') != before.get('selected_id')
+                or reconnected.get('runtime_outbound_id') != before.get('selected_id')):
+            raise RuntimeError('Manual native selection did not persist before Auto tap')
         tap('Активный сервер', True)
         tap('Страна\nАвтовыбор', True)
         event('auto_selected_by_tap')
