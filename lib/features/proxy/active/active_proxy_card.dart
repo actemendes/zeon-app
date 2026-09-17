@@ -3,9 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
-import 'package:zeon/features/connection/model/connection_status.dart';
-import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/features/home/notifier/home_connection_state_provider.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
+import 'package:zeon/features/proxy/active/active_proxy_snapshot.dart';
 import 'package:zeon/features/proxy/active/ip_widget.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/utils/custom_loggers.dart';
@@ -26,15 +26,18 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final connectionState = ref.watch(
-      connectionNotifierProvider.select((value) => value.valueOrNull ?? const Disconnected()),
-    );
-    if (connectionState != const Connected()) {
+    final connectionState = ref.watch(homeConnectionStateProvider);
+    if (!connectionState.isConnected) {
       return const SizedBox.shrink();
     }
 
     final activeProxy = ref.watch(activeProxyNotifierProvider);
-    final proxy = activeProxy.valueOrNull;
+    final session = ref.watch(homeVpnSessionSnapshotProvider);
+    // On Android the native snapshot survives foreground stream teardown and
+    // wins over delayed selector/stats data, including a previous manual/Auto choice.
+    final proxy = session == null
+        ? activeProxy.valueOrNull
+        : activeProxyFromSessionSnapshot(session.valueOrNull, activeProxy: activeProxy.valueOrNull);
     final t = ref.watch(translationsProvider).requireValue;
 
     final theme = Theme.of(context);

@@ -1,6 +1,6 @@
 # Точка продолжения и план восстановления
 
-Снимок обновлён **2026-09-15**. Актуальные статусы брать из TickTick; этот документ
+Снимок обновлён **2026-09-17**. Актуальные статусы брать из TickTick; этот документ
 не является автоматически обновляемой панелью и не утверждает готовность релиза.
 Требования — [README.md](README.md) и [MATRIX.md](MATRIX.md).
 
@@ -108,6 +108,18 @@ Preserve-first проверки действуют сразу, несмотря 
 прошли на физическом Android и прямом Windows-стенде с разделённым UI/runtime
 evidence. S05 остаётся пользовательским `MANUAL/NOT_RUN`, FULL не запускался. Отчёт:
 `Z:\Zeon-Envelope\Temp\zeon-app-testing\T04-B1050050-FINAL-20260915\report.md`.
+Повторное открытие этапа 04 от 17.09.2026: пользователь сообщил об исчезновении
+карточки на Android при перезаходе с продолжающимся VPN. Предыдущая приёмка
+сохранена как исторический результат. Регрессионный widget test воспроизвёл
+исчезновение: native Connected при пустом `ConnectionNotifier` скрывал карточку.
+Теперь карточка и кнопка используют общую проекцию native session; имя и Auto/leaf
+восстанавливаются из того же snapshot, поздние foreground данные не заменяют выбор.
+Передача тестеру: Task `6a9fbc798f08ecb120d25c30`, Android Home re-entry и полное
+пересоздание UI при живом VPN, Manual → Auto → Manual, native stop при устаревшем
+UI Connected. Проверить имя/флаг против native leaf и свежего трафика; затем SHORT
+по README. Новые device runtime/SHORT/FULL/build проверки — `NOT_RUN`.
+Локальное evidence разработки:
+`Z:\Zeon-Envelope\Temp\zeon-app-testing\T04-ANDROID-CARD-20260917\report.md`.
 Этапы 07 и 09 завершены на `1.5.0+1050021` / `ec3104f4`; P03/R17 и регрессия
 задачи 05 прошли на физическом Android и во всех трёх Windows-режимах. Отчёт:
 `Z:\Zeon-Envelope\Temp\zeon-app-testing\T09-B1050021-FINAL-20260914\report.md`.
