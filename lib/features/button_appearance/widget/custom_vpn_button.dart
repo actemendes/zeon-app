@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:zeon/core/localization/translation_context.dart';
 
 import 'package:zeon/features/button_appearance/button_appearance.dart';
 export 'package:zeon/features/button_appearance/button_appearance.dart';
@@ -109,7 +110,9 @@ class _CustomVpnButtonState extends State<CustomVpnButton> with SingleTickerProv
     final inset = standard ? widget.diameter * .16 : 11.0;
     return Semantics(
       button: true,
-      label: widget.semanticsLabel ?? '${widget.phase.label}. ${widget.phase.action}',
+      label:
+          widget.semanticsLabel ??
+          '${widget.phase.label(context.translations)}. ${widget.phase.action(context.translations)}',
       enabled: widget.onPressed != null,
       child: SizedBox.square(
         dimension: widget.diameter,

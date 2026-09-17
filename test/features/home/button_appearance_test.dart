@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zeon/core/localization/translation_context.dart';
+import 'package:zeon/core/localization/translation_loader.dart';
 import 'package:zeon/features/button_appearance/data/button_appearance_repository.dart';
 import 'package:zeon/features/button_appearance/data/button_image_codec.dart';
 import 'package:zeon/features/button_appearance/widget/button_appearance_editor.dart';
@@ -10,11 +13,13 @@ import 'package:zeon/features/button_appearance/widget/custom_vpn_button.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
 import 'package:zeon/features/home/widget/connection_button.dart';
 import 'package:zeon/gen/assets.gen.dart';
+import 'package:zeon/gen/translations.g.dart';
 import 'package:zeon/gen/translations_ru.g.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() => loadTranslations(AppLocale.ru));
   late Directory temp;
   late SharedPreferences preferences;
   late ButtonAppearanceRepository store;
@@ -74,6 +79,7 @@ void main() {
     await store.save(
       ButtonAppearance(
         preset: ButtonPreset.custom,
+        name: 'Saved set',
         pictures: {
           for (final phase in ButtonPhase.values)
             phase: ButtonPicture(MemoryImage(File('assets/images/button_presets/kawaii-idle.png').readAsBytesSync())),
@@ -120,7 +126,7 @@ void main() {
         p: const ButtonPicture(AssetImage('assets/images/button_presets/kawaii-idle.png'), zoom: 4),
     };
     await expectLater(
-      store.save(ButtonAppearance(preset: ButtonPreset.custom, pictures: pictures)),
+      store.save(ButtonAppearance(preset: ButtonPreset.custom, name: 'Invalid crop', pictures: pictures)),
       throwsFormatException,
     );
   });
@@ -135,6 +141,9 @@ void main() {
   testWidgets('editor removes state gallery and keeps custom slots', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('ru'),
+        supportedLocales: const [Locale('ru')],
+        localizationsDelegates: const [InterfaceTranslationsDelegate(), ...GlobalMaterialLocalizations.delegates],
         home: ButtonAppearanceEditor(
           initial: const ButtonAppearance(preset: ButtonPreset.kawaii),
           onSave: (_) async {},

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zeon/gen/translations.g.dart';
 
 const zeonGreen = Color(0xFF3CE74F);
 const zeonLime = Color(0xFFBFDD71);
@@ -8,15 +9,15 @@ enum ButtonPhase { idle, connecting, connected }
 enum ButtonPreset { standard, kawaii, custom }
 
 extension PhaseLabel on ButtonPhase {
-  String get label => switch (this) {
-    ButtonPhase.idle => 'Выключено',
-    ButtonPhase.connecting => 'Подключение',
-    ButtonPhase.connected => 'Подключено',
+  String label(Translations t) => switch (this) {
+    ButtonPhase.idle => t.buttonAppearance.idle,
+    ButtonPhase.connecting => t.buttonAppearance.connecting,
+    ButtonPhase.connected => t.buttonAppearance.connected,
   };
-  String get action => switch (this) {
-    ButtonPhase.idle => 'Подключиться',
-    ButtonPhase.connecting => 'Отменить подключение',
-    ButtonPhase.connected => 'Отключиться',
+  String action(Translations t) => switch (this) {
+    ButtonPhase.idle => t.buttonAppearance.connectAction,
+    ButtonPhase.connecting => t.buttonAppearance.cancelAction,
+    ButtonPhase.connected => t.buttonAppearance.disconnectAction,
   };
 }
 
@@ -30,7 +31,7 @@ class ButtonPicture {
 
 @immutable
 class ButtonAppearance {
-  const ButtonAppearance({this.preset = ButtonPreset.standard, this.pictures = const {}, this.name = 'Моя кнопка'});
+  const ButtonAppearance({this.preset = ButtonPreset.standard, this.pictures = const {}, this.name = ''});
   final ButtonPreset preset;
   final Map<ButtonPhase, ButtonPicture> pictures;
   final String name;

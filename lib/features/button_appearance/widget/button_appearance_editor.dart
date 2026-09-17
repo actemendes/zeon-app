@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:zeon/core/localization/translation_context.dart';
 import 'package:zeon/features/button_appearance/data/button_image_codec.dart';
 import 'package:zeon/features/button_appearance/widget/custom_vpn_button.dart';
 
@@ -37,6 +38,19 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
   late ButtonPreset preset = widget.initial.preset;
   late final Map<ButtonPhase, ButtonPicture> pictures = {...widget.initial.pictures};
   late final name = TextEditingController(text: widget.initial.name);
+  bool _nameInitialized = false;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_nameInitialized) {
+      // Only suggest a localized name for a new set; saved user names are data.
+      if (widget.initial.pictures.isEmpty || name.text.isEmpty) {
+        name.text = context.translations.buttonAppearance.defaultName;
+      }
+      _nameInitialized = true;
+    }
+  }
+
   ButtonPhase previewPhase = ButtonPhase.connected;
   bool busy = false;
   ButtonAppearance get draft =>
@@ -52,7 +66,7 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
     try {
       final bytes = await widget.pickImage();
       if (bytes == null || !mounted) return;
-      if (bytes.length > 15 * 1024 * 1024) throw const FormatException('Размер изображения — до 15 МБ');
+      if (bytes.length > 15 * 1024 * 1024) throw const FormatException('Image size');
       // Decode before accepting a file, so corrupt data cannot replace a working slot.
       final normalized = await normalizeButtonImage(bytes);
       if (!mounted) return;
@@ -68,9 +82,9 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось открыть изображение. Выберите PNG, JPG или WebP до 15 МБ.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.translations.buttonAppearance.imageError)));
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -87,7 +101,7 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Не удалось сохранить вид кнопки. Попробуйте ещё раз.')));
+        ).showSnackBar(SnackBar(content: Text(context.translations.buttonAppearance.saveError)));
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -107,16 +121,19 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
             onPressed: busy ? null : (widget.onBack ?? () => Navigator.maybePop(context)),
             icon: const Icon(Icons.arrow_back_rounded),
           ),
-          title: const Text('Вид кнопки'),
+          title: Text(context.translations.buttonAppearance.title),
           centerTitle: true,
         ),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
           children: [
-            const Text('Выберите настроение', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            Text(
+              context.translations.buttonAppearance.chooseMood,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 6),
             Text(
-              'Готовый набор или Ваши изображения\nдля каждого состояния.',
+              context.translations.buttonAppearance.intro,
               style: TextStyle(fontSize: 12, height: 1.5, color: c.onSurfaceVariant),
             ),
             const SizedBox(height: 18),
@@ -137,7 +154,10 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
               ),
               child: Column(
                 children: [
-                  Text('ПРЕДПРОСМОТР', style: TextStyle(fontSize: 9, letterSpacing: 1.5, color: c.onSurfaceVariant)),
+                  Text(
+                    context.translations.buttonAppearance.preview,
+                    style: TextStyle(fontSize: 9, letterSpacing: 1.5, color: c.onSurfaceVariant),
+                  ),
                   const SizedBox(height: 12),
                   CustomVpnButton(
                     phase: previewPhase,
@@ -158,21 +178,34 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
                 controller: name,
                 onChanged: (_) => setState(() {}),
                 maxLength: 32,
-                decoration: const InputDecoration(labelText: 'Название набора', counterText: '', isDense: true),
+                decoration: InputDecoration(
+                  labelText: context.translations.buttonAppearance.setName,
+                  counterText: '',
+                  isDense: true,
+                ),
               ),
               const SizedBox(height: 18),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Ваши изображения', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                  Text('${pictures.length} / 3', style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+                  Expanded(
+                    child: Text(
+                      context.translations.buttonAppearance.yourImages,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Text(
+                    '${pictures.length} / 3',
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               for (final phase in ButtonPhase.values) _slot(phase),
               const SizedBox(height: 7),
               Text(
-                'PNG, JPG, WebP · до 15 МБ\nКадрирование настраивается после выбора.',
+                context.translations.buttonAppearance.fileHint,
                 style: TextStyle(fontSize: 10, height: 1.5, color: c.onSurfaceVariant),
               ),
             ] else ...[
@@ -187,8 +220,8 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
                     Expanded(
                       child: Text(
                         preset == ButtonPreset.standard
-                            ? 'Классическая кнопка ZEON с логотипом и большим кольцом.'
-                            : 'Картинка меняется вместе с состоянием. Тонкое кольцо оставляет больше места персонажу.',
+                            ? context.translations.buttonAppearance.standardDescription
+                            : context.translations.buttonAppearance.imageDescription,
                         style: const TextStyle(fontSize: 11, height: 1.55),
                       ),
                     ),
@@ -203,7 +236,7 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
                   });
                   preset = ButtonPreset.custom;
                 }),
-                child: const Text('Создать свой на основе набора', style: TextStyle(fontSize: 11)),
+                child: Text(context.translations.buttonAppearance.clone, style: const TextStyle(fontSize: 11)),
               ),
             ],
           ],
@@ -212,12 +245,16 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 15),
-            child: SizedBox(
-              height: 48,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
               child: FilledButton(
                 key: const ValueKey('save-appearance'),
                 onPressed: canSave ? save : null,
-                child: Text(custom ? 'Сохранить и применить' : 'Применить'),
+                child: Text(
+                  custom
+                      ? context.translations.buttonAppearance.saveApply
+                      : context.translations.buttonAppearance.apply,
+                ),
               ),
             ),
           ),
@@ -229,7 +266,11 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
   Widget _presetTile(ButtonPreset p) {
     final c = Theme.of(context).colorScheme;
     final selected = preset == p;
-    final label = ['Стандартная', 'Кавайность', 'Своя'][p.index];
+    final label = [
+      context.translations.buttonAppearance.standard,
+      context.translations.buttonAppearance.kawaii,
+      context.translations.buttonAppearance.custom,
+    ][p.index];
     return Semantics(
       selected: selected,
       child: InkWell(
@@ -237,7 +278,7 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
         borderRadius: BorderRadius.circular(17),
         onTap: busy ? null : () => setState(() => preset = p),
         child: Container(
-          height: 108,
+          height: 108 + (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(0, double.infinity),
           padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
           decoration: BoxDecoration(
             color: c.surfaceContainerHigh,
@@ -301,10 +342,15 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(phase.label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      Text(
+                        phase.label(context.translations),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
                       const SizedBox(height: 4),
                       Text(
-                        filled ? 'Заменить изображение' : 'Выбрать изображение',
+                        filled
+                            ? context.translations.buttonAppearance.replaceImage
+                            : context.translations.buttonAppearance.chooseImage,
                         style: TextStyle(fontSize: 10, color: c.onSurfaceVariant),
                       ),
                     ],
@@ -312,7 +358,7 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
                 ),
                 if (filled)
                   IconButton(
-                    tooltip: 'Удалить изображение',
+                    tooltip: context.translations.buttonAppearance.removeImage,
                     onPressed: busy ? null : () => setState(() => pictures.remove(phase)),
                     icon: const Icon(Icons.close_rounded, size: 17),
                   )
@@ -350,7 +396,7 @@ class PhaseSelector extends StatelessWidget {
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        p.label,
+                        p.label(context.translations),
                         style: TextStyle(fontSize: 10, fontWeight: phase == p ? FontWeight.w700 : FontWeight.w500),
                       ),
                     ),
@@ -386,12 +432,15 @@ class _PictureCropDialogState extends State<PictureCropDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Настройте кадр', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                Text(
+                  context.translations.buttonAppearance.cropTitle,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Переместите картинку и выберите масштаб.',
+                Text(
+                  context.translations.buttonAppearance.cropHint,
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 11, height: 1.5),
+                  style: const TextStyle(fontSize: 11, height: 1.5),
                 ),
                 const SizedBox(height: 22),
                 GestureDetector(
@@ -420,12 +469,15 @@ class _PictureCropDialogState extends State<PictureCropDialog> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(context.translations.buttonAppearance.cancel),
+                      ),
                     ),
                     Expanded(
                       child: FilledButton(
                         onPressed: () => Navigator.pop(context, picture),
-                        child: const Text('Готово'),
+                        child: Text(context.translations.buttonAppearance.done),
                       ),
                     ),
                   ],

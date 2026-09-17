@@ -59,7 +59,7 @@ class ButtonAppearanceRepository {
         preset: preset == ButtonPreset.custom && pictures.length != 3 ? ButtonPreset.standard : preset,
         name: value['name'] is String
             ? (value['name'] as String).substring(0, (value['name'] as String).length.clamp(0, 32))
-            : 'Моя кнопка',
+            : '',
         pictures: Map.unmodifiable(pictures),
       );
     } catch (_) {
