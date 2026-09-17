@@ -5,7 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/router/go_router/helper/custom_transition.dart';
 import 'package:zeon/features/settings/widget/settings_help_painter.dart';
+
+const _helpAppearDuration = Duration(milliseconds: 260);
 
 /// Root modal covers the shell navigation too; its target never changes a value.
 Future<void> showSettingsHelp(
@@ -50,7 +53,30 @@ class _SettingsHelpOnboardingState extends ConsumerState<SettingsHelpOnboarding>
         return;
       }
       _showing = true;
-      await Scrollable.ensureVisible(context, alignment: .15);
+      final reduced = ref.read(Preferences.lowPowerMode) || MediaQuery.disableAnimationsOf(context);
+      // Let the settings branch finish its entrance before anchoring the lesson.
+      if (!reduced) await Future<void>.delayed(routeTransitionDuration);
+      if (!mounted || !TickerMode.of(context) || ModalRoute.of(context)?.isCurrent != true) {
+        _showing = false;
+        return;
+      }
+      // Leave an already visible row in place; only reveal a clipped edge.
+      for (final policy in [
+        ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+      ]) {
+        await Scrollable.ensureVisible(
+          context,
+          alignmentPolicy: policy,
+          duration: reduced ? Duration.zero : _helpAppearDuration,
+          curve: Curves.easeOutCubic,
+        );
+        if (!mounted || !TickerMode.of(context) || ModalRoute.of(context)?.isCurrent != true) {
+          _showing = false;
+          return;
+        }
+      }
+      await WidgetsBinding.instance.endOfFrame;
       if (!mounted || !TickerMode.of(context) || ModalRoute.of(context)?.isCurrent != true) {
         _showing = false;
         return;
@@ -216,75 +242,85 @@ class _SettingsHelpOverlayState extends ConsumerState<_SettingsHelpOverlay>
               closeLabel: t.common.close,
               onClose: _close,
             );
-            return Stack(
-              key: _surfaceKey,
-              children: [
-                Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _close,
-                    child: CustomPaint(painter: SettingsSpotlightPainter(rect, _teaching)),
-                  ),
-                ),
-                if (visibleTarget)
-                  Positioned.fromRect(
-                    rect: rect,
-                    child: FocusableActionDetector(
-                      autofocus: _teaching,
-                      shortcuts: const {
-                        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-                        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-                      },
-                      actions: {
-                        ActivateIntent: CallbackAction<ActivateIntent>(
-                          onInvoke: (_) {
-                            if (_teaching) _learn();
-                            return null;
+            // Measure invisibly first, then reveal the spotlight, hand and card
+            // together at their real positions instead of flashing the fallback.
+            return AnimatedOpacity(
+              opacity: _target == null ? 0 : 1,
+              duration: reduced ? Duration.zero : _helpAppearDuration,
+              curve: Curves.easeOutCubic,
+              child: IgnorePointer(
+                ignoring: _target == null,
+                child: Stack(
+                  key: _surfaceKey,
+                  children: [
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _close,
+                        child: CustomPaint(painter: SettingsSpotlightPainter(rect, _teaching)),
+                      ),
+                    ),
+                    if (visibleTarget)
+                      Positioned.fromRect(
+                        rect: rect,
+                        child: FocusableActionDetector(
+                          autofocus: _teaching,
+                          shortcuts: const {
+                            SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+                            SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
                           },
-                        ),
-                      },
-                      child: Semantics(
-                        button: _teaching,
-                        label: _teaching ? '${widget.title}. ${t.settingsHelp.learn}' : widget.title,
-                        onLongPress: _teaching ? _learn : null,
-                        // Screen readers use their activation gesture for the same lesson.
-                        onTap: _teaching ? _learn : null,
-                        child: GestureDetector(
-                          key: const ValueKey('settings-help-target'),
-                          excludeFromSemantics: true,
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {},
-                          onLongPress: _teaching ? _learn : null,
-                        ),
-                      ),
-                    ),
-                  ),
-                if (_teaching && visibleTarget)
-                  Positioned(
-                    left: (rect.right - 112).clamp(8.0, size.width - 104),
-                    top: handGap > 0 ? rect.bottom - 25 : rect.top - 10,
-                    width: 104,
-                    height: 115,
-                    child: IgnorePointer(
-                      child: ExcludeSemantics(
-                        child: AnimatedBuilder(
-                          animation: _hand,
-                          builder: (_, _) => CustomPaint(painter: SettingsHandPainter(reduced ? .6 : _hand.value)),
+                          actions: {
+                            ActivateIntent: CallbackAction<ActivateIntent>(
+                              onInvoke: (_) {
+                                if (_teaching) _learn();
+                                return null;
+                              },
+                            ),
+                          },
+                          child: Semantics(
+                            button: _teaching,
+                            label: _teaching ? '${widget.title}. ${t.settingsHelp.learn}' : widget.title,
+                            onLongPress: _teaching ? _learn : null,
+                            // Screen readers use their activation gesture for the same lesson.
+                            onTap: _teaching ? _learn : null,
+                            child: GestureDetector(
+                              key: const ValueKey('settings-help-target'),
+                              excludeFromSemantics: true,
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {},
+                              onLongPress: _teaching ? _learn : null,
+                            ),
+                          ),
                         ),
                       ),
+                    if (_teaching && visibleTarget)
+                      Positioned(
+                        left: (rect.right - 112).clamp(8.0, size.width - 104),
+                        top: handGap > 0 ? rect.bottom - 25 : rect.top - 10,
+                        width: 104,
+                        height: 115,
+                        child: IgnorePointer(
+                          child: ExcludeSemantics(
+                            child: AnimatedBuilder(
+                              animation: _hand,
+                              builder: (_, _) => CustomPaint(painter: SettingsHandPainter(reduced ? .6 : _hand.value)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      left: left,
+                      width: width,
+                      top: below ? rect.bottom + 12 + handGap : null,
+                      bottom: below ? null : size.height - rect.top + 12,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: math.max(80, available - handGap)),
+                        child: card,
+                      ),
                     ),
-                  ),
-                Positioned(
-                  left: left,
-                  width: width,
-                  top: below ? rect.bottom + 12 + handGap : null,
-                  bottom: below ? null : size.height - rect.top + 12,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: math.max(80, available - handGap)),
-                    child: card,
-                  ),
+                  ],
                 ),
-              ],
+              ),
             );
           },
         ),
