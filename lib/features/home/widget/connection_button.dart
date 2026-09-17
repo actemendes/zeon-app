@@ -8,6 +8,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/theme/theme_extensions.dart';
 import 'package:zeon/core/widget/animated_text.dart';
+import 'package:zeon/features/button_appearance/data/button_appearance_provider.dart';
+import 'package:zeon/features/button_appearance/widget/custom_vpn_button.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
 import 'package:zeon/features/home/notifier/home_connection_state_provider.dart';
@@ -45,6 +47,7 @@ class ConnectionButton extends ConsumerWidget {
     final presentation = buttonState.present(t);
 
     return MainVpnButtonView(
+      appearance: ref.watch(buttonAppearanceProvider).valueOrNull ?? const ButtonAppearance(),
       faceKey: faceKey,
       showStatus: showStatus,
       onTap: buttonState.enabled
@@ -68,6 +71,7 @@ class MainVpnButtonView extends StatelessWidget {
     required this.image,
     required this.useImage,
     required this.secureLabel,
+    this.appearance = const ButtonAppearance(),
   });
 
   final VoidCallback? onTap;
@@ -77,6 +81,7 @@ class MainVpnButtonView extends StatelessWidget {
   final AssetGenImage image;
   final bool useImage;
   final String secureLabel;
+  final ButtonAppearance appearance;
 
   @override
   Widget build(BuildContext context) {
@@ -89,19 +94,33 @@ class MainVpnButtonView extends StatelessWidget {
           button: true,
           enabled: state.enabled,
           label: presentation.semanticsLabel,
+          onTap: appearance.preset != ButtonPreset.standard && state.enabled ? onTap : null,
           child: Container(
             key: faceKey,
             decoration: const BoxDecoration(shape: BoxShape.circle),
             width: _ConnectionButtonFace.outerSize,
             height: _ConnectionButtonFace.outerSize,
-            child: _ConnectionButtonFace(
-              onTap: onTap,
-              enabled: state.enabled,
-              image: image,
-              useImage: useImage,
-              visualState: state.visualState,
-              isStopping: state.isStopping,
-            ),
+            child: appearance.preset != ButtonPreset.standard
+                ? ExcludeSemantics(
+                    child: CustomVpnButton(
+                      diameter: _ConnectionButtonFace.outerSize,
+                      appearance: appearance,
+                      phase: switch (state.visualState) {
+                        MainVpnButtonVisualState.connected => ButtonPhase.connected,
+                        MainVpnButtonVisualState.loading when !state.isStopping => ButtonPhase.connecting,
+                        _ => ButtonPhase.idle,
+                      },
+                      onPressed: state.enabled ? onTap : null,
+                    ),
+                  )
+                : _ConnectionButtonFace(
+                    onTap: onTap,
+                    enabled: state.enabled,
+                    image: image,
+                    useImage: useImage,
+                    visualState: state.visualState,
+                    isStopping: state.isStopping,
+                  ),
           ),
         ),
         if (showStatus) ...[

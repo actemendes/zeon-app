@@ -8,6 +8,7 @@ import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/features/auto_start/notifier/auto_start_notifier.dart';
+import 'package:zeon/features/button_appearance/widget/button_appearance_page.dart';
 import 'package:zeon/features/common/general_pref_tiles.dart';
 import 'package:zeon/features/notifications/data/notification_data_providers.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
@@ -32,7 +33,7 @@ class GeneralPage extends HookConsumerWidget {
         children: [
           SettingsGroup(
             title: t.pages.settings.groups.appearance,
-            children: const [LocalePrefTile(), ThemeModePrefTile()],
+            children: const [LocalePrefTile(), ThemeModePrefTile(), ButtonAppearancePrefTile()],
           ),
           SettingsGroup(
             title: PlatformUtils.isDesktop ? t.pages.settings.groups.startup : t.pages.settings.groups.feedback,
