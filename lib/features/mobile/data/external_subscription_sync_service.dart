@@ -1,8 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:zeon/core/localization/translations.dart';
-import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
@@ -88,10 +86,6 @@ class ExternalSubscriptionSyncService with InfraLogger {
 
     await finishPendingCheck();
     await ref.read(connectionNotifierProvider.notifier).reconnect(updated);
-    final t = ref.read(translationsProvider).valueOrNull;
-    ref
-        .read(inAppNotificationControllerProvider)
-        .showSuccessToast(t?.pages.profiles.msg.update.success ?? 'Subscription updated');
     loggy.info(
       'external subscription change applied '
       '[profile_id=${active.id} previous_expiry=$previousExpiry current_expiry=$currentExpiry]',

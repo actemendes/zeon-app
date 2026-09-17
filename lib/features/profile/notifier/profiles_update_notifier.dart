@@ -200,32 +200,38 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
           now: DateTime.now(),
         )) {
           attemptedProfileUpdate = true;
-          final t = ref.read(translationsProvider).requireValue;
           final result = await ref
               .read(profileRepositoryProvider)
               .requireValue
               .upsertRemote(profile.url, proxyOnly: proxyOnly, syncManagedRouting: false)
               .mapLeft((l) {
                 loggy.debug("error updating profile [${profile.id}]", l);
-                ref
-                    .read(inAppNotificationControllerProvider)
-                    .showErrorToast(
-                      t.presentShortError(
-                        l,
-                        action: t.pages.profiles.msg.update.failureNamed(name: displayProfileName),
-                      ),
-                      diagnosticText: t.diagnosticError(
-                        l,
-                        action: t.pages.profiles.msg.update.failureNamed(name: displayProfileName),
-                      ),
-                    );
+                // Only explicit refresh actions request user-facing feedback.
+                if (force) {
+                  final t = ref.read(translationsProvider).requireValue;
+                  ref
+                      .read(inAppNotificationControllerProvider)
+                      .showErrorToast(
+                        t.presentShortError(
+                          l,
+                          action: t.pages.profiles.msg.update.failureNamed(name: displayProfileName),
+                        ),
+                        diagnosticText: t.diagnosticError(
+                          l,
+                          action: t.pages.profiles.msg.update.failureNamed(name: displayProfileName),
+                        ),
+                      );
+                }
                 state = AsyncData((name: displayProfileName, success: false));
               })
               .map((_) {
                 loggy.debug("profile [${profile.id}] updated successfully");
-                ref
-                    .read(inAppNotificationControllerProvider)
-                    .showSuccessToast(t.pages.profiles.msg.update.successNamed(name: displayProfileName));
+                if (force) {
+                  final t = ref.read(translationsProvider).requireValue;
+                  ref
+                      .read(inAppNotificationControllerProvider)
+                      .showSuccessToast(t.pages.profiles.msg.update.successNamed(name: displayProfileName));
+                }
                 state = AsyncData((name: displayProfileName, success: true));
               })
               .run();
