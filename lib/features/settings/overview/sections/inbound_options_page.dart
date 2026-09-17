@@ -27,9 +27,9 @@ class InboundOptionsPage extends HookConsumerWidget {
       ),
       body: SettingsList(
         children: [
-          if (serviceModeChoices.length > 1)
-            SettingsGroup(
-              children: [
+          SettingsGroup(
+            children: [
+              if (serviceModeChoices.length > 1)
                 ChoicePreferenceWidget(
                   selected: serviceMode,
                   preferences: ref.watch(ConfigOptions.serviceMode.notifier),
@@ -39,8 +39,18 @@ class InboundOptionsPage extends HookConsumerWidget {
                   icon: Icons.tune_rounded,
                   presentChoice: (value) => value.present(t),
                 ),
-              ],
-            ),
+              ValuePreferenceWidget(
+                value: ref.watch(ConfigOptions.mixedPort),
+                preferences: ref.watch(ConfigOptions.mixedPort.notifier),
+                title: t.pages.settings.inbound.mixedPort,
+                help: t.settingsHelp.mixedPort,
+                icon: Icons.device_hub_rounded,
+                inputToValue: int.tryParse,
+                digitsOnly: true,
+                validateInput: isPort,
+              ),
+            ],
+          ),
           SettingsGroup(
             title: 'TUN',
             children: [
