@@ -58,8 +58,8 @@ class _WindowsNetworkHelpDialogState extends State<WindowsNetworkHelpDialog> {
             children: [
               Text(
                 _text(
-                  'Добавьте ZEON в исключения брандмауэра или антивируса.',
-                  'Add ZEON to your firewall or antivirus exceptions.',
+                  'Добавьте ZEON в исключения или отключите на время антивирус и перезапустите ZEON.',
+                  'Add ZEON to the exceptions or temporarily disable your antivirus and restart ZEON.',
                 ),
               ),
               const SizedBox(height: 14),
