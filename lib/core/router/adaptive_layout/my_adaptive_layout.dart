@@ -65,11 +65,17 @@ class MyAdaptiveLayout extends HookConsumerWidget {
     }, [isMobileBreakpoint, showProfilesAction, navigationShell.currentIndex]);
     return Material(
       child: Scaffold(
+        // Paint branch backgrounds behind the rounded mobile panel. Scaffold
+        // supplies its height as bottom padding for safe content placement.
+        extendBody: isMobileBreakpoint,
         // Keep the Scaffold surface edge-to-edge while protecting branch
         // controls from the bottom/side insets. Branch AppBars own the top
         // inset, so it must not be consumed twice here.
         body: SafeArea(
           top: false,
+          // Home protects its controls with its own SafeArea while its map
+          // fills the background. Other branches rely on this outer inset.
+          bottom: !isMobileBreakpoint || currentBranchName != 'home',
           child: isMobileBreakpoint
               ? navigationShell
               : Row(
