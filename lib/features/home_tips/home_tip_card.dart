@@ -9,10 +9,12 @@ class HomeTipCard extends ConsumerWidget {
     super.key,
     required this.content,
     this.maxHeight = double.infinity,
+    this.maxWidth = 520,
     this.padding = const EdgeInsets.fromLTRB(16, 0, 16, 12),
   });
   final HomeTipContent content;
   final double maxHeight;
+  final double maxWidth;
   final EdgeInsetsGeometry padding;
 
   @override
@@ -23,7 +25,7 @@ class HomeTipCard extends ConsumerWidget {
         alignment: Alignment.topCenter,
         heightFactor: 1,
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: ((maxHeight - 12) * content.tip.aspectRatio).clamp(0, 520)),
+          constraints: BoxConstraints(maxWidth: ((maxHeight - 12) * content.tip.aspectRatio).clamp(0, maxWidth)),
           child: Material(
             borderRadius: BorderRadius.circular(20),
             clipBehavior: Clip.antiAlias,

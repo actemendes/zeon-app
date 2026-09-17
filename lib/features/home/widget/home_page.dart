@@ -83,6 +83,7 @@ class HomePage extends HookConsumerWidget {
                   tablet: breakpoint.isTablet(),
                   header: _HomeHeaderFrame(
                     mobile: breakpoint.isMobile(),
+                    tipAnchor: tipAnchor,
                     child: Row(
                       crossAxisAlignment: breakpoint.isMobile() ? CrossAxisAlignment.center : CrossAxisAlignment.start,
                       children: [
@@ -137,8 +138,17 @@ class HomePage extends HookConsumerWidget {
                   child: Align(
                     alignment: Alignment.topLeft,
                     child: SizedBox(
-                      width: (constraints.maxWidth - 32).clamp(0.0, compactHeight ? 240.0 : 360.0),
-                      child: HomeTipCard(content: tip, padding: EdgeInsets.zero),
+                      width: breakpoint.isMobile()
+                          ? (constraints.maxWidth - MediaQuery.paddingOf(context).horizontal - 32).clamp(
+                              0.0,
+                              double.infinity,
+                            )
+                          : (constraints.maxWidth - 32).clamp(0.0, compactHeight ? 240.0 : 360.0),
+                      child: HomeTipCard(
+                        content: tip,
+                        padding: EdgeInsets.zero,
+                        maxWidth: breakpoint.isMobile() ? double.infinity : 520,
+                      ),
                     ),
                   ),
                 ),
@@ -428,20 +438,24 @@ class _HomeQuickSettingsButton extends ConsumerWidget {
 }
 
 class _HomeHeaderFrame extends StatelessWidget {
-  const _HomeHeaderFrame({required this.mobile, required this.child});
+  const _HomeHeaderFrame({required this.mobile, required this.tipAnchor, required this.child});
   final bool mobile;
+  final LayerLink tipAnchor;
   final Widget child;
 
   @override
   Widget build(BuildContext context) => mobile
-      ? Container(
-          key: const ValueKey('home_header_panel'),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.secondaryContainer,
-            borderRadius: BorderRadius.circular(24),
+      ? CompositedTransformTarget(
+          link: tipAnchor,
+          child: Container(
+            key: const ValueKey('home_header_panel'),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: child,
           ),
-          child: child,
         )
       : child;
 }
@@ -512,10 +526,13 @@ class _HomeAppBarTitle extends StatelessWidget {
                     : 8,
               ),
             ],
-            CompositedTransformTarget(
-              link: tipAnchor,
-              child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
-            ),
+            if (mobile)
+              Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle)
+            else
+              CompositedTransformTarget(
+                link: tipAnchor,
+                child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
+              ),
           ],
         );
       },
