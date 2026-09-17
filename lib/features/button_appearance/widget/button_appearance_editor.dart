@@ -229,7 +229,7 @@ class _ButtonAppearanceEditorState extends State<ButtonAppearanceEditor> {
   Widget _presetTile(ButtonPreset p) {
     final c = Theme.of(context).colorScheme;
     final selected = preset == p;
-    final label = ['Стандартная', 'Аниме', 'Кавайность', 'Своя'][p.index];
+    final label = ['Стандартная', 'Кавайность', 'Своя'][p.index];
     return Semantics(
       selected: selected,
       child: InkWell(

@@ -5,7 +5,7 @@ const zeonLime = Color(0xFFBFDD71);
 
 enum ButtonPhase { idle, connecting, connected }
 
-enum ButtonPreset { standard, anime, kawaii, custom }
+enum ButtonPreset { standard, kawaii, custom }
 
 extension PhaseLabel on ButtonPhase {
   String get label => switch (this) {
@@ -37,7 +37,6 @@ class ButtonAppearance {
   bool get complete => ButtonPhase.values.every(pictures.containsKey);
   ButtonPicture? pictureFor(ButtonPhase phase) => switch (preset) {
     ButtonPreset.standard => null,
-    ButtonPreset.anime => ButtonPicture(AssetImage('assets/images/button_presets/anime-${phase.name}.png')),
     ButtonPreset.kawaii => ButtonPicture(AssetImage('assets/images/button_presets/kawaii-${phase.name}.png')),
     ButtonPreset.custom => pictures[phase],
   };

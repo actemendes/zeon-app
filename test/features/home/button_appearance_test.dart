@@ -30,7 +30,7 @@ void main() {
 
   test('standard is default; preset and custom crop survive store recreation', () async {
     expect((await store.load()).preset, ButtonPreset.standard);
-    final bytes = File('assets/images/button_presets/anime-idle.png').readAsBytesSync();
+    final bytes = File('assets/images/button_presets/kawaii-idle.png').readAsBytesSync();
     final saved = await store.save(
       ButtonAppearance(
         preset: ButtonPreset.custom,
@@ -67,19 +67,44 @@ void main() {
       }),
     );
     expect((await store.load()).preset, ButtonPreset.standard);
-    await store.save(const ButtonAppearance(preset: ButtonPreset.anime));
-    expect((await store.load()).preset, ButtonPreset.anime);
+    await store.save(const ButtonAppearance(preset: ButtonPreset.kawaii));
+    expect((await store.load()).preset, ButtonPreset.kawaii);
+  });
+  test('removed preset falls back without losing saved custom images', () async {
+    await store.save(
+      ButtonAppearance(
+        preset: ButtonPreset.custom,
+        pictures: {
+          for (final phase in ButtonPhase.values)
+            phase: ButtonPicture(MemoryImage(File('assets/images/button_presets/kawaii-idle.png').readAsBytesSync())),
+        },
+      ),
+    );
+    final saved = jsonDecode(preferences.getString(ButtonAppearanceRepository.preferenceKey)!) as Map<String, dynamic>;
+    saved['preset'] = 'anime';
+    await preferences.setString(ButtonAppearanceRepository.preferenceKey, jsonEncode(saved));
+    final loaded = await store.load();
+    expect(loaded.preset, ButtonPreset.standard);
+    expect(loaded.complete, isTrue);
+    expect(loaded.pictures.values.every((picture) => picture.image is FileImage), isTrue);
+
+    saved['preset'] = 'custom';
+    saved['pictures'] = {
+      for (final phase in ButtonPhase.values)
+        phase.name: {'asset': 'assets/images/button_presets/anime-${phase.name}.png', 'zoom': 1, 'x': 0, 'y': 0},
+    };
+    await preferences.setString(ButtonAppearanceRepository.preferenceKey, jsonEncode(saved));
+    final removedAssets = await store.load();
+    expect(removedAssets.preset, ButtonPreset.standard);
+    expect(removedAssets.pictures, isEmpty);
   });
   test('failed write retains previous configuration; cleanup preserves unknown files', () async {
-    await store.save(const ButtonAppearance(preset: ButtonPreset.anime));
+    await store.save(const ButtonAppearance(preset: ButtonPreset.kawaii));
     final before = preferences.getString(ButtonAppearanceRepository.preferenceKey);
     final obstacle = File('${temp.path}/not-a-directory');
     await obstacle.writeAsString('keep');
     await expectLater(
-      ButtonAppearanceRepository(
-        preferences,
-        Directory(obstacle.path),
-      ).save(const ButtonAppearance(preset: ButtonPreset.kawaii)),
+      ButtonAppearanceRepository(preferences, Directory(obstacle.path)).save(const ButtonAppearance()),
       throwsA(isA<FileSystemException>()),
     );
     expect(preferences.getString(ButtonAppearanceRepository.preferenceKey), before);
@@ -100,7 +125,7 @@ void main() {
     );
   });
   test('normalization limits decoded size and rejects corrupt data', () async {
-    final bytes = await normalizeButtonImage(File('assets/images/button_presets/anime-idle.png').readAsBytesSync());
+    final bytes = await normalizeButtonImage(File('assets/images/button_presets/kawaii-idle.png').readAsBytesSync());
     final image = await decodeImageFromList(bytes);
     expect(image.width, lessThanOrEqualTo(768));
     expect(image.height, lessThanOrEqualTo(768));
@@ -111,7 +136,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ButtonAppearanceEditor(
-          initial: const ButtonAppearance(preset: ButtonPreset.anime),
+          initial: const ButtonAppearance(preset: ButtonPreset.kawaii),
           onSave: (_) async {},
           animate: false,
         ),
@@ -120,6 +145,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Три состояния'), findsNothing);
     expect(find.text('Котята'), findsNothing);
+    expect(find.text('Аниме'), findsNothing);
+    expect(find.text('Стандартная'), findsOneWidget);
+    expect(find.text('Кавайность'), findsOneWidget);
+    expect(find.text('Своя'), findsOneWidget);
     expect(find.byType(CustomVpnButton), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('preset-custom')));
     await tester.pumpAndSettle();
@@ -142,7 +171,7 @@ void main() {
                 context,
                 MaterialPageRoute<void>(
                   builder: (_) => ButtonAppearanceEditor(
-                    initial: const ButtonAppearance(preset: ButtonPreset.anime),
+                    initial: const ButtonAppearance(preset: ButtonPreset.kawaii),
                     animate: false,
                     onSave: (_) async {
                       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -192,7 +221,7 @@ void main() {
                 useImage: false,
                 secureLabel: '',
                 onTap: () => calls++,
-                appearance: const ButtonAppearance(preset: ButtonPreset.anime),
+                appearance: const ButtonAppearance(preset: ButtonPreset.kawaii),
               ),
             ),
           ),

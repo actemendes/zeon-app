@@ -13,7 +13,6 @@ class ButtonAppearancePrefTile extends ConsumerWidget {
     return SettingsTile(
       title: const Text('Вид кнопки'),
       subtitle: Text(switch (appearance?.preset) {
-        ButtonPreset.anime => 'Аниме',
         ButtonPreset.kawaii => 'Кавайность',
         ButtonPreset.custom => appearance!.name,
         _ => 'Стандартная',

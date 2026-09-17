@@ -14,7 +14,7 @@ class ButtonAppearanceRepository {
   final Directory directory;
   static final _ownedName = RegExp(r'^[a-f0-9]{64}\.png$');
   static bool _assetAllowed(String asset) => [
-    for (final preset in ['anime', 'kawaii'])
+    for (final preset in ['kawaii'])
       for (final phase in ButtonPhase.values) 'assets/images/button_presets/$preset-${phase.name}.png',
   ].contains(asset);
 
@@ -24,7 +24,10 @@ class ButtonAppearanceRepository {
       if (raw == null) return const ButtonAppearance();
       final value = jsonDecode(raw) as Map<String, dynamic>;
       if (value['version'] != 1) return const ButtonAppearance();
-      final preset = ButtonPreset.values.byName(value['preset'] as String);
+      final preset = ButtonPreset.values.firstWhere(
+        (preset) => preset.name == value['preset'],
+        orElse: () => ButtonPreset.standard,
+      );
       final pictures = <ButtonPhase, ButtonPicture>{};
       final slots = value['pictures'] as Map<String, dynamic>;
       for (final phase in ButtonPhase.values) {
