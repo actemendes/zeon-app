@@ -27,6 +27,7 @@ class ZeonDialog extends StatelessWidget {
     this.actions,
     this.footer,
     this.primaryAction = true,
+    this.maxWidth = 460,
   });
   final Widget? title;
   final Widget? icon;
@@ -34,6 +35,7 @@ class ZeonDialog extends StatelessWidget {
   final Widget? footer;
   final List<Widget>? actions;
   final bool primaryAction;
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +53,7 @@ class ZeonDialog extends StatelessWidget {
     );
     final contents = ConstrainedBox(
       constraints: BoxConstraints(
-        maxWidth: 460,
+        maxWidth: maxWidth,
         maxHeight: math.max(
           0,
           math.min(760, media.size.height - media.viewInsets.bottom - media.padding.vertical - (mobile ? 24 : 48)),
