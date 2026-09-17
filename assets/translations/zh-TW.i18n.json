@@ -874,6 +874,22 @@
     }
   },
   "dialogs": {
+    "windowsNetworkHelp": {
+      "title": "無法連線",
+      "description": "連線設定檔尚未載入。Windows 防火牆或卡巴斯基等防毒軟體可能正在封鎖網路存取。",
+      "allowTitle": "允許 ZEON 存取網路",
+      "allowDescription": "請將 ZEON 加入例外清單，或暫時停用防毒軟體，然後重新啟動 ZEON。",
+      "exceptionsAction": "如何新增例外",
+      "exceptionsHint": "適用於 Windows 10 和 11 的指南",
+      "happTitle": "仍然無法使用？試試 Happ",
+      "happDescription": "安裝 Happ，並透過我們在 Telegram 或 VK 上的機器人取得連線連結。",
+      "existingDevice": "如果您已在其他裝置上安裝我們的應用程式，請下載 Happ，並將應用程式中的連結貼到 Happ 中。",
+      "downloadHapp": "下載 Windows 版 Happ",
+      "telegram": "Telegram",
+      "vk": "VK",
+      "restart": "變更設定後，請重新啟動 ZEON。",
+      "browserFailure": "無法開啟瀏覽器。請複製此連結："
+    },
     "sortProfiles": {
       "title": "排序方式",
       "sort": {

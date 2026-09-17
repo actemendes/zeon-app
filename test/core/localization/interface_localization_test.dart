@@ -37,6 +37,7 @@ void main() {
     'pages.settings.general.notifications',
     'pages.profileDetails.editor',
     'dialogs.proxyInfo.quality',
+    'dialogs.windowsNetworkHelp',
     'errors.withDetails',
     'components.notifications',
   ];

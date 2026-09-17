@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:zeon/core/localization/translation_context.dart';
 import 'package:zeon/core/router/dialog/widgets/zeon_dialog.dart';
 import 'package:zeon/utils/uri_utils.dart';
 
 /// Help for the Windows no-profile recovery path. A missing profile is not
 /// evidence of a firewall block, so the copy describes it as a possibility.
 class WindowsNetworkHelpDialog extends StatefulWidget {
-  const WindowsNetworkHelpDialog({super.key, required this.russian, this.openLink});
+  const WindowsNetworkHelpDialog({super.key, this.openLink});
 
-  final bool russian;
   final Future<bool> Function(Uri)? openLink;
 
   static final firewallUri = Uri.parse(
@@ -22,9 +22,8 @@ class WindowsNetworkHelpDialog extends StatefulWidget {
 }
 
 class _WindowsNetworkHelpDialogState extends State<WindowsNetworkHelpDialog> {
+  static const _fontFamilyFallback = ['Shabnam', 'Microsoft YaHei', 'Microsoft JhengHei'];
   Uri? _unopenedLink;
-
-  String _text(String ru, String en) => widget.russian ? ru : en;
 
   Future<void> _open(Uri uri) async {
     final opened = await (widget.openLink ?? UriUtils.tryLaunch)(uri);
@@ -33,40 +32,34 @@ class _WindowsNetworkHelpDialogState extends State<WindowsNetworkHelpDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.translations.dialogs.windowsNetworkHelp;
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final captionStyle = theme.textTheme.bodySmall?.copyWith(
+      color: colors.onSurfaceVariant,
+      fontFamilyFallback: _fontFamilyFallback,
+    );
     return ZeonDialog(
       maxWidth: 560,
+      fontFamilyFallback: _fontFamilyFallback,
       icon: const Icon(Icons.wifi_off_rounded),
-      title: Text(_text('НЕ УДАЛОСЬ ПОДКЛЮЧИТЬСЯ', 'UNABLE TO CONNECT')),
+      title: Text(t.title),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            _text(
-              'Профиль подключения пока не загрузился. Возможно, доступ к сети блокирует '
-                  'брандмауэр Windows или антивирус, например Касперский.',
-              'Your connection profile has not loaded yet. Windows Firewall or an antivirus, '
-                  'such as Kaspersky, may be blocking network access.',
-            ),
-          ),
+          Text(t.description),
           const SizedBox(height: 20),
           _step(
             number: '01',
-            title: _text('Разрешите доступ ZEON', 'Allow ZEON to access the network'),
+            title: t.allowTitle,
             children: [
-              Text(
-                _text(
-                  'Добавьте ZEON в исключения или отключите на время антивирус и перезапустите ZEON.',
-                  'Add ZEON to the exceptions or temporarily disable your antivirus and restart ZEON.',
-                ),
-              ),
+              Text(t.allowDescription),
               const SizedBox(height: 14),
               FilledButton.icon(
                 onPressed: () => _open(WindowsNetworkHelpDialog.firewallUri),
                 icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                label: Text(_text('Как добавить исключение', 'How to add an exception')),
+                label: Text(t.exceptionsAction),
                 style: FilledButton.styleFrom(
                   foregroundColor: colors.onPrimary,
                   backgroundColor: colors.primary,
@@ -75,38 +68,22 @@ class _WindowsNetworkHelpDialogState extends State<WindowsNetworkHelpDialog> {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                _text('Инструкция для Windows 10 и 11', 'Instructions for Windows 10 and 11'),
-                style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-              ),
+              Text(t.exceptionsHint, style: captionStyle),
             ],
           ),
           const SizedBox(height: 12),
           _step(
             number: '02',
-            title: _text('Не помогло? Попробуйте Happ', 'Still not working? Try Happ'),
+            title: t.happTitle,
             children: [
-              Text(
-                _text(
-                  'Установите Happ и получите ссылку для подключения у нашего бота '
-                      'в Telegram или ВКонтакте.',
-                  'Install Happ and get a connection link from our bot on Telegram or VK.',
-                ),
-              ),
+              Text(t.happDescription),
               const SizedBox(height: 12),
-              Text(
-                _text(
-                  'Если у вас уже есть наше приложение на другом устройстве, скачайте Happ '
-                      'и вставьте в него ссылку из вашего приложения.',
-                  'If you already have our app on another device, download Happ '
-                      'and paste the link from your app into it.',
-                ),
-              ),
+              Text(t.existingDevice),
               const SizedBox(height: 14),
               OutlinedButton.icon(
                 onPressed: () => _open(WindowsNetworkHelpDialog.happUri),
                 icon: const Icon(Icons.download_rounded, size: 20),
-                label: Text(_text('Скачать Happ для Windows', 'Download Happ for Windows')),
+                label: Text(t.downloadHapp),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: colors.onSurface,
                   side: BorderSide(color: colors.onSurface.withValues(alpha: .22)),
@@ -119,32 +96,33 @@ class _WindowsNetworkHelpDialogState extends State<WindowsNetworkHelpDialog> {
                 spacing: 8,
                 runSpacing: 4,
                 children: [
-                  TextButton(
+                  TextButton.icon(
                     style: TextButton.styleFrom(foregroundColor: colors.onSurface),
                     onPressed: () => _open(WindowsNetworkHelpDialog.telegramUri),
-                    child: const Text('Telegram ↗'),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: Text(t.telegram),
                   ),
-                  TextButton(
+                  TextButton.icon(
                     style: TextButton.styleFrom(foregroundColor: colors.onSurface),
                     onPressed: () => _open(WindowsNetworkHelpDialog.vkUri),
-                    child: Text(_text('ВКонтакте ↗', 'VK ↗')),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: Text(t.vk),
                   ),
                 ],
               ),
-              const SelectableText('@zvo_net_bot', style: TextStyle(fontSize: 14)),
+              const SelectableText('@zvo_net_bot', textDirection: TextDirection.ltr, style: TextStyle(fontSize: 14)),
             ],
           ),
           const SizedBox(height: 16),
-          Text(
-            _text('После изменения настроек перезапустите ZEON.', 'Restart ZEON after changing your settings.'),
-            style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-          ),
+          Text(t.restart, style: captionStyle),
           if (_unopenedLink != null) ...[
             const SizedBox(height: 12),
-            Text(
-              _text('Не удалось открыть браузер. Скопируйте ссылку:', 'Could not open your browser. Copy this link:'),
+            Text(t.browserFailure),
+            SelectableText(
+              _unopenedLink.toString(),
+              textDirection: TextDirection.ltr,
+              style: theme.textTheme.bodySmall,
             ),
-            SelectableText(_unopenedLink.toString(), style: theme.textTheme.bodySmall),
           ],
         ],
       ),

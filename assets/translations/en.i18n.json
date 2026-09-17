@@ -957,6 +957,22 @@
     }
   },
   "dialogs": {
+    "windowsNetworkHelp": {
+      "title": "UNABLE TO CONNECT",
+      "description": "Your connection profile has not loaded yet. Windows Firewall or an antivirus, such as Kaspersky, may be blocking network access.",
+      "allowTitle": "Allow ZEON to access the network",
+      "allowDescription": "Add ZEON to the exceptions or temporarily disable your antivirus and restart ZEON.",
+      "exceptionsAction": "How to add an exception",
+      "exceptionsHint": "Instructions for Windows 10 and 11",
+      "happTitle": "Still not working? Try Happ",
+      "happDescription": "Install Happ and get a connection link from our bot on Telegram or VK.",
+      "existingDevice": "If you already have our app on another device, download Happ and paste the link from your app into it.",
+      "downloadHapp": "Download Happ for Windows",
+      "telegram": "Telegram",
+      "vk": "VK",
+      "restart": "Restart ZEON after changing your settings.",
+      "browserFailure": "Could not open your browser. Copy this link:"
+    },
     "sortProfiles": {
       "title": "Sort by",
       "sort": {

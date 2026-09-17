@@ -874,6 +874,22 @@
     }
   },
   "dialogs": {
+    "windowsNetworkHelp": {
+      "title": "BAĞLANTI KURULAMADI",
+      "description": "Bağlantı profili henüz yüklenmedi. Windows Güvenlik Duvarı veya Kaspersky gibi bir antivirüs programı ağ erişimini engelliyor olabilir.",
+      "allowTitle": "ZEON için ağ erişimine izin verin",
+      "allowDescription": "ZEON’u istisnalara ekleyin veya antivirüs programınızı geçici olarak devre dışı bırakıp ZEON’u yeniden başlatın.",
+      "exceptionsAction": "İstisna nasıl eklenir?",
+      "exceptionsHint": "Windows 10 ve 11 için yönergeler",
+      "happTitle": "Sorun devam mı ediyor? Happ’i deneyin",
+      "happDescription": "Happ’i yükleyin ve Telegram veya VK’daki botumuzdan bir bağlantı alın.",
+      "existingDevice": "Uygulamamız başka bir cihazınızda zaten yüklüyse Happ’i indirin ve uygulamanızdaki bağlantıyı Happ’e yapıştırın.",
+      "downloadHapp": "Windows için Happ’i indir",
+      "telegram": "Telegram",
+      "vk": "VK",
+      "restart": "Ayarları değiştirdikten sonra ZEON’u yeniden başlatın.",
+      "browserFailure": "Tarayıcı açılamadı. Bu bağlantıyı kopyalayın:"
+    },
     "sortProfiles": {
       "title": "Sıralama ölçütü",
       "sort": {

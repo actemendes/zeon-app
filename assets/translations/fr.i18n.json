@@ -875,6 +875,22 @@
     }
   },
   "dialogs": {
+    "windowsNetworkHelp": {
+      "title": "CONNEXION IMPOSSIBLE",
+      "description": "Le profil de connexion n’a pas encore été chargé. Le pare-feu Windows ou un antivirus, comme Kaspersky, bloque peut-être l’accès au réseau.",
+      "allowTitle": "Autorisez l’accès au réseau pour ZEON",
+      "allowDescription": "Ajoutez ZEON aux exceptions ou désactivez temporairement votre antivirus, puis redémarrez ZEON.",
+      "exceptionsAction": "Comment ajouter une exception",
+      "exceptionsHint": "Instructions pour Windows 10 et 11",
+      "happTitle": "Toujours un problème ? Essayez Happ",
+      "happDescription": "Installez Happ et obtenez un lien de connexion auprès de notre bot sur Telegram ou VK.",
+      "existingDevice": "Si notre application est déjà installée sur un autre appareil, téléchargez Happ et collez-y le lien provenant de votre application.",
+      "downloadHapp": "Télécharger Happ pour Windows",
+      "telegram": "Telegram",
+      "vk": "VK",
+      "restart": "Redémarrez ZEON après avoir modifié les paramètres.",
+      "browserFailure": "Impossible d’ouvrir le navigateur. Copiez ce lien :"
+    },
     "sortProfiles": {
       "title": "Trier par",
       "sort": {

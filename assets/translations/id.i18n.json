@@ -874,6 +874,22 @@
     }
   },
   "dialogs": {
+    "windowsNetworkHelp": {
+      "title": "TIDAK DAPAT TERHUBUNG",
+      "description": "Profil koneksi belum dimuat. Windows Firewall atau antivirus, seperti Kaspersky, mungkin memblokir akses jaringan.",
+      "allowTitle": "Izinkan ZEON mengakses jaringan",
+      "allowDescription": "Tambahkan ZEON ke daftar pengecualian atau nonaktifkan antivirus untuk sementara, lalu mulai ulang ZEON.",
+      "exceptionsAction": "Cara menambahkan pengecualian",
+      "exceptionsHint": "Petunjuk untuk Windows 10 dan 11",
+      "happTitle": "Masih belum berhasil? Coba Happ",
+      "happDescription": "Instal Happ dan dapatkan tautan koneksi dari bot kami di Telegram atau VK.",
+      "existingDevice": "Jika aplikasi kami sudah terpasang di perangkat lain, unduh Happ dan tempelkan tautan dari aplikasi Anda ke Happ.",
+      "downloadHapp": "Unduh Happ untuk Windows",
+      "telegram": "Telegram",
+      "vk": "VK",
+      "restart": "Mulai ulang ZEON setelah mengubah pengaturan.",
+      "browserFailure": "Tidak dapat membuka browser. Salin tautan ini:"
+    },
     "sortProfiles": {
       "title": "Urut berdasarkan",
       "sort": {

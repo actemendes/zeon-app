@@ -8,6 +8,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/localization/locale_extensions.dart';
+import 'package:zeon/core/localization/translation_context.dart';
+import 'package:zeon/core/localization/translation_loader.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/dialog/widgets/no_active_profile_dialog.dart';
 import 'package:zeon/core/router/dialog/widgets/windows_network_help_dialog.dart';
@@ -18,6 +21,10 @@ import 'package:zeon/gen/translations_ru.g.dart';
 
 void main() {
   setUpAll(() async {
+    // Deferred catalogs must load outside the widget test's fake async zone.
+    for (final locale in AppLocale.values) {
+      await loadTranslations(locale);
+    }
     for (final entry in jsonDecode(await rootBundle.loadString('FontManifest.json')) as List) {
       final font = entry as Map<String, dynamic>;
       final loader = FontLoader(font['family'] as String);
@@ -26,6 +33,16 @@ void main() {
         loader.addFont(rootBundle.load(asset['asset'] as String));
       }
       await loader.load();
+    }
+    // flutter_tester does not resolve Windows' system font fallback. Load the
+    // same OS fonts explicitly for optional previews; do not bundle them.
+    if (Platform.isWindows && Platform.environment['ZEON_UI_EVIDENCE'] != null) {
+      for (final (family, fileName) in [('Microsoft YaHei', 'msyh.ttc'), ('Microsoft JhengHei', 'msjh.ttc')]) {
+        final file = File('${Platform.environment['WINDIR'] ?? 'C:/Windows'}/Fonts/$fileName');
+        if (await file.exists()) {
+          await (FontLoader(family)..addFont(file.readAsBytes().then(ByteData.sublistView))).load();
+        }
+      }
     }
   });
 
@@ -71,7 +88,7 @@ void main() {
         return true;
       },
     );
-    for (final label in ['Как добавить исключение', 'Скачать Happ для Windows', 'Telegram ↗', 'ВКонтакте ↗']) {
+    for (final label in ['Как добавить исключение', 'Скачать Happ для Windows', 'Telegram', 'ВКонтакте']) {
       await tester.ensureVisible(find.text(label));
       await tester.tap(find.text(label));
       await tester.pumpAndSettle();
@@ -103,10 +120,51 @@ void main() {
     expect(find.byType(WindowsNetworkHelpDialog), Platform.isWindows ? findsOneWidget : findsNothing);
   });
 
-  testWidgets('English fallback has working layout', (tester) async {
-    await _pump(tester, dialog: const WindowsNetworkHelpDialog(russian: false));
+  testWidgets('English catalog has working layout', (tester) async {
+    await _pump(tester, locale: AppLocale.en);
     expect(find.text('UNABLE TO CONNECT'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  for (final locale in AppLocale.values) {
+    for (final scale in [1.0, 1.6]) {
+      testWidgets('${locale.languageTag} help renders and scrolls at scale $scale', (tester) async {
+        final t = locale.buildSync().dialogs.windowsNetworkHelp;
+        await _pump(tester, locale: locale, size: const Size(460, 700), scale: scale, openLink: (_) async => false);
+        expect(find.text(t.title), findsOneWidget);
+        expect(find.text(t.existingDevice), findsOneWidget);
+        final direction = locale == AppLocale.ar || locale == AppLocale.fa ? TextDirection.rtl : TextDirection.ltr;
+        expect(Directionality.of(tester.element(find.byType(WindowsNetworkHelpDialog))), direction);
+        if (scale == 1) await _capture(tester, locale.languageTag);
+        await tester.ensureVisible(find.text(t.exceptionsAction));
+        await tester.tap(find.text(t.exceptionsAction));
+        await tester.pumpAndSettle();
+        expect(find.text(t.browserFailure), findsOneWidget);
+        final url = find.widgetWithText(SelectableText, WindowsNetworkHelpDialog.firewallUri.toString());
+        await tester.ensureVisible(url);
+        await tester.pumpAndSettle();
+        expect(tester.widget<SelectableText>(url).textDirection, TextDirection.ltr);
+        expect(tester.getRect(url).bottom, lessThan(700));
+        expect(
+          tester.widget<SelectableText>(find.widgetWithText(SelectableText, '@zvo_net_bot')).textDirection,
+          TextDirection.ltr,
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+}
+
+Future<void> _capture(WidgetTester tester, String name) async {
+  final folder = Platform.environment['ZEON_UI_EVIDENCE'];
+  if (folder == null) return;
+  await tester.runAsync(() async {
+    final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(const ValueKey('capture')));
+    final image = await boundary.toImage();
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    await Directory(folder).create(recursive: true);
+    await File('$folder/windows-network-help-$name.png').writeAsBytes(data!.buffer.asUint8List());
+    image.dispose();
   });
 }
 
@@ -115,6 +173,7 @@ Future<void> _pump(
   AppThemeMode mode = AppThemeMode.dark,
   Size size = const Size(840, 920),
   double scale = 1,
+  AppLocale locale = AppLocale.ru,
   Future<bool> Function(Uri)? openLink,
   Widget? dialog,
 }) async {
@@ -122,15 +181,15 @@ Future<void> _pump(
   tester.view.physicalSize = size;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final theme = AppTheme(mode, 'Montserrat');
+  final theme = AppTheme(mode, locale.preferredFontFamily);
   await tester.pumpWidget(
     RepaintBoundary(
       key: const ValueKey('capture'),
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        locale: const Locale('ru'),
-        supportedLocales: const [Locale('ru')],
-        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        locale: locale.flutterLocale,
+        supportedLocales: AppLocale.values.map((locale) => locale.flutterLocale),
+        localizationsDelegates: const [InterfaceTranslationsDelegate(), ...GlobalMaterialLocalizations.delegates],
         theme: mode == AppThemeMode.light ? theme.lightTheme(null) : theme.darkTheme(null),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
@@ -140,10 +199,7 @@ Future<void> _pump(
           body: Builder(
             builder: (context) => Center(
               child: TextButton(
-                onPressed: () => showZeonDialog<void>(
-                  context,
-                  dialog ?? WindowsNetworkHelpDialog(russian: true, openLink: openLink),
-                ),
+                onPressed: () => showZeonDialog<void>(context, dialog ?? WindowsNetworkHelpDialog(openLink: openLink)),
                 child: const Text('Открыть'),
               ),
             ),
@@ -152,6 +208,7 @@ Future<void> _pump(
       ),
     ),
   );
+  await tester.pumpAndSettle();
   await tester.tap(find.text('Открыть'));
   await tester.pumpAndSettle();
 }

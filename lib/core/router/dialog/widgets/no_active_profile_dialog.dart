@@ -12,7 +12,7 @@ class NoActiveProfileDialog extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     if (PlatformUtils.isWindows) {
-      return WindowsNetworkHelpDialog(russian: t.$meta.locale == AppLocale.ru);
+      return const WindowsNetworkHelpDialog();
     }
     return ZeonDialog(
       title: Text(t.dialogs.noActiveProfile.title),

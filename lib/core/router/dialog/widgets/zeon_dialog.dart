@@ -28,6 +28,7 @@ class ZeonDialog extends StatelessWidget {
     this.footer,
     this.primaryAction = true,
     this.maxWidth = 460,
+    this.fontFamilyFallback,
   });
   final Widget? title;
   final Widget? icon;
@@ -36,6 +37,7 @@ class ZeonDialog extends StatelessWidget {
   final List<Widget>? actions;
   final bool primaryAction;
   final double maxWidth;
+  final List<String>? fontFamilyFallback;
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +51,12 @@ class ZeonDialog extends StatelessWidget {
       minimumSize: const Size(48, 48),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      textStyle: const TextStyle(fontFamily: 'Montserrat', fontSize: 16, fontWeight: FontWeight.w600),
+      textStyle: TextStyle(
+        fontFamily: 'Montserrat',
+        fontFamilyFallback: fontFamilyFallback,
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+      ),
     );
     final contents = ConstrainedBox(
       constraints: BoxConstraints(
@@ -61,6 +68,9 @@ class ZeonDialog extends StatelessWidget {
       ),
       child: Theme(
         data: theme.copyWith(
+          textTheme: fontFamilyFallback == null
+              ? theme.textTheme
+              : theme.textTheme.apply(fontFamilyFallback: fontFamilyFallback),
           inputDecorationTheme: InputDecorationTheme(
             filled: true,
             fillColor: cs.surface,
@@ -100,6 +110,7 @@ class ZeonDialog extends StatelessWidget {
                       child: DefaultTextStyle(
                         style: TextStyle(
                           fontFamily: 'Unbounded',
+                          fontFamilyFallback: fontFamilyFallback,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                           height: 1.45,
@@ -121,6 +132,7 @@ class ZeonDialog extends StatelessWidget {
                 final body = DefaultTextStyle(
                   style: TextStyle(
                     fontFamily: 'Montserrat',
+                    fontFamilyFallback: fontFamilyFallback,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     height: 1.65,

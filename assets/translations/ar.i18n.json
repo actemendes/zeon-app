@@ -889,6 +889,22 @@
     }
   },
   "dialogs": {
+    "windowsNetworkHelp": {
+      "title": "تعذّر الاتصال",
+      "description": "لم يتم تحميل ملف الاتصال بعد. قد يكون جدار حماية Windows أو برنامج مكافحة فيروسات، مثل كاسبرسكي، يحظر الوصول إلى الشبكة.",
+      "allowTitle": "اسمح لتطبيق ZEON بالوصول إلى الشبكة",
+      "allowDescription": "أضف ZEON إلى الاستثناءات أو عطّل برنامج مكافحة الفيروسات مؤقتًا، ثم أعد تشغيل ZEON.",
+      "exceptionsAction": "كيفية إضافة استثناء",
+      "exceptionsHint": "إرشادات لنظامَي Windows 10 و11",
+      "happTitle": "لم تُحل المشكلة؟ جرّب Happ",
+      "happDescription": "ثبّت Happ واحصل على رابط الاتصال من البوت الخاص بنا على تيليجرام أو VK.",
+      "existingDevice": "إذا كان تطبيقنا مثبّتًا لديك على جهاز آخر، فنزّل Happ والصق فيه الرابط من تطبيقك.",
+      "downloadHapp": "تنزيل Happ لنظام Windows",
+      "telegram": "تيليجرام",
+      "vk": "VK",
+      "restart": "أعد تشغيل ZEON بعد تغيير الإعدادات.",
+      "browserFailure": "تعذّر فتح المتصفح. انسخ هذا الرابط:"
+    },
     "sortProfiles": {
       "title": "فرز حسب",
       "sort": {

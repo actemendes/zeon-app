@@ -874,6 +874,22 @@
     }
   },
   "dialogs": {
+    "windowsNetworkHelp": {
+      "title": "无法连接",
+      "description": "连接配置尚未加载。Windows 防火墙或卡巴斯基等杀毒软件可能正在阻止网络访问。",
+      "allowTitle": "允许 ZEON 访问网络",
+      "allowDescription": "请将 ZEON 添加到例外列表，或暂时关闭杀毒软件，然后重新启动 ZEON。",
+      "exceptionsAction": "如何添加例外",
+      "exceptionsHint": "适用于 Windows 10 和 11 的指南",
+      "happTitle": "仍然无法使用？试试 Happ",
+      "happDescription": "安装 Happ，并通过我们在 Telegram 或 VK 上的机器人获取连接链接。",
+      "existingDevice": "如果您已在其他设备上安装了我们的应用，请下载 Happ，并将应用中的链接粘贴到 Happ 中。",
+      "downloadHapp": "下载 Windows 版 Happ",
+      "telegram": "Telegram",
+      "vk": "VK",
+      "restart": "更改设置后，请重新启动 ZEON。",
+      "browserFailure": "无法打开浏览器。请复制此链接："
+    },
     "sortProfiles": {
       "title": "排序方式",
       "sort": {

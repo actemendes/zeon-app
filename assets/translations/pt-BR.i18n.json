@@ -875,6 +875,22 @@
     }
   },
   "dialogs": {
+    "windowsNetworkHelp": {
+      "title": "NÃO FOI POSSÍVEL CONECTAR",
+      "description": "O perfil de conexão ainda não foi carregado. O Firewall do Windows ou um antivírus, como o Kaspersky, pode estar bloqueando o acesso à rede.",
+      "allowTitle": "Permita que o ZEON acesse a rede",
+      "allowDescription": "Adicione o ZEON às exceções ou desative temporariamente o antivírus e reinicie o ZEON.",
+      "exceptionsAction": "Como adicionar uma exceção",
+      "exceptionsHint": "Instruções para Windows 10 e 11",
+      "happTitle": "Ainda não funciona? Experimente o Happ",
+      "happDescription": "Instale o Happ e obtenha um link de conexão com nosso bot no Telegram ou no VK.",
+      "existingDevice": "Se você já tem nosso aplicativo em outro dispositivo, baixe o Happ e cole nele o link do seu aplicativo.",
+      "downloadHapp": "Baixar o Happ para Windows",
+      "telegram": "Telegram",
+      "vk": "VK",
+      "restart": "Reinicie o ZEON após alterar as configurações.",
+      "browserFailure": "Não foi possível abrir o navegador. Copie este link:"
+    },
     "sortProfiles": {
       "title": "Ordenar por",
       "sort": {
