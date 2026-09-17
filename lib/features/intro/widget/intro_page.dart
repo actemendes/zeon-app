@@ -91,6 +91,36 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                     await UriUtils.tryLaunch(Uri.parse(Constants.termsAndConditionsUrl));
                   },
                 );
+                if (constraints.maxWidth < 600) {
+                  return CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        sliver: SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              header,
+                              Expanded(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(minHeight: 160),
+                                  child: Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                                      child: logo,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              footer,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
                 return SingleChildScrollView(
                   child: ConstrainedBox(
                     constraints: BoxConstraints(minHeight: constraints.maxHeight),
