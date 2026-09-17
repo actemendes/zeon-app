@@ -70,20 +70,17 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
     if (state.isLoading) return;
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      // final activeProfile = await ref.read(activeProfileProvider.future);
-      // final markAsActive = activeProfile == null || ref.read(Preferences.markNewProfileActive);
-      final TaskEither<ProfileFailure, Unit> task;
-      if (LinkParser.parse(rawInput) case (final rs)?) {
-        loggy.debug("adding profile, url: [${_redactUrl(rs.url)}]");
-        task = _profilesRepo.upsertRemote(
-          rs.url,
-          userOverride: rs.name.isNotEmpty ? UserOverride(name: rs.name) : null,
-          cancelToken: _cancelToken = CancelToken(),
-        );
-      } else {
-        loggy.debug("adding profile, content");
-        task = _profilesRepo.addLocal(safeDecodeBase64(rawInput));
+      final link = LinkParser.parse(rawInput);
+      if (link == null) {
+        throw const ProfileFailure.invalidUrl();
       }
+      _validateImportUrl(link.url);
+      loggy.debug("adding profile, url: [${_redactUrl(link.url)}]");
+      final task = _profilesRepo.upsertRemote(
+        link.url,
+        userOverride: link.name.isNotEmpty ? UserOverride(name: link.name) : null,
+        cancelToken: _cancelToken = CancelToken(),
+      );
       return await task
           .match(
             (err) {
@@ -100,6 +97,13 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
     });
   }
 
+  void _validateImportUrl(String url) {
+    // Check the resolved profile URL, not the outer zeon:// import wrapper.
+    if (!isUrl(url) || !url.toLowerCase().contains('zeon')) {
+      throw const ProfileFailure.invalidUrl();
+    }
+  }
+
   String _redactUrl(String value) {
     final uri = Uri.tryParse(value.trim());
     if (uri == null || uri.host.isEmpty) return '<redacted>';
@@ -110,6 +114,7 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
     if (state.isLoading) return;
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
+      _validateImportUrl(url);
       final task = _profilesRepo.upsertRemote(url, userOverride: userOverride);
       return await task
           .match(
