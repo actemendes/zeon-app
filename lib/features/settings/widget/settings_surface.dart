@@ -7,7 +7,7 @@ class SettingsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+    padding: EdgeInsets.fromLTRB(16, 12, 16, 32 + MediaQuery.paddingOf(context).bottom),
     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
   );
 }

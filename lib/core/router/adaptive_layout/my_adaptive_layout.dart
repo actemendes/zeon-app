@@ -73,9 +73,9 @@ class MyAdaptiveLayout extends HookConsumerWidget {
         // inset, so it must not be consumed twice here.
         body: SafeArea(
           top: false,
-          // Home protects its controls with its own SafeArea while its map
-          // fills the background. Other branches rely on this outer inset.
-          bottom: !isMobileBreakpoint || currentBranchName != 'home',
+          // Home owns its SafeArea; SettingsList reserves the bottom inset
+          // inside its scrollable so content can paint behind the corners.
+          bottom: !isMobileBreakpoint || (currentBranchName != 'home' && currentBranchName != 'settings'),
           child: isMobileBreakpoint
               ? navigationShell
               : Row(
