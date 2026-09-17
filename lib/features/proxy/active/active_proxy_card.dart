@@ -42,8 +42,9 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
 
     final theme = Theme.of(context);
     final displayInfo = proxy == null ? null : resolveOutboundDisplayInfo(proxy, translations: t);
-    final navBarTextColor =
-        theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
+    final serverTextColor = theme.brightness == Brightness.light
+        ? theme.colorScheme.onSurface
+        : theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
     final navBarIconColor =
         theme.navigationBarTheme.iconTheme?.resolve(const <WidgetState>{})?.color ?? theme.colorScheme.onSurface;
 
@@ -85,7 +86,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                     button: true,
                     child: _ServerPickerPlaceholder(
                       label: t.pages.proxies.title,
-                      foregroundColor: navBarTextColor,
+                      foregroundColor: serverTextColor,
                       iconColor: navBarIconColor,
                     ),
                   )
@@ -119,7 +120,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                                 style:
                                     (theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{}) ??
                                             theme.textTheme.labelMedium)
-                                        ?.copyWith(color: navBarTextColor, fontWeight: FontWeight.w700),
+                                        ?.copyWith(color: serverTextColor, fontWeight: FontWeight.w700),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),

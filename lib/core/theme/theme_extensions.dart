@@ -19,7 +19,7 @@ class HomeVisualTheme extends ThemeExtension<HomeVisualTheme> {
 
   static const light = HomeVisualTheme(
     mapDotColor: AppColorTokens.lightMapDots,
-    connectionLogoColor: AppColorTokens.lightText,
+    connectionLogoColor: AppColorTokens.lightConnectionLogo,
     premiumTrackColor: AppColorTokens.lightBackground,
     idleOpacity: .85,
     loadingOpacity: .92,
