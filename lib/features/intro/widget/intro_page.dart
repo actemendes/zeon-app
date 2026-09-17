@@ -24,7 +24,7 @@ import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 class IntroPage extends HookConsumerWidget with PresLogger {
   const IntroPage({super.key});
 
-  static const double _maxContentWidth = 620;
+  static const double _maxContentWidth = 1120;
   static const bool _bindFeatureEnabled = bool.fromEnvironment('mobile_bind_enabled', defaultValue: true);
   static bool locationInfoLoaded = false;
 
@@ -55,97 +55,92 @@ class IntroPage extends HookConsumerWidget with PresLogger {
       locationInfoLoaded = true;
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final logoWidth = switch (breakpoint.activeBreakpoint) {
-          Breakpoints.mobile => (constraints.maxWidth * 0.76).clamp(230.0, 360.0),
-          Breakpoints.tablet => (constraints.maxWidth * 0.56).clamp(320.0, 480.0),
-          Breakpoints.desktop => 440.0,
-        };
-        return Stack(
-          children: [
-            Positioned.fill(child: WorldMapBackground(state: _backgroundState)),
-            Scaffold(
-              key: const ValueKey(UiNames.screenIntro),
-              backgroundColor: Colors.transparent,
-              appBar: AppBar(
-                backgroundColor: Colors.transparent,
-                surfaceTintColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                elevation: 0,
-                scrolledUnderElevation: 0,
-                toolbarHeight: switch (breakpoint.activeBreakpoint) {
-                  Breakpoints.mobile => 164,
-                  Breakpoints.tablet || Breakpoints.desktop => 132,
-                },
-                centerTitle: false,
-                titleSpacing: 0,
-                actionsPadding: EdgeInsets.zero,
-                title: const SizedBox.shrink(),
-                flexibleSpace: SafeArea(
-                  bottom: false,
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: _maxContentWidth),
-                      child: Align(
-                        alignment: Alignment.topLeft,
-                        child: _IntroAppBarTitle(
-                          line1: t.intro.appBarLine1,
-                          line2: t.intro.appBarLine2,
-                          line3: t.intro.appBarLine3,
-                          activeBreakpoint: breakpoint.activeBreakpoint,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              body: SafeArea(
-                top: false,
-                child: Center(
+    return Scaffold(
+      key: const ValueKey(UiNames.screenIntro),
+      body: Stack(
+        children: [
+          Positioned.fill(child: WorldMapBackground(state: _backgroundState)),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 840;
+                final header = _IntroAppBarTitle(
+                  line1: t.intro.appBarLine1,
+                  line2: t.intro.appBarLine2,
+                  line3: t.intro.appBarLine3,
+                  activeBreakpoint: breakpoint.activeBreakpoint,
+                );
+                final logo = SvgPicture.asset(
+                  logoAsset,
+                  key: const ValueKey(UiNames.imageIntroLogo),
+                  width: wide ? 400 : 300,
+                );
+                final footer = _IntroFooter(
+                  isStarting: isStarting.value,
+                  startTitle: t.intro.ctaTitle,
+                  startSubtitle: t.intro.ctaSubtitle,
+                  accountLabel: t.intro.alreadyHaveAccount,
+                  showAccountButton: _bindFeatureEnabled,
+                  onStart: () async {
+                    if (isStarting.value) return;
+                    isStarting.value = true;
+                    await ref.read(Preferences.introCompleted.notifier).update(true);
+                    if (context.mounted) context.goNamed('home');
+                  },
+                  onTermsTap: () async {
+                    await UriUtils.tryLaunch(Uri.parse(Constants.termsAndConditionsUrl));
+                  },
+                );
+                return SingleChildScrollView(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: _maxContentWidth),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: Center(
-                              child: SvgPicture.asset(
-                                logoAsset,
-                                key: const ValueKey(UiNames.imageIntroLogo),
-                                width: logoWidth,
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    child: Center(
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+                        padding: EdgeInsets.symmetric(horizontal: wide ? 40 : 16, vertical: wide ? 40 : 24),
+                        child: wide
+                            ? Row(
+                                children: [
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsetsDirectional.only(end: 48),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [header, const Gap(64), logo],
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(child: footer),
+                                ],
+                              )
+                            : ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 520),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    header,
+                                    SizedBox(
+                                      height: (constraints.maxHeight - 470).clamp(200.0, 420.0),
+                                      child: Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                                          child: logo,
+                                        ),
+                                      ),
+                                    ),
+                                    footer,
+                                  ],
+                                ),
                               ),
-                            ),
-                          ),
-                          _IntroFooter(
-                            isStarting: isStarting.value,
-                            startTitle: t.intro.ctaTitle,
-                            startSubtitle: t.intro.ctaSubtitle,
-                            accountLabel: t.intro.alreadyHaveAccount,
-                            showAccountButton: _bindFeatureEnabled,
-                            onStart: () async {
-                              if (isStarting.value) return;
-                              isStarting.value = true;
-                              await ref.read(Preferences.introCompleted.notifier).update(true);
-                              if (context.mounted) {
-                                context.goNamed('home');
-                              }
-                            },
-                            onTermsTap: () async {
-                              await UriUtils.tryLaunch(Uri.parse(Constants.termsAndConditionsUrl));
-                            },
-                          ),
-                        ],
                       ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
-          ],
-        );
-      },
+          ),
+        ],
+      ),
     );
   }
 
@@ -183,33 +178,42 @@ class _IntroFooter extends ConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
     final linkColor = theme.brightness == Brightness.dark ? const Color(0xFF91C2FF) : const Color(0xFF245FA8);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _IntroStartButton(isLoading: isStarting, title: startTitle, subtitle: startSubtitle, onPressed: onStart),
-        if (showAccountButton) ...[
-          const Gap(16),
-          _IntroSecondaryButton(label: accountLabel),
-          const Gap(16),
-        ] else
-          const Gap(16),
-        Text.rich(
-          key: const ValueKey(UiNames.textIntroTermsAndPolicy),
-          textAlign: TextAlign.center,
-          t.intro.termsAndPolicyCaution(
-            tap: (text) => TextSpan(
-              text: text,
-              style: theme.textTheme.bodySmall?.copyWith(color: linkColor, fontWeight: FontWeight.w600),
-              recognizer: TapGestureRecognizer()..onTap = onTermsTap,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _IntroStartButton(isLoading: isStarting, title: startTitle, subtitle: startSubtitle, onPressed: onStart),
+            if (showAccountButton) ...[
+              const Gap(16),
+              _IntroSecondaryButton(label: accountLabel),
+              const Gap(16),
+            ] else
+              const Gap(16),
+            Text.rich(
+              key: const ValueKey(UiNames.textIntroTermsAndPolicy),
+              textAlign: TextAlign.center,
+              t.intro.termsAndPolicyCaution(
+                tap: (text) => TextSpan(
+                  text: text,
+                  style: theme.textTheme.bodySmall?.copyWith(color: linkColor, fontWeight: FontWeight.w600),
+                  recognizer: TapGestureRecognizer()..onTap = onTermsTap,
+                ),
+              ),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.brightness == Brightness.dark ? const Color(0xFF989CA3) : const Color(0xFF63707B),
+                fontFamily: 'Montserrat',
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.brightness == Brightness.dark ? const Color(0xFF989CA3) : const Color(0xFF63707B),
-            fontFamily: 'Montserrat',
-            fontWeight: FontWeight.w600,
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -222,13 +226,8 @@ class _IntroStartButton extends StatelessWidget {
     required this.onPressed,
   });
 
-  static const double _height = 65;
-  static const double _leftSegmentWidth = 65;
-  static const double _crownPadding = 18;
-  static const double _crownSize = 29;
-  static const _backgroundAsset = 'assets/images/1x/cta-background.png';
   static const _arrowSize = 24.0;
-  static const _arrowVisualScale = 1.18;
+  static const _arrowVisualScale = 1.0;
 
   final bool isLoading;
   final String title;
@@ -248,76 +247,68 @@ class _IntroStartButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: Ink(
-        height: _height,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          image: const DecorationImage(image: AssetImage(_backgroundAsset), fit: BoxFit.cover),
+          gradient: LinearGradient(colors: [theme.colorScheme.primary, theme.colorScheme.secondary]),
         ),
         child: InkWell(
           key: const ValueKey(UiNames.buttonIntroStart),
           onTap: isLoading ? null : onPressed,
-          child: Row(
-            children: [
-              Container(
-                width: _leftSegmentWidth,
-                height: _height,
-                color: Colors.transparent,
-                padding: const EdgeInsets.all(_crownPadding),
-                child: _IntroCrownIcon(size: _crownSize, color: crownColor),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontFamily: 'Unbounded',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                        color: titleColor,
-                        height: 1,
-                      ),
-                    ),
-                    const Gap(7),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'Montserrat',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: subtitleColor,
-                        height: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox.square(
-                dimension: 44,
-                child: Center(
-                  child: isLoading
-                      ? SizedBox(
-                          width: _arrowSize,
-                          height: _arrowSize,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.2,
-                            valueColor: AlwaysStoppedAnimation<Color>(arrowColor),
-                          ),
-                        )
-                      : Transform.scale(
-                          scale: _arrowVisualScale,
-                          child: Icon(Icons.arrow_outward, size: _arrowSize, color: arrowColor),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+            child: Row(
+              children: [
+                _IntroCrownIcon(size: 26, color: crownColor),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontFamily: 'Unbounded',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                          color: titleColor,
+                          height: 1,
                         ),
+                      ),
+                      const Gap(7),
+                      Text(
+                        subtitle,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'Montserrat',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: subtitleColor,
+                          height: 1,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                SizedBox.square(
+                  dimension: 44,
+                  child: Center(
+                    child: isLoading
+                        ? SizedBox(
+                            width: _arrowSize,
+                            height: _arrowSize,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              valueColor: AlwaysStoppedAnimation<Color>(arrowColor),
+                            ),
+                          )
+                        : Transform.scale(
+                            scale: _arrowVisualScale,
+                            child: Icon(Icons.arrow_outward, size: _arrowSize, color: arrowColor),
+                          ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -344,11 +335,12 @@ class _IntroSecondaryButton extends StatelessWidget {
         onTap: () {
           showDialog<void>(context: context, builder: (_) => const _BindAccountCodeDialog());
         },
-        child: SizedBox(
-          height: 44,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
           child: Center(
             child: Text(
               label,
+              textAlign: TextAlign.center,
               style: theme.textTheme.titleSmall?.copyWith(
                 fontFamily: 'Montserrat',
                 fontWeight: FontWeight.w600,
@@ -528,6 +520,7 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
     final inputBorderColor = theme.brightness == Brightness.dark ? const Color(0xFF3B4756) : const Color(0xFFC8D3DC);
 
     return AlertDialog(
+      scrollable: true,
       key: const ValueKey(UiNames.dialogIntroBindAccount),
       backgroundColor: dialogBackgroundColor,
       title: Text(
@@ -639,37 +632,34 @@ class _IntroAppBarTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final lineOneTwoStyle = theme.textTheme.titleLarge?.copyWith(
-      fontFamily: "Unbounded",
-      fontWeight: FontWeight.w300,
-      fontSize: 32,
-      height: 27 / 32,
+    final wide = activeBreakpoint == Breakpoints.desktop;
+    final style = theme.textTheme.headlineMedium?.copyWith(
+      fontFamily: 'Unbounded',
+      fontSize: wide ? 38 : 28,
+      fontWeight: FontWeight.w400,
+      height: 1.3,
+      letterSpacing: -0.8,
     );
-    final lineThreeStyle = theme.textTheme.titleLarge?.copyWith(
-      fontFamily: "Unbounded",
-      fontWeight: FontWeight.w700,
-      fontSize: 32,
-      height: 37 / 32,
-    );
-    final maxLineWidth = switch (activeBreakpoint) {
-      Breakpoints.mobile => 260.0,
-      Breakpoints.tablet => 460.0,
-      Breakpoints.desktop => 520.0,
-    };
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, top: 20),
-      child: SizedBox(
-        width: maxLineWidth,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(line1, maxLines: 1, overflow: TextOverflow.ellipsis, style: lineOneTwoStyle),
-            Text(line2, maxLines: 1, overflow: TextOverflow.ellipsis, style: lineOneTwoStyle),
-            Text(line3, maxLines: 2, overflow: TextOverflow.ellipsis, style: lineThreeStyle),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(line1, style: style),
+        Text(line2, style: style),
+        const Gap(12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(color: theme.colorScheme.primary, borderRadius: BorderRadius.circular(14)),
+          child: Text(
+            line3,
+            style: style?.copyWith(
+              fontSize: wide ? 32 : 24,
+              fontWeight: FontWeight.w700,
+              color: theme.colorScheme.onPrimary,
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
