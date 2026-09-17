@@ -24,7 +24,7 @@ class ConnectionStatsCard extends HookConsumerWidget {
         switch (activeProxy) {
           AsyncData(value: final proxy) => (
             label: const Icon(FluentIcons.arrow_routing_20_regular),
-            data: Text(formatOutboundTitle(proxy, autoSelectionLabel: t.pages.proxies.autoSelection)),
+            data: Text(formatOutboundTitle(proxy, translations: t)),
             semanticLabel: null,
           ),
           _ => (label: const Icon(FluentIcons.arrow_routing_20_regular), data: const Text("..."), semanticLabel: null),

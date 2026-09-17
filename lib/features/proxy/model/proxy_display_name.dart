@@ -1,32 +1,35 @@
+import 'package:zeon/features/proxy/model/server_name_localization.dart';
+import 'package:zeon/gen/translations.g.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 const String autoSelectionSeparator = '•';
 
-/// Returns the user-facing name exactly as supplied by Core/config.
-///
-/// This deliberately does not remove flags, subscription labels (such as
-/// `| БЫСТРЫЙ`) or any other portion of a normal proxy display name.
-String formatProxyDisplayName(String raw, {required String autoSelectionLabel}) {
+/// Localizes presentation text while keeping Core/config identifiers untouched.
+String formatProxyDisplayName(String raw, {required Translations translations}) {
   final value = raw.trim();
-  return _isAutoSelectionName(value) ? autoSelectionLabel : value;
+  return _isAutoSelectionName(value)
+      ? translations.pages.proxies.autoSelection
+      : localizeServerDisplayName(value, translations);
 }
 
-String formatOutboundTitle(OutboundInfo outbound, {required String autoSelectionLabel}) =>
-    resolveOutboundDisplayInfo(outbound, autoSelectionLabel: autoSelectionLabel).title;
+String formatOutboundTitle(OutboundInfo outbound, {required Translations translations}) =>
+    resolveOutboundDisplayInfo(outbound, translations: translations).title;
 
 String formatSelectedServerTitle({
   required bool isAutoSelected,
-  required String autoSelectionLabel,
+  required Translations translations,
   required String? selectedName,
   required String? realOutboundName,
   required String? realOutboundFlag,
 }) {
   if (!isAutoSelected) {
     final name = selectedName?.trim().isNotEmpty == true ? selectedName!.trim() : realOutboundName?.trim() ?? '';
-    return _withoutLeadingFlag(name);
+    return _withoutLeadingFlag(localizeServerDisplayName(name, translations));
   }
 
-  final realName = displayNameFromRealOutbound(realOutboundName);
+  final autoSelectionLabel = translations.pages.proxies.autoSelection;
+  final rawRealName = displayNameFromRealOutbound(realOutboundName);
+  final realName = rawRealName == null ? null : localizeServerDisplayName(rawRealName, translations);
   if (realName == null) return autoSelectionLabel;
 
   // Flutter renders the flag in a separate leading widget. This branch keeps
@@ -46,7 +49,7 @@ class ServerDisplayInfo {
 
 ServerDisplayInfo resolveOutboundDisplayInfo(
   OutboundInfo outbound, {
-  required String autoSelectionLabel,
+  required Translations translations,
   Iterable<OutboundInfo> allOutbounds = const [],
 }) {
   final isAuto = isAutoSelectedOutbound(outbound);
@@ -67,10 +70,10 @@ ServerDisplayInfo resolveOutboundDisplayInfo(
 
   return ServerDisplayInfo(
     // The list/card uses a leading flag widget, so avoid a duplicate emoji in
-    // its text. The real outbound name itself remains untouched.
+    // its text. Only the presentation string is localized.
     title: formatSelectedServerTitle(
       isAutoSelected: isAuto,
-      autoSelectionLabel: autoSelectionLabel,
+      translations: translations,
       selectedName: outbound.tagDisplay,
       realOutboundName: isAuto ? _withoutLeadingFlag(realName ?? '') : realName,
       realOutboundFlag: null,

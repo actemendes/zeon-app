@@ -58,7 +58,7 @@ void main() {
         type: 'balancer',
         groupSelectedTagDisplay: '🇩🇪 Germany | FAST',
       );
-      final display = resolveOutboundDisplayInfo(outbound, autoSelectionLabel: t.pages.proxies.autoSelection);
+      final display = resolveOutboundDisplayInfo(outbound, translations: t);
       expect(display.title, '${t.pages.proxies.autoSelection} • Germany | FAST');
       expect(display.countryCode, 'DE');
       expect(outbound.groupSelectedTagDisplay, '🇩🇪 Germany | FAST');

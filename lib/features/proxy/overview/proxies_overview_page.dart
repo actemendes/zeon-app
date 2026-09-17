@@ -117,7 +117,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                             final displayInfo = resolveOutboundDisplayInfo(
                               proxy,
                               allOutbounds: group.items,
-                              autoSelectionLabel: t.pages.proxies.autoSelection,
+                              translations: t,
                             );
                             final ipv6Status = proxy.isGroup ? "not_tested" : proxy.ipv6Status;
                             final ipv6StatusText = ipv6Mode == IPv6Mode.disable

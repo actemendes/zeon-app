@@ -9,7 +9,7 @@ void main() {
   });
   test("formats balancer as auto selection", () {
     expect(
-      formatProxyDisplayName("balance", autoSelectionLabel: AppLocale.ru.buildSync().pages.proxies.autoSelection),
+      formatProxyDisplayName("balance", translations: AppLocale.ru.buildSync()),
       "\u0410\u0432\u0442\u043e\u0432\u044b\u0431\u043e\u0440",
     );
   });
@@ -23,10 +23,7 @@ void main() {
   test("keeps flag source while hiding leading flag from server title", () {
     final outbound = OutboundInfo(tag: "proxy-1", tagDisplay: "\uD83C\uDDE9\uD83C\uDDEA Germany", type: "vless");
 
-    final displayInfo = resolveOutboundDisplayInfo(
-      outbound,
-      autoSelectionLabel: AppLocale.en.buildSync().pages.proxies.autoSelection,
-    );
+    final displayInfo = resolveOutboundDisplayInfo(outbound, translations: AppLocale.en.buildSync());
 
     expect(displayInfo.countryCode, "DE");
     expect(displayInfo.title, "Germany");

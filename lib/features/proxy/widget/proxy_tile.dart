@@ -88,11 +88,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
-                    displayTitle ??
-                        formatOutboundTitle(
-                          proxy,
-                          autoSelectionLabel: context.translations.pages.proxies.autoSelection,
-                        ),
+                    displayTitle ?? formatOutboundTitle(proxy, translations: context.translations),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

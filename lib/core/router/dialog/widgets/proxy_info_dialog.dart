@@ -16,9 +16,7 @@ class ProxyInfoDialog extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     return ZeonDialog(
-      title: SelectionArea(
-        child: Text(formatOutboundTitle(outboundInfo, autoSelectionLabel: t.pages.proxies.autoSelection)),
-      ),
+      title: SelectionArea(child: Text(formatOutboundTitle(outboundInfo, translations: t))),
       content: OutboundInfoWidget(outboundInfo: outboundInfo),
       actions: [TextButton(onPressed: context.pop, child: Text(t.common.close))],
     );
