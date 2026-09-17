@@ -42,7 +42,11 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
           notification.showSuccessToast(t.pages.profiles.msg.save.success);
         case AsyncError(:final error):
           if (error case ProfileInvalidUrlFailure()) {
-            notification.showErrorToast(t.pages.profiles.msg.invalidUrl);
+            unawaited(
+              ref
+                  .read(dialogNotifierProvider.notifier)
+                  .showOk(t.pages.profiles.msg.add.failure, t.pages.profiles.msg.zeonOnly),
+            );
           } else if (error case ProfileCancelByUserFailure()) {
             return;
           } else {

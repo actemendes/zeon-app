@@ -437,6 +437,7 @@
         "save": {
           "success": "Profil başarıyla kaydedildi"
         },
+        "zeonOnly": "Yalnızca ZEON hizmeti desteklenir. ZEON abonelik bağlantısını yapıştırın.",
         "invalidUrl": "Geçersiz URL",
         "add": {
           "failure": "Profil eklenemedi"

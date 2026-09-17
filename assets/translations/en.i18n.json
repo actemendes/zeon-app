@@ -448,6 +448,7 @@
         "save": {
           "success": "Profile saved successfully"
         },
+        "zeonOnly": "Only the ZEON service is supported. Paste a ZEON subscription link.",
         "invalidUrl": "Invalid URL",
         "add": {
           "failure": "Failed to add profile"

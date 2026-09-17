@@ -437,6 +437,7 @@
         "save": {
           "success": "配置文件保存成功"
         },
+        "zeonOnly": "仅支持 ZEON 服务。请粘贴 ZEON 订阅链接。",
         "invalidUrl": "无效的 URL",
         "add": {
           "failure": "添加配置文件失败"

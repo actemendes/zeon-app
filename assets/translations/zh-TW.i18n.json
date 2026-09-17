@@ -437,6 +437,7 @@
         "save": {
           "success": "設定檔儲存成功"
         },
+        "zeonOnly": "僅支援 ZEON 服務。請貼上 ZEON 訂閱連結。",
         "invalidUrl": "無效的 URL",
         "add": {
           "failure": "新增設定檔失敗"

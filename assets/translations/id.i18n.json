@@ -437,6 +437,7 @@
         "save": {
           "success": "Profil berhasil disimpan"
         },
+        "zeonOnly": "Hanya layanan ZEON yang didukung. Tempel tautan langganan ZEON.",
         "invalidUrl": "URL tidak valid",
         "add": {
           "failure": "Gagal menambahkan profil"

@@ -438,6 +438,7 @@
         "save": {
           "success": "Perfil salvo com sucesso"
         },
+        "zeonOnly": "Somente o serviço ZEON é compatível. Cole um link de assinatura ZEON.",
         "invalidUrl": "URL inválida",
         "add": {
           "failure": "Falha ao adicionar perfil"
