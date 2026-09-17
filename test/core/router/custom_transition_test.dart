@@ -3,6 +3,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zeon/core/router/go_router/helper/custom_transition.dart';
 
 void main() {
+  test('low power route has no forward or reverse animation delay', () {
+    final page = customTransition(
+      TransitionType.slide,
+      const ValueKey('test'),
+      const SizedBox.shrink(),
+      reduceMotion: true,
+    );
+    expect(page.transitionDuration, Duration.zero);
+    expect(page.reverseTransitionDuration, Duration.zero);
+  });
   testWidgets('route transitions remain visible and use eased motion', (tester) async {
     late BuildContext context;
     await tester.pumpWidget(

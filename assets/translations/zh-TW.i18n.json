@@ -571,6 +571,8 @@
         "silentStart": "靜默啟動",
         "ignoreBatteryOptimizations": "忽略電池最佳化",
         "ignoreBatteryOptimizationsMsg": "移除限制以獲得最佳 VPN 效能",
+        "lowPowerMode": "低效能裝置",
+        "lowPowerModeMsg": "減少動畫與視覺效果，降低介面負載。立即生效。",
         "memoryLimit": "記憶體限制",
         "memoryLimitMsg": "如果您遇到記憶體不足錯誤或應用程式頻繁崩潰，請啟用此選項",
         "debugMode": "偵錯模式",

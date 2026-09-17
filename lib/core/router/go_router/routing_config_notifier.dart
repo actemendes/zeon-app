@@ -107,17 +107,22 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                     GoRoute(
                       name: 'proxies',
                       path: '/proxies',
-                      pageBuilder: (_, state) =>
-                          customTransition(TransitionType.fade, state.pageKey, const ProxiesOverviewPage()),
+                      pageBuilder: (context, state) => customTransition(
+                        TransitionType.fade,
+                        state.pageKey,
+                        const ProxiesOverviewPage(),
+                        reduceMotion: MediaQuery.disableAnimationsOf(context),
+                      ),
                     ),
                     if (isMobileBreakpoint)
                       GoRoute(
                         name: 'profileDetails',
                         path: '/profile-details/:id',
-                        pageBuilder: (_, state) => customTransition(
+                        pageBuilder: (context, state) => customTransition(
                           TransitionType.fade,
                           state.pageKey,
                           ProfileDetailsPage(id: state.pathParameters['id']!),
+                          reduceMotion: MediaQuery.disableAnimationsOf(context),
                         ),
                       ),
                   ],
@@ -135,10 +140,11 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                       GoRoute(
                         name: 'profileDetails',
                         path: '/profiles/:id',
-                        pageBuilder: (_, state) => customTransition(
+                        pageBuilder: (context, state) => customTransition(
                           TransitionType.fade,
                           state.pageKey,
                           ProfileDetailsPage(id: state.pathParameters['id']!),
+                          reduceMotion: MediaQuery.disableAnimationsOf(context),
                         ),
                       ),
                     ],
@@ -162,59 +168,95 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                     GoRoute(
                       name: 'general',
                       path: '/general',
-                      pageBuilder: (_, state) =>
-                          customTransition(TransitionType.slide, state.pageKey, const GeneralPage()),
+                      pageBuilder: (context, state) => customTransition(
+                        TransitionType.slide,
+                        state.pageKey,
+                        const GeneralPage(),
+                        reduceMotion: MediaQuery.disableAnimationsOf(context),
+                      ),
                     ),
                     GoRoute(
                       name: 'routeOptions',
                       path: '/route-options',
-                      pageBuilder: (_, state) =>
-                          customTransition(TransitionType.slide, state.pageKey, const RouteOptionsPage()),
+                      pageBuilder: (context, state) => customTransition(
+                        TransitionType.slide,
+                        state.pageKey,
+                        const RouteOptionsPage(),
+                        reduceMotion: MediaQuery.disableAnimationsOf(context),
+                      ),
                       routes: <GoRoute>[
                         GoRoute(
                           name: 'perAppProxy',
                           path: '/per-app-proxy',
-                          pageBuilder: (_, state) =>
-                              customTransition(TransitionType.slide, state.pageKey, const PerAppProxyPage()),
+                          pageBuilder: (context, state) => customTransition(
+                            TransitionType.slide,
+                            state.pageKey,
+                            const PerAppProxyPage(),
+                            reduceMotion: MediaQuery.disableAnimationsOf(context),
+                          ),
                         ),
                       ],
                     ),
                     GoRoute(
                       name: 'dnsOptions',
                       path: '/dns-options',
-                      pageBuilder: (_, state) =>
-                          customTransition(TransitionType.slide, state.pageKey, const DnsOptionsPage()),
+                      pageBuilder: (context, state) => customTransition(
+                        TransitionType.slide,
+                        state.pageKey,
+                        const DnsOptionsPage(),
+                        reduceMotion: MediaQuery.disableAnimationsOf(context),
+                      ),
                     ),
                     GoRoute(
                       name: 'inboundOptions',
                       path: '/inbound-options',
-                      pageBuilder: (_, state) =>
-                          customTransition(TransitionType.slide, state.pageKey, const InboundOptionsPage()),
+                      pageBuilder: (context, state) => customTransition(
+                        TransitionType.slide,
+                        state.pageKey,
+                        const InboundOptionsPage(),
+                        reduceMotion: MediaQuery.disableAnimationsOf(context),
+                      ),
                     ),
                     GoRoute(
                       name: 'tlsTricks',
                       path: '/tls-tricks',
-                      pageBuilder: (_, state) =>
-                          customTransition(TransitionType.slide, state.pageKey, const TlsTricksPage()),
+                      pageBuilder: (context, state) => customTransition(
+                        TransitionType.slide,
+                        state.pageKey,
+                        const TlsTricksPage(),
+                        reduceMotion: MediaQuery.disableAnimationsOf(context),
+                      ),
                     ),
                     GoRoute(
                       name: 'warpOptions',
                       path: '/warp-options',
-                      pageBuilder: (_, state) =>
-                          customTransition(TransitionType.slide, state.pageKey, const WarpOptionsPage()),
+                      pageBuilder: (context, state) => customTransition(
+                        TransitionType.slide,
+                        state.pageKey,
+                        const WarpOptionsPage(),
+                        reduceMotion: MediaQuery.disableAnimationsOf(context),
+                      ),
                     ),
                     if (isMobileBreakpoint) ...[
                       GoRoute(
                         name: 'logs',
                         path: '/logs',
-                        pageBuilder: (_, state) =>
-                            customTransition(TransitionType.slide, state.pageKey, const LogsPage()),
+                        pageBuilder: (context, state) => customTransition(
+                          TransitionType.slide,
+                          state.pageKey,
+                          const LogsPage(),
+                          reduceMotion: MediaQuery.disableAnimationsOf(context),
+                        ),
                       ),
                       GoRoute(
                         name: 'about',
                         path: '/about',
-                        pageBuilder: (_, state) =>
-                            customTransition(TransitionType.slide, state.pageKey, const AboutPage()),
+                        pageBuilder: (context, state) => customTransition(
+                          TransitionType.slide,
+                          state.pageKey,
+                          const AboutPage(),
+                          reduceMotion: MediaQuery.disableAnimationsOf(context),
+                        ),
                       ),
                     ],
                   ],
@@ -251,8 +293,12 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                     GoRoute(
                       name: 'profileLinkAccount',
                       path: '/link-account',
-                      pageBuilder: (_, state) =>
-                          customTransition(TransitionType.slide, state.pageKey, const ProfileLinkAccountPage()),
+                      pageBuilder: (context, state) => customTransition(
+                        TransitionType.slide,
+                        state.pageKey,
+                        const ProfileLinkAccountPage(),
+                        reduceMotion: MediaQuery.disableAnimationsOf(context),
+                      ),
                     ),
                   ],
                 ),

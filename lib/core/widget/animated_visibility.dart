@@ -17,6 +17,9 @@ class AnimatedVisibility extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final replacement = axis == Axis.vertical ? const SizedBox(width: double.infinity) : const SizedBox.shrink();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return visible ? Padding(padding: padding, child: child) : replacement;
+    }
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 200),

@@ -571,6 +571,8 @@
         "silentStart": "Simge durumunda başlat",
         "ignoreBatteryOptimizations": "Pil optimizasyonunu devre dışı bırak",
         "ignoreBatteryOptimizationsMsg": "Optimum VPN performansı için kısıtlamaları kaldırın",
+        "lowPowerMode": "Düşük performanslı cihaz",
+        "lowPowerModeMsg": "Arayüz yükünü azaltmak için animasyonları ve görsel efektleri azaltır. Hemen uygulanır.",
         "memoryLimit": "Bellek limiti",
         "memoryLimitMsg": "Bellek yetersizliği hataları veya sık uygulama çökmeleri yaşıyorsanız etkinleştirin",
         "debugMode": "Hata ayıklama modu",

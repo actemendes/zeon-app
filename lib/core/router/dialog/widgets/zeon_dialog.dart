@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 Future<T?> showZeonDialog<T>(BuildContext context, Widget child) {
   if (MediaQuery.sizeOf(context).width < 600) {
     return showModalBottomSheet<T>(
+      sheetAnimationStyle: MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null,
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
@@ -14,7 +15,12 @@ Future<T?> showZeonDialog<T>(BuildContext context, Widget child) {
       builder: (_) => child,
     );
   }
-  return showDialog<T>(context: context, barrierColor: Colors.black.withValues(alpha: .55), builder: (_) => child);
+  return showDialog<T>(
+    context: context,
+    animationStyle: MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null,
+    barrierColor: Colors.black.withValues(alpha: .55),
+    builder: (_) => child,
+  );
 }
 
 /// A scrollable body with persistent actions, shared by settings and diagnostics.

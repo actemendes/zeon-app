@@ -17,6 +17,7 @@ class AnimatedText extends Text {
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return Text(data!, style: style);
     return AnimatedSwitcher(
       duration: duration,
       transitionBuilder: (child, animation) {

@@ -571,6 +571,8 @@
         "silentStart": "静默启动",
         "ignoreBatteryOptimizations": "忽略电池优化",
         "ignoreBatteryOptimizationsMsg": "移除限制以获得最佳 VPN 性能",
+        "lowPowerMode": "低性能设备",
+        "lowPowerModeMsg": "减少动画和视觉效果，降低界面负载。立即生效。",
         "memoryLimit": "内存限制",
         "memoryLimitMsg": "如果您遇到内存不足错误或应用频繁崩溃，请启用此选项",
         "debugMode": "调试模式",

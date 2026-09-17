@@ -23,6 +23,7 @@ import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dar
 import 'package:zeon/core/theme/app_theme.dart';
 import 'package:zeon/core/theme/system_bars_style.dart';
 import 'package:zeon/core/theme/theme_preferences.dart';
+import 'package:zeon/core/widget/app_visual_effects.dart';
 import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/features/connection/widget/connection_wrapper.dart';
 import 'package:zeon/features/notifications/data/notification_data_providers.dart';
@@ -73,6 +74,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
     final router = ref.watch(goRouterNotiferProvider);
     final locale = ref.watch(localePreferencesProvider);
     final themeMode = ref.watch(themePreferencesProvider);
+    final lowPowerMode = ref.watch(Preferences.lowPowerMode);
     final theme = AppTheme(themeMode, locale.preferredFontFamily);
     final appInfo = ref.watch(appInfoProvider).requireValue;
     final upgrader = appInfo.release == Release.googlePlay ? ref.watch(upgraderProvider) : null;
@@ -118,6 +120,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
             supportedLocales: AppLocaleUtils.supportedLocales,
             localizationsDelegates: const [InterfaceTranslationsDelegate(), ...GlobalMaterialLocalizations.delegates],
             debugShowCheckedModeBanner: false,
+            themeAnimationDuration: lowPowerMode ? Duration.zero : kThemeAnimationDuration,
             themeMode: themeMode.flutterThemeMode,
             theme: theme.lightTheme(null),
             darkTheme: theme.darkTheme(null),
@@ -133,11 +136,11 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
                 );
               }
               if (kDebugMode && _debugAccessibility) {
-                return AccessibilityTools(checkFontOverflows: true, child: appChild);
+                appChild = AccessibilityTools(checkFontOverflows: true, child: appChild);
               }
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: systemBarsStyleFor(theme.brightness),
-                child: appChild,
+                child: AppVisualEffects(lowPowerMode: lowPowerMode, child: appChild),
               );
             },
           ),

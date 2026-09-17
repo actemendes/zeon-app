@@ -630,6 +630,8 @@
         "silentStart": "Start minimized",
         "ignoreBatteryOptimizations": "Disable battery optimization",
         "ignoreBatteryOptimizationsMsg": "Remove restrictions for optimal VPN performance",
+        "lowPowerMode": "Low-end device",
+        "lowPowerModeMsg": "Reduces animations and visual effects to lower interface load. Applies immediately.",
         "memoryLimit": "Memory limit",
         "memoryLimitMsg": "Enable if you're experiencing out of memory errors or frequent app crashes",
         "debugMode": "Debug mode",

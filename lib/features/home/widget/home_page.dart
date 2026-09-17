@@ -46,8 +46,9 @@ class HomePage extends HookConsumerWidget {
       _ => false,
     };
     final refreshAnimationController = useAnimationController(duration: const Duration(milliseconds: 900));
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     useEffect(() {
-      if (isUpdatingProfile) {
+      if (isUpdatingProfile && !reduceMotion) {
         refreshAnimationController.repeat();
       } else {
         refreshAnimationController
@@ -55,7 +56,7 @@ class HomePage extends HookConsumerWidget {
           ..reset();
       }
       return null;
-    }, [isUpdatingProfile, refreshAnimationController]);
+    }, [isUpdatingProfile, reduceMotion, refreshAnimationController]);
     final breakpoint = Breakpoint(context);
     final mediaSize = MediaQuery.sizeOf(context);
     final compactHeight = mediaSize.width > mediaSize.height && mediaSize.height < Breakpoint.compactHeight;

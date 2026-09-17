@@ -571,6 +571,8 @@
         "silentStart": "Mulai diminimalkan",
         "ignoreBatteryOptimizations": "Nonaktifkan optimasi baterai",
         "ignoreBatteryOptimizationsMsg": "Hapus batasan untuk kinerja VPN yang optimal",
+        "lowPowerMode": "Perangkat berspesifikasi rendah",
+        "lowPowerModeMsg": "Mengurangi animasi dan efek visual untuk meringankan antarmuka. Langsung diterapkan.",
         "memoryLimit": "Batas memori",
         "memoryLimitMsg": "Aktifkan jika Anda mengalami kesalahan kehabisan memori atau aplikasi sering macet",
         "debugMode": "Mode debug",

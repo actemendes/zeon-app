@@ -118,6 +118,7 @@ class MyAdaptiveLayout extends HookConsumerWidget {
                           ),
                         ),
                         NavigationBar(
+                          animationDuration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : null,
                           backgroundColor: Colors.transparent,
                           elevation: 0,
                           maintainBottomViewPadding: true,

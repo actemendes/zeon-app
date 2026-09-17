@@ -22,6 +22,7 @@ class BottomSheetsNotifier extends _$BottomSheetsNotifier {
     return await Navigator.of(context)
         .push<T>(
           ModalBottomSheetRoute(
+            sheetAnimationStyle: MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null,
             constraints: BottomSheetConst.boxConstraints,
             isScrollControlled: isScrollControlled,
             useSafeArea: true,

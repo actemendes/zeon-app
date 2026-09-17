@@ -572,6 +572,8 @@
         "silentStart": "Iniciar minimizado",
         "ignoreBatteryOptimizations": "Desactivar optimización de batería",
         "ignoreBatteryOptimizationsMsg": "Eliminar restricciones para un rendimiento óptimo de la VPN",
+        "lowPowerMode": "Dispositivo de bajo rendimiento",
+        "lowPowerModeMsg": "Reduce las animaciones y los efectos visuales para aligerar la interfaz. Se aplica al instante.",
         "memoryLimit": "Límite de memoria",
         "memoryLimitMsg": "Habilitar si experimentas errores de falta de memoria o fallos frecuentes de la aplicación",
         "debugMode": "Modo de depuración",

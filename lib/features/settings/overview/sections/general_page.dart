@@ -87,6 +87,14 @@ class GeneralPage extends HookConsumerWidget {
           SettingsGroup(
             title: t.pages.settings.groups.behavior,
             children: [
+              SettingsSwitch(
+                key: const ValueKey('settings_low_power_mode'),
+                title: Text(t.pages.settings.general.lowPowerMode),
+                subtitle: Text(t.pages.settings.general.lowPowerModeMsg),
+                secondary: const Icon(Icons.speed_rounded),
+                value: ref.watch(Preferences.lowPowerMode),
+                onChanged: ref.read(Preferences.lowPowerMode.notifier).update,
+              ),
               if (PlatformUtils.isAndroid) const BatteryOptimizationWidget(),
               SettingsSwitch(
                 title: Text(t.pages.settings.general.memoryLimit),

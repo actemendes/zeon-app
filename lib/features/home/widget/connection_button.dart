@@ -387,15 +387,17 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
                         decoration: BoxDecoration(
                           color: theme.colorScheme.surface,
                           shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                              color: isDarkTheme
-                                  ? Colors.black.withValues(alpha: .5)
-                                  : Colors.white.withValues(alpha: .5),
-                            ),
-                          ],
+                          boxShadow: _reduceMotion
+                              ? const []
+                              : [
+                                  BoxShadow(
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                    color: isDarkTheme
+                                        ? Colors.black.withValues(alpha: .5)
+                                        : Colors.white.withValues(alpha: .5),
+                                  ),
+                                ],
                         ),
                         child: Center(
                           child: _ConnectionContentOpacity(
