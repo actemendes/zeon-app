@@ -93,6 +93,15 @@ class _WindowsNetworkHelpDialogState extends State<WindowsNetworkHelpDialog> {
                   'Install Happ and get a connection link from our bot on Telegram or VK.',
                 ),
               ),
+              const SizedBox(height: 12),
+              Text(
+                _text(
+                  'Если у вас уже есть наше приложение на другом устройстве, скачайте Happ '
+                      'и вставьте в него ссылку из вашего приложения.',
+                  'If you already have our app on another device, download Happ '
+                      'and paste the link from your app into it.',
+                ),
+              ),
               const SizedBox(height: 14),
               OutlinedButton.icon(
                 onPressed: () => _open(WindowsNetworkHelpDialog.happUri),
