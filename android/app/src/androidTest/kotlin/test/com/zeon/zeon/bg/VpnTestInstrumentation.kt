@@ -54,6 +54,9 @@ class VpnTestInstrumentation : Instrumentation() {
         val routePolicyTests = VpnRoutePolicyInstrumentedTest()
         val bitmapTests = SampledBitmapDecoderInstrumentedTest(targetContext)
         val tests = mutableListOf(
+            TestCase(notificationTests.javaClass.name, "disabledDynamicNotificationStillUpdatesConnectedOutbound") {
+                notificationTests.disabledDynamicNotificationStillUpdatesConnectedOutbound()
+            },
             TestCase(generationTests.javaClass.name, "generationIsStrictlyMonotonic") {
                 generationTests.generationIsStrictlyMonotonic()
             },

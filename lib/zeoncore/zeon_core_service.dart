@@ -187,8 +187,9 @@ CloseFrontPublicationDecision classifyCloseFrontPublication({
 }
 
 class ZeonCoreService with InfraLogger {
-  ZeonCoreService(this.ref, {CoreInterface? coreInterface, bool? isWindows})
+  ZeonCoreService(this.ref, {CoreInterface? coreInterface, bool? isWindows, bool? isAndroid})
     : core = coreInterface ?? getCoreInterface(),
+      _isAndroid = isAndroid ?? PlatformUtils.isAndroid,
       _isWindows = isWindows ?? PlatformUtils.isWindows {
     _platformSnapshotSubscription = core.watchSessionSnapshots().listen(
       _queuePlatformSessionSnapshot,
@@ -231,6 +232,7 @@ class ZeonCoreService with InfraLogger {
 
   // CoreZeonCoreService() {}
   final CoreInterface core;
+  final bool _isAndroid;
   final bool _isWindows;
 
   CoreStatus currentState = const CoreStatus.stopped();
@@ -244,6 +246,7 @@ class ZeonCoreService with InfraLogger {
   ({int generation, Future<Either<String, Unit>> future})? _stopInFlight;
   ResponseFuture<CoreInfoResponse>? _startupCall;
   late final SessionGenerationGate _sessionGeneration = SessionGenerationGate(
+    awaitPlatformGeneration: _isAndroid,
     onStale: (stale, current, source) {
       loggy.warning(
         vpnDiagnosticEvent("stale_callback_ignored", stale, details: "current_generation=$current source=$source"),

@@ -16,6 +16,29 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('SessionGenerationGate', () {
+    test('platform adoption accepts surviving generation until a local intent is reserved', () {
+      final gate = SessionGenerationGate(seed: 1000, awaitPlatformGeneration: true);
+      expect(gate.current, 0);
+      expect(gate.advanceTo(100), 100);
+      expect(gate.isCurrent(100, source: 'native_server_update'), isTrue);
+      expect(gate.next(), 1001);
+      expect(gate.advanceTo(100), 1001);
+      expect(gate.isCurrent(100, source: 'late_native_event'), isFalse);
+    });
+
+    test('local intent before first platform event keeps its allocation floor', () {
+      final gate = SessionGenerationGate(seed: 1000, awaitPlatformGeneration: true);
+      expect(gate.next(), 1001);
+      expect(gate.advanceTo(100), 1001);
+      expect(gate.next(), 1002);
+    });
+
+    test('platform generation ahead of the local seed remains monotonic', () {
+      final gate = SessionGenerationGate(seed: 1000, awaitPlatformGeneration: true);
+      expect(gate.advanceTo(2000), 2000);
+      expect(gate.next(), 2001);
+    });
+
     test('start then restart makes the start callback stale', () {
       final stale = <String>[];
       final gate = SessionGenerationGate(
@@ -589,9 +612,53 @@ void main() {
     expect(service.beginVpnOperation('test_after_external_stop'), greaterThan(connectedGeneration + 1));
   });
 
+  test('recreated Android bridge adopts surviving generation and subsequent server updates', () async {
+    SharedPreferences.setMockInitialValues({'started_by_user': true});
+    final preferences = await SharedPreferences.getInstance();
+    final core = _SnapshotCoreInterface();
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core, isAndroid: true));
+    final container = ProviderContainer(overrides: [sharedPreferencesProvider.overrideWith((ref) => preferences)]);
+    addTearDown(() async {
+      container.dispose();
+      await core.close();
+    });
+    await container.read(sharedPreferencesProvider.future);
+    final service = container.read(provider);
+    for (final label in ['Server A', 'Server B']) {
+      final updated = service.watchAuthoritativeSessionSnapshots().firstWhere(
+        (snapshot) => snapshot.selectedOutboundLabel == label,
+      );
+      core.add(
+        _platformSnapshot(
+          generation: 100,
+          sequenceNumber: label == 'Server A' ? 1 : 2,
+          phase: VpnSessionPhase.connected,
+          ready: true,
+          selectedOutboundLabel: label,
+        ),
+      );
+      await updated.timeout(const Duration(seconds: 2));
+      await Future<void>.delayed(Duration.zero);
+      expect(service.currentState, isA<CoreStarted>());
+      expect(service.isVpnOperationCurrent(100, source: 'surviving_session'), isTrue);
+    }
+    final stopped = service.statusController.stream.firstWhere((status) => status is CoreStopped);
+    core.add(
+      _platformSnapshot(
+        generation: 101,
+        phase: VpnSessionPhase.disconnected,
+        requestedAction: 'stop',
+        stopSource: VpnStopSource.notification,
+      ),
+    );
+    await stopped.timeout(const Duration(seconds: 2));
+    expect(preferences.getBool('started_by_user'), isFalse);
+    expect(service.beginVpnOperation('next_user_start'), greaterThan(101));
+  });
+
   test('older Android snapshot cannot overwrite a newer locally reserved operation', () async {
     final core = _SnapshotCoreInterface();
-    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core));
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: core, isAndroid: true));
     final container = ProviderContainer();
     addTearDown(() async {
       container.dispose();
@@ -881,6 +948,7 @@ VpnSessionSnapshot _platformSnapshot({
   bool ready = false,
   String requestedAction = '',
   VpnStopSource stopSource = VpnStopSource.none,
+  String selectedOutboundLabel = '',
 }) => VpnSessionSnapshot(
   generation: generation,
   runtimeEpoch: 'android-process',
@@ -896,6 +964,7 @@ VpnSessionSnapshot _platformSnapshot({
   protectSucceeded: ready,
   platformVpnValidated: ready,
   selectedOutboundId: ready ? 'opaque-outbound' : '',
+  selectedOutboundLabel: selectedOutboundLabel,
 );
 
 Map<String, Object?> _androidSnapshotEvent({

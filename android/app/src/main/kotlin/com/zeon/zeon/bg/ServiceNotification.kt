@@ -197,12 +197,12 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
             }
         }
         if (!installed) return
-        if (Settings.dynamicNotification && checkPermission()) {
-//            commandClient.connect()
-            startListenSystemInfo(generation, sessionAcceptsOperations)
-            withContext(Dispatchers.Main) {
-                registerReceiver()
-            }
+        // This stream also owns the runtime snapshot consumed by Home. Hiding
+        // notification speeds or denying notification permission must not freeze
+        // the selected server. Screen-off suspension remains unchanged.
+        startListenSystemInfo(generation, sessionAcceptsOperations)
+        withContext(Dispatchers.Main) {
+            registerReceiver()
         }
     }
 
@@ -223,7 +223,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
             status.current_outbound,
             if (status.current_outbound.startsWith(AUTO_BALANCER_TAG)) AUTO_BALANCER_TAG else "selector",
         )
-        if (!snapshot.provesConnected()) return
+        if (!snapshot.provesConnected() || !Settings.dynamicNotification || !checkPermission()) return
         val currentOutbound = presentOutboundForNotification(snapshot.selectedOutboundLabel)
         val content = "${Libbox.formatBytes(uplink)}/s \u2191\t${Libbox.formatBytes(downlink)}/s \u2193 \n$currentOutbound"
         val title = "${status.current_profile}"
@@ -352,7 +352,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
                 var previous: SystemInfo? = null
                 for (current in responses) {
                     if (!isPollingCurrent(generation, sessionAcceptsOperations, "result")) break
-                    previous?.let { updateStatus(it, current) }
+                    updateStatus(previous ?: current, current)
                     previous = current
                 }
             } catch (e: CancellationException) {

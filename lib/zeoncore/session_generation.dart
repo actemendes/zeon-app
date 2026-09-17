@@ -6,14 +6,24 @@ enum SessionCompletionDisposition { current, stale }
 
 /// Monotonic session gate shared by Flutter lifecycle and stream adapters.
 class SessionGenerationGate {
-  SessionGenerationGate({int? seed, this.onStale}) : _current = seed ?? DateTime.now().microsecondsSinceEpoch;
+  SessionGenerationGate({int? seed, bool awaitPlatformGeneration = false, this.onStale})
+    : _allocationFloor = seed ?? DateTime.now().microsecondsSinceEpoch {
+    // A recreated Android UI has not reserved an operation yet. Its wall clock
+    // seed must not invalidate the older generation of a surviving native VPN.
+    _current = awaitPlatformGeneration ? 0 : _allocationFloor;
+  }
 
   final StaleGenerationCallback? onStale;
-  int _current;
+  final int _allocationFloor;
+  late int _current;
 
   int get current => _current;
 
-  int next() => ++_current;
+  int next() {
+    // A new local intent still supersedes generations from earlier UI instances.
+    if (_current < _allocationFloor) _current = _allocationFloor;
+    return ++_current;
+  }
 
   /// Synchronizes with an authoritative platform operation without ever
   /// moving backwards. The following locally allocated operation is therefore
