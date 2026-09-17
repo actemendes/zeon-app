@@ -63,7 +63,8 @@ class IntroPage extends HookConsumerWidget with PresLogger {
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final wide = constraints.maxWidth >= 840;
+                final landscape = constraints.maxWidth > constraints.maxHeight;
+                final wide = constraints.maxWidth >= 840 || (landscape && constraints.maxWidth >= 600);
                 final header = _IntroAppBarTitle(
                   line1: t.intro.appBarLine1,
                   line2: t.intro.appBarLine2,
@@ -102,17 +103,17 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               header,
-                              Expanded(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(minHeight: 160),
-                                  child: Center(
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                                      child: logo,
+                              if (landscape)
+                                const Spacer()
+                              else
+                                Expanded(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(minHeight: 160),
+                                    child: Center(
+                                      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: logo),
                                     ),
                                   ),
                                 ),
-                              ),
                               footer,
                             ],
                           ),
@@ -136,7 +137,10 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                                       padding: const EdgeInsetsDirectional.only(end: 48),
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [header, const Gap(64), logo],
+                                        children: [
+                                          header,
+                                          if (!landscape) ...[const Gap(64), logo],
+                                        ],
                                       ),
                                     ),
                                   ),
