@@ -49,8 +49,8 @@ const ColorScheme _lightColorScheme = ColorScheme(
   onSurface: _lightText,
   surfaceVariant: _lightSurfaceAlt,
   onSurfaceVariant: AppColorTokens.lightTextMuted,
-  outline: Color(0xFF6A757E),
-  outlineVariant: _lightSurfaceAlt,
+  outline: AppColorTokens.lightTextMuted,
+  outlineVariant: AppColorTokens.lightOutline,
   shadow: Colors.black,
   scrim: Colors.black,
   inverseSurface: _lightText,
@@ -273,7 +273,7 @@ class AppTheme {
         }),
         trackColor: MaterialStateProperty.resolveWith((states) {
           if (!states.contains(MaterialState.selected)) {
-            return navBarColor;
+            return scheme.brightness == Brightness.light ? AppColorTokens.lightOutline : navBarColor;
           }
           return null;
         }),
