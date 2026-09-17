@@ -30,7 +30,9 @@ class AppUpdateRepositoryImpl with ExceptionHandler, InfraLogger implements AppU
       if (!release.allowCustomUpdateChecker) {
         throw Exception("custom update checkers are not supported");
       }
-      final response = await httpClient.get<dynamic>(Constants.githubReleasesApiUrl);
+      // ZEON hosts the release catalog; its wire format retains the existing
+      // release parser contract without making any requests to GitHub.
+      final response = await httpClient.get<dynamic>(Constants.appReleasesApiUrl);
       if (response.statusCode != 200 || response.data == null) {
         loggy.warning("failed to fetch latest version info");
         return left(AppUpdateFailure.unexpected("failed to fetch latest version info: status=${response.statusCode}"));

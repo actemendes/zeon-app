@@ -16,6 +16,12 @@ import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/features/app_update/notifier/app_update_state.dart';
 
 void main() {
+  test('internal build numbers do not trigger a release update', () async {
+    final setup = await _createContainer(_remoteVersion('1.0.0').copyWith(buildNumber: '9999999'));
+    addTearDown(setup.container.dispose);
+    expect(await setup.container.read(appUpdateNotifierProvider.notifier).check(), isA<AppUpdateStateNotAvailable>());
+  });
+
   test('automatic update notification is emitted only once per release', () async {
     final (:container, :preferences, :repository) = await _createContainer(_remoteVersion('1.1.0'));
     addTearDown(container.dispose);
