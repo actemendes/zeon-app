@@ -15,6 +15,17 @@ import ios_lab_build as build
 
 
 class ControllerTests(unittest.TestCase):
+    def test_runtime_receipt_requires_matching_provenance_and_finite_phone_deadline(self):
+        value = {'schema': 1, 'status': 'FAIL', 'steps': [], 'run_id': 'run-fixture',
+                 'source_sha': 'a' * 40, 'lease_deadline': 1234567890.0}
+        self.assertEqual(lab.sanitized_device_receipt(value, 'run-fixture', 'a' * 40)['lease_deadline'], 1234567890.0)
+        for extra in [{'run_id': 'previous-run'}, {'source_sha': 'b' * 40},
+                      {'lease_deadline': float('nan')}, {'lease_deadline': True}, {'lease_deadline': -1}]:
+            with self.assertRaises(lab.Blocked):
+                lab.sanitized_device_receipt(dict(value, **extra), 'run-fixture', 'a' * 40)
+        with self.assertRaises(lab.Blocked):
+            lab.sanitized_device_receipt({'schema': 1, 'status': 'PASS', 'steps': []}, 'run-fixture', 'a' * 40)
+
     def test_navigation_failure_is_bounded_and_never_passes(self):
         value = {'schema': 1, 'status': 'FAIL', 'steps': [], 'navigation_failure': 'server_missing'}
         self.assertEqual(lab.sanitized_device_receipt(value)['navigation_failure'], 'server_missing')

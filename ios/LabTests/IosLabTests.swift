@@ -32,6 +32,9 @@ final class IosLabTests: XCTestCase {
 
     private func journal(_ status: String) -> [String: Any] {
         var value: [String: Any] = ["schema": 1, "test": name, "status": status, "steps": steps]
+        value["run_id"] = ProcessInfo.processInfo.environment["ZEON_IOS_LAB_RUN_ID"] ?? "missing"
+        value["source_sha"] = ProcessInfo.processInfo.environment["ZEON_IOS_LAB_SOURCE_SHA"] ?? "missing"
+        if let deadline = deadline { value["lease_deadline"] = deadline.timeIntervalSince1970 }
         if let failure = trafficFailure { value["failure"] = failure }
         if !uiFailures.isEmpty { value["ui_failures"] = uiFailures }
         if let failure = navigationFailure { value["navigation_failure"] = failure }
@@ -330,10 +333,14 @@ final class IosLabTests: XCTestCase {
 
     func testCloseReturn() throws {
         try connect()
+        try traffic(egress: fixture.serverAEgress)
+        record("app_terminate_requested")
         app.terminate()
+        record("app_terminated")
         try traffic(egress: fixture.serverAEgress)
         app.launchEnvironment.removeValue(forKey: "ZEON_IOS_LAB_DEADLINE")
         app.launch()
+        record("app_relaunched")
         try waitState("connected", seconds: 45)
         try traffic(egress: fixture.serverAEgress)
         scenarioCompleted = true
@@ -343,13 +350,22 @@ final class IosLabTests: XCTestCase {
         // This is diagnostic evidence, never ordinary-build functional PASS.
         try connect()
         try traffic(egress: fixture.serverAEgress)
-        app.terminate()
+        // Keep the host backgrounded, not force-terminated by XCTest. A tunnel
+        // that stops early must not pass merely because it is down at expiry.
+        XCUIDevice.shared.press(.home)
+        record("app_backgrounded")
+        while Date() < deadline.addingTimeInterval(-35) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+        try traffic(egress: fixture.serverAEgress)
+        record("lease_preexpiry_verified")
         while Date() < deadline.addingTimeInterval(5) {
             RunLoop.current.run(until: Date().addingTimeInterval(0.5))
         }
         try traffic(egress: directEgress)
         app.launchEnvironment.removeValue(forKey: "ZEON_IOS_LAB_DEADLINE")
         app.launch()
+        record("app_relaunched")
         try waitState("disconnected", seconds: 15)
         ownsConnection = false
         scenarioCompleted = true

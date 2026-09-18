@@ -227,16 +227,18 @@ DEVICE_CASES = {
 }
 
 
-def sanitized_device_receipt(value):
+def sanitized_device_receipt(value, expected_run_id=None, expected_source_sha=None):
     allowed_steps = {'lease_armed', 'connected', 'disconnected', 'direct_traffic_verified',
                      'tunnel_traffic_verified', 'cleanup_verified', 'traffic_failed', 'cleanup_failed',
                      'start_requested', 'start_tapped', 'stop_requested', 'stop_tapped', 'state_timeout', 'server_a_selected',
-                     'server_picker_opened', 'server_row_found', 'server_row_tapped', 'server_row_selected', 'navigation_failed'}
+                     'server_picker_opened', 'server_row_found', 'server_row_tapped', 'server_row_selected', 'navigation_failed',
+                     'app_terminate_requested', 'app_terminated', 'app_relaunched', 'app_backgrounded', 'lease_preexpiry_verified'}
     allowed_reasons = {'network_offline', 'network_dns', 'network_timeout', 'network_refused',
                        'network_cancelled', 'network_tls', 'network_other', 'http_status',
                        'origin', 'payload', 'nonce', 'marker', 'egress_mismatch',
                        'baseline_is_vpn_exit', 'baseline_disagreement'}
-    if (not isinstance(value, dict) or set(value) - {'schema', 'test', 'status', 'steps', 'failure', 'ui_failures', 'navigation_failure'}
+    if (not isinstance(value, dict) or set(value) - {'schema', 'test', 'status', 'steps', 'failure', 'ui_failures', 'navigation_failure',
+                                                   'run_id', 'source_sha', 'lease_deadline'}
             or value.get('schema') != 1 or value.get('status') not in ('PASS', 'FAIL')
             or not isinstance(value.get('steps'), list)):
         raise Blocked('Invalid device completion receipt')
@@ -248,6 +250,17 @@ def sanitized_device_receipt(value):
                                        for step in value['steps']):
         raise Blocked('Device PASS receipt contains a failed step')
     result = {'status': value['status'], 'steps': value['steps']}
+    provenance = {'run_id', 'source_sha', 'lease_deadline'}
+    if provenance.intersection(value) or expected_run_id is not None or expected_source_sha is not None:
+        if (not provenance.issubset(value) or not isinstance(value['run_id'], str)
+                or not 1 <= len(value['run_id']) <= 256 or not isinstance(value['source_sha'], str)
+                or len(value['source_sha']) != 40 or any(c not in '0123456789abcdef' for c in value['source_sha'])
+                or type(value['lease_deadline']) not in (int, float)
+                or not math.isfinite(value['lease_deadline']) or value['lease_deadline'] <= 0
+                or (expected_run_id is not None and value['run_id'] != expected_run_id)
+                or (expected_source_sha is not None and value['source_sha'] != expected_source_sha)):
+            raise Blocked('Device receipt provenance does not match the active run')
+        result.update({key: value[key] for key in provenance})
     if 'navigation_failure' in value:
         if value['status'] == 'PASS' or value['navigation_failure'] not in (
                 'home_missing', 'picker_missing', 'server_missing', 'selection_timeout'):
@@ -344,6 +357,7 @@ def device_run(run, args):
     target['EnvironmentVariables'].update({
         'ZEON_IOS_LAB_FIXTURE': json.dumps(fixture),
         'ZEON_IOS_LAB_SOURCE_SHA': run.report['source_sha'],
+        'ZEON_IOS_LAB_RUN_ID': run.report['run_id'],
         'ZEON_IOS_LAB_LEASE_SECONDS': '300' if args.case in ('cancel', 'server-ab') else '180',
     })
     target['OnlyTestIdentifiers'] = ['IosLabTests/' + DEVICE_CASES[args.case]]
@@ -406,7 +420,8 @@ def device_run(run, args):
                         pass
             if len(receipts) != 1:
                 raise Blocked('Missing device completion and cleanup receipt')
-            receipt = sanitized_device_receipt(receipts[0])
+            receipt = sanitized_device_receipt(receipts[0], run.report['run_id'], run.report['source_sha'])
+            run.report['device_receipt_provenance'] = {key: receipt[key] for key in ('run_id', 'source_sha', 'lease_deadline')}
             steps = receipt['steps']
             run.report['device_steps'] = steps
             if 'ui_failures' in receipt:

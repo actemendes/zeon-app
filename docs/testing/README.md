@@ -102,6 +102,11 @@ Evidence по умолчанию: абсолютный `$HOME/Library/Logs/ZEON/
 cleanup, минимальные безопасные receipts. Сырые device logs, screenshots, fixture
 contents и provisioning не копировать в evidence. Native runner оставляет последний
 sanitized journal в собственном Documents для последующего восстановления.
+Каждый device receipt содержит run ID, SHA кандидата и абсолютный deadline iPhone;
+controller отклоняет журнал другого запуска. Lease-expiry проверяет трафик до
+дедлайна с приложением в фоне, затем direct traffic после него. Принудительное
+завершение приложения не подменяет эту проверку watchdog. Close-return отдельно
+фиксирует проверку трафика до termination и фазы termination/relaunch.
 
 Передача отдельному тестеру: clean SHA + manifests из `out/installers/ios/lab`,
 один Simulator run, повтор для проверки cleanup и device preflight. Device VPN
