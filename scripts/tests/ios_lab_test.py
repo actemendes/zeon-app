@@ -78,6 +78,14 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaises(subprocess.TimeoutExpired):
             lab.command([sys.executable, '-c', 'import time; time.sleep(60)'], timeout=0.05)
 
+    def test_timeout_preserves_opt_in_synthetic_simulator_output(self):
+        with tempfile.TemporaryDirectory() as work:
+            log = Path(work) / 'simulator.log'
+            with self.assertRaises(subprocess.TimeoutExpired):
+                lab.command([sys.executable, '-u', '-c', 'import time; print("lab-started"); time.sleep(60)'],
+                            timeout=0.2, log=log)
+            self.assertIn('lab-started', log.read_text())
+
     def test_evidence_cannot_be_written_in_repository(self):
         with self.assertRaises(lab.Blocked):
             lab.Run('device', lab.ROOT / 'out/not-evidence')

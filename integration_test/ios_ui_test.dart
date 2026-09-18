@@ -1,15 +1,17 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import '../test/ios_lab_ui_test.dart' as suite;
 
-void main() {
-  if (!Platform.isIOS || Platform.environment['SIMULATOR_DEVICE_NAME'] == null) {
+Future<void> main() async {
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  if (!Platform.isIOS ||
+      await const MethodChannel('zeon.ios_lab').invokeMethod<String>('environment') != 'SIMULATOR_UI_LOGIC_ONLY') {
     throw StateError('This suite is Simulator UI/logic evidence only');
   }
-  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.reportData = {'evidence_kind': 'UI_LOGIC_ONLY', 'real_ios_vpn': false};
   suite.main();
   tearDownAll(() {

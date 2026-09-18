@@ -11,6 +11,12 @@ import Sentry
     ) -> Bool {
 #if targetEnvironment(simulator) && ZEON_IOS_SIMULATOR_LAB
         GeneratedPluginRegistrant.register(with: self)
+        if let controller = window?.rootViewController as? FlutterViewController {
+            FlutterMethodChannel(name: "zeon.ios_lab", binaryMessenger: controller.binaryMessenger)
+                .setMethodCallHandler { call, result in
+                    result(call.method == "environment" ? "SIMULATOR_UI_LOGIC_ONLY" : FlutterMethodNotImplemented)
+                }
+        }
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
 #else
         setupFileManager()

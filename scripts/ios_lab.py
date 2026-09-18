@@ -47,10 +47,12 @@ def command(args, timeout=60, env=None, log=None):
         except ProcessLookupError:
             pass
         try:
-            process.communicate(timeout=5)
+            stdout, stderr = process.communicate(timeout=5)
         except subprocess.TimeoutExpired:
             os.killpg(process.pid, signal.SIGKILL)
-            process.communicate()
+            stdout, stderr = process.communicate()
+        if log is not None:
+            log.write_text(stdout + stderr)
         raise
     if log is not None:
         log.write_text(stdout + stderr)
