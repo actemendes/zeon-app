@@ -6,12 +6,14 @@ import 'package:integration_test/integration_test.dart';
 
 import '../test/ios_lab_ui_test.dart' as suite;
 
-Future<void> main() async {
+void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  if (!Platform.isIOS ||
-      await const MethodChannel('zeon.ios_lab').invokeMethod<String>('environment') != 'SIMULATOR_UI_LOGIC_ONLY') {
-    throw StateError('This suite is Simulator UI/logic evidence only');
-  }
+  setUpAll(() async {
+    if (!Platform.isIOS ||
+        await const MethodChannel('zeon.ios_lab').invokeMethod<String>('environment') != 'SIMULATOR_UI_LOGIC_ONLY') {
+      throw StateError('This suite is Simulator UI/logic evidence only');
+    }
+  });
   binding.reportData = {'evidence_kind': 'UI_LOGIC_ONLY', 'real_ios_vpn': false};
   suite.main();
   tearDownAll(() {
