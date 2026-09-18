@@ -27,10 +27,12 @@ final class IosLabTests: XCTestCase {
     private var scenarioCompleted = false
     private var directEgress: String?
     private var trafficFailure: [String: Any]?
+    private var uiFailures = [[String: Any]]()
 
     private func journal(_ status: String) -> [String: Any] {
         var value: [String: Any] = ["schema": 1, "test": name, "status": status, "steps": steps]
         if let failure = trafficFailure { value["failure"] = failure }
+        if !uiFailures.isEmpty { value["ui_failures"] = uiFailures }
         return value
     }
 
@@ -84,19 +86,22 @@ final class IosLabTests: XCTestCase {
 
     override func tearDownWithError() throws {
         guard !steps.isEmpty else { return }
-        if ownsConnection, app != nil {
-            if changedServer {
-                app.activate()
-                try chooseServer(fixture.serverA)
-                try traffic(egress: fixture.serverAEgress)
-                changedServer = false
+        let cleaned = IosLabEvidence.attemptCleanup {
+            if ownsConnection, app != nil {
+                if changedServer {
+                    app.activate()
+                    try chooseServer(fixture.serverA)
+                    try traffic(egress: fixture.serverAEgress)
+                    changedServer = false
+                }
+                try stop()
+                try traffic(egress: directEgress)
             }
-            try stop()
-            try traffic(egress: directEgress)
         }
-        record("cleanup_verified")
+        // Cleanup failure must survive in the receipt, not bypass its creation.
+        record(cleaned ? "cleanup_verified" : "cleanup_failed")
         let value = journal(IosLabEvidence.receiptStatus(
-            completed: scenarioCompleted, cleanup: true, failures: testRun?.failureCount ?? 1))
+            completed: scenarioCompleted, cleanup: cleaned, failures: testRun?.failureCount ?? 1))
         let data = try JSONSerialization.data(withJSONObject: value)
         let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
         attachment.name = "zeon-ios-lab"
@@ -117,12 +122,20 @@ final class IosLabTests: XCTestCase {
             if element(state).exists { return }
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
+        let states = ["idle", "disconnected", "permissionRequired", "startRequested", "startingPlatform",
+                      "startingCore", "waitingTun", "verifying", "connected", "stopRequested", "stopping", "failed"]
+        uiFailures.append(["expected": state, "observed": states.filter { element($0).exists },
+                           "app_alert": app.alerts.firstMatch.exists,
+                           "system_alert": XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch.exists])
+        record("state_timeout")
         throw NSError(domain: "ZEON.IosLab.State", code: 1)
     }
 
     private func connect() throws {
         ownsConnection = true
+        record("start_requested")
         element("disconnected").tap()
+        record("start_tapped")
         try waitState("connected", seconds: 45)
         record("connected")
         // Keep an observable active window for the host's independent USB probe.
@@ -132,8 +145,10 @@ final class IosLabTests: XCTestCase {
     private func stop() throws {
         app.activate()
         try returnHome()
+        record("stop_requested")
         if element("connected").exists { element("connected").tap() }
         else if element("startingCore").exists { element("startingCore").tap() }
+        record("stop_tapped")
         try waitState("disconnected", seconds: 15)
         ownsConnection = false
         record("disconnected")

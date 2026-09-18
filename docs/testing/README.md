@@ -71,6 +71,10 @@ Native journal получает PASS только после явного кон
 Отказ HTTPS сохраняется как whitelist-категория причины и номер цели, без адресов,
 response body или текста системной ошибки. Controller извлекает такой receipt и
 при XCTest FAIL, отделяя ошибку baseline/environment от неподтверждённого VPN.
+Ошибка самого cleanup не должна прерывать создание receipt: она сохраняет FAIL и
+`cleanup_verified=false`. Для UI timeout допустимы только известные enum-состояния
+и boolean наличия app/system alert; текст диалога, accessibility tree и screenshots
+в evidence не сохраняются.
 
 Диагностическая сборка отдельно включает `ZEON_IOS_LAB`: host записывает абсолютную
 lease в App Group, PacketTunnel отказывает без lease/после истечения и отменяет

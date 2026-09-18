@@ -12,6 +12,8 @@ struct IosLabEvidenceTests {
         expect(IosLabEvidence.receiptStatus(completed: true, cleanup: false, failures: 0) == "FAIL", "cleanup missing")
         expect(IosLabEvidence.receiptStatus(completed: true, cleanup: true, failures: 1) == "FAIL", "XCTest failure")
         expect(IosLabEvidence.receiptStatus(completed: true, cleanup: true, failures: 0) == "PASS", "completed")
+        expect(IosLabEvidence.attemptCleanup({}), "successful cleanup")
+        expect(!IosLabEvidence.attemptCleanup { throw NSError(domain: "synthetic", code: 1) }, "cleanup throw retained")
         let url = URL(string: "https://control.example.invalid/echo")!
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
         let valid = ["nonce": "fresh-nonce", "marker": "control", "egress": "192.0.2.1"]

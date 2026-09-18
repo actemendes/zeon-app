@@ -15,6 +15,17 @@ import ios_lab_build as build
 
 
 class ControllerTests(unittest.TestCase):
+    def test_cleanup_failure_retains_only_safe_ui_state(self):
+        failure = {'expected': 'connected', 'observed': ['startingCore'], 'app_alert': False, 'system_alert': True}
+        value = {'schema': 1, 'status': 'FAIL', 'steps': [{'id': 'cleanup_failed', 'time': 1}],
+                 'ui_failures': [failure]}
+        self.assertEqual(lab.sanitized_device_receipt(value)['ui_failures'], [failure])
+        for extra in [{'status': 'PASS'}, {'ui_failures': [dict(failure, alert_text='private')]},
+                      {'ui_failures': [dict(failure, observed=['private'])]},
+                      {'ui_failures': [dict(failure, system_alert='private')]}]:
+            with self.subTest(extra=extra), self.assertRaises(lab.Blocked):
+                lab.sanitized_device_receipt(dict(value, **extra))
+
     def test_failed_receipt_keeps_only_bounded_diagnostics(self):
         value = {'schema': 1, 'test': 'IosLabTests/connect', 'status': 'FAIL',
                  'steps': [{'id': 'traffic_failed', 'time': 1}, {'id': 'cleanup_verified', 'time': 2}],

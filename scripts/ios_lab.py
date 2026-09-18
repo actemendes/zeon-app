@@ -227,12 +227,13 @@ DEVICE_CASES = {
 
 def sanitized_device_receipt(value):
     allowed_steps = {'lease_armed', 'connected', 'disconnected', 'direct_traffic_verified',
-                     'tunnel_traffic_verified', 'cleanup_verified', 'traffic_failed'}
+                     'tunnel_traffic_verified', 'cleanup_verified', 'traffic_failed', 'cleanup_failed',
+                     'start_requested', 'start_tapped', 'stop_requested', 'stop_tapped', 'state_timeout'}
     allowed_reasons = {'network_offline', 'network_dns', 'network_timeout', 'network_refused',
                        'network_cancelled', 'network_tls', 'network_other', 'http_status',
                        'origin', 'payload', 'nonce', 'marker', 'egress_mismatch',
                        'baseline_is_vpn_exit', 'baseline_disagreement'}
-    if (not isinstance(value, dict) or set(value) - {'schema', 'test', 'status', 'steps', 'failure'}
+    if (not isinstance(value, dict) or set(value) - {'schema', 'test', 'status', 'steps', 'failure', 'ui_failures'}
             or value.get('schema') != 1 or value.get('status') not in ('PASS', 'FAIL')
             or not isinstance(value.get('steps'), list)):
         raise Blocked('Invalid device completion receipt')
@@ -240,8 +241,9 @@ def sanitized_device_receipt(value):
         if (not isinstance(step, dict) or set(step) != {'id', 'time'} or step['id'] not in allowed_steps
                 or type(step['time']) not in (int, float) or not math.isfinite(step['time'])):
             raise Blocked('Device receipt contains unexpected fields')
-    if value['status'] == 'PASS' and any(step['id'] == 'traffic_failed' for step in value['steps']):
-        raise Blocked('Device PASS receipt contains a failed traffic step')
+    if value['status'] == 'PASS' and any(step['id'] in {'traffic_failed', 'cleanup_failed', 'state_timeout'}
+                                       for step in value['steps']):
+        raise Blocked('Device PASS receipt contains a failed step')
     result = {'status': value['status'], 'steps': value['steps']}
     if 'failure' in value:
         failure = value['failure']
@@ -250,6 +252,20 @@ def sanitized_device_receipt(value):
                 or type(failure['target_index']) is not int or failure['target_index'] not in (1, 2)):
             raise Blocked('Device failure receipt contains unexpected fields')
         result['failure'] = failure
+    if 'ui_failures' in value:
+        states = {'idle', 'disconnected', 'permissionRequired', 'startRequested', 'startingPlatform',
+                  'startingCore', 'waitingTun', 'verifying', 'connected', 'stopRequested', 'stopping', 'failed'}
+        failures = value['ui_failures']
+        if value['status'] == 'PASS' or not isinstance(failures, list) or not 1 <= len(failures) <= 8:
+            raise Blocked('Invalid UI failure receipt')
+        for failure in failures:
+            if (not isinstance(failure, dict) or set(failure) != {'expected', 'observed', 'app_alert', 'system_alert'}
+                    or failure['expected'] not in states or not isinstance(failure['observed'], list)
+                    or len(failure['observed']) > len(states)
+                    or any(not isinstance(state, str) or state not in states for state in failure['observed'])
+                    or type(failure['app_alert']) is not bool or type(failure['system_alert']) is not bool):
+                raise Blocked('UI failure receipt contains unexpected fields')
+        result['ui_failures'] = failures
     return result
 
 
@@ -381,6 +397,8 @@ def device_run(run, args):
             receipt = sanitized_device_receipt(receipts[0])
             steps = receipt['steps']
             run.report['device_steps'] = steps
+            if 'ui_failures' in receipt:
+                run.report['device_ui_failures'] = receipt['ui_failures']
             run.report['cleanup_verified'] = bool(steps and steps[-1]['id'] == 'cleanup_verified')
             if failed or receipt['status'] == 'FAIL':
                 run.report['status'] = case['status'] = 'FAIL'

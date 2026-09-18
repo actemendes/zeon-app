@@ -11,6 +11,10 @@ enum IosLabEvidence {
         completed && cleanup && failures == 0 ? "PASS" : "FAIL"
     }
 
+    static func attemptCleanup(_ operation: () throws -> Void) -> Bool {
+        do { try operation(); return true } catch { return false }
+    }
+
     static func traffic(data: Data?, response: URLResponse?, error: Error?,
                         host: String?, marker: String, nonce: String,
                         expectedEgress: String?) -> TrafficCheck {
