@@ -47,6 +47,8 @@ class _Core implements ZeonCoreService {
   int generation = 0;
   final prepared = <int>[];
   @override
+  int? reserveVpnPreparation() => ++generation;
+  @override
   int beginVpnOperation(String source) => ++generation;
   @override
   bool isVpnOperationCurrent(int value, {String source = 'external_operation_guard'}) => value == generation;

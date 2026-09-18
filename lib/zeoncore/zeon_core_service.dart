@@ -583,6 +583,14 @@ class ZeonCoreService with InfraLogger {
     _authoritativeSnapshotController.add(snapshot);
   }
 
+  int? reserveVpnPreparation() {
+    if (currentState is! CoreStopped) return null;
+    // Configuration preparation reserves ordering, not a running tunnel intent.
+    final generation = _sessionGeneration.next();
+    loggy.info(vpnDiagnosticEvent("vpn_preparation_reserved", generation));
+    return generation;
+  }
+
   int beginVpnOperation(String source) {
     final generation = _sessionGeneration.next();
     _connectedGeneration = 0;

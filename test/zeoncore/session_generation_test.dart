@@ -15,6 +15,42 @@ import 'package:zeon/zeoncore/zeon_core_service.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('standalone VPN preparation reserves ordering without publishing a start', () async {
+    final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: _StoppedCoreInterface()));
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final service = container.read(provider);
+    final statuses = <CoreStatus>[];
+    final subscription = service.statusController.listen(statuses.add);
+    addTearDown(subscription.cancel);
+
+    final preparation = service.reserveVpnPreparation();
+    expect(preparation, isNotNull);
+    expect(service.isVpnOperationCurrent(preparation!), isTrue);
+    expect(service.currentState, isA<CoreStopped>());
+    expect(await service.resyncFromPlatform('preparation_complete', publish: true), isA<CoreStopped>());
+    await Future<void>.delayed(Duration.zero);
+    expect(statuses.whereType<CoreStarting>(), isEmpty);
+    final start = service.beginVpnOperation('connect');
+    expect(start, greaterThan(preparation));
+    expect(service.isVpnOperationCurrent(preparation), isFalse);
+    expect(service.currentState, isA<CoreStarting>());
+  });
+
+  for (final status in [const CoreStatus.starting(), const CoreStatus.started(), const CoreStatus.stopping()]) {
+    test('standalone VPN preparation does not supersede ${status.runtimeType}', () {
+      final provider = Provider<ZeonCoreService>((ref) => ZeonCoreService(ref, coreInterface: _StoppedCoreInterface()));
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final service = container.read(provider);
+      final generation = service.beginVpnOperation('existing_intent');
+      service.currentState = status;
+      expect(service.reserveVpnPreparation(), isNull);
+      expect(service.currentState, same(status));
+      expect(service.isVpnOperationCurrent(generation), isTrue);
+    });
+  }
+
   group('SessionGenerationGate', () {
     test('platform adoption accepts surviving generation until a local intent is reserved', () {
       final gate = SessionGenerationGate(seed: 1000, awaitPlatformGeneration: true);
