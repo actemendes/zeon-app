@@ -178,6 +178,9 @@ Entrypoint проверяет версию Flutter из `pubspec.yaml`; если
 ./scripts/build.sh ios-device
 ```
 
+Entrypoint хранится в Git с executable-битом; проверка запуска без сборки:
+`bash scripts/tests/apple_entrypoint_test.sh`.
+
 `ios-device` требует подключённый и разблокированный iPhone; при необходимости
 передайте `DEVICE_ID=<CoreDevice-UUID>`. App Store upload остаётся явным действием:
 `ios-upload`, `macos-app-store-upload` или `apple-upload`.
