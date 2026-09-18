@@ -445,12 +445,16 @@ class _PictureCropDialogState extends State<PictureCropDialog> {
                 ),
                 const SizedBox(height: 22),
                 GestureDetector(
-                  onPanUpdate: (d) => setState(
-                    () => alignment = Alignment(
-                      (alignment.x - d.delta.dx / 90).clamp(-1.0, 1.0),
-                      (alignment.y - d.delta.dy / 90).clamp(-1.0, 1.0),
-                    ),
-                  ),
+                  onPanUpdate: (d) {
+                    // Scaling magnifies alignment changes; damp dragging by zoom.
+                    final dragScale = 90 * zoom;
+                    setState(
+                      () => alignment = Alignment(
+                        (alignment.x - d.delta.dx / dragScale).clamp(-1.0, 1.0),
+                        (alignment.y - d.delta.dy / dragScale).clamp(-1.0, 1.0),
+                      ),
+                    );
+                  },
                   child: AspectRatio(
                     aspectRatio: 1,
                     child: ClipOval(child: PictureFace(picture: picture)),
