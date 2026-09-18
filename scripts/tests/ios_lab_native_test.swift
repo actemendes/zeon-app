@@ -31,6 +31,18 @@ struct IosLabEvidenceTests {
         var ipv6 = valid
         ipv6["egress"] = "2001:db8::1"
         expect(try check(ipv6, expected: nil).failure == nil, "valid IPv6")
+        expect(try check(ipv6, expected: "2001:db8:0:0:0:0:0:1").failure == nil, "IPv6 identity")
+        expect(try check(valid, expected: "::ffff:192.0.2.1").failure == nil, "mapped IPv4 identity")
+        expect(IosLabEvidence.baselineFailure(egress: "2001:db8::1", first: nil,
+            vpnExits: ["2001:db8:0:0:0:0:0:1"]) == "baseline_is_vpn_exit", "equivalent IPv6 VPN exit")
+        expect(IosLabEvidence.baselineFailure(egress: "::ffff:192.0.2.1", first: nil,
+            vpnExits: ["192.0.2.1"]) == "baseline_is_vpn_exit", "mapped IPv4 VPN exit")
+        expect(IosLabEvidence.baselineFailure(egress: "2001:db8::1", first: "2001:db8:0:0:0:0:0:1",
+            vpnExits: ["192.0.2.1"]) == nil, "equivalent baseline replies")
+        expect(!IosLabEvidence.distinctAddresses(["2001:db8::1", "2001:db8:0:0:0:0:0:1"]), "duplicate IPv6 exit")
+        expect(!IosLabEvidence.distinctAddresses(["192.0.2.1", "::ffff:192.0.2.1"]), "duplicate mapped exit")
+        expect(!IosLabEvidence.distinctAddresses(["not-an-address", "192.0.2.1"]), "invalid fixture address")
+        expect(IosLabEvidence.distinctAddresses(["192.0.2.1", "192.0.2.2", "2001:db8::1"]), "distinct exits")
         let wrongOrigin = HTTPURLResponse(url: URL(string: "https://other.example.invalid/echo")!,
                                          statusCode: 200, httpVersion: nil, headerFields: nil)!
         expect(try check(valid, response: wrongOrigin).failure == "origin", "redirect origin")

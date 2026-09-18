@@ -53,7 +53,8 @@ final class IosLabTests: XCTestCase {
         directEgress = fixture.directEgress == "discover" ? nil : fixture.directEgress
         guard fixture.targets.count == 2,
               Set(fixture.targets.compactMap { URL(string: $0.url)?.host }).count == 2,
-              Set([fixture.directEgress, fixture.serverAEgress, fixture.serverBEgress]).count == 3 else {
+              IosLabEvidence.distinctAddresses([fixture.serverAEgress, fixture.serverBEgress] +
+                  (directEgress.map { [$0] } ?? [])) else {
             throw XCTSkip("BLOCKED: two independent targets and distinct egress identities required")
         }
         // Ordinary builds have no autonomous PacketTunnel lease. They must not
