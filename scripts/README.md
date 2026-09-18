@@ -242,6 +242,7 @@ Fixture — локальный JSON вне Git, только выделенны�
   "serverAEgress": "expected-a-egress",
   "serverBEgress": "expected-b-egress",
   "serverPicker": "test-server-picker-accessibility-label",
+  "homeTab": "Home",
   "serverA": "test-server-a-label",
   "serverB": "test-server-b-label",
   "unavailableURL": "https://failure.example.invalid/unavailable"
@@ -252,6 +253,9 @@ Fixture — локальный JSON вне Git, только выделенны�
 сервером адрес/метка выхода). Два независимых host, доверенный TLS, без redirect,
 auth, credentials или URL query. Примеры `.invalid` не являются рабочими целями.
 Профили A/B подготавливаются отдельно, fixture не содержит subscription secrets.
+`homeTab` — видимая подпись главной вкладки в локали устройства; драйвер возвращается
+на неё после выбора сервера, включая аварийный cleanup. `serverPicker` и A/B labels
+должны соответствовать accessibility текущей сборки, не координатам экрана.
 `unavailableURL` принадлежит тестовой среде и возвращает 503 либо недоступен.
 
 Для разрешённой серверной площадки есть `scripts/apple/ios_lab_echo.py`: временный

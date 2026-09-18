@@ -36,6 +36,13 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(report['status'], 'INTERRUPTED')
             self.assertFalse(report['cleanup_verified'])
             self.assertFalse(report['real_ios_vpn'])
+            self.assertEqual([case['status'] for case in report['cases']], ['NOT_RUN'] * 5)
+
+    def test_custom_evidence_names_do_not_reuse_simulator_ownership_names(self):
+        with tempfile.TemporaryDirectory() as work, patch.object(lab, 'command', return_value='candidate'):
+            first = lab.Run('simulator', Path(work) / 'first/run')
+            second = lab.Run('simulator', Path(work) / 'second/run')
+            self.assertNotEqual(first.report['run_id'], second.report['run_id'])
 
     def test_step_failure_preserves_start_and_timing(self):
         with tempfile.TemporaryDirectory() as work, patch.object(lab, 'command', return_value='candidate'):

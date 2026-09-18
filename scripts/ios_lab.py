@@ -81,7 +81,7 @@ class Run:
             raise Blocked('Evidence must be outside the repository')
         self.path.mkdir(parents=True, mode=0o700, exist_ok=False)
         self.report = {'schema': 1, 'contract': 'APPLE-TARGETED-v1', 'level': 'TARGETED',
-                       'task_id': '6aad153d8f085e121ad13499', 'run_id': self.path.name,
+                       'task_id': '6aad153d8f085e121ad13499', 'run_id': self.path.name + '-' + uuid.uuid4().hex[:8],
                        'started_utc': now(), 'ended_utc': None, 'suite': suite,
                        'controller_pid': os.getpid(),
                        'source_sha': command(['git', 'rev-parse', 'HEAD']).strip(),
@@ -91,6 +91,8 @@ class Run:
                        'cleanup_verified': False, 'artifacts': [], 'steps': [], 'cases': [],
                        'environment': {'host_arch': platform.machine(), 'host_os': platform.mac_ver()[0]},
                        'unresolved': [], 'real_ios_vpn': False}
+        self.report['cases'] = [{'id': name, 'status': 'NOT_RUN'} for name in
+                                (['SIM01', 'SIM02', 'SIM03', 'SIM04', 'SIM05'] if suite == 'simulator' else DEVICE_CASES)]
         self.save()
 
     def save(self):
@@ -151,6 +153,8 @@ def simulator(run, args, manifest, payload):
             if key.lower() in {'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'}:
                 env.pop(key)
         env['ZEON_IOS_LAB_EVIDENCE'] = str(run.path)
+        for case in run.report['cases']:
+            case['status'] = 'INTERRUPTED'
         try:
             run.step('ui_logic', lambda: command([
                 'flutter', 'drive', '--no-pub', '-d', device,
@@ -259,7 +263,7 @@ def device_run(run, args):
         raise Blocked('Runner, installed target and controller must use one candidate')
     fixture = json.loads(args.fixture.read_text())
     expected_keys = {'appBundleId', 'mode', 'targets', 'directEgress', 'serverAEgress', 'serverBEgress',
-                     'serverPicker', 'serverA', 'serverB', 'unavailableURL'}
+                     'serverPicker', 'homeTab', 'serverA', 'serverB', 'unavailableURL'}
     if set(fixture) != expected_keys or fixture['mode'] != 'diagnostic':
         raise Blocked('Fixture must use the documented diagnostic schema without secret fields')
     if (not isinstance(fixture['targets'], list) or len(fixture['targets']) != 2
@@ -317,6 +321,7 @@ def device_run(run, args):
         result = scratch / 'result.xcresult'
         thread = threading.Thread(target=heartbeat, daemon=True)
         thread.start()
+        case['status'] = 'INTERRUPTED'
         try:
             try:
                 run.step('xctest', lambda: command([

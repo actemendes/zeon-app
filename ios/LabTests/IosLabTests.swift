@@ -13,6 +13,7 @@ final class IosLabTests: XCTestCase {
         let serverAEgress: String
         let serverBEgress: String
         let serverPicker: String
+        let homeTab: String
         let serverA: String
         let serverB: String
         let unavailableURL: String
@@ -75,9 +76,7 @@ final class IosLabTests: XCTestCase {
         if ownsConnection, app != nil {
             if changedServer {
                 app.activate()
-                app.descendants(matching: .any).matching(identifier: fixture.serverPicker).firstMatch.tap()
-                app.staticTexts[fixture.serverA].firstMatch.tap()
-                try waitState("connected", seconds: 45)
+                try chooseServer(fixture.serverA)
                 try traffic(egress: fixture.serverAEgress)
                 changedServer = false
             }
@@ -121,11 +120,35 @@ final class IosLabTests: XCTestCase {
 
     private func stop() throws {
         app.activate()
+        try returnHome()
         if element("connected").exists { element("connected").tap() }
         else if element("startingCore").exists { element("startingCore").tap() }
         try waitState("disconnected", seconds: 15)
         ownsConnection = false
         record("disconnected")
+    }
+
+    private func returnHome() throws {
+        if element("connected").exists || element("disconnected").exists || element("startingCore").exists {
+            return
+        }
+        let home = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", fixture.homeTab)).firstMatch
+        guard home.waitForExistence(timeout: 10) else {
+            throw NSError(domain: "ZEON.IosLab.Navigation", code: 1)
+        }
+        home.tap()
+    }
+
+    private func chooseServer(_ label: String) throws {
+        try returnHome()
+        app.descendants(matching: .any).matching(identifier: fixture.serverPicker).firstMatch.tap()
+        let server = app.descendants(matching: .any).matching(identifier: label).firstMatch
+        guard server.waitForExistence(timeout: 10) else {
+            throw NSError(domain: "ZEON.IosLab.Navigation", code: 2)
+        }
+        server.tap()
+        try returnHome()
+        try waitState("connected", seconds: 45)
     }
 
     private func traffic(egress: String) throws {
@@ -195,13 +218,9 @@ final class IosLabTests: XCTestCase {
         try connect()
         try traffic(egress: fixture.serverAEgress)
         changedServer = true
-        app.descendants(matching: .any).matching(identifier: fixture.serverPicker).firstMatch.tap()
-        app.staticTexts[fixture.serverB].firstMatch.tap()
-        try waitState("connected", seconds: 45)
+        try chooseServer(fixture.serverB)
         try traffic(egress: fixture.serverBEgress)
-        app.descendants(matching: .any).matching(identifier: fixture.serverPicker).firstMatch.tap()
-        app.staticTexts[fixture.serverA].firstMatch.tap()
-        try waitState("connected", seconds: 45)
+        try chooseServer(fixture.serverA)
         try traffic(egress: fixture.serverAEgress)
         changedServer = false
     }
