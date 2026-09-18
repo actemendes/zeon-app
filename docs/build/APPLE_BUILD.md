@@ -58,11 +58,18 @@ Developer ID Application/Installer и отправить на notarization.
 ## iOS
 
 Для отдельного тестового стенда доступны `ios-test-simulator`, `ios-test-runner`
-и `ios-test-diagnostic` через тот же `scripts/build.sh`. Артефакты и provenance
+и `ios-test-diagnostic` через тот же `scripts/build.sh`. Обычная development-сборка
+без test hooks: `./scripts/build.sh ios-test-functional`. Артефакты и provenance
 публикуются в `out/installers/ios/lab`; команды — [scripts/README.md](../../scripts/README.md#ios-test-lab).
 Это не Store pipeline: ASC API и automatic provisioning не нужны. Dedicated
 runner требует собственного существующего development profile; профиль ZEON
 или PacketTunnel не подходит для нового runner App ID. Без него device run BLOCKED.
+`ios-test-functional` также подходит для возврата обычной сборки после диагностической:
+установка поверх существующей допускается только по отдельному согласованию, без удаления
+данных. Этот режим не запускает тесты и не доказывает functional PASS. В отличие от
+обычного `flutter build ios` он не передаёт Xcode `allowProvisioningUpdates` и
+`allowProvisioningDeviceRegistration`; существующий `ios-device` не использовать
+для стенда с запретом автоматического provisioning.
 
 Проверить компиляцию без сертификата:
 

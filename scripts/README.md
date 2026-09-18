@@ -228,6 +228,12 @@ Device artifacts собираются `ios-test-runner` и `ios-test-diagnostic`
 решается безопасная установка; XCTest проверяет source SHA и armed lease в
 accessibility установленного target, иначе пропускает запуск с BLOCKED.
 
+Для обычной development-сборки без диагностического lease используется
+`./scripts/build.sh ios-test-functional`: тот же Profile/main.dart и существующий
+signing, без automatic provisioning и без установки. Артефакт `functional-*`
+не допускается в unattended diagnostic suite. Это путь безопасной сборки для
+согласованного возврата обычного приложения, не functional acceptance.
+
 Fixture — локальный JSON вне Git, только выделенные тестовые endpoints/labels:
 
 ```json

@@ -7,6 +7,7 @@ test -x "${ROOT}/scripts/apple/build.sh"
 bash -n "${ROOT}/scripts/build.sh" "${ROOT}/scripts/apple/build.sh"
 help="$("${ROOT}/scripts/build.sh" help)"
 [[ "${help}" == *ios-device* && "${help}" == *out/installers* ]]
+[[ "${help}" == *ios-test-functional* ]]
 if "${ROOT}/scripts/build.sh" invalid-test-action >/dev/null 2>&1; then
   echo 'Unknown action unexpectedly succeeded' >&2
   exit 1

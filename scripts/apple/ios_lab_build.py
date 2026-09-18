@@ -38,9 +38,19 @@ def candidate_unchanged(sha):
     return current == sha and not subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT)
 
 
+def profile_build_command(derived, sha, diagnostic):
+    command = ['xcodebuild', '-workspace', 'ios/Runner.xcworkspace', '-scheme', 'Runner',
+               '-configuration', 'Profile', '-destination', 'generic/platform=iOS',
+               '-derivedDataPath', str(derived)]
+    if diagnostic:
+        command.extend(['ZEON_IOS_LAB_SOURCE_SHA=' + sha,
+                        'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) ZEON_IOS_LAB'])
+    return command + ['build']
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['ios-test-simulator', 'ios-test-runner', 'ios-test-diagnostic'])
+    parser.add_argument('action', choices=['ios-test-simulator', 'ios-test-runner', 'ios-test-diagnostic', 'ios-test-functional'])
     parser.add_argument('--simulator', action='store_true', help='Compile XCTest runner unsigned for Simulator')
     parser.add_argument('--development', action='store_true', help='Allow dirty source; never acceptance evidence')
     args = parser.parse_args()
@@ -53,6 +63,7 @@ def main():
     run(['flutter', 'pub', 'get', '--enforce-lockfile'], 180)
     run(['dart', 'run', 'slang'], 180)
     kind = ('simulator' if args.action == 'ios-test-simulator' else 'diagnostic' if args.action == 'ios-test-diagnostic'
+            else 'functional' if args.action == 'ios-test-functional'
             else 'runner-simulator' if args.simulator else 'runner-device')
     with tempfile.TemporaryDirectory(prefix='zeon-ios-build-') as scratch:
         scratch = Path(scratch)
@@ -66,13 +77,9 @@ def main():
                  'CODE_SIGNING_ALLOWED=NO',
                  'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) DEBUG ZEON_IOS_SIMULATOR_LAB', 'build'])
             source = derived / 'Build/Products/Debug-iphonesimulator/Runner.app'
-        elif kind == 'diagnostic':
+        elif kind in ('diagnostic', 'functional'):
             run(['flutter', 'build', 'ios', '--profile', '--config-only', '--no-pub', '--target', 'lib/main.dart'])
-            run(['xcodebuild', '-workspace', 'ios/Runner.xcworkspace', '-scheme', 'Runner',
-                 '-configuration', 'Profile', '-destination', 'generic/platform=iOS',
-                 '-derivedDataPath', str(scratch / 'derived'),
-                 'ZEON_IOS_LAB_SOURCE_SHA=' + sha,
-                 'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) ZEON_IOS_LAB', 'build'])
+            run(profile_build_command(scratch / 'derived', sha, kind == 'diagnostic'))
             source = scratch / 'derived/Build/Products/Profile-iphoneos/Runner.app'
         else:
             # This identifier/profile must already exist locally. Never request
@@ -97,10 +104,10 @@ def main():
         destination.parent.mkdir(parents=True, exist_ok=True)
         if not destination.exists():
             destination.mkdir()
-            shutil.copytree(source, destination / ('Runner.app' if kind in ('simulator', 'diagnostic') else 'Products'), symlinks=True)
+            shutil.copytree(source, destination / ('Runner.app' if kind in ('simulator', 'diagnostic', 'functional') else 'Products'), symlinks=True)
             manifest = {'schema': 1, 'source_sha': sha, 'source_dirty': dirty, 'kind': kind,
                         'artifact_sha256': artifact_hash, 'hash_algorithm': 'path-type-content-v1',
-                        'evidence_kind': 'UI_LOGIC_ONLY' if kind == 'simulator' else 'DEVICE_TEST_RUNNER',
+                        'evidence_kind': 'UI_LOGIC_ONLY' if kind == 'simulator' else 'ORDINARY_APP_ARTIFACT' if kind == 'functional' else 'DEVICE_TEST_RUNNER',
                         'entrypoint': 'scripts/build.sh', 'core_sha256': tree_hash(ROOT / 'ios/Frameworks/HiddifyCore.xcframework')}
             flutter = json.loads(subprocess.check_output(['flutter', '--version', '--machine'], cwd=ROOT))
             manifest['tools'] = {key: flutter[key] for key in ['frameworkVersion', 'frameworkRevision', 'dartSdkVersion']}

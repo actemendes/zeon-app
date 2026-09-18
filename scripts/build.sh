@@ -21,6 +21,7 @@ Usage: ./scripts/build.sh <action>
   ios-test-simulator      Build Simulator UI/logic test artifact (no VPN evidence)
   ios-test-runner         Build the independent XCTest traffic/UI runner
   ios-test-diagnostic     Build development app with a bounded test-only VPN lease
+  ios-test-functional     Build ordinary development app without lab hooks/provisioning updates
   ios-upload              Upload the iOS build
   apple-upload            Upload both Apple applications
   doctor                  Check the Apple build environment
@@ -32,7 +33,7 @@ EOF
 
 case "${ACTION}" in
   help|-h|--help) show_help ;;
-  ios-test-simulator|ios-test-runner|ios-test-diagnostic)
+  ios-test-simulator|ios-test-runner|ios-test-diagnostic|ios-test-functional)
     source "${SCRIPT_DIR}/apple/env.sh"
     exec python3 "${SCRIPT_DIR}/apple/ios_lab_build.py" "${ACTION}" "$@"
     ;;

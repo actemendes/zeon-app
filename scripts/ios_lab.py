@@ -69,7 +69,7 @@ def verify_artifact(directory, development=False):
     manifest = json.loads((directory / 'manifest.json').read_text())
     if manifest['source_dirty'] and not development:
         raise Blocked('Dirty build cannot be accepted as immutable candidate')
-    payload = directory / ('Runner.app' if manifest['kind'] in ('simulator', 'diagnostic') else 'Products')
+    payload = directory / ('Runner.app' if manifest['kind'] in ('simulator', 'diagnostic', 'functional') else 'Products')
     if tree_hash(payload) != manifest['artifact_sha256']:
         raise Blocked('Artifact hash mismatch')
     return manifest, payload

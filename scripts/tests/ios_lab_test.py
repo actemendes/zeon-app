@@ -15,6 +15,18 @@ import ios_lab_build as build
 
 
 class ControllerTests(unittest.TestCase):
+    def test_ordinary_profile_build_has_no_test_hooks_or_automatic_provisioning(self):
+        command = build.profile_build_command(Path('/isolated/derived'), 'a' * 40, False)
+        self.assertEqual(command[-1], 'build')
+        self.assertIn('Profile', command)
+        self.assertFalse(any('ZEON_IOS_LAB' in item or 'allowProvisioning' in item for item in command))
+
+    def test_diagnostic_profile_build_keeps_explicit_lease_and_candidate(self):
+        command = build.profile_build_command(Path('/isolated/derived'), 'a' * 40, True)
+        self.assertIn('ZEON_IOS_LAB_SOURCE_SHA=' + 'a' * 40, command)
+        self.assertIn('SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) ZEON_IOS_LAB', command)
+        self.assertFalse(any('allowProvisioning' in item for item in command))
+
     def test_runtime_receipt_requires_matching_provenance_and_finite_phone_deadline(self):
         value = {'schema': 1, 'status': 'FAIL', 'steps': [], 'run_id': 'run-fixture',
                  'source_sha': 'a' * 40, 'lease_deadline': 1234567890.0}
