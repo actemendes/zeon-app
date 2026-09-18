@@ -97,7 +97,9 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                             ? 1
                             : max(1, (width / 536).floor());
                         return GridView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          // The shell extends this route behind the mobile navbar.
+                          // Keep the last server scrollable above the whole panel.
+                          padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
                           itemCount: group.items.length,
                           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: crossAxisCount,
