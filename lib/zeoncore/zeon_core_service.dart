@@ -645,12 +645,28 @@ class ZeonCoreService with InfraLogger {
     return const CoreStatus.starting();
   }
 
-  Future<CoreStatus> _applyCoreStatusFromListener(String key, CoreStatus next, int generation) async {
+  Future<CoreStatus> _applyCoreStatusFromListener(
+    String key,
+    CoreStatus next,
+    int generation, {
+    bool initialPreStartSample = false,
+  }) async {
     if (!_sessionGeneration.isCurrent(generation, source: "coreInfoListener[$key]")) {
       return currentState;
     }
     final gatedNext = _gateTerminalStatus(next, generation, "coreInfoListener[$key]");
-    if (core.isSingleChannel() && gatedNext is CoreStopped && _lifecycleState == _CoreLifecycleState.starting) {
+    // Apple subscribes to the newly created background daemon before issuing
+    // Start. Its first empty STOPPED describes that daemon, not a failed VPN
+    // attempt. Only suppress that initial sample; errors, later stops and
+    // recovery subscriptions must retain their terminal meaning.
+    final idleDaemonSample =
+        initialPreStartSample &&
+        gatedNext is CoreStopped &&
+        gatedNext.alert == null &&
+        (gatedNext.message?.isEmpty ?? true);
+    if ((core.isSingleChannel() || idleDaemonSample) &&
+        gatedNext is CoreStopped &&
+        _lifecycleState == _CoreLifecycleState.starting) {
       loggy.debug("ignore pre-start daemon stopped sample [generation=$generation]");
       return currentState;
     }
@@ -1765,7 +1781,7 @@ class ZeonCoreService with InfraLogger {
 
         if (!core.isSingleChannel()) {
           await startListeningLogs("bg", core.bgClient);
-          await startListeningStatus("bg", core.bgClient, generation: generation);
+          await startListeningStatus("bg", core.bgClient, generation: generation, beforeCoreStart: true);
         }
 
         final optionsResult = await _applyLatestCoreOptionsToBackground("start");
@@ -2405,7 +2421,7 @@ class ZeonCoreService with InfraLogger {
           }
 
           await startListeningLogs("bg", core.bgClient);
-          await startListeningStatus("bg", core.bgClient, generation: generation);
+          await startListeningStatus("bg", core.bgClient, generation: generation, beforeCoreStart: true);
           final optionsResult = await _applyLatestCoreOptionsToBackground("restart");
           if (optionsResult.isLeft()) {
             final error = optionsResult.getLeft().toNullable() ?? "failed to apply core options";
@@ -3066,9 +3082,10 @@ class ZeonCoreService with InfraLogger {
     // .endWith(const CoreStatus.stopped());
   }
 
-  Future<void> startListeningStatus(String key, CoreClient cc, {int? generation}) async {
+  Future<void> startListeningStatus(String key, CoreClient cc, {int? generation, bool beforeCoreStart = false}) async {
     final listenerGeneration = generation ?? _sessionGeneration.current;
     final listenKey = "${key}StatusListener";
+    var initialSample = true;
     await listenSingle<CoreStatus>(
       listenKey,
       () => cc
@@ -3082,7 +3099,16 @@ class ZeonCoreService with InfraLogger {
           .doOnDone(() {
             loggy.debug("status listener done [$key]");
           })
-          .asyncMap((event) => _applyCoreStatusFromListener(key, CoreStatus.fromCoreInfo(event), listenerGeneration)),
+          .asyncMap((event) {
+            final initialPreStartSample = initialSample && beforeCoreStart;
+            initialSample = false;
+            return _applyCoreStatusFromListener(
+              key,
+              CoreStatus.fromCoreInfo(event),
+              listenerGeneration,
+              initialPreStartSample: initialPreStartSample,
+            );
+          }),
       onDone: () {
         loggy.warning(
           vpnDiagnosticEvent("grpc_disconnect", listenerGeneration, details: "source=${key}_status outcome=done"),
