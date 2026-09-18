@@ -215,7 +215,7 @@ void main() {
     });
   });
 
-  test('Android replacement cleanup is typed separately from terminal Stop', () async {
+  test('mobile stop consumes integer generation and distinguishes replacement from terminal Stop', () async {
     final calls = <MethodCall>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       CoreInterfaceMobile.methodChannel,
@@ -232,8 +232,8 @@ void main() {
     );
 
     final core = CoreInterfaceMobile();
-    await core.stopMethodChannel(generation: 9001, replacement: true);
-    await core.stopMethodChannel(generation: 9002, preemptive: true);
+    expect(await core.stopMethodChannel(generation: 9001, replacement: true), 9001);
+    expect(await core.stopMethodChannel(generation: 9002, preemptive: true), 9002);
 
     expect(calls, hasLength(2));
     expect(calls[0].method, 'stop');

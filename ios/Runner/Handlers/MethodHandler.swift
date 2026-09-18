@@ -255,7 +255,7 @@ public class MethodHandler: NSObject, FlutterPlugin {
                 } else {
                     NSLog("event=stale_completion_ignored source=ios_stop")
                 }
-                await mainResult(true)
+                await mainResult(NSNumber(value: VPNManager.shared.currentSessionGeneration()))
             }
         case "reset":
             VPNManager.shared.reset()
