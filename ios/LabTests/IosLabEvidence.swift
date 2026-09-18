@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CryptoKit
 
 enum IosLabEvidence {
     struct TrafficCheck {
@@ -13,6 +14,19 @@ enum IosLabEvidence {
 
     static func attemptCleanup(_ operation: () throws -> Void) -> Bool {
         do { try operation(); return true } catch { return false }
+    }
+
+    static func proxyIdentifier(_ tag: String) -> String {
+        "zeon.proxy." + SHA256.hash(data: Data(tag.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func exitClass(_ address: String, direct: String?, a: String, b: String) -> String {
+        let bytes = addressBytes(address)
+        guard bytes != nil else { return "other" }
+        if let direct = direct, bytes == addressBytes(direct) { return "direct" }
+        if bytes == addressBytes(a) { return "server_a" }
+        if bytes == addressBytes(b) { return "server_b" }
+        return "other"
     }
 
     static func traffic(data: Data?, response: URLResponse?, error: Error?,
@@ -42,7 +56,9 @@ enum IosLabEvidence {
         guard value["nonce"] == nonce else { return failed("nonce") }
         guard value["marker"] == marker else { return failed("marker") }
         guard let egress = value["egress"], let address = addressBytes(egress) else { return failed("payload") }
-        if let expected = expectedEgress, address != addressBytes(expected) { return failed("egress_mismatch") }
+        if let expected = expectedEgress, address != addressBytes(expected) {
+            return TrafficCheck(egress: egress, failure: "egress_mismatch")
+        }
         return TrafficCheck(egress: egress, failure: nil)
     }
 

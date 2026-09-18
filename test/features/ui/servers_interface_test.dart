@@ -11,6 +11,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/features/home/widget/home_page.dart';
 import 'package:zeon/features/profile/overview/profile_menu_page.dart';
 import 'package:zeon/features/proxy/overview/proxies_overview_notifier.dart';
+import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/features/proxy/overview/proxies_overview_page.dart';
 import 'package:zeon/features/proxy/widget/proxy_tile.dart';
 import 'package:zeon/gen/translations_ru.g.dart';
@@ -68,6 +69,11 @@ void main() {
         await tester.pump();
         expect(container.read(proxiesOverviewNotifierProvider).requireValue?.selected, 'de');
         expect(tester.widget<ProxyTile>(tile).selected, isTrue);
+        final identity = find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.identifier == proxySemanticsIdentifier('de'),
+        );
+        expect(identity, findsOneWidget);
+        expect(tester.widget<Semantics>(identity).properties.selected, isTrue);
         // The existing flag now participates in selecting the entire card.
         final flag = find.descendant(of: tile, matching: find.byKey(const ValueKey('proxy-ipv6-flag-frame')));
         await tester.tapAt(tester.getCenter(flag));
@@ -91,6 +97,12 @@ void main() {
     for (final (name, page) in <(String, Widget)>[('home', const HomePage()), ('profile', const ProfileMenuPage())]) {
       testWidgets('$name updated typography light=$light', (tester) async {
         await ui.pumpPage(tester, page, light: light);
+        if (name == 'home') {
+          expect(
+            find.byWidgetPredicate((w) => w is Semantics && w.properties.identifier == 'zeon.server-picker'),
+            findsOneWidget,
+          );
+        }
         expect(tester.takeException(), isNull);
         await ui.capture(tester, 'phone-$name-${light ? 'light' : 'dark'}');
       });

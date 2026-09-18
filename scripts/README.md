@@ -241,10 +241,10 @@ Fixture — локальный JSON вне Git, только выделенны�
   "directEgress": "discover",
   "serverAEgress": "expected-a-egress",
   "serverBEgress": "expected-b-egress",
-  "serverPicker": "test-server-picker-accessibility-label",
+  "serverPicker": "zeon.server-picker",
   "homeTab": "Home",
-  "serverA": "test-server-a-label",
-  "serverB": "test-server-b-label",
+  "serverA": "test-server-a-core-tag",
+  "serverB": "test-server-b-core-tag",
   "unavailableURL": "https://failure.example.invalid/unavailable"
 }
 ```
@@ -258,8 +258,12 @@ runner получает согласованный прямой IP от обеи
 хранится только в памяти и фиксируется до конца case; после disconnect оно не
 переобучается. Адрес Mac нельзя автоматически считать прямым адресом iPhone.
 `homeTab` — видимая подпись главной вкладки в локали устройства; драйвер возвращается
-на неё после выбора сервера, включая аварийный cleanup. `serverPicker` и A/B labels
-должны соответствовать accessibility текущей сборки, не координатам экрана.
+на неё после выбора сервера, включая аварийный cleanup. A/B — точные core tags,
+не локализованные подписи: accessibility ID строки равен `zeon.proxy.` + SHA256
+UTF-8 tag. Сам tag не попадает в evidence/accessibility ID. Каждый connect явно
+выбирает A через UI и проверяет selected перед проверкой выхода; default профиля
+не доказывает текущий выбор, поскольку core может восстановить cached/Auto selection.
+При несовпадении выхода сохраняется только `direct/server_a/server_b/other`, не IP.
 `unavailableURL` принадлежит тестовой среде и возвращает 503 либо недоступен.
 
 Для разрешённой серверной площадки есть `scripts/apple/ios_lab_echo.py`: временный
@@ -276,7 +280,7 @@ systemd-ограничения `MemoryMax=64M`, `CPUQuota=5%`, `TasksMax=2`, `No
 
 Выбор `--case`: `connect`, `cancel`, `server-ab`, `unavailable`, `close-return`,
 `lease-expiry`. Одна команда выполняет один case; другие получают NOT_RUN.
-Diagnostic lease ограничена 120с (cancel: 300с), абсолютный максимум 600с.
+Diagnostic lease ограничена 180с (cancel/server-ab: 300с), абсолютный максимум 600с.
 Бюджеты: boot Simulator 180с, UI suite 420с, device XCTest 570с; connect 45с,
 stop 15с, HTTPS resource 12с. Превышение не увеличивать ради PASS.
 

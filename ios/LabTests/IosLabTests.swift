@@ -138,6 +138,8 @@ final class IosLabTests: XCTestCase {
         record("start_tapped")
         try waitState("connected", seconds: 45)
         record("connected")
+        try chooseServer(fixture.serverA)
+        record("server_a_selected")
         // Keep an observable active window for the host's independent USB probe.
         RunLoop.current.run(until: Date().addingTimeInterval(5))
     }
@@ -146,9 +148,13 @@ final class IosLabTests: XCTestCase {
         app.activate()
         try returnHome()
         record("stop_requested")
-        if element("connected").exists { element("connected").tap() }
-        else if element("startingCore").exists { element("startingCore").tap() }
-        record("stop_tapped")
+        if element("connected").exists {
+            element("connected").tap()
+            record("stop_tapped")
+        } else if element("startingCore").exists {
+            element("startingCore").tap()
+            record("stop_tapped")
+        }
         try waitState("disconnected", seconds: 15)
         ownsConnection = false
         record("disconnected")
@@ -165,14 +171,24 @@ final class IosLabTests: XCTestCase {
         home.tap()
     }
 
-    private func chooseServer(_ label: String) throws {
+    private func chooseServer(_ tag: String) throws {
         try returnHome()
         app.descendants(matching: .any).matching(identifier: fixture.serverPicker).firstMatch.tap()
-        let server = app.descendants(matching: .any).matching(identifier: label).firstMatch
-        guard server.waitForExistence(timeout: 10) else {
+        let server = app.descendants(matching: .any).matching(identifier: IosLabEvidence.proxyIdentifier(tag)).firstMatch
+        _ = server.waitForExistence(timeout: 5)
+        for _ in 0..<10 {
+            if server.exists && server.isHittable { break }
+            app.swipeUp()
+        }
+        guard server.exists && server.isHittable else {
             throw NSError(domain: "ZEON.IosLab.Navigation", code: 2)
         }
-        server.tap()
+        if !server.isSelected { server.tap() }
+        let selected = Date().addingTimeInterval(45)
+        while !server.isSelected && Date() < selected {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        guard server.isSelected else { throw NSError(domain: "ZEON.IosLab.Navigation", code: 3) }
         try returnHome()
         try waitState("connected", seconds: 45)
     }
@@ -213,6 +229,10 @@ final class IosLabTests: XCTestCase {
             }
             if let reason = failure {
                 trafficFailure = ["reason": reason, "target_index": index + 1]
+                if reason == "egress_mismatch", let actual = check.egress {
+                    trafficFailure?["observed_exit"] = IosLabEvidence.exitClass(actual, direct: directEgress,
+                        a: fixture.serverAEgress, b: fixture.serverBEgress)
+                }
                 record("traffic_failed")
                 throw NSError(domain: "ZEON.IosLab.Traffic", code: 1)
             }

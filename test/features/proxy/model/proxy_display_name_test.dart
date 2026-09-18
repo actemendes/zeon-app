@@ -4,6 +4,14 @@ import 'package:zeon/gen/translations.g.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 void main() {
+  test('automation identity matches the native runner without exposing the tag', () {
+    expect(
+      proxySemanticsIdentifier('fixture'),
+      'zeon.proxy.f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d',
+    );
+    expect(proxySemanticsIdentifier('other'), isNot(proxySemanticsIdentifier('fixture')));
+  });
+
   setUpAll(() async {
     await AppLocale.ru.build();
   });

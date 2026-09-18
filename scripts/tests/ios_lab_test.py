@@ -15,6 +15,15 @@ import ios_lab_build as build
 
 
 class ControllerTests(unittest.TestCase):
+    def test_exit_identity_is_classified_without_retaining_addresses(self):
+        value = {'schema': 1, 'status': 'FAIL', 'steps': [],
+                 'failure': {'reason': 'egress_mismatch', 'target_index': 1, 'observed_exit': 'direct'}}
+        self.assertEqual(lab.sanitized_device_receipt(value)['failure']['observed_exit'], 'direct')
+        for reason, observed in [('egress_mismatch', '192.0.2.1'), ('network_tls', 'other')]:
+            value['failure'].update(reason=reason, observed_exit=observed)
+            with self.assertRaises(lab.Blocked):
+                lab.sanitized_device_receipt(value)
+
     def test_cleanup_failure_retains_only_safe_ui_state(self):
         failure = {'expected': 'connected', 'observed': ['startingCore'], 'app_alert': False, 'system_alert': True}
         value = {'schema': 1, 'status': 'FAIL', 'steps': [{'id': 'cleanup_failed', 'time': 1}],

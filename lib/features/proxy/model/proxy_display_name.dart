@@ -1,8 +1,13 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:zeon/features/proxy/model/server_name_localization.dart';
 import 'package:zeon/gen/translations.g.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
 const String autoSelectionSeparator = '•';
+
+String proxySemanticsIdentifier(String tag) => 'zeon.proxy.${sha256.convert(utf8.encode(tag))}';
 
 /// Localizes presentation text while keeping Core/config identifiers untouched.
 String formatProxyDisplayName(String raw, {required Translations translations}) {

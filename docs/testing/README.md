@@ -57,6 +57,9 @@ Device runner использует XCUITest для UI и собственный 
 Ответ каждой цели: свежий `nonce`, ожидаемые `marker` и `egress`; TLS проверяется
 системой. До/после туннеля нужен direct baseline, при VPN — выход A/B. Provider
 health-check, один UI Connected, IP без nonce или результат Simulator недостаточны.
+Перед проверкой выхода runner явно выбирает A через UI и подтверждает selected;
+default профиля не заменяет выбор, поскольку core может восстановить cached/Auto
+selection. Идентификатор строки содержит SHA256 core tag, не его текст.
 Live USB round trip `devicectl device info processes` с присутствующим процессом
 `ZeonPacketTunnel` должен попасть внутрь окна подтверждённого VPN-трафика.
 В отчёте сохраняется только boolean присутствия, не список процессов.

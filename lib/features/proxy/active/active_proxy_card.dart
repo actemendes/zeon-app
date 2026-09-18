@@ -82,6 +82,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
             padding: const EdgeInsets.all(16),
             child: proxy == null
                 ? Semantics(
+                    identifier: 'zeon.server-picker',
                     label: '${t.pages.proxies.activeProxy}\n${t.pages.proxies.title}',
                     button: true,
                     child: _ServerPickerPlaceholder(
@@ -114,6 +115,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: Semantics(
+                              identifier: 'zeon.server-picker',
                               label: t.pages.proxies.activeProxy,
                               child: Text(
                                 displayInfo?.title ?? proxy.tagDisplay,

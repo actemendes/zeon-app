@@ -228,7 +228,7 @@ DEVICE_CASES = {
 def sanitized_device_receipt(value):
     allowed_steps = {'lease_armed', 'connected', 'disconnected', 'direct_traffic_verified',
                      'tunnel_traffic_verified', 'cleanup_verified', 'traffic_failed', 'cleanup_failed',
-                     'start_requested', 'start_tapped', 'stop_requested', 'stop_tapped', 'state_timeout'}
+                     'start_requested', 'start_tapped', 'stop_requested', 'stop_tapped', 'state_timeout', 'server_a_selected'}
     allowed_reasons = {'network_offline', 'network_dns', 'network_timeout', 'network_refused',
                        'network_cancelled', 'network_tls', 'network_other', 'http_status',
                        'origin', 'payload', 'nonce', 'marker', 'egress_mismatch',
@@ -248,9 +248,13 @@ def sanitized_device_receipt(value):
     if 'failure' in value:
         failure = value['failure']
         if (value['status'] == 'PASS' or not isinstance(failure, dict)
-                or set(failure) != {'reason', 'target_index'} or failure['reason'] not in allowed_reasons
+                or set(failure) not in ({'reason', 'target_index'}, {'reason', 'target_index', 'observed_exit'})
+                or failure['reason'] not in allowed_reasons
                 or type(failure['target_index']) is not int or failure['target_index'] not in (1, 2)):
             raise Blocked('Device failure receipt contains unexpected fields')
+        if 'observed_exit' in failure and (failure['reason'] != 'egress_mismatch'
+                or failure['observed_exit'] not in ('direct', 'server_a', 'server_b', 'other')):
+            raise Blocked('Device exit classification must not contain an address')
         result['failure'] = failure
     if 'ui_failures' in value:
         states = {'idle', 'disconnected', 'permissionRequired', 'startRequested', 'startingPlatform',
@@ -332,7 +336,7 @@ def device_run(run, args):
     target['EnvironmentVariables'].update({
         'ZEON_IOS_LAB_FIXTURE': json.dumps(fixture),
         'ZEON_IOS_LAB_SOURCE_SHA': run.report['source_sha'],
-        'ZEON_IOS_LAB_LEASE_SECONDS': '300' if args.case == 'cancel' else '120',
+        'ZEON_IOS_LAB_LEASE_SECONDS': '300' if args.case in ('cancel', 'server-ab') else '180',
     })
     target['OnlyTestIdentifiers'] = ['IosLabTests/' + DEVICE_CASES[args.case]]
     target['SystemAttachmentLifetime'] = 'deleteAlways'
@@ -408,7 +412,7 @@ def device_run(run, args):
                     connected = any(step['id'] == 'connected' for step in steps)
                     run.report['classification'] = 'unknown' if connected else 'environment'
                 return
-            if not {'connected', 'direct_traffic_verified', 'tunnel_traffic_verified', 'cleanup_verified'}.issubset(
+            if not {'connected', 'server_a_selected', 'direct_traffic_verified', 'tunnel_traffic_verified', 'cleanup_verified'}.issubset(
                     {step['id'] for step in steps}):
                 raise Blocked('Device PASS receipt is missing required traffic or cleanup steps')
             connected = next(step['time'] for step in steps if step['id'] == 'connected')

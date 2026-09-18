@@ -46,6 +46,7 @@ class ProxyTile extends StatelessWidget with PresLogger {
     final showIpv6Unavailable = ipv6Mode == IPv6Mode.only && ipv6Status == "unavailable";
 
     return Semantics(
+      identifier: proxySemanticsIdentifier(proxy.tag),
       selected: selected,
       button: true,
       child: Material(

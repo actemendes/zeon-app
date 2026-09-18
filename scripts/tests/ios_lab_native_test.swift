@@ -14,6 +14,13 @@ struct IosLabEvidenceTests {
         expect(IosLabEvidence.receiptStatus(completed: true, cleanup: true, failures: 0) == "PASS", "completed")
         expect(IosLabEvidence.attemptCleanup({}), "successful cleanup")
         expect(!IosLabEvidence.attemptCleanup { throw NSError(domain: "synthetic", code: 1) }, "cleanup throw retained")
+        expect(IosLabEvidence.proxyIdentifier("fixture") ==
+            "zeon.proxy.f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d", "shared tag identity")
+        for (address, expected) in [("::ffff:192.0.2.1", "direct"), ("192.0.2.2", "server_a"),
+                                    ("192.0.2.3", "server_b"), ("192.0.2.4", "other")] {
+            expect(IosLabEvidence.exitClass(address, direct: "192.0.2.1", a: "192.0.2.2", b: "192.0.2.3") == expected,
+                   "private exit classification")
+        }
         let url = URL(string: "https://control.example.invalid/echo")!
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
         let valid = ["nonce": "fresh-nonce", "marker": "control", "egress": "192.0.2.1"]
