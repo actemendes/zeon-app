@@ -254,6 +254,18 @@ auth, credentials или URL query. Примеры `.invalid` не являют�
 Профили A/B подготавливаются отдельно, fixture не содержит subscription secrets.
 `unavailableURL` принадлежит тестовой среде и возвращает 503 либо недоступен.
 
+Для разрешённой серверной площадки есть `scripts/apple/ios_lab_echo.py`: временный
+TLS listener `/echo` и `/unavailable`, только на отдельном nonprivileged порту.
+Он загружает существующий сертификат, сбрасывает root до UID/GID 65534, не читает
+production data, не проксирует запросы и не пишет access logs. Требуются внешние
+systemd-ограничения `MemoryMax=64M`, `CPUQuota=5%`, `TasksMax=2`, `NoNewPrivileges=yes`,
+`ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, `RuntimeMaxSec=3600`.
+Не включать автозапуск. До запуска проверить свободный порт и production health;
+после остановки проверить отсутствие listener и неизменную production health.
+Не менять Nginx, firewall, DNS или сертификаты ради endpoint. Две цели должны
+работать на разных хостах. Публичный адрес клиента используется только в HTTPS
+ответе; в evidence сохраняется факт совпадения, а не сам адрес.
+
 Выбор `--case`: `connect`, `cancel`, `server-ab`, `unavailable`, `close-return`,
 `lease-expiry`. Одна команда выполняет один case; другие получают NOT_RUN.
 Diagnostic lease ограничена 120с (cancel: 300с), абсолютный максимум 600с.
