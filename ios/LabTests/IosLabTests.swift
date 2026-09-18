@@ -201,8 +201,10 @@ final class IosLabTests: XCTestCase {
             throw navigationError("server_missing")
         }
         record("server_row_found")
-        if !server.isSelected { server.tap() }
-        record("server_row_tapped")
+        if !server.isSelected {
+            server.tap()
+            record("server_row_tapped")
+        }
         let selected = Date().addingTimeInterval(45)
         while !server.isSelected && Date() < selected {
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))

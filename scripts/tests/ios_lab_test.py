@@ -113,7 +113,9 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(json.loads((run.path / 'report.json').read_text())['status'], 'INTERRUPTED')
             run.report['ended_utc'] = lab.now()
             run.save()
-            self.assertEqual(json.loads((run.path / 'report.json').read_text())['status'], 'PASS')
+            final = json.loads((run.path / 'report.json').read_text())
+            self.assertEqual(final['status'], 'PASS')
+            self.assertIsNone(final['classification'])
 
     def test_artifact_content_or_name_tampering_is_rejected(self):
         with tempfile.TemporaryDirectory() as work, patch.object(lab, 'ROOT', Path(work).resolve()):

@@ -102,6 +102,8 @@ class Run:
             snapshot['status'] = 'INTERRUPTED'
         if snapshot['status'] != 'PASS':
             snapshot['real_ios_vpn'] = False
+        else:
+            snapshot['classification'] = None
         atomic_json(self.path / 'report.json', snapshot)
         (self.path / 'report.md').write_text(
             f"# iOS lab {self.report['run_id']}\n\n"
