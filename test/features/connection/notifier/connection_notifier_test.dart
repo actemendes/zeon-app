@@ -21,6 +21,32 @@ import 'package:zeon/zeoncore/init_signal.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
 void main() {
+  testWidgets('launch preparation still runs without a newer user intent', (tester) async {
+    final repository = _FakeConnectionRepository()..initialStatus = const Disconnected();
+    final setup = await _createContainer(repository);
+    addTearDown(setup.dispose);
+    await setup.notifier.prepareSystemVpnForActiveProfile();
+    expect(repository.prepareCalls, 1);
+  });
+
+  for (final action in ['connect', 'stop']) {
+    testWidgets('delayed launch preparation cannot supersede user $action', (tester) async {
+      final repository = _FakeConnectionRepository()
+        ..initialStatus = action == 'connect' ? const Disconnected() : const Connecting();
+      final profileBarrier = Completer<ProfileEntity?>();
+      final setup = await _createContainer(repository, profileBarrier: profileBarrier);
+      addTearDown(setup.dispose);
+      final preparation = setup.notifier.prepareSystemVpnForActiveProfile();
+      final intent = action == 'connect' ? setup.notifier.mayConnect() : setup.notifier.abortConnection();
+      profileBarrier.complete(setup.profile);
+      await preparation;
+      await intent;
+      expect(repository.prepareCalls, 0);
+      expect(action == 'connect' ? repository.connectCalls : repository.disconnectCalls, 1);
+      await tester.pump(const Duration(seconds: 12));
+    });
+  }
+
   group('shouldReconnectForActiveProfileChange', () {
     test('reconnects when a release-speed transition has no previous provider value', () {
       expect(
@@ -485,6 +511,7 @@ Future<_ConnectionTestSetup> _createContainer(
   Completer<void>? hapticBarrier,
   bool activeProfileMissing = false,
   VpnSessionSnapshotSource? snapshotSource,
+  Completer<ProfileEntity?>? profileBarrier,
 }) async {
   SharedPreferences.setMockInitialValues({'haptic_feedback': false, 'started_by_user': startedByUser});
   final preferences = await SharedPreferences.getInstance();
@@ -498,7 +525,9 @@ Future<_ConnectionTestSetup> _createContainer(
     overrides: [
       sharedPreferencesProvider.overrideWith((ref) => preferences),
       connectionRepositoryProvider.overrideWith((ref) => repository),
-      activeProfileProvider.overrideWith(() => _TestActiveProfile(activeProfileMissing ? null : profile)),
+      activeProfileProvider.overrideWith(
+        () => _TestActiveProfile(activeProfileMissing ? null : profile, profileBarrier),
+      ),
       if (snapshotSource != null) vpnSessionSnapshotSourceProvider.overrideWithValue(snapshotSource),
       if (hapticBarrier != null) hapticServiceProvider.overrideWith(() => _TestHapticService(hapticBarrier)),
     ],
@@ -562,12 +591,13 @@ class _ConnectionTestSetup {
 }
 
 class _TestActiveProfile extends ActiveProfile {
-  _TestActiveProfile(this.profile);
+  _TestActiveProfile(this.profile, [this.barrier]);
 
   final ProfileEntity? profile;
+  final Completer<ProfileEntity?>? barrier;
 
   @override
-  Stream<ProfileEntity?> build() => Stream.value(profile);
+  Stream<ProfileEntity?> build() => barrier == null ? Stream.value(profile) : Stream.fromFuture(barrier!.future);
 }
 
 class _TestHapticService extends HapticService {
@@ -598,6 +628,7 @@ class _FakeConnectionRepository implements ConnectionRepository {
   int connectCalls = 0;
   int disconnectCalls = 0;
   int reconnectCalls = 0;
+  int prepareCalls = 0;
   final resyncSources = <String>[];
 
   void emit(ConnectionStatus status) => _events.add(status);
@@ -640,6 +671,7 @@ class _FakeConnectionRepository implements ConnectionRepository {
 
   @override
   TaskEither<ConnectionFailure, Unit> prepareSystemVpn(ProfileEntity activeProfile, bool disableMemoryLimit) {
+    prepareCalls++;
     return TaskEither.of(unit);
   }
 

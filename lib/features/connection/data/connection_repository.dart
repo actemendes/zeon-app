@@ -107,8 +107,9 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   @override
   TaskEither<ConnectionFailure, Unit> prepareSystemVpn(ProfileEntity activeProfile, bool disableMemoryLimit) =>
       TaskEither.tryCatch(() async {
-        final runtimeFile = await _createRuntimeConfigFile(activeProfile);
         final generation = singbox.beginVpnOperation("prepare_system_vpn");
+        final runtimeFile = await _createRuntimeConfigFile(activeProfile);
+        if (!singbox.isVpnOperationCurrent(generation, source: "prepare_system_vpn_after_config")) return unit;
         return (await singbox
                 .prepareVpnConfiguration(
                   runtimeFile.path,
