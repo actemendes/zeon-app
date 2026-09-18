@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:zeon/core/localization/translation_context.dart';
 import 'package:zeon/features/button_appearance/data/button_image_codec.dart';
@@ -8,9 +7,11 @@ import 'package:zeon/features/button_appearance/widget/custom_vpn_button.dart';
 
 typedef PickButtonImage = Future<Uint8List?> Function();
 Future<Uint8List?> pickButtonImage() async {
+  // On iOS, image opens Photos; custom extension filters open Files instead.
+  final usePhotos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
   final result = await FilePicker.platform.pickFiles(
-    type: FileType.custom,
-    allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+    type: usePhotos ? FileType.image : FileType.custom,
+    allowedExtensions: usePhotos ? null : ['png', 'jpg', 'jpeg', 'webp'],
     withData: true,
   );
   return result?.files.single.bytes;
