@@ -40,6 +40,62 @@ unit/widget или native tests не заменяют реальные пров�
 
 ## Частота и бюджет
 
+### Отдельная Apple acceptance: APPLE-TARGETED-v1
+
+Apple-стенд не наследует PASS Windows/Android. Для инфраструктурной задачи
+`6aad153d8f085e121ad13499` выполнять только строки Apple из [MATRIX.md](MATRIX.md),
+один выбранный сценарий за команду; длинную продуктовую матрицу не запускать.
+Команды и fixture contract: [scripts/README.md](../../scripts/README.md#ios-test-lab).
+
+Simulator запускает production Flutter widgets/ConnectionNotifier с тестовым
+`ConnectionRepository`. Его native bootstrap отключён только при сочетании
+`targetEnvironment(simulator)` и `ZEON_IOS_SIMULATOR_LAB`. Метка результата всегда
+`UI_LOGIC_ONLY`, `real_ios_vpn=false`: стек сети Simulator принадлежит macOS.
+Текущий импорт SIM03 проверяет metadata parser и передачу профиля connection owner;
+полный UI-import с записью в реальное хранилище пока NOT_RUN.
+
+Device runner использует XCUITest для UI и собственный URLSession для двух HTTPS
+целей. Это другой процесс/application sandbox, не Runner и не PacketTunnel.
+Ответ каждой цели: свежий `nonce`, ожидаемые `marker` и `egress`; TLS проверяется
+системой. До/после туннеля нужен direct baseline, при VPN — выход A/B. Provider
+health-check, один UI Connected, IP без nonce или результат Simulator недостаточны.
+Live USB round trip `devicectl device info processes` должен попасть внутрь окна
+подтверждённого VPN-трафика. Cached `list devices` этого не доказывает.
+
+Диагностическая сборка отдельно включает `ZEON_IOS_LAB`: host записывает абсолютную
+lease в App Group, PacketTunnel отказывает без lease/после истечения и отменяет
+туннель по локальному таймеру независимо от Mac. Lease нельзя автоматически
+продлевать при возврате приложения. Это test hook, не доказательство поведения
+обычной сборки. Реальная lease/controller-loss приёмка остаётся обязательной.
+Обычная сборка пока BLOCKED для unattended device run: автономное восстановление
+без hooks не подтверждено. Не выдавать diagnostic PASS за functional PASS.
+
+Результат сначала сохраняется как INTERRUPTED; только законченные тесты, проверенные
+артефакты и cleanup дают PASS. Отдельно отмечать app/environment/external-path/unknown.
+При отсутствии устройства/signing/fixture/receipt — BLOCKED. Пропущенный XCTest
+не считается PASS. SIGTERM завершает дочерние процессы и cleanup; SIGKILL оставляет
+INTERRUPTED, следующий запуск удаляет только Simulator с сохранённым ownership.
+Уничтожение Mac/USB ещё требует физического drill; lease code review его не заменяет.
+
+Evidence по умолчанию: абсолютный `$HOME/Library/Logs/ZEON/ios-lab/<run-id>`.
+В нём source SHA/dirty, artifact/core hashes, OS/toolchain, времена шагов, verdict,
+cleanup, минимальные безопасные receipts. Сырые device logs, screenshots, fixture
+contents и provisioning не копировать в evidence. Native runner оставляет последний
+sanitized journal в собственном Documents для последующего восстановления.
+
+Передача отдельному тестеру: clean SHA + manifests из `out/installers/ios/lab`,
+один Simulator run, повтор для проверки cleanup и device preflight. Device VPN
+не запускать при отсутствующем dedicated runner development profile, fixture или
+доказанном совпадении установленной диагностической сборки. Не удалять/переустанавливать
+пользовательскую ZEON, профили или данные ради устранения блокера. Установка диагностической
+сборки поверх существующей требует отдельного решения владельца устройства.
+
+Непокрыто до device commissioning: настоящий PacketTunnel и native/egress correlation,
+физическая потеря USB/контроллера, обычная functional сборка, IPv6/leaks, полный UI import,
+сохранение A/B после перезапуска и системные VPN permission prompts. Эти строки не
+повышаются в PASS по успешной компиляции. KB final sync/закрытие TickTick — только
+после достижения конечной цели по AI-AGENT-GUIDE.
+
 | Набор | Когда | Объём |
 |---|---|---|
 | TARGETED | При исправлении | Исходный дефект и затронутая причина; необходимые платформы/режимы |

@@ -91,6 +91,7 @@ class MainVpnButtonView extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Semantics(
+          identifier: 'zeon.vpn.${state.phase.name}',
           button: true,
           enabled: state.enabled,
           label: presentation.semanticsLabel,

@@ -18,6 +18,9 @@ Usage: ./scripts/build.sh <action>
   ios-ipa                 Build a signed iOS IPA
   ios-unsigned            Build an unsigned iOS .app
   ios-device              Build and install on a connected iPhone
+  ios-test-simulator      Build Simulator UI/logic test artifact (no VPN evidence)
+  ios-test-runner         Build the independent XCTest traffic/UI runner
+  ios-test-diagnostic     Build development app with a bounded test-only VPN lease
   ios-upload              Upload the iOS build
   apple-upload            Upload both Apple applications
   doctor                  Check the Apple build environment
@@ -29,6 +32,10 @@ EOF
 
 case "${ACTION}" in
   help|-h|--help) show_help ;;
+  ios-test-simulator|ios-test-runner|ios-test-diagnostic)
+    source "${SCRIPT_DIR}/apple/env.sh"
+    exec python3 "${SCRIPT_DIR}/apple/ios_lab_build.py" "${ACTION}" "$@"
+    ;;
   doctor|apple-upload|macos-app|macos-artifacts|macos-app-store|macos-app-store-upload|ios-unsigned|ios-ipa|ios-device|ios-upload)
     exec "${SCRIPT_DIR}/apple/build.sh" "${ACTION}" "$@"
     ;;

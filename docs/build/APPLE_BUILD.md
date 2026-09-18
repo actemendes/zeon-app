@@ -57,6 +57,13 @@ Developer ID Application/Installer и отправить на notarization.
 
 ## iOS
 
+Для отдельного тестового стенда доступны `ios-test-simulator`, `ios-test-runner`
+и `ios-test-diagnostic` через тот же `scripts/build.sh`. Артефакты и provenance
+публикуются в `out/installers/ios/lab`; команды — [scripts/README.md](../../scripts/README.md#ios-test-lab).
+Это не Store pipeline: ASC API и automatic provisioning не нужны. Dedicated
+runner требует собственного существующего development profile; профиль ZEON
+или PacketTunnel не подходит для нового runner App ID. Без него device run BLOCKED.
+
 Проверить компиляцию без сертификата:
 
 ```bash

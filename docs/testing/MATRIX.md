@@ -4,6 +4,31 @@
 передачи — в [README.md](README.md). Очередь исправлений — [PLAN.md](PLAN.md).
 Все строки ниже — требования; результат появляется только в отчёте конкретного run.
 
+## Apple TARGETED (APPLE-TARGETED-v1)
+
+Независимый инфраструктурный scope; не входит в Windows/Android SHORT/FULL.
+Каждый device case запускается отдельно, с disconnected baseline и cleanup.
+
+| ID / command case | Проверка | Evidence |
+|---|---|---|
+| SIM01 | UI connect/disconnect через production notifier и подменяемый VPN repository | UI/logic only |
+| SIM02 | Детерминированный pending start, cancel, stale callback, retry | UI/logic only; не 150-секундный device drill |
+| SIM03 | Импорт metadata синтетического профиля, выбранный профиль передан connection owner | UI/logic; полный UI/storage import NOT_RUN |
+| SIM04 | Изменение настройки через настоящий settings widget и сохранение значения | UI/logic only |
+| SIM05 | Недоступный API не уничтожает cache; ошибка классифицирована отдельно от VPN | UI/logic only |
+| connect | Connect ≤45с → две независимые HTTPS цели с egress A → background/return → disconnect ≤15с → direct HTTPS | Device diagnostic |
+| cancel | Наблюдаемая фаза startup → cancel → 150с без Connected → direct traffic → retry ≤45с → egress A → cleanup | Device diagnostic; ненаблюдаемая фаза BLOCKED |
+| server-ab | A → UI select B → egress B → UI select A → egress A → cleanup | Device diagnostic |
+| unavailable | Egress A healthy → выделенная недоступная HTTPS цель → healthy цели по-прежнему проходят | Device diagnostic; не изменять сеть Mac |
+| close-return | Connect → terminate host app → независимый HTTPS → relaunch/adoption → HTTPS → stop/direct | Device diagnostic |
+| lease-expiry | Connect/HTTPS → terminate host → локальный срок lease → direct traffic → disconnected после возврата | Device diagnostic; не равен физической потере controller |
+| CONTROL-LOSS | Утрата live USB/controller не даёт PASS; локальное прекращение туннеля, сбор journal, повтор без ремонта | Device, отдельный commissioning drill, NOT_RUN до evidence |
+| FUNCTIONAL | Обычная сборка без hooks, те же пользовательские сценарии | BLOCKED до безопасного автономного recovery |
+
+Для device PASS проверять полный SHA кандидата, hashes, два разных HTTPS host,
+уникальный nonce, ожидаемый marker/egress, USB round trip внутри активного окна,
+terminal receipt и cleanup. Детали и ограничения — [README.md](README.md).
+
 ## SHORT: одинаковый набор после продуктового исправления
 
 Один цикл каждой применимой ветки. Windows — локальный host с независимым

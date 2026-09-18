@@ -185,6 +185,86 @@ Entrypoint хранится в Git с executable-битом; проверка з
 передайте `DEVICE_ID=<CoreDevice-UUID>`. App Store upload остаётся явным действием:
 `ios-upload`, `macos-app-store-upload` или `apple-upload`.
 
+### iOS test lab
+
+Сборка только canonical entrypoint (ничего не устанавливает и не загружает в Store):
+
+```bash
+./scripts/build.sh ios-test-simulator
+./scripts/build.sh ios-test-runner --simulator
+```
+
+Каждая команда печатает immutable каталог
+`out/installers/ios/lab/<source-sha>/<kind>-<hash>/` с `manifest.json`.
+`--development` допускает dirty источник только для разработки, не TARGETED acceptance.
+Устанавливаемая Simulator app находится внутри каталога в `Runner.app`.
+
+Одна команда запуска выбранного набора с готовым артефактом:
+
+```bash
+./scripts/ios_lab.sh --suite simulator --artifact /absolute/path/to/simulator-artifact
+```
+
+По умолчанию iOS 18.6; `--runtime` выбирает установленную версию. Контроллер сам
+создаёт и удаляет только собственный Simulator, не стирает чужие устройства.
+Отчёт: `$HOME/Library/Logs/ZEON/ios-lab/<run-id>/report.json` и `report.md`, абсолютный
+путь печатается в конце. `--evidence` задаёт новый каталог вне Git.
+
+Device preflight и выбранный сценарий (до runner signing завершается BLOCKED):
+
+```bash
+./scripts/ios_lab.sh --suite device --device "$DEVICE_ID" --case connect \
+  --artifact "$IOS_RUNNER_ARTIFACT" --target-artifact "$IOS_DIAGNOSTIC_ARTIFACT" \
+  --fixture "$IOS_LAB_FIXTURE"
+```
+
+Device artifacts собираются `ios-test-runner` и `ios-test-diagnostic`. Нужны уже
+существующие `ZEON_LAB_RUNNER_BUNDLE_ID`, `ZEON_LAB_RUNNER_PROFILE`,
+`ZEON_LAB_DEVELOPMENT_TEAM`; generated runner App ID имеет suffix `.xctrunner`.
+Ключ — Apple Development, не distribution. Значения не хранить в Git/отчётах.
+`allowProvisioningUpdates`, новая регистрация App ID и App Store Connect API
+не используются. Продуктовые signing/entitlements не меняются. Контроллер не
+устанавливает диагностическую ZEON поверх пользовательской: сначала отдельно
+решается безопасная установка; XCTest проверяет source SHA и armed lease в
+accessibility установленного target, иначе пропускает запуск с BLOCKED.
+
+Fixture — локальный JSON вне Git, только выделенные тестовые endpoints/labels:
+
+```json
+{
+  "appBundleId": "app.zeon.ios",
+  "mode": "diagnostic",
+  "targets": [
+    {"url": "https://control-a.example.invalid/echo", "marker": "zeon-lab-a"},
+    {"url": "https://control-b.example.invalid/echo", "marker": "zeon-lab-b"}
+  ],
+  "directEgress": "expected-direct-egress",
+  "serverAEgress": "expected-a-egress",
+  "serverBEgress": "expected-b-egress",
+  "serverPicker": "test-server-picker-accessibility-label",
+  "serverA": "test-server-a-label",
+  "serverB": "test-server-b-label",
+  "unavailableURL": "https://failure.example.invalid/unavailable"
+}
+```
+
+Цель возвращает HTTP 200 JSON `nonce` (эхо query), `marker`, `egress` (наблюдаемый
+сервером адрес/метка выхода). Два независимых host, доверенный TLS, без redirect,
+auth, credentials или URL query. Примеры `.invalid` не являются рабочими целями.
+Профили A/B подготавливаются отдельно, fixture не содержит subscription secrets.
+`unavailableURL` принадлежит тестовой среде и возвращает 503 либо недоступен.
+
+Выбор `--case`: `connect`, `cancel`, `server-ab`, `unavailable`, `close-return`,
+`lease-expiry`. Одна команда выполняет один case; другие получают NOT_RUN.
+Diagnostic lease ограничена 120с (cancel: 300с), абсолютный максимум 600с.
+Бюджеты: boot Simulator 180с, UI suite 420с, device XCTest 570с; connect 45с,
+stop 15с, HTTPS resource 12с. Превышение не увеличивать ради PASS.
+
+Проверки самого контроллера: `python3 -m unittest discover -s scripts/tests -p ios_lab_test.py`.
+Требования/непокрытое: [docs/testing/README.md](../docs/testing/README.md),
+[Apple matrix](../docs/testing/MATRIX.md). Успех диагностического runner не заменяет
+ordinary-build functional и physical controller-loss приёмку.
+
 ## Точный Android-тест переключения в Auto
 
 `verify_android_exact_auto.py` проверяет последовательность: выбран ручной сервер

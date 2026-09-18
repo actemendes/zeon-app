@@ -143,6 +143,8 @@ dependencies:
   workmanager: ^0.9.0+3
 
 dev_dependencies:
+  integration_test:
+    sdk: flutter
   flutter_test:
     sdk: flutter
   lint: ^2.3.0

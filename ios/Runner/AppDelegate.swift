@@ -9,10 +9,31 @@ import Sentry
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
+#if targetEnvironment(simulator) && ZEON_IOS_SIMULATOR_LAB
+        GeneratedPluginRegistrant.register(with: self)
+        return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+#else
         setupFileManager()
+#if ZEON_IOS_LAB
+        // A diagnostic build cannot start a tunnel without a bounded run lease.
+        // A relaunch without these arguments must not renew an existing lease.
+        if let raw = ProcessInfo.processInfo.environment["ZEON_IOS_LAB_DEADLINE"],
+           let deadline = Double(raw), deadline > Date().timeIntervalSince1970,
+           deadline <= Date().timeIntervalSince1970 + 600 {
+            do {
+                try raw.write(to: FilePath.sharedDirectory.appendingPathComponent("ios-lab-deadline"),
+                              atomically: true, encoding: .utf8)
+                let source = Bundle.main.infoDictionary?["ZeonLabSourceSHA"] as? String ?? "unknown"
+                window?.accessibilityIdentifier = "zeon.lab.lease." + source
+            } catch {
+                window?.accessibilityIdentifier = "zeon.lab.lease.unavailable"
+            }
+        }
+#endif
         GeneratedPluginRegistrant.register(with: self)
         registerHandlers()
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+#endif
     }
     
     func setupFileManager() {

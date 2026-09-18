@@ -52,6 +52,8 @@ PODS:
     - Flutter
   - in_app_review (2.0.0):
     - Flutter
+  - integration_test (0.0.1):
+    - Flutter
   - mobile_scanner (7.0.0):
     - Flutter
     - FlutterMacOS
@@ -116,6 +118,7 @@ DEPENDENCIES:
   - flutter_native_splash (from `.symlinks/plugins/flutter_native_splash/ios`)
   - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
   - in_app_review (from `.symlinks/plugins/in_app_review/ios`)
+  - integration_test (from `.symlinks/plugins/integration_test/ios`)
   - mobile_scanner (from `.symlinks/plugins/mobile_scanner/darwin`)
   - network_info_plus (from `.symlinks/plugins/network_info_plus/ios`)
   - objective_c (from `.symlinks/plugins/objective_c/ios`)
@@ -160,6 +163,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_secure_storage/ios"
   in_app_review:
     :path: ".symlinks/plugins/in_app_review/ios"
+  integration_test:
+    :path: ".symlinks/plugins/integration_test/ios"
   mobile_scanner:
     :path: ".symlinks/plugins/mobile_scanner/darwin"
   network_info_plus:
@@ -199,6 +204,7 @@ SPEC CHECKSUMS:
   flutter_native_splash: df59bb2e1421aa0282cb2e95618af4dcb0c56c29
   flutter_secure_storage: d33dac7ae2ea08509be337e775f6b59f1ff45f12
   in_app_review: a31b5257259646ea78e0e35fc914979b0031d011
+  integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
   mobile_scanner: 77265f3dc8d580810e91849d4a0811a90467ed5e
   network_info_plus: 6613d9d7cdeb0e6f366ed4dbe4b3c51c52d567a9
   objective_c: 77e887b5ba1827970907e10e832eec1683f3431d

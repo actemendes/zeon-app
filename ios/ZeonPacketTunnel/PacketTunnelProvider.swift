@@ -8,6 +8,33 @@
 import NetworkExtension
 
 class PacketTunnelProvider: ExtensionProvider {
+#if ZEON_IOS_LAB
+    private var labDeadlineTimer: DispatchSourceTimer?
+
+    private func armLabDeadline() throws {
+        let path = FilePath.sharedDirectory.appendingPathComponent("ios-lab-deadline")
+        guard let raw = try? String(contentsOf: path, encoding: .utf8),
+              let deadline = Double(raw), deadline > Date().timeIntervalSince1970,
+              deadline <= Date().timeIntervalSince1970 + 600 else {
+            throw NSError(domain: "ZEON.IosLab", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Diagnostic run lease missing or expired"])
+        }
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        timer.schedule(deadline: .now() + max(0, deadline - Date().timeIntervalSince1970))
+        timer.setEventHandler { [weak self] in
+            self?.cancelTunnelWithError(NSError(domain: "ZEON.IosLab", code: 2))
+        }
+        labDeadlineTimer?.cancel()
+        labDeadlineTimer = timer
+        timer.resume()
+    }
+
+    override func stopTunnel(with reason: NEProviderStopReason) async {
+        labDeadlineTimer?.cancel()
+        labDeadlineTimer = nil
+        await super.stopTunnel(with: reason)
+    }
+#endif
 
     private var upload: Int64 = 0
     private var download: Int64 = 0
@@ -16,6 +43,9 @@ class PacketTunnelProvider: ExtensionProvider {
     // var trafficReader: TrafficReader!
     
     override func startTunnel(options: [String : NSObject]?) async throws {
+#if ZEON_IOS_LAB
+        try armLabDeadline()
+#endif
 //    override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) {
 
         NSLog("H?C1")
