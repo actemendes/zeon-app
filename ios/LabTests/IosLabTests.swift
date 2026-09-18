@@ -28,11 +28,13 @@ final class IosLabTests: XCTestCase {
     private var directEgress: String?
     private var trafficFailure: [String: Any]?
     private var uiFailures = [[String: Any]]()
+    private var navigationFailure: String?
 
     private func journal(_ status: String) -> [String: Any] {
         var value: [String: Any] = ["schema": 1, "test": name, "status": status, "steps": steps]
         if let failure = trafficFailure { value["failure"] = failure }
         if !uiFailures.isEmpty { value["ui_failures"] = uiFailures }
+        if let failure = navigationFailure { value["navigation_failure"] = failure }
         return value
     }
 
@@ -166,29 +168,47 @@ final class IosLabTests: XCTestCase {
         }
         let home = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", fixture.homeTab)).firstMatch
         guard home.waitForExistence(timeout: 10) else {
-            throw NSError(domain: "ZEON.IosLab.Navigation", code: 1)
+            throw navigationError("home_missing")
         }
         home.tap()
     }
 
+    private func navigationError(_ reason: String) -> NSError {
+        navigationFailure = reason
+        record("navigation_failed")
+        return NSError(domain: "ZEON.IosLab.Navigation", code: 1)
+    }
+
     private func chooseServer(_ tag: String) throws {
         try returnHome()
-        app.descendants(matching: .any).matching(identifier: fixture.serverPicker).firstMatch.tap()
+        let picker = app.descendants(matching: .any).matching(identifier: fixture.serverPicker).firstMatch
+        guard picker.waitForExistence(timeout: 10), picker.isHittable else {
+            throw navigationError("picker_missing")
+        }
+        picker.tap()
+        record("server_picker_opened")
         let server = app.descendants(matching: .any).matching(identifier: IosLabEvidence.proxyIdentifier(tag)).firstMatch
         _ = server.waitForExistence(timeout: 5)
         for _ in 0..<10 {
             if server.exists && server.isHittable { break }
             app.swipeUp()
         }
-        guard server.exists && server.isHittable else {
-            throw NSError(domain: "ZEON.IosLab.Navigation", code: 2)
+        for _ in 0..<20 {
+            if server.exists && server.isHittable { break }
+            app.swipeDown()
         }
+        guard server.exists && server.isHittable else {
+            throw navigationError("server_missing")
+        }
+        record("server_row_found")
         if !server.isSelected { server.tap() }
+        record("server_row_tapped")
         let selected = Date().addingTimeInterval(45)
         while !server.isSelected && Date() < selected {
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
-        guard server.isSelected else { throw NSError(domain: "ZEON.IosLab.Navigation", code: 3) }
+        guard server.isSelected else { throw navigationError("selection_timeout") }
+        record("server_row_selected")
         try returnHome()
         try waitState("connected", seconds: 45)
     }

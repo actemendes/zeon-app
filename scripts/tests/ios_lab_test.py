@@ -15,6 +15,13 @@ import ios_lab_build as build
 
 
 class ControllerTests(unittest.TestCase):
+    def test_navigation_failure_is_bounded_and_never_passes(self):
+        value = {'schema': 1, 'status': 'FAIL', 'steps': [], 'navigation_failure': 'server_missing'}
+        self.assertEqual(lab.sanitized_device_receipt(value)['navigation_failure'], 'server_missing')
+        for extra in [{'status': 'PASS'}, {'navigation_failure': 'private server tag'}]:
+            with self.assertRaises(lab.Blocked):
+                lab.sanitized_device_receipt(dict(value, **extra))
+
     def test_exit_identity_is_classified_without_retaining_addresses(self):
         value = {'schema': 1, 'status': 'FAIL', 'steps': [],
                  'failure': {'reason': 'egress_mismatch', 'target_index': 1, 'observed_exit': 'direct'}}
