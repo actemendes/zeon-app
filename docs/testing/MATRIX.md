@@ -13,7 +13,7 @@
 |---|---|---|
 | SIM01 | UI connect/disconnect через production notifier и подменяемый VPN repository | UI/logic only |
 | SIM02 | Детерминированный pending start, cancel, stale callback, retry | UI/logic only; не 150-секундный device drill |
-| SIM03 | Импорт metadata синтетического профиля, выбранный профиль передан connection owner | UI/logic; полный UI/storage import NOT_RUN |
+| SIM03 | Форма импорта: validation, production notifier/parser/repository, encrypted config, повторное открытие SQLite, передача профиля connection owner | UI/logic; HTTP/native validation/keychain/account bootstrap подменены |
 | SIM04 | Изменение настройки через настоящий settings widget и сохранение значения | UI/logic only |
 | SIM05 | Недоступный API не уничтожает cache; ошибка классифицирована отдельно от VPN | UI/logic only |
 | connect | Connect ≤45с → две независимые HTTPS цели с egress A → background/return → disconnect ≤15с → direct HTTPS | Device diagnostic |

@@ -49,8 +49,11 @@ Simulator запускает production Flutter widgets/ConnectionNotifier с т
 `ConnectionRepository`. Его native bootstrap отключён только при сочетании
 `targetEnvironment(simulator)` и `ZEON_IOS_SIMULATOR_LAB`. Метка результата всегда
 `UI_LOGIC_ONLY`, `real_ios_vpn=false`: стек сети Simulator принадлежит macOS.
-Текущий импорт SIM03 проверяет metadata parser и передачу профиля connection owner;
-полный UI-import с записью в реальное хранилище пока NOT_RUN.
+SIM03 вводит неверный и затем корректный URL через настоящую форму, вызывает
+production notifier/parser/repository, проверяет encrypted config и повторное
+открытие отдельной SQLite базы, затем передаёт сохранённый профиль connection owner.
+HTTP fixture, native validation, keychain и account bootstrap явно подменены;
+это не проверка настоящего VPN, удалённой подписки или iOS Keychain.
 
 Device runner использует XCUITest для UI и собственный URLSession для двух HTTPS
 целей. Это другой процесс/application sandbox, не Runner и не PacketTunnel.
@@ -107,9 +110,15 @@ sanitized journal в собственном Documents для последующ�
 пользовательскую ZEON, профили или данные ради устранения блокера. Установка диагностической
 сборки поверх существующей требует отдельного решения владельца устройства.
 
-Непокрыто до device commissioning: настоящий PacketTunnel и native/egress correlation,
-физическая потеря USB/контроллера, обычная functional сборка, IPv6/leaks, полный UI import,
-сохранение A/B после перезапуска и системные VPN permission prompts. Эти строки не
+Commissioning `8bb3f258`: два независимых diagnostic connect/HTTPS/disconnect прогона
+на iPhone прошли без ручного ремонта, с ожидаемым A, live USB/PacketTunnel и direct
+traffic после Stop. Evidence: `/Users/actemendes/Library/Logs/ZEON/ios-lab/device-connect-8bb3f258`
+и каталог с suffix `-repeat`. Это не переносит PASS на последующие SHA.
+Следующий A/B был BLOCKED после подтверждённого владельцем ручного вмешательства;
+старый receipt не засчитан, стороннее соединение не остановлено.
+
+Пока не покрыты физическая потеря USB/контроллера, обычная functional сборка,
+IPv6/leaks, сохранение A/B после перезапуска и системные VPN permission prompts. Эти строки не
 повышаются в PASS по успешной компиляции. KB final sync/закрытие TickTick — только
 после достижения конечной цели по AI-AGENT-GUIDE.
 

@@ -13,7 +13,6 @@ import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
 import 'package:zeon/features/home/widget/connection_button.dart';
 import 'package:zeon/features/pricing/data/pricing_repository.dart';
 import 'package:zeon/features/pricing/model/pricing_models.dart';
-import 'package:zeon/features/profile/data/profile_parser.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
@@ -23,6 +22,7 @@ import 'package:zeon/gen/translations_ru.g.dart';
 
 import 'features/ui/approved_interface_test.dart' as ui;
 import 'support/ios_vpn_adapter.dart';
+import 'support/ios_profile_fixture.dart';
 
 // Shared by host widget checks and the explicitly labelled Simulator suite.
 void main() {
@@ -75,22 +75,12 @@ void main() {
     await lab.close(tester);
   });
 
-  testWidgets('SIM03 profile metadata import feeds the connection owner', (tester) async {
-    final parsed = ProfileParser.parse(
-      tempFilePath: '',
-      profile: ProfileEntity.remote(
-        id: 'sim-profile',
-        active: true,
-        name: '',
-        url: 'https://example.invalid/lab#Simulator',
-        lastUpdate: DateTime.utc(2026),
-      ),
-    ).getOrElse((_) => throw StateError('fixture import failed'));
-    expect(parsed.name, 'Simulator');
+  testWidgets('SIM03 UI import persists profile and feeds the connection owner', (tester) async {
+    final parsed = await importIosLabProfile(tester);
     final lab = await _mount(tester, profile: parsed);
     await tester.tap(find.byKey(const ValueKey('home_connection_button')));
     await _until(tester, () => lab.status is Connected);
-    expect(lab.adapter.profiles, ['sim-profile']);
+    expect(lab.adapter.profiles, [parsed.id]);
     await lab.close(tester);
   });
 
