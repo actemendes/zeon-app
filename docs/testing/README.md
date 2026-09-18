@@ -38,9 +38,7 @@
 приложения не требуется. Для продуктового исправления успешная сборка, analyzer,
 unit/widget или native tests не заменяют реальные проверки двух платформ.
 
-## Частота и бюджет
-
-### Отдельная Apple acceptance: APPLE-TARGETED-v1
+## Отдельная Apple acceptance: APPLE-TARGETED-v1
 
 Apple-стенд не наследует PASS Windows/Android. Для инфраструктурной задачи
 `6aad153d8f085e121ad13499` выполнять только строки Apple из [MATRIX.md](MATRIX.md),
@@ -59,8 +57,10 @@ Device runner использует XCUITest для UI и собственный 
 Ответ каждой цели: свежий `nonce`, ожидаемые `marker` и `egress`; TLS проверяется
 системой. До/после туннеля нужен direct baseline, при VPN — выход A/B. Provider
 health-check, один UI Connected, IP без nonce или результат Simulator недостаточны.
-Live USB round trip `devicectl device info processes` должен попасть внутрь окна
-подтверждённого VPN-трафика. Cached `list devices` этого не доказывает.
+Live USB round trip `devicectl device info processes` с присутствующим процессом
+`ZeonPacketTunnel` должен попасть внутрь окна подтверждённого VPN-трафика.
+В отчёте сохраняется только boolean присутствия, не список процессов.
+Cached `list devices` этого не доказывает.
 
 Диагностическая сборка отдельно включает `ZEON_IOS_LAB`: host записывает абсолютную
 lease в App Group, PacketTunnel отказывает без lease/после истечения и отменяет
@@ -95,6 +95,8 @@ sanitized journal в собственном Documents для последующ�
 сохранение A/B после перезапуска и системные VPN permission prompts. Эти строки не
 повышаются в PASS по успешной компиляции. KB final sync/закрытие TickTick — только
 после достижения конечной цели по AI-AGENT-GUIDE.
+
+## Частота и бюджет
 
 | Набор | Когда | Объём |
 |---|---|---|

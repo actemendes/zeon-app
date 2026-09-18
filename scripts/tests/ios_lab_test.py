@@ -11,9 +11,24 @@ SCRIPT = Path(__file__).resolve().parents[1] / 'ios_lab.py'
 spec = importlib.util.spec_from_file_location('ios_lab', SCRIPT)
 lab = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(lab)
+import ios_lab_build as build
 
 
 class ControllerTests(unittest.TestCase):
+    def test_build_publication_rejects_changed_head_or_dirty_source(self):
+        for outputs, expected in [(['candidate\n', b''], True), (['other\n'], False),
+                                  (['candidate\n', b' M source'], False)]:
+            with patch.object(build.subprocess, 'check_output', side_effect=outputs):
+                self.assertEqual(build.candidate_unchanged('candidate'), expected)
+
+    def test_usb_probe_retains_only_packet_tunnel_presence(self):
+        def response(args, timeout):
+            Path(args[args.index('--json-output') + 1]).write_text(json.dumps({'result': {
+                'runningProcesses': [{'executable': '/private/ZeonPacketTunnel'},
+                                     {'executable': '/private/personal-app'}]}}))
+        with patch.object(lab, 'command', side_effect=response):
+            self.assertIs(lab.usb_probe('private-device-id'), True)
+
     def test_missing_completion_is_interrupted_on_disk(self):
         with tempfile.TemporaryDirectory() as work, patch.object(lab, 'command', return_value='candidate'):
             run = lab.Run('simulator', Path(work) / 'evidence')
@@ -31,6 +46,19 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(report['steps'][0]['status'], 'BLOCKED')
             self.assertIn('duration_seconds', report['steps'][0])
             self.assertNotEqual(report['status'], 'PASS')
+
+    def test_pass_cannot_be_persisted_before_cleanup_and_final_completion(self):
+        with tempfile.TemporaryDirectory() as work, patch.object(lab, 'command', return_value='candidate'):
+            run = lab.Run('simulator', Path(work) / 'evidence')
+            run.report['status'] = 'PASS'
+            run.save()
+            self.assertEqual(json.loads((run.path / 'report.json').read_text())['status'], 'INTERRUPTED')
+            run.report['cleanup_verified'] = True
+            run.save()
+            self.assertEqual(json.loads((run.path / 'report.json').read_text())['status'], 'INTERRUPTED')
+            run.report['ended_utc'] = lab.now()
+            run.save()
+            self.assertEqual(json.loads((run.path / 'report.json').read_text())['status'], 'PASS')
 
     def test_artifact_content_or_name_tampering_is_rejected(self):
         with tempfile.TemporaryDirectory() as work, patch.object(lab, 'ROOT', Path(work).resolve()):

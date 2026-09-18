@@ -92,10 +92,15 @@ class Run:
         self.save()
 
     def save(self):
-        atomic_json(self.path / 'report.json', self.report)
+        snapshot = dict(self.report)
+        if snapshot['status'] == 'PASS' and (not snapshot['cleanup_verified'] or snapshot['ended_utc'] is None):
+            snapshot['status'] = 'INTERRUPTED'
+        if snapshot['status'] != 'PASS':
+            snapshot['real_ios_vpn'] = False
+        atomic_json(self.path / 'report.json', snapshot)
         (self.path / 'report.md').write_text(
             f"# iOS lab {self.report['run_id']}\n\n"
-            f"{self.report['status']} / {self.report['evidence_kind']}\n\n"
+            f"{snapshot['status']} / {self.report['evidence_kind']}\n\n"
             f"Source: {self.report['source_sha']}\n\n"
             f"Cleanup verified: {self.report['cleanup_verified']}\n\n"
             + '\n'.join(self.report['unresolved']) + '\n')
@@ -231,6 +236,16 @@ def recover_simulators(base):
         marker.unlink()
 
 
+def usb_probe(device):
+    # Raw process paths can contain personal app names. Retain only this boolean.
+    with tempfile.TemporaryDirectory(prefix='zeon-usb-private-') as scratch:
+        result = Path(scratch) / 'processes.json'
+        command(['xcrun', 'devicectl', '--timeout', '10', '--json-output', str(result),
+                 'device', 'info', 'processes', '--device', device], 15)
+        processes = json.loads(result.read_text())['result']['runningProcesses']
+        return any(Path(process.get('executable', '')).name == 'ZeonPacketTunnel' for process in processes)
+
+
 def device_run(run, args):
     if not args.artifact or not args.target_artifact:
         raise Blocked('Both runner and diagnostic target artifact manifests are required')
@@ -287,9 +302,10 @@ def device_run(run, args):
         while not stopped.is_set():
             started = time.time()
             try:
-                command(['xcrun', 'devicectl', '--timeout', '10', 'device', 'info', 'processes', '--device', args.device], 15)
-                heartbeats.append({'started': started, 'ended': time.time(), 'status': 'PASS'})
-            except (Blocked, subprocess.TimeoutExpired, OSError):
+                tunnel_present = usb_probe(args.device)
+                heartbeats.append({'started': started, 'ended': time.time(), 'status': 'PASS',
+                                   'packet_tunnel_present': tunnel_present})
+            except (Blocked, subprocess.TimeoutExpired, OSError, ValueError, KeyError):
                 heartbeats.append({'started': started, 'ended': time.time(), 'status': 'INTERRUPTED'})
             stopped.wait(3)
     with tempfile.TemporaryDirectory(prefix='zeon-xctest-private-') as scratch:
@@ -335,8 +351,9 @@ def device_run(run, args):
                 raise Blocked('Device receipt contains unexpected fields')
             connected = next(step['time'] for step in steps if step['id'] == 'connected')
             traffic = next(step['time'] for step in steps if step['id'] == 'tunnel_traffic_verified')
-            if not any(h['status'] == 'PASS' and h['started'] >= connected and h['ended'] <= traffic for h in heartbeats):
-                raise Blocked('No live USB management round trip during verified tunnel traffic')
+            if not any(h['status'] == 'PASS' and h['packet_tunnel_present']
+                       and h['started'] >= connected and h['ended'] <= traffic for h in heartbeats):
+                raise Blocked('No live USB round trip with Packet Tunnel present during verified tunnel traffic')
             if any(h['status'] != 'PASS' for h in heartbeats):
                 run.report['status'] = 'INTERRUPTED'
                 return

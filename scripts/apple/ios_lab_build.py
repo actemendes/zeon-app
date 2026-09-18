@@ -33,6 +33,11 @@ def tree_hash(path):
     return digest.hexdigest()
 
 
+def candidate_unchanged(sha):
+    current = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    return current == sha and not subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['ios-test-simulator', 'ios-test-runner', 'ios-test-diagnostic'])
@@ -86,8 +91,8 @@ def main():
             run(command)
             source = scratch / 'derived/Build/Products'
         artifact_hash = tree_hash(source)
-        if not args.development and subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT):
-            parser.error('Build changed tracked source or lockfiles; commit the resolved candidate before publishing')
+        if not args.development and not candidate_unchanged(sha):
+            parser.error('HEAD or source changed during build; rebuild the committed candidate before publishing')
         destination = ROOT / 'out/installers/ios/lab' / sha / (kind + '-' + artifact_hash[:12])
         destination.parent.mkdir(parents=True, exist_ok=True)
         if not destination.exists():
