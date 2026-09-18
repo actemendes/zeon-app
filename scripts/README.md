@@ -238,7 +238,7 @@ Fixture — локальный JSON вне Git, только выделенны�
     {"url": "https://control-a.example.invalid/echo", "marker": "zeon-lab-a"},
     {"url": "https://control-b.example.invalid/echo", "marker": "zeon-lab-b"}
   ],
-  "directEgress": "expected-direct-egress",
+  "directEgress": "discover",
   "serverAEgress": "expected-a-egress",
   "serverBEgress": "expected-b-egress",
   "serverPicker": "test-server-picker-accessibility-label",
@@ -250,9 +250,13 @@ Fixture — локальный JSON вне Git, только выделенны�
 ```
 
 Цель возвращает HTTP 200 JSON `nonce` (эхо query), `marker`, `egress` (наблюдаемый
-сервером адрес/метка выхода). Два независимых host, доверенный TLS, без redirect,
+сервером IP-адрес выхода). Два независимых host, доверенный TLS, без redirect,
 auth, credentials или URL query. Примеры `.invalid` не являются рабочими целями.
 Профили A/B подготавливаются отдельно, fixture не содержит subscription secrets.
+`directEgress` принимает ожидаемый IP или `discover`: до Start, в disconnected-состоянии,
+runner получает согласованный прямой IP от обеих целей, отличный от A/B. Это значение
+хранится только в памяти и фиксируется до конца case; после disconnect оно не
+переобучается. Адрес Mac нельзя автоматически считать прямым адресом iPhone.
 `homeTab` — видимая подпись главной вкладки в локали устройства; драйвер возвращается
 на неё после выбора сервера, включая аварийный cleanup. `serverPicker` и A/B labels
 должны соответствовать accessibility текущей сборки, не координатам экрана.
@@ -277,6 +281,9 @@ Diagnostic lease ограничена 120с (cancel: 300с), абсолютны�
 stop 15с, HTTPS resource 12с. Превышение не увеличивать ради PASS.
 
 Проверки самого контроллера: `python3 -m unittest discover -s scripts/tests -p ios_lab_test.py`.
+Чистая native-проверка HTTPS evidence и verdict без iPhone/сети:
+`bash scripts/tests/ios_lab_native_test.sh`. FAIL сохраняет только допустимую категорию
+ошибки и номер цели, не response body, URL, адреса или описание системной ошибки.
 Требования/непокрытое: [docs/testing/README.md](../docs/testing/README.md),
 [Apple matrix](../docs/testing/MATRIX.md). Успех диагностического runner не заменяет
 ordinary-build functional и physical controller-loss приёмку.

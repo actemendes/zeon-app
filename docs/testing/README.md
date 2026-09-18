@@ -62,6 +62,16 @@ Live USB round trip `devicectl device info processes` с присутствую�
 В отчёте сохраняется только boolean присутствия, не список процессов.
 Cached `list devices` этого не доказывает.
 
+В режиме `directEgress=discover` прямой baseline определяется самим iPhone до Start:
+оба независимых ответа должны совпасть, иметь валидный IP и отличаться от A/B.
+Baseline фиксируется в памяти на весь case, после остановки не переобучается и не
+пишется в evidence. Mac и iPhone могут использовать разные underlay/выходы.
+Native journal получает PASS только после явного конца выбранного сценария и cleanup;
+нулевой XCTest failureCount в teardown сам по себе недостаточен (setup мог упасть).
+Отказ HTTPS сохраняется как whitelist-категория причины и номер цели, без адресов,
+response body или текста системной ошибки. Controller извлекает такой receipt и
+при XCTest FAIL, отделяя ошибку baseline/environment от неподтверждённого VPN.
+
 Диагностическая сборка отдельно включает `ZEON_IOS_LAB`: host записывает абсолютную
 lease в App Group, PacketTunnel отказывает без lease/после истечения и отменяет
 туннель по локальному таймеру независимо от Mac. Lease нельзя автоматически

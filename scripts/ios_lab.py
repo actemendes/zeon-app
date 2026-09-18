@@ -5,6 +5,7 @@ import datetime as dt
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -224,6 +225,34 @@ DEVICE_CASES = {
 }
 
 
+def sanitized_device_receipt(value):
+    allowed_steps = {'lease_armed', 'connected', 'disconnected', 'direct_traffic_verified',
+                     'tunnel_traffic_verified', 'cleanup_verified', 'traffic_failed'}
+    allowed_reasons = {'network_offline', 'network_dns', 'network_timeout', 'network_refused',
+                       'network_cancelled', 'network_tls', 'network_other', 'http_status',
+                       'origin', 'payload', 'nonce', 'marker', 'egress_mismatch',
+                       'baseline_is_vpn_exit', 'baseline_disagreement'}
+    if (not isinstance(value, dict) or set(value) - {'schema', 'test', 'status', 'steps', 'failure'}
+            or value.get('schema') != 1 or value.get('status') not in ('PASS', 'FAIL')
+            or not isinstance(value.get('steps'), list)):
+        raise Blocked('Invalid device completion receipt')
+    for step in value['steps']:
+        if (not isinstance(step, dict) or set(step) != {'id', 'time'} or step['id'] not in allowed_steps
+                or type(step['time']) not in (int, float) or not math.isfinite(step['time'])):
+            raise Blocked('Device receipt contains unexpected fields')
+    if value['status'] == 'PASS' and any(step['id'] == 'traffic_failed' for step in value['steps']):
+        raise Blocked('Device PASS receipt contains a failed traffic step')
+    result = {'status': value['status'], 'steps': value['steps']}
+    if 'failure' in value:
+        failure = value['failure']
+        if (value['status'] == 'PASS' or not isinstance(failure, dict)
+                or set(failure) != {'reason', 'target_index'} or failure['reason'] not in allowed_reasons
+                or type(failure['target_index']) is not int or failure['target_index'] not in (1, 2)):
+            raise Blocked('Device failure receipt contains unexpected fields')
+        result['failure'] = failure
+    return result
+
+
 def recover_simulators(base):
     markers = list(base.glob('ownership/*.json'))
     if not markers:
@@ -335,9 +364,7 @@ def device_run(run, args):
             summary = json.loads(command(['xcrun', 'xcresulttool', 'get', 'test-results', 'summary', '--path', str(result)]))
             if summary.get('skippedTests', 0) or summary.get('totalTestCount', 0) != 1:
                 raise Blocked('Selected XCTest did not execute exactly once; inspect device prerequisites')
-            if summary.get('failedTests', 0) or case['status'] == 'FAIL':
-                run.report['status'] = 'FAIL'
-                return
+            failed = bool(summary.get('failedTests', 0) or case['status'] == 'FAIL')
             exported = scratch / 'attachments'
             command(['xcrun', 'xcresulttool', 'export', 'attachments', '--path', str(result), '--output-path', str(exported)])
             receipts = []
@@ -349,13 +376,23 @@ def device_run(run, args):
                             receipts.append(value)
                     except (ValueError, UnicodeError):
                         pass
-            if len(receipts) != 1 or receipts[0].get('status') != 'PASS':
+            if len(receipts) != 1:
                 raise Blocked('Missing device completion and cleanup receipt')
-            steps = receipts[0]['steps']
-            allowed = {'lease_armed', 'connected', 'disconnected', 'direct_traffic_verified',
-                       'tunnel_traffic_verified', 'cleanup_verified'}
-            if any(set(step) != {'id', 'time'} or step['id'] not in allowed for step in steps):
-                raise Blocked('Device receipt contains unexpected fields')
+            receipt = sanitized_device_receipt(receipts[0])
+            steps = receipt['steps']
+            run.report['device_steps'] = steps
+            run.report['cleanup_verified'] = bool(steps and steps[-1]['id'] == 'cleanup_verified')
+            if failed or receipt['status'] == 'FAIL':
+                run.report['status'] = case['status'] = 'FAIL'
+                failure = receipt.get('failure')
+                if failure:
+                    run.report['device_failure'] = failure
+                    connected = any(step['id'] == 'connected' for step in steps)
+                    run.report['classification'] = 'unknown' if connected else 'environment'
+                return
+            if not {'connected', 'direct_traffic_verified', 'tunnel_traffic_verified', 'cleanup_verified'}.issubset(
+                    {step['id'] for step in steps}):
+                raise Blocked('Device PASS receipt is missing required traffic or cleanup steps')
             connected = next(step['time'] for step in steps if step['id'] == 'connected')
             traffic = next(step['time'] for step in steps if step['id'] == 'tunnel_traffic_verified')
             if not any(h['status'] == 'PASS' and h['packet_tunnel_present']

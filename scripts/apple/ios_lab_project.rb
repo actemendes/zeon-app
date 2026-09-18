@@ -7,8 +7,10 @@ root = File.expand_path('../..', __dir__)
 work = ARGV.fetch(0)
 project = Xcodeproj::Project.new(File.join(work, 'IosLab.xcodeproj'))
 target = project.new_target(:ui_test_bundle, 'IosLab', :ios, '15.5')
-file = project.main_group.new_file(File.join(root, 'ios/LabTests/IosLabTests.swift'))
-target.source_build_phase.add_file_reference(file)
+%w[IosLabEvidence.swift IosLabTests.swift].each do |name|
+  file = project.main_group.new_file(File.join(root, 'ios/LabTests', name))
+  target.source_build_phase.add_file_reference(file)
+end
 target.build_configurations.each do |configuration|
   settings = configuration.build_settings
   settings['PRODUCT_BUNDLE_IDENTIFIER'] = ENV.fetch('ZEON_LAB_RUNNER_BUNDLE_ID', 'invalid.zeon.lab.simulator')

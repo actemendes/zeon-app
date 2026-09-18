@@ -24,10 +24,19 @@ final class IosLabTests: XCTestCase {
     private var changedServer = false
     private var deadline: Date!
     private var steps = [[String: Any]]()
+    private var scenarioCompleted = false
+    private var directEgress: String?
+    private var trafficFailure: [String: Any]?
+
+    private func journal(_ status: String) -> [String: Any] {
+        var value: [String: Any] = ["schema": 1, "test": name, "status": status, "steps": steps]
+        if let failure = trafficFailure { value["failure"] = failure }
+        return value
+    }
 
     private func record(_ id: String) {
         steps.append(["id": id, "time": Date().timeIntervalSince1970])
-        let value: [String: Any] = ["schema": 1, "test": name, "status": "INTERRUPTED", "steps": steps]
+        let value = journal("INTERRUPTED")
         if let data = try? JSONSerialization.data(withJSONObject: value),
            let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
             try? data.write(to: directory.appendingPathComponent("ios-lab-current.json"), options: .atomic)
@@ -41,6 +50,7 @@ final class IosLabTests: XCTestCase {
             throw XCTSkip("BLOCKED: isolated test fixture is required")
         }
         fixture = try JSONDecoder().decode(Fixture.self, from: Data(json.utf8))
+        directEgress = fixture.directEgress == "discover" ? nil : fixture.directEgress
         guard fixture.targets.count == 2,
               Set(fixture.targets.compactMap { URL(string: $0.url)?.host }).count == 2,
               Set([fixture.directEgress, fixture.serverAEgress, fixture.serverBEgress]).count == 3 else {
@@ -68,7 +78,7 @@ final class IosLabTests: XCTestCase {
         }
         record("lease_armed")
         try waitState("disconnected", seconds: 45)
-        try traffic(egress: fixture.directEgress)
+        try traffic(egress: directEgress, discoverBaseline: directEgress == nil)
     }
 
     override func tearDownWithError() throws {
@@ -81,11 +91,11 @@ final class IosLabTests: XCTestCase {
                 changedServer = false
             }
             try stop()
-            try traffic(egress: fixture.directEgress)
+            try traffic(egress: directEgress)
         }
         record("cleanup_verified")
-        let value: [String: Any] = ["schema": 1, "test": name,
-            "status": testRun?.failureCount == 0 ? "PASS" : "FAIL", "steps": steps]
+        let value = journal(IosLabEvidence.receiptStatus(
+            completed: scenarioCompleted, cleanup: true, failures: testRun?.failureCount ?? 1))
         let data = try JSONSerialization.data(withJSONObject: value)
         let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
         attachment.name = "zeon-ios-lab"
@@ -151,8 +161,12 @@ final class IosLabTests: XCTestCase {
         try waitState("connected", seconds: 45)
     }
 
-    private func traffic(egress: String) throws {
-        for target in fixture.targets {
+    private func traffic(egress: String?, discoverBaseline: Bool = false) throws {
+        guard egress != nil || discoverBaseline else {
+            throw NSError(domain: "ZEON.IosLab.Fixture", code: 2)
+        }
+        var discovered: String?
+        for (index, target) in fixture.targets.enumerated() {
             let nonce = UUID().uuidString
             var components = URLComponents(string: target.url)!
             guard components.scheme == "https", components.user == nil, components.password == nil else {
@@ -166,23 +180,29 @@ final class IosLabTests: XCTestCase {
             configuration.timeoutIntervalForResource = 12
             let session = URLSession(configuration: configuration)
             let finished = expectation(description: "independent HTTPS response")
-            var valid = false
+            var check = IosLabEvidence.TrafficCheck(egress: nil, failure: "network_timeout")
             let task = session.dataTask(with: components.url!) { data, response, error in
                 defer { finished.fulfill() }
-                guard error == nil, let http = response as? HTTPURLResponse, http.statusCode == 200,
-                      http.url?.host == components.host, let data = data, data.count <= 16384,
-                      let object = try? JSONSerialization.jsonObject(with: data) as? [String: String] else { return }
-                valid = object["nonce"] == nonce && object["marker"] == target.marker && object["egress"] == egress
+                check = IosLabEvidence.traffic(data: data, response: response, error: error,
+                    host: components.host, marker: target.marker, nonce: nonce, expectedEgress: egress)
             }
             task.resume()
             let result = XCTWaiter.wait(for: [finished], timeout: 13)
             session.invalidateAndCancel()
-            guard result == .completed && valid else {
-                // Never include response bodies, IPs, URLs or profile names in reports.
+            var failure = result == .completed ? check.failure : "network_timeout"
+            if failure == nil, discoverBaseline, let actual = check.egress {
+                failure = IosLabEvidence.baselineFailure(egress: actual, first: discovered,
+                    vpnExits: [fixture.serverAEgress, fixture.serverBEgress])
+                discovered = actual
+            }
+            if let reason = failure {
+                trafficFailure = ["reason": reason, "target_index": index + 1]
+                record("traffic_failed")
                 throw NSError(domain: "ZEON.IosLab.Traffic", code: 1)
             }
         }
-        record(egress == fixture.directEgress ? "direct_traffic_verified" : "tunnel_traffic_verified")
+        if discoverBaseline { directEgress = discovered }
+        record(discoverBaseline || egress == directEgress ? "direct_traffic_verified" : "tunnel_traffic_verified")
     }
 
     func testConnectTrafficDisconnect() throws {
@@ -193,7 +213,8 @@ final class IosLabTests: XCTestCase {
         app.activate()
         try waitState("connected", seconds: 10)
         try stop()
-        try traffic(egress: fixture.directEgress)
+        try traffic(egress: directEgress)
+        scenarioCompleted = true
     }
 
     func testCancelObserveRetry() throws {
@@ -209,9 +230,10 @@ final class IosLabTests: XCTestCase {
             XCTAssertFalse(element("connected").exists, "Late connection after cancel")
             RunLoop.current.run(until: Date().addingTimeInterval(0.5))
         }
-        try traffic(egress: fixture.directEgress)
+        try traffic(egress: directEgress)
         try connect()
         try traffic(egress: fixture.serverAEgress)
+        scenarioCompleted = true
     }
 
     func testServerAB() throws {
@@ -223,6 +245,7 @@ final class IosLabTests: XCTestCase {
         try chooseServer(fixture.serverA)
         try traffic(egress: fixture.serverAEgress)
         changedServer = false
+        scenarioCompleted = true
     }
 
     func testUnavailableEndpoint() throws {
@@ -244,6 +267,7 @@ final class IosLabTests: XCTestCase {
         XCTAssertEqual(result, .completed)
         XCTAssertTrue(failed)
         try traffic(egress: fixture.serverAEgress)
+        scenarioCompleted = true
     }
 
     func testCloseReturn() throws {
@@ -254,6 +278,7 @@ final class IosLabTests: XCTestCase {
         app.launch()
         try waitState("connected", seconds: 45)
         try traffic(egress: fixture.serverAEgress)
+        scenarioCompleted = true
     }
 
     func testLeaseExpiry() throws {
@@ -264,10 +289,11 @@ final class IosLabTests: XCTestCase {
         while Date() < deadline.addingTimeInterval(5) {
             RunLoop.current.run(until: Date().addingTimeInterval(0.5))
         }
-        try traffic(egress: fixture.directEgress)
+        try traffic(egress: directEgress)
         app.launchEnvironment.removeValue(forKey: "ZEON_IOS_LAB_DEADLINE")
         app.launch()
         try waitState("disconnected", seconds: 15)
         ownsConnection = false
+        scenarioCompleted = true
     }
 }

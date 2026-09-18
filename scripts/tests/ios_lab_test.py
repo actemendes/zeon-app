@@ -15,6 +15,27 @@ import ios_lab_build as build
 
 
 class ControllerTests(unittest.TestCase):
+    def test_failed_receipt_keeps_only_bounded_diagnostics(self):
+        value = {'schema': 1, 'test': 'IosLabTests/connect', 'status': 'FAIL',
+                 'steps': [{'id': 'traffic_failed', 'time': 1}, {'id': 'cleanup_verified', 'time': 2}],
+                 'failure': {'reason': 'egress_mismatch', 'target_index': 1}}
+        result = lab.sanitized_device_receipt(value)
+        self.assertNotIn('test', result)
+        self.assertEqual(result['failure'], value['failure'])
+        self.assertEqual(result['status'], 'FAIL')
+
+    def test_device_receipt_rejects_private_fields_and_false_pass(self):
+        base = {'schema': 1, 'test': 'IosLabTests/connect', 'status': 'FAIL', 'steps': []}
+        for extra in [{'failure': {'reason': 'https://private.invalid', 'target_index': 1}},
+                      {'failure': {'reason': 'network_tls', 'target_index': 1, 'body': 'private'}},
+                      {'private': 'data'},
+                      {'steps': [{'id': 'private-data', 'time': 1}]},
+                      {'steps': [{'id': 'connected', 'time': float('nan')}]},
+                      {'status': 'PASS', 'steps': [{'id': 'traffic_failed', 'time': 1}]},
+                      {'status': 'PASS', 'failure': {'reason': 'network_tls', 'target_index': 1}}]:
+            with self.subTest(extra=extra), self.assertRaises(lab.Blocked):
+                lab.sanitized_device_receipt(dict(base, **extra))
+
     def test_build_publication_rejects_changed_head_or_dirty_source(self):
         for outputs, expected in [(['candidate\n', b''], True), (['other\n'], False),
                                   (['candidate\n', b' M source'], False)]:
