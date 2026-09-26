@@ -169,7 +169,7 @@ void main() {
     expect(find.text('${TranslationsEn().pages.proxies.autoSelection} • Server C'), findsOneWidget);
   });
 
-  testWidgets('connected ping slot stays fixed while the server is checked and switched', (tester) async {
+  testWidgets('connected ping slot follows its text width without changing height', (tester) async {
     final updates = BehaviorSubject<OutboundInfo>.seeded(
       OutboundInfo(
         tag: 'server-a',
@@ -194,22 +194,27 @@ void main() {
     addTearDown(container.dispose);
 
     await _pumpAndroidFooter(tester, container);
+    await tester.pump(const Duration(milliseconds: 250));
     final slot = find.byKey(const ValueKey('home_connected_ping_slot'));
     final initialSize = tester.getSize(slot);
     expect(find.text('42 ms'), findsOneWidget);
+    expect(initialSize.width, closeTo(36 + tester.getSize(find.text('42 ms')).width, 0.1));
     expect(find.text('Server A'), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 200));
 
     updates.add(
       OutboundInfo(tag: 'server-a', tagDisplay: 'Server A', type: 'proxy', isVisible: true, urlTestStatus: 'checking'),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 90));
-    expect(tester.getSize(slot), initialSize);
+    expect(tester.getSize(slot).height, initialSize.height);
     expect(find.text('42 ms'), findsOneWidget);
     expect(find.text('...'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 110));
-    expect(tester.getSize(slot), initialSize);
+    await tester.pump(const Duration(milliseconds: 200));
+    final checkingSize = tester.getSize(slot);
+    expect(checkingSize.height, initialSize.height);
+    expect(checkingSize.width, lessThan(initialSize.width));
+    expect(checkingSize.width, closeTo(36 + tester.getSize(find.text('...')).width, 0.1));
     expect(find.text(TranslationsEn().pages.proxies.checkingServers), findsOneWidget);
     expect(find.text('Server A'), findsNothing);
     expect(find.text('...'), findsOneWidget);
@@ -227,11 +232,31 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(tester.getSize(slot), initialSize);
+    await tester.pump(const Duration(milliseconds: 400));
+    final switchedSize = tester.getSize(slot);
+    expect(switchedSize.height, initialSize.height);
+    expect(switchedSize.width, greaterThan(checkingSize.width));
     expect(find.text('Server B'), findsOneWidget);
     expect(find.text('105 ms'), findsOneWidget);
     expect(find.text(TranslationsEn().pages.proxies.checkingServers), findsNothing);
+
+    updates.add(
+      OutboundInfo(
+        tag: 'server-b',
+        tagDisplay: 'Server B',
+        type: 'proxy',
+        isVisible: true,
+        urlTestStatus: 'success',
+        urlTestDelay: 1234,
+        healthScore: 20,
+        success: true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('1234 ms'), findsOneWidget);
+    expect(tester.getSize(slot).width, greaterThan(switchedSize.width));
+    expect(tester.getSize(slot).height, initialSize.height);
   });
 }
 

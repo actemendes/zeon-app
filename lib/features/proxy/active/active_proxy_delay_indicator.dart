@@ -105,25 +105,26 @@ class _CompactPing extends StatelessWidget {
               : const SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))
         : bars;
 
-    return SizedBox(
+    return AnimatedSize(
       key: const ValueKey('home_connected_ping_slot'),
-      width: 116,
-      height: 24,
-      child: Row(
-        children: [
-          SizedBox(
-            width: 28,
-            height: 16,
-            child: AnimatedSwitcher(
-              duration: duration,
-              child: Center(key: ValueKey(qualityKey), child: quality),
+      duration: duration,
+      curve: Curves.easeInOut,
+      alignment: Alignment.centerLeft,
+      child: SizedBox(
+        height: 24,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 28,
+              height: 16,
+              child: AnimatedSwitcher(
+                duration: duration,
+                child: Center(key: ValueKey(qualityKey), child: quality),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 80,
-            height: 24,
-            child: AnimatedSwitcher(
+            const SizedBox(width: 8),
+            AnimatedSwitcher(
               duration: duration,
               layoutBuilder: (current, previous) =>
                   Stack(alignment: Alignment.centerLeft, children: [...previous, if (current != null) current]),
@@ -140,8 +141,8 @@ class _CompactPing extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
