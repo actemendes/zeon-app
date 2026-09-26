@@ -157,6 +157,10 @@ override в WinINet-профиле именно `ZEONRuntime`. Это не до�
 `windows-exe-unsigned` публикует отдельный файл с суффиксом `-unsigned`; он допускается
 только для локальной проверки и не должен распространяться как подписанный релиз.
 Параметр `windows-exe -AllowUnsignedExe` сохранён для совместимости и даёт тот же результат.
+Перед упаковкой Windows установщика скрипт сверяет встроенный Git tree native DLL
+с текущими исходниками `hiddify-core` и повторяет проверку после Flutter build.
+Если core устарел, сначала выполните `rebuild_hiddify_core.ps1 -Platform windows`
+из чистого checkout; один `flutter build windows` DLL не пересобирает.
 Для debug/profile APK можно передать `-Mode debug` или `-Mode profile`.
 `android-google-play` всегда собирает release AAB с жёстко заданным
 `release=google-play`, публикует `ZEON-<version>-google-play.aab` и не создаёт

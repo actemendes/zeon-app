@@ -338,6 +338,22 @@ function Build-WindowsRelease {
     }
 }
 
+function Assert-WindowsCoreProvenance {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$CorePath
+    )
+
+    # Loading a Go c-shared DLL holds a Windows file handle for the process lifetime.
+    # Inspect it in a child shell so the isolated workspace can be removed afterward.
+    $shellPath = (Get-Process -Id $PID).Path
+    & $shellPath -NoProfile -NonInteractive -File (Join-Path $scriptDir "verify_windows_core_provenance.ps1") `
+        -RepoRoot $RepoRoot -CorePath $CorePath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Windows native core provenance verification failed: $CorePath"
+    }
+}
+
 function Invoke-DartCodeGeneration {
     Write-Host "Running: dart run build_runner build --delete-conflicting-outputs"
     & dart run build_runner build --delete-conflicting-outputs
@@ -960,6 +976,11 @@ try {
     Assert-Command "flutter"
     Assert-Command "dart"
 
+    # Flutter packages the existing DLL; it does not rebuild hiddify-core.
+    # Reject stale native payloads before the isolated workspace copies them.
+    Assert-WindowsCoreProvenance -RepoRoot $repoRoot `
+        -CorePath (Join-Path $repoRoot "hiddify-core\bin\hiddify-core.dll")
+
     if (-not $NoIsolatedWorkspace) {
         $isolatedWorkspace = New-IsolatedWorkspace -RepoRoot $repoRoot
         $workingRoot = $isolatedWorkspace
@@ -1038,6 +1059,8 @@ try {
             if ($t -eq "exe") {
                 Build-WindowsRelease -BuildTarget $BuildTarget -SentryDsn $SentryDsn
                 $releaseDir = Join-Path $workingRoot "build\windows\x64\runner\Release"
+                Assert-WindowsCoreProvenance -RepoRoot $repoRoot `
+                    -CorePath (Join-Path $releaseDir "hiddify-core.dll")
                 if ($AllowUnsignedExe) {
                     Write-Warning "Building an unsigned EXE payload. Do not distribute this local-test artifact."
                 }
