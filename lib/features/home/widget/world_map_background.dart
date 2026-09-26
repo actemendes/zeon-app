@@ -70,7 +70,6 @@ class _WorldMapBackgroundState extends State<WorldMapBackground>
 
   void _tick(Duration elapsed) {
     final delta = elapsed - _lastFrame;
-    if (delta.inMicroseconds < 33333) return; // Decorative layer: at most 30 fps.
     _lastFrame = elapsed;
     final button = widget.buttonKey?.currentContext?.findRenderObject();
     final map = _canvasKey.currentContext?.findRenderObject();

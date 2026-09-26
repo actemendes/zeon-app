@@ -116,6 +116,17 @@ void main() {
     expect(tester.binding.transientCallbackCount, 0);
   });
 
+  testWidgets('map advances on each 75 Hz display frame', (tester) async {
+    await showMap(tester);
+    final motion = mapPainter(tester).motion;
+    await tester.pump(const Duration(microseconds: 13333));
+    final firstFrame = motion.seconds;
+    await tester.pump(const Duration(microseconds: 13333));
+    expect(firstFrame, greaterThan(0));
+    expect(motion.seconds, greaterThan(firstFrame));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('hidden, reduced-motion, and background-app maps stop scheduling frames', (tester) async {
     await showMap(tester);
     await tester.pump(const Duration(milliseconds: 50));
