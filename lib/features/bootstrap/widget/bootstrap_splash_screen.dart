@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:zeon/core/theme/app_color_tokens.dart';
 import 'package:zeon/core/theme/app_theme_mode.dart';
 import 'package:zeon/core/theme/system_bars_style.dart';
+import 'package:zeon/utils/platform_utils.dart';
 
 class BootstrapSplashScreen extends StatefulWidget {
   const BootstrapSplashScreen({super.key, required this.themeMode});
@@ -40,6 +41,14 @@ class _BootstrapSplashScreenState extends State<BootstrapSplashScreen> with Tick
     duration: const Duration(milliseconds: 2200),
   );
   bool _logoRevealScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Windows core setup enters a synchronous FFI call after the first frame.
+    // Keep the logo visible even if that call blocks the reveal timer.
+    if (PlatformUtils.isWindows) _logoRevealController.value = 1;
+  }
 
   void _scheduleLogoReveal() {
     if (_logoRevealScheduled) return;
