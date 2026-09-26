@@ -1121,13 +1121,15 @@ class ZeonCoreService with InfraLogger {
           if (res.messageType != MessageType.EMPTY) {
             return left("${res.messageType} ${res.message}");
           }
-          try {
-            await core.backgroundCommandClient.ChangeHiddifySettings(request);
-          } on GrpcError catch (e) {
-            if (e.code == StatusCode.unavailable || _isTransientGrpcTransportClose(e)) {
-              loggy.debug("background core is not started yet! $e");
-            } else {
-              rethrow;
+          if (!core.isSingleChannel()) {
+            try {
+              await core.backgroundCommandClient.ChangeHiddifySettings(request);
+            } on GrpcError catch (e) {
+              if (e.code == StatusCode.unavailable || _isTransientGrpcTransportClose(e)) {
+                loggy.debug("background core is not started yet! $e");
+              } else {
+                rethrow;
+              }
             }
           }
           return right(unit);

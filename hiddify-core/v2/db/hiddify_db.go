@@ -6,16 +6,48 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
+	"sync"
 	"time"
 
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	tmdb "github.com/tendermint/tm-db"
 )
 
-// getDB initializes the database with retry logic. If it fails after 100 attempts, it returns nil.
+var databaseCache = struct {
+	sync.Mutex
+	byPath map[string]tmdb.DB
+}{byPath: make(map[string]tmdb.DB)}
+
+// getDB keeps one writable LevelDB handle per database on Windows.
+// Reopening and closing on every settings access creates a new L0 table and can
+// make Close wait tens of seconds for compaction on long-lived Windows installs.
 func getDB(name string, readOnly bool) (tmdb.DB, error) {
-	// Check if the database file exists; if not, set to readOnly
+	if runtime.GOOS != "windows" {
+		return openDB(name, readOnly)
+	}
+	dbPath, err := filepath.Abs(filepath.Join("data", name+".db"))
+	if err != nil {
+		return nil, err
+	}
+	databaseCache.Lock()
+	defer databaseCache.Unlock()
+	if db := databaseCache.byPath[dbPath]; db != nil {
+		return db, nil
+	}
+	// Callers that initially read settings may later write them. A cached
+	// read-only handle would make that normal transition fail.
+	db, err := openDB(name, false)
+	if err != nil {
+		return nil, err
+	}
+	databaseCache.byPath[dbPath] = db
+	return db, nil
+}
+
+func openDB(name string, readOnly bool) (tmdb.DB, error) {
 	dbPath := "data/" + name + ".db"
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		readOnly = false
@@ -31,7 +63,6 @@ func getDB(name string, readOnly bool) (tmdb.DB, error) {
 		}
 	}()
 	for i := 0; i < retryAttempts; i++ {
-		// Set readOnly to true for the first 80 attempts
 		opts := &opt.Options{ReadOnly: readOnly && i < 80}
 
 		db, err = tmdb.NewGoLevelDBWithOpts(name, "./data", opts)
@@ -42,6 +73,12 @@ func getDB(name string, readOnly bool) (tmdb.DB, error) {
 		time.Sleep(retryDelay)
 	}
 	return nil, err
+}
+
+func closeAfterUse(db tmdb.DB) {
+	if runtime.GOOS != "windows" {
+		_ = db.Close()
+	}
 }
 
 // GetTable returns a new Table instance for the generic type T, ensuring the struct has an "Id" field.
@@ -120,7 +157,7 @@ func (tbl *Table[T]) All() ([]*T, error) {
 	if db == nil {
 		return nil, fmt.Errorf("failed to open database %s, error: %w", tbl.name, err)
 	}
-	defer db.Close()
+	defer closeAfterUse(db)
 
 	var items []*T
 	iter, err := db.Iterator(nil, nil)
@@ -172,7 +209,7 @@ func (tbl *Table[T]) UpdateInsert(items ...*T) error {
 	if db == nil {
 		return fmt.Errorf("failed to open database %s, error: %w", tbl.name, err)
 	}
-	defer db.Close()
+	defer closeAfterUse(db)
 
 	for _, item := range items {
 		// b, err := json.Marshal(item)
@@ -193,7 +230,7 @@ func (tbl *Table[T]) Delete(ids ...any) error {
 	if db == nil {
 		return fmt.Errorf("failed to open database %s, error: %w", tbl.name, err)
 	}
-	defer db.Close()
+	defer closeAfterUse(db)
 
 	for _, id := range ids {
 		if err := db.Delete(getIdBytes(id)); err != nil {
@@ -209,7 +246,7 @@ func (tbl *Table[T]) Get(id any) (*T, error) {
 	if db == nil {
 		return nil, fmt.Errorf("failed to open database %s, error: %w", tbl.name, err)
 	}
-	defer db.Close()
+	defer closeAfterUse(db)
 
 	b, err := db.Get(getIdBytes(id))
 	if err != nil {
