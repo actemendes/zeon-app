@@ -23,6 +23,23 @@ void main() {
       expect(presentation.semanticsLabel, 'Нажмите для отключения');
     });
 
+    test('unproven native connected phase keeps connecting status and stop action', () {
+      final state = MainVpnButtonState.fromSnapshot(
+        const VpnSessionSnapshot(
+          generation: 42,
+          runtimeEpoch: 'runtime-1',
+          sequenceNumber: 1,
+          snapshotVersion: 1,
+          phase: VpnSessionPhase.connected,
+          selectedOutboundId: 'opaque-id',
+        ),
+      );
+      expect(state.action, MainVpnButtonAction.stop);
+      expect(state.isConnected, isFalse);
+      expect(state.visualState, MainVpnButtonVisualState.loading);
+      expect(state.present(translations).label, translations.connection.connecting);
+    });
+
     test('DISCONNECTED derives START and connect semantics', () {
       final state = MainVpnButtonState.fromSnapshot(snapshot(VpnSessionPhase.disconnected));
       final presentation = state.present(translations);
@@ -209,6 +226,12 @@ VpnSessionSnapshot snapshot(VpnSessionPhase phase, {int sequence = 1, int versio
     sequenceNumber: sequence,
     snapshotVersion: version,
     phase: phase,
+    coreReady: true,
+    coreStarted: true,
+    commandEndpointReady: true,
+    tunnelReady: true,
+    protectSucceeded: true,
+    selectedOutboundId: 'opaque-id',
     requestedAction: switch (phase) {
       VpnSessionPhase.stopRequested || VpnSessionPhase.stopping || VpnSessionPhase.disconnected => 'stop',
       _ => 'connect',

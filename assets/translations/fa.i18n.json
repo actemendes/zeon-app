@@ -232,6 +232,7 @@
         "testing": "تأخیر: در حال تست..."
       },
       "autoSelection": "انتخاب خودکار",
+      "selectingBestServer": "در حال انتخاب بهترین سرور",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

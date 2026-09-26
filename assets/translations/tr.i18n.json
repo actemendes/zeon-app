@@ -231,6 +231,7 @@
         "testing": "Gecikme: test ediliyor..."
       },
       "autoSelection": "Otomatik seçim",
+      "selectingBestServer": "En iyi sunucu seçiliyor",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

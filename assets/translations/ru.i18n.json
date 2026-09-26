@@ -248,6 +248,7 @@
         "testing": "Задержка: тестирование..."
       },
       "autoSelection": "Автовыбор",
+      "selectingBestServer": "Выбираем лучший сервер",
       "serverNames": {
         "fast": "БЫСТРЫЙ",
         "bypass": "СВЯЗЬ",

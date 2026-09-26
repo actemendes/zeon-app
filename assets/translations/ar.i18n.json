@@ -242,6 +242,7 @@
         "testing": "التأخير: قيد الاختبار..."
       },
       "autoSelection": "اختيار تلقائي",
+      "selectingBestServer": "جارٍ اختيار أفضل خادم",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

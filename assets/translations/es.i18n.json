@@ -232,6 +232,7 @@
         "testing": "Latencia: probando..."
       },
       "autoSelection": "Selección automática",
+      "selectingBestServer": "Buscando el mejor servidor",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

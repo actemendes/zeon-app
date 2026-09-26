@@ -8,8 +8,10 @@ import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/features/connection/model/connection_status.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/home/notifier/home_connection_state_provider.dart';
+import 'package:zeon/features/home/notifier/home_selected_proxy_provider.dart';
 import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
 import 'package:zeon/features/proxy/active/active_proxy_card.dart';
+import 'package:zeon/features/proxy/active/active_proxy_delay_indicator.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
@@ -105,7 +107,60 @@ void main() {
     addTearDown(container.dispose);
     addTearDown(source.close);
     await _pumpAndroidFooter(tester, container);
+    expect(container.read(homeConnectionStateProvider).isConnected, isFalse);
     expect(find.byKey(const ValueKey('home_server_picker')), findsNothing);
+  });
+
+  testWidgets('Android connected Auto shows progress until its native leaf resolves', (tester) async {
+    final source = _SnapshotSource(_snapshot(label: 'balance', strategy: 'balance'));
+    final container = _androidContainer(
+      source,
+      status: const Connected(),
+      activeProxy: OutboundInfo(tag: 'balance', tagDisplay: 'balance', type: 'balancer', urlTestDelay: 42),
+    );
+    addTearDown(container.dispose);
+    addTearDown(source.close);
+
+    await _pumpAndroidFooter(tester, container);
+    expect(container.read(homeConnectionStateProvider).isConnected, isTrue);
+    expect(container.read(homeSelectedProxyProvider), isNull);
+    expect(find.text(TranslationsEn().pages.proxies.selectingBestServer), findsOneWidget);
+    expect(find.byKey(const ValueKey('home_server_picker_loading')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('42 ms'), findsNothing);
+
+    source.snapshots.add(_snapshot(label: 'balance → Server B', strategy: 'balance'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('${TranslationsEn().pages.proxies.autoSelection} • Server B'), findsOneWidget);
+    expect(find.byKey(const ValueKey('home_server_picker_loading')), findsNothing);
+    expect(container.read(homeSelectedProxyProvider)!.hasUrlTestDelay(), isFalse);
+    expect(find.text('42 ms'), findsNothing);
+  });
+
+  testWidgets('Android ping appears only for the native selected leaf', (tester) async {
+    final source = _SnapshotSource(_snapshot(label: 'balance → Server B', strategy: 'balance'));
+    final container = _androidContainer(
+      source,
+      status: const Connected(),
+      activeProxy: OutboundInfo(
+        tag: 'balance',
+        tagDisplay: 'balance',
+        type: 'balancer',
+        groupSelectedTagDisplay: 'Server B',
+        urlTestDelay: 42,
+      ),
+    );
+    addTearDown(container.dispose);
+    addTearDown(source.close);
+    await _pumpAndroidFooter(tester, container);
+    expect(find.text('42 ms'), findsOneWidget);
+
+    source.snapshots.add(_snapshot(label: 'balance → Server C', strategy: 'balance'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('42 ms'), findsNothing);
+    expect(find.text('${TranslationsEn().pages.proxies.autoSelection} • Server C'), findsOneWidget);
   });
 }
 
@@ -128,7 +183,9 @@ Future<void> _pumpAndroidFooter(WidgetTester tester, ProviderContainer container
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: Scaffold(body: ActiveProxyFooter())),
+      child: const MaterialApp(
+        home: Scaffold(body: Column(children: [ActiveProxyFooter(), ActiveProxyDelayIndicator(compact: true)])),
+      ),
     ),
   );
   await tester.pump();

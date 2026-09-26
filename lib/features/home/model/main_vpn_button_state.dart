@@ -48,7 +48,8 @@ class MainVpnButtonState {
       VpnSessionPhase.stopRequested || VpnSessionPhase.stopping || VpnSessionPhase.failed => MainVpnButtonAction.none,
     };
     final visualState = switch (snapshot.phase) {
-      VpnSessionPhase.connected => MainVpnButtonVisualState.connected,
+      VpnSessionPhase.connected =>
+        snapshot.provesConnected ? MainVpnButtonVisualState.connected : MainVpnButtonVisualState.loading,
       VpnSessionPhase.permissionRequired ||
       VpnSessionPhase.startRequested ||
       VpnSessionPhase.startingPlatform ||
@@ -83,11 +84,16 @@ class MainVpnButtonState {
     };
     return MainVpnButtonState.fromSnapshot(
       VpnSessionSnapshot(
-        generation: 0,
+        generation: 1,
         runtimeEpoch: 'non-android',
         sequenceNumber: 1,
         snapshotVersion: 1,
         phase: phase,
+        coreReady: true,
+        coreStarted: true,
+        commandEndpointReady: true,
+        tunnelRequired: false,
+        selectedOutboundId: 'non-android-status',
         requestedAction: switch (phase) {
           VpnSessionPhase.connected || VpnSessionPhase.stopping => 'stop',
           _ => 'connect',
@@ -107,9 +113,10 @@ class MainVpnButtonState {
   final MainVpnButtonVisualState visualState;
   final bool enabled;
 
-  bool get isConnected => phase == VpnSessionPhase.connected;
+  bool get isConnected => visualState == MainVpnButtonVisualState.connected;
 
   bool get isStarting => switch (phase) {
+    VpnSessionPhase.connected when !isConnected => true,
     VpnSessionPhase.permissionRequired ||
     VpnSessionPhase.startRequested ||
     VpnSessionPhase.startingPlatform ||

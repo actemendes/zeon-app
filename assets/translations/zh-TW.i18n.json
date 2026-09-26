@@ -231,6 +231,7 @@
         "testing": "延遲：測試中..."
       },
       "autoSelection": "自動選擇",
+      "selectingBestServer": "正在選擇最佳伺服器",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

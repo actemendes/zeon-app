@@ -242,6 +242,7 @@
         "testing": "Delay: testing..."
       },
       "autoSelection": "Auto selection",
+      "selectingBestServer": "Choosing the best server",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

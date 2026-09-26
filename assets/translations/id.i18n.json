@@ -231,6 +231,7 @@
         "testing": "Latensi: sedang menguji..."
       },
       "autoSelection": "Pilihan otomatis",
+      "selectingBestServer": "Memilih server terbaik",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

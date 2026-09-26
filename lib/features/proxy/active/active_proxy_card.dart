@@ -4,8 +4,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/features/home/notifier/home_connection_state_provider.dart';
+import 'package:zeon/features/home/notifier/home_selected_proxy_provider.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
-import 'package:zeon/features/proxy/active/active_proxy_snapshot.dart';
 import 'package:zeon/features/proxy/active/ip_widget.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/utils/custom_loggers.dart';
@@ -31,13 +31,7 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
       return const SizedBox.shrink();
     }
 
-    final activeProxy = ref.watch(activeProxyNotifierProvider);
-    final session = ref.watch(homeVpnSessionSnapshotProvider);
-    // On Android the native snapshot survives foreground stream teardown and
-    // wins over delayed selector/stats data, including a previous manual/Auto choice.
-    final proxy = session == null
-        ? activeProxy.valueOrNull
-        : activeProxyFromSessionSnapshot(session.valueOrNull, activeProxy: activeProxy.valueOrNull);
+    final proxy = ref.watch(homeSelectedProxyProvider);
     final t = ref.watch(translationsProvider).requireValue;
 
     final theme = Theme.of(context);
@@ -83,10 +77,10 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
             child: proxy == null
                 ? Semantics(
                     identifier: 'zeon.server-picker',
-                    label: '${t.pages.proxies.activeProxy}\n${t.pages.proxies.title}',
+                    label: t.pages.proxies.selectingBestServer,
                     button: true,
                     child: _ServerPickerPlaceholder(
-                      label: t.pages.proxies.title,
+                      label: t.pages.proxies.selectingBestServer,
                       foregroundColor: serverTextColor,
                       iconColor: navBarIconColor,
                     ),

@@ -1,6 +1,7 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/features/home/notifier/home_selected_proxy_provider.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:zeon/utils/custom_loggers.dart';
@@ -12,14 +13,13 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final activeProxy = ref.watch(activeProxyNotifierProvider);
+    final proxy = ref.watch(homeSelectedProxyProvider);
     final theme = Theme.of(context);
 
-    if (activeProxy is! AsyncData) {
-      return const SizedBox(); // Avoid building widget if data is not available
+    if (proxy == null) {
+      return const SizedBox.shrink();
     }
 
-    final proxy = activeProxy.value!;
     final pingText = formatOutboundPing(proxy);
     final failedPing = proxyPingFailed(proxy);
     final isLightTheme = theme.brightness == Brightness.light;
