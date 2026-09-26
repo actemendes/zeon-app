@@ -211,6 +211,7 @@ void main() {
     expect(find.text('...'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 110));
     await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 200));
     final checkingSize = tester.getSize(slot);
     expect(checkingSize.height, initialSize.height);
     expect(checkingSize.width, lessThan(initialSize.width));
@@ -233,6 +234,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 200));
     final switchedSize = tester.getSize(slot);
     expect(switchedSize.height, initialSize.height);
     expect(switchedSize.width, greaterThan(checkingSize.width));
@@ -254,9 +256,72 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('1234 ms'), findsOneWidget);
     expect(tester.getSize(slot).width, greaterThan(switchedSize.width));
     expect(tester.getSize(slot).height, initialSize.height);
+  });
+
+  testWidgets('mobile ping survives a return to the same result before its fade completes', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 852);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    OutboundInfo ping(String status) => OutboundInfo(
+      tag: 'server-a',
+      tagDisplay: 'Server A',
+      type: 'proxy',
+      isVisible: true,
+      urlTestStatus: status,
+      urlTestDelay: status == 'success' ? 96 : 0,
+      healthScore: 90,
+      success: status == 'success',
+    );
+
+    final pingProvider = StateProvider<OutboundInfo>((ref) => ping('success'));
+    final container = ProviderContainer(
+      overrides: [
+        translationsProvider.overrideWith((ref) => TranslationsEn()),
+        homeSelectedProxyProvider.overrideWith((ref) => ref.watch(pingProvider)),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: Wrap(
+                spacing: 14,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [Text('Подключено'), ActiveProxyDelayIndicator(compact: true)],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('96 ms'), findsOneWidget);
+    container.read(pingProvider.notifier).state = ping('checking');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    expect(find.text('...'), findsWidgets);
+    container.read(pingProvider.notifier).state = ping('success');
+    await tester.pump();
+    for (var i = 0; i < 6; i++) {
+      container.read(pingProvider.notifier).state = ping(i.isEven ? 'checking' : 'success');
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('96 ms'), findsOneWidget);
+    expect(tester.getSize(find.byKey(const ValueKey('home_connected_ping_slot'))).width, lessThan(150));
   });
 }
 

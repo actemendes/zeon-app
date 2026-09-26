@@ -78,7 +78,7 @@ class ActiveProxyDelayIndicator extends ConsumerWidget with InfraLogger {
   }
 }
 
-class _CompactPing extends StatelessWidget {
+class _CompactPing extends StatefulWidget {
   const _CompactPing({
     required this.proxy,
     required this.status,
@@ -96,14 +96,43 @@ class _CompactPing extends StatelessWidget {
   final bool reduceMotion;
 
   @override
+  State<_CompactPing> createState() => _CompactPingState();
+}
+
+class _CompactPingState extends State<_CompactPing> {
+  late String _lastQuality = _qualityIdentity(widget);
+  late String _lastText = _textIdentity(widget);
+  int _qualityRevision = 0;
+  int _textRevision = 0;
+
+  String _qualityIdentity(_CompactPing ping) =>
+      '${ping.proxy?.tag}:${ping.status.name}:${ping.proxy?.healthScore}:${ping.proxy?.success}';
+
+  String _textIdentity(_CompactPing ping) => '${ping.proxy?.tag}:${ping.text}';
+
+  @override
+  void didUpdateWidget(_CompactPing oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final quality = _qualityIdentity(widget);
+    final text = _textIdentity(widget);
+    if (quality != _lastQuality) {
+      _lastQuality = quality;
+      _qualityRevision++;
+    }
+    if (text != _lastText) {
+      _lastText = text;
+      _textRevision++;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final duration = reduceMotion ? Duration.zero : const Duration(milliseconds: 180);
-    final qualityKey = '${proxy?.tag}:${status.name}:${proxy?.healthScore}:${proxy?.success}';
-    final quality = status == ProxyPingStatus.checking
-        ? reduceMotion
+    final duration = widget.reduceMotion ? Duration.zero : const Duration(milliseconds: 180);
+    final quality = widget.status == ProxyPingStatus.checking
+        ? widget.reduceMotion
               ? const Icon(Icons.sync_rounded, size: 18)
               : const SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))
-        : bars;
+        : widget.bars;
 
     return AnimatedSize(
       key: const ValueKey('home_connected_ping_slot'),
@@ -120,7 +149,7 @@ class _CompactPing extends StatelessWidget {
               height: 16,
               child: AnimatedSwitcher(
                 duration: duration,
-                child: Center(key: ValueKey(qualityKey), child: quality),
+                child: Center(key: ValueKey(_qualityRevision), child: quality),
               ),
             ),
             const SizedBox(width: 8),
@@ -129,15 +158,15 @@ class _CompactPing extends StatelessWidget {
               layoutBuilder: (current, previous) =>
                   Stack(alignment: Alignment.centerLeft, children: [...previous, if (current != null) current]),
               child: Text(
-                text,
-                key: ValueKey('${proxy?.tag}:$text'),
+                widget.text,
+                key: ValueKey(_textRevision),
                 maxLines: 1,
                 overflow: TextOverflow.clip,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontSize: 14,
                   fontFamily: 'Montserrat',
                   fontWeight: FontWeight.w600,
-                  color: textColor,
+                  color: widget.textColor,
                 ),
               ),
             ),
