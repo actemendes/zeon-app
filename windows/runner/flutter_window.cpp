@@ -1,6 +1,9 @@
 #include "flutter_window.h"
 
+#include <cstdint>
 #include <optional>
+
+#include <flutter/standard_method_codec.h>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "startup_diagnostics.h"
@@ -35,6 +38,52 @@ bool FlutterWindow::OnCreate() {
   WriteStartupMarker("plugins_register_begin");
   RegisterPlugins(flutter_controller_->engine());
   WriteStartupMarker("plugins_registered");
+  caption_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "zeon/window_caption",
+          &flutter::StandardMethodCodec::GetInstance());
+  caption_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() != "setCaptionAppearance") {
+          result->NotImplemented();
+          return;
+        }
+        const auto* args =
+            std::get_if<flutter::EncodableMap>(call.arguments());
+        if (!args) {
+          result->Error("invalid_arguments", "Expected caption colors");
+          return;
+        }
+        const auto read_color = [args](const char* key)
+            -> std::optional<COLORREF> {
+          const auto it = args->find(flutter::EncodableValue(key));
+          if (it == args->end()) return std::nullopt;
+          uint32_t argb;
+          if (const auto* int32_value = std::get_if<int32_t>(&it->second)) {
+            argb = static_cast<uint32_t>(*int32_value);
+          } else if (const auto* int64_value =
+                         std::get_if<int64_t>(&it->second)) {
+            argb = static_cast<uint32_t>(*int64_value);
+          } else {
+            return std::nullopt;
+          }
+          return RGB((argb >> 16) & 0xff, (argb >> 8) & 0xff, argb & 0xff);
+        };
+        const auto background = read_color("background");
+        const auto foreground = read_color("foreground");
+        const auto dark_it = args->find(flutter::EncodableValue("dark"));
+        const auto* dark = dark_it == args->end()
+                               ? nullptr
+                               : std::get_if<bool>(&dark_it->second);
+        if (!background || !foreground || !dark) {
+          result->Error("invalid_arguments", "Expected colors and brightness");
+          return;
+        }
+        SetCaptionAppearance(*background, *foreground, *dark);
+        result->Success();
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
   WriteStartupMarker("flutter_child_attached");
 
@@ -58,6 +107,7 @@ void FlutterWindow::OnDestroy() {
   // still owns the exact ZEON loopback proxy.
   RecoverZeonSystemProxy(true);
 
+  caption_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

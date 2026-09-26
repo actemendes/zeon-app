@@ -33,6 +33,7 @@ import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/shortcut/shortcut_wrapper.dart';
 import 'package:zeon/features/system_tray/notifier/system_tray_notifier.dart';
 import 'package:zeon/features/window/widget/window_wrapper.dart';
+import 'package:zeon/features/window/widget/windows_caption_sync.dart';
 import 'package:zeon/utils/utils.dart';
 import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 
@@ -140,7 +141,10 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
               }
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: systemBarsStyleFor(theme.brightness),
-                child: AppVisualEffects(lowPowerMode: lowPowerMode, child: appChild),
+                child: WindowsCaptionSync(
+                  style: WindowsCaptionStyle.fromMode(themeMode, MediaQuery.platformBrightnessOf(context)),
+                  child: AppVisualEffects(lowPowerMode: lowPowerMode, child: appChild),
+                ),
               );
             },
           ),

@@ -17,6 +17,12 @@ namespace
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
+#ifndef DWMWA_CAPTION_COLOR
+#define DWMWA_CAPTION_COLOR 35
+#endif
+#ifndef DWMWA_TEXT_COLOR
+#define DWMWA_TEXT_COLOR 36
+#endif
 
   constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 
@@ -338,6 +344,19 @@ HWND Win32Window::GetHandle()
   return window_handle_;
 }
 
+void Win32Window::SetCaptionAppearance(COLORREF background,
+                                       COLORREF foreground, bool dark)
+{
+  has_caption_appearance_ = true;
+  caption_background_ = background;
+  caption_foreground_ = foreground;
+  caption_dark_ = dark;
+  if (window_handle_)
+  {
+    UpdateTheme(window_handle_);
+  }
+}
+
 void Win32Window::SetQuitOnClose(bool quit_on_close)
 {
   quit_on_close_ = quit_on_close;
@@ -356,6 +375,20 @@ void Win32Window::OnDestroy()
 
 void Win32Window::UpdateTheme(HWND const window)
 {
+  if (has_caption_appearance_)
+  {
+    BOOL enable_dark_mode = caption_dark_ ? TRUE : FALSE;
+    DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                          &enable_dark_mode, sizeof(enable_dark_mode));
+    // Exact caption/text colors are supported from Windows 11. Older Windows
+    // keeps the light/dark decoration where the DWM calls are unsupported.
+    DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR, &caption_background_,
+                          sizeof(caption_background_));
+    DwmSetWindowAttribute(window, DWMWA_TEXT_COLOR, &caption_foreground_,
+                          sizeof(caption_foreground_));
+    return;
+  }
+
   DWORD light_mode;
   DWORD light_mode_size = sizeof(light_mode);
   LSTATUS result = RegGetValue(HKEY_CURRENT_USER, kGetPreferredBrightnessRegKey,

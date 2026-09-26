@@ -54,6 +54,10 @@ public:
   // window properties. Returns nullptr if the window has been destroyed.
   HWND GetHandle();
 
+  // Match the native caption to the Flutter surface and text colors.
+  void SetCaptionAppearance(COLORREF background, COLORREF foreground,
+                            bool dark);
+
   // If true, closing this window will quit the application.
   void SetQuitOnClose(bool quit_on_close);
 
@@ -93,7 +97,12 @@ private:
   static Win32Window *GetThisFromHandle(HWND const window) noexcept;
 
   // Update the window frame's theme to match the system theme.
-  static void UpdateTheme(HWND const window);
+  void UpdateTheme(HWND const window);
+
+  bool has_caption_appearance_ = false;
+  bool caption_dark_ = false;
+  COLORREF caption_background_ = 0;
+  COLORREF caption_foreground_ = 0;
 
   bool quit_on_close_ = false;
 

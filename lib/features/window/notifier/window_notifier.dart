@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -7,7 +6,9 @@ import 'package:screen_retriever/screen_retriever.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/theme/theme_preferences.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
+import 'package:zeon/features/window/widget/windows_caption_sync.dart';
 import 'package:zeon/utils/utils.dart';
 
 part 'window_notifier.g.dart';
@@ -61,6 +62,14 @@ class WindowNotifier extends _$WindowNotifier with AppLogger {
       WindowOptions(size: size, center: !isWindowVisible, minimumSize: minimumWindowSize),
     );
     _writeWindowStartupMarker("dart_window_ready_to_show");
+    if (PlatformUtils.isWindows) {
+      await applyWindowsCaptionStyle(
+        WindowsCaptionStyle.fromMode(
+          ref.read(themePreferencesProvider),
+          WidgetsBinding.instance.platformDispatcher.platformBrightness,
+        ),
+      );
+    }
     if (isWindowVisible) {
       await windowManager.setPosition(position);
       loggy.debug("restoring window to position: $position");
