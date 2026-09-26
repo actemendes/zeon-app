@@ -868,7 +868,7 @@
           "system": "Sistem",
           "gvisor": "gVisor"
         },
-        "mixedPort": "Port campuran",
+        "mixedPort": "Port proxy lokal",
         "tproxyPort": "Port proksi transparan",
         "directPort": "Port direct",
         "redirectPort": "Port pengalihan",

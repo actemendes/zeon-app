@@ -869,7 +869,7 @@
           "system": "سیستم",
           "gvisor": "gVisor"
         },
-        "mixedPort": "پورت ترکیبی",
+        "mixedPort": "درگاه پروکسی محلی",
         "tproxyPort": "پورت پروکسی شفاف",
         "directPort": "پورت مستقیم",
         "redirectPort": "پورت تغییر مسیر",

@@ -868,7 +868,7 @@
           "system": "系统",
           "gvisor": "gVisor"
         },
-        "mixedPort": "混合端口",
+        "mixedPort": "本地代理端口",
         "tproxyPort": "透明代理端口",
         "directPort": "本地 Direct 端口",
         "redirectPort": "重定向端口",

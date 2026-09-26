@@ -868,7 +868,7 @@
           "system": "Sistem",
           "gvisor": "gVisor"
         },
-        "mixedPort": "Karışık port",
+        "mixedPort": "Yerel proxy portu",
         "tproxyPort": "Şeffaf proxy portu",
         "directPort": "Direct portu",
         "redirectPort": "Yönlendirme portu",

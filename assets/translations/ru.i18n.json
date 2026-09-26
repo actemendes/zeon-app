@@ -960,7 +960,7 @@
           "system": "Системная",
           "gvisor": "gVisor"
         },
-        "mixedPort": "Смешанный порт",
+        "mixedPort": "Локальный порт прокси",
         "tproxyPort": "Порт прозрачного прокси",
         "directPort": "Локальный порт direct",
         "redirectPort": "Порт перенаправления",

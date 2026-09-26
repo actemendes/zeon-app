@@ -869,7 +869,7 @@
           "system": "Sistema",
           "gvisor": "gVisor"
         },
-        "mixedPort": "Puerto mixto",
+        "mixedPort": "Puerto del proxy local",
         "tproxyPort": "Puerto de proxy transparente",
         "directPort": "Puerto de Directo",
         "redirectPort": "Puerto de redirección",

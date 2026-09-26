@@ -950,7 +950,7 @@
           "system": "System",
           "gvisor": "gVisor"
         },
-        "mixedPort": "Mixed port",
+        "mixedPort": "Local proxy port",
         "tproxyPort": "Transparent proxy port",
         "directPort": "Direct port",
         "redirectPort": "Redirect port",

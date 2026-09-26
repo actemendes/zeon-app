@@ -883,7 +883,7 @@
           "system": "النظام",
           "gvisor": "gVisor"
         },
-        "mixedPort": "منفذ مختلط",
+        "mixedPort": "منفذ الوكيل المحلي",
         "tproxyPort": "منفذ البروكسي الشفاف",
         "directPort": "منفذ مباشر",
         "redirectPort": "منفذ إعادة التوجيه",

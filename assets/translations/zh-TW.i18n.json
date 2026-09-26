@@ -868,7 +868,7 @@
           "system": "系統",
           "gvisor": "gVisor"
         },
-        "mixedPort": "混合連接埠",
+        "mixedPort": "本機代理連接埠",
         "tproxyPort": "透明代理連接埠",
         "directPort": "本地 Direct 連接埠",
         "redirectPort": "重新導向連接埠",
