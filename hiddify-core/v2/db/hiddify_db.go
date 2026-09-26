@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	leveldberrors "github.com/syndtr/goleveldb/leveldb/errors"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	tmdb "github.com/tendermint/tm-db"
 )
@@ -68,6 +69,11 @@ func openDB(name string, readOnly bool) (tmdb.DB, error) {
 		db, err = tmdb.NewGoLevelDBWithOpts(name, "./data", opts)
 		if err == nil {
 			return db, nil
+		}
+		// A damaged manifest cannot become readable after a short delay. Retrying
+		// it 100 times blocks every settings read/write for about five seconds.
+		if leveldberrors.IsCorrupted(err) {
+			return nil, err
 		}
 		log.Printf("Failed attempt %d to initialize the database: %v", i, err)
 		time.Sleep(retryDelay)
