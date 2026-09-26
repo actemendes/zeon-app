@@ -12,8 +12,8 @@ $repoRoot = Split-Path -Parent $scriptDir
 . (Join-Path $scriptDir "build\common.ps1")
 
 $version = Get-ZeonAppVersion -RepoRoot $repoRoot
-if ($version -notmatch '^1\.5\.0\+([1-9][0-9]*)$') {
-    throw "Windows runtime builds require the canonical 1.5.0+N version in pubspec.yaml. Current: $version"
+if ($version -notmatch '^1\.5\.[01]\+([1-9][0-9]*)$') {
+    throw "Windows runtime builds require the canonical 1.5.0+N or 1.5.1+N version in pubspec.yaml. Current: $version"
 }
 
 $sourceStatus = @(& git -C $repoRoot status --porcelain=v1 --untracked-files=normal)
@@ -57,8 +57,7 @@ if (Test-Path -LiteralPath $registryPath) {
     -BuildTarget "tool/windows_recovery_runtime.dart" `
     -RuntimeValidation `
     -RuntimeSourceSha $sourceSha `
-    -RuntimeBuildUtc $buildUtc `
-    -SkipCodeGeneration
+    -RuntimeBuildUtc $buildUtc
 
 if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
     throw "Runtime ZIP was not published: $zipPath"
