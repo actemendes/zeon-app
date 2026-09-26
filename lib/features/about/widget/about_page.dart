@@ -36,36 +36,35 @@ class AboutPage extends HookConsumerWidget {
             key: const ValueKey('about_identity'),
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(34)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
+                IconButton.filledTonal(
+                  key: const ValueKey('about_copy_info'),
+                  tooltip: t.common.addToClipboard,
+                  onPressed: () => Clipboard.setData(ClipboardData(text: appInfo.format())),
+                  style: IconButton.styleFrom(
+                    backgroundColor: cs.surface,
+                    foregroundColor: cs.onSurface,
+                    minimumSize: const Size(48, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.copy_rounded, size: 21),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: SvgPicture.asset(logoAsset, width: 156, semanticsLabel: t.common.appTitle)),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: SvgPicture.asset(logoAsset, width: 156, semanticsLabel: t.common.appTitle),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    IconButton.filledTonal(
-                      key: const ValueKey('about_copy_info'),
-                      tooltip: t.common.addToClipboard,
-                      onPressed: () => Clipboard.setData(ClipboardData(text: appInfo.format())),
-                      style: IconButton.styleFrom(
-                        backgroundColor: cs.surface,
-                        foregroundColor: cs.onSurface,
-                        minimumSize: const Size(48, 48),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      icon: const Icon(Icons.copy_rounded, size: 21),
+                    Text(t.common.version, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                    const SizedBox(height: 6),
+                    Text(
+                      appInfo.presentVersion,
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                Text(t.common.version, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                const SizedBox(height: 6),
-                Text(appInfo.presentVersion, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
               ],
             ),
           ),
