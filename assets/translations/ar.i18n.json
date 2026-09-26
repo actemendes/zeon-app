@@ -243,6 +243,7 @@
       },
       "autoSelection": "اختيار تلقائي",
       "selectingBestServer": "جارٍ اختيار أفضل خادم",
+      "checkingServers": "جارٍ فحص الخوادم",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

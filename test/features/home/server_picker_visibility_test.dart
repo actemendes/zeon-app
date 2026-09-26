@@ -126,7 +126,13 @@ void main() {
     expect(container.read(homeSelectedProxyProvider), isNull);
     expect(find.text(TranslationsEn().pages.proxies.selectingBestServer), findsOneWidget);
     expect(find.byKey(const ValueKey('home_server_picker_loading')), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('home_server_picker_loading')),
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('42 ms'), findsNothing);
 
     source.snapshots.add(_snapshot(label: 'balance → Server B', strategy: 'balance'));
@@ -161,6 +167,71 @@ void main() {
     await tester.pump();
     expect(find.text('42 ms'), findsNothing);
     expect(find.text('${TranslationsEn().pages.proxies.autoSelection} • Server C'), findsOneWidget);
+  });
+
+  testWidgets('connected ping slot stays fixed while the server is checked and switched', (tester) async {
+    final updates = BehaviorSubject<OutboundInfo>.seeded(
+      OutboundInfo(
+        tag: 'server-a',
+        tagDisplay: 'Server A',
+        type: 'proxy',
+        isVisible: true,
+        urlTestStatus: 'success',
+        urlTestDelay: 42,
+        healthScore: 90,
+        success: true,
+      ),
+    );
+    addTearDown(updates.close);
+    final container = ProviderContainer(
+      overrides: [
+        translationsProvider.overrideWith((ref) => TranslationsEn()),
+        homeVpnSessionSnapshotProvider.overrideWithValue(null),
+        connectionNotifierProvider.overrideWith(() => _FixedConnectionNotifier(const Connected())),
+        activeProxyNotifierProvider.overrideWith(() => _UpdatingActiveProxyNotifier(updates)),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await _pumpAndroidFooter(tester, container);
+    final slot = find.byKey(const ValueKey('home_connected_ping_slot'));
+    final initialSize = tester.getSize(slot);
+    expect(find.text('42 ms'), findsOneWidget);
+    expect(find.text('Server A'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 200));
+
+    updates.add(
+      OutboundInfo(tag: 'server-a', tagDisplay: 'Server A', type: 'proxy', isVisible: true, urlTestStatus: 'checking'),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    expect(tester.getSize(slot), initialSize);
+    expect(find.text('42 ms'), findsOneWidget);
+    expect(find.text('...'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 110));
+    expect(tester.getSize(slot), initialSize);
+    expect(find.text(TranslationsEn().pages.proxies.checkingServers), findsOneWidget);
+    expect(find.text('Server A'), findsNothing);
+    expect(find.text('...'), findsOneWidget);
+
+    updates.add(
+      OutboundInfo(
+        tag: 'server-b',
+        tagDisplay: 'Server B',
+        type: 'proxy',
+        isVisible: true,
+        urlTestStatus: 'success',
+        urlTestDelay: 105,
+        healthScore: 60,
+        success: true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.getSize(slot), initialSize);
+    expect(find.text('Server B'), findsOneWidget);
+    expect(find.text('105 ms'), findsOneWidget);
+    expect(find.text(TranslationsEn().pages.proxies.checkingServers), findsNothing);
   });
 }
 
@@ -265,4 +336,13 @@ class _FixedActiveProxyNotifier extends ActiveProxyNotifier {
 
   @override
   Stream<OutboundInfo> build() => activeProxy == null ? const Stream.empty() : Stream.value(activeProxy!);
+}
+
+class _UpdatingActiveProxyNotifier extends ActiveProxyNotifier {
+  _UpdatingActiveProxyNotifier(this.updates);
+
+  final BehaviorSubject<OutboundInfo> updates;
+
+  @override
+  Stream<OutboundInfo> build() => updates.stream;
 }

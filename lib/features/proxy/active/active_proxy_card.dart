@@ -8,6 +8,7 @@ import 'package:zeon/features/home/notifier/home_selected_proxy_provider.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/proxy/active/ip_widget.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
+import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 
 class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
@@ -33,6 +34,8 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
 
     final proxy = ref.watch(homeSelectedProxyProvider);
     final t = ref.watch(translationsProvider).requireValue;
+    final isRechecking = proxy != null && outboundPingStatus(proxy) == ProxyPingStatus.checking;
+    final placeholderLabel = isRechecking ? t.pages.proxies.checkingServers : t.pages.proxies.selectingBestServer;
 
     final theme = Theme.of(context);
     final displayInfo = proxy == null ? null : resolveOutboundDisplayInfo(proxy, translations: t);
@@ -74,13 +77,13 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
           onTap: () => context.goNamed('proxies'),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: proxy == null
+            child: proxy == null || isRechecking
                 ? Semantics(
                     identifier: 'zeon.server-picker',
-                    label: t.pages.proxies.selectingBestServer,
+                    label: placeholderLabel,
                     button: true,
                     child: _ServerPickerPlaceholder(
-                      label: t.pages.proxies.selectingBestServer,
+                      label: placeholderLabel,
                       foregroundColor: serverTextColor,
                       iconColor: navBarIconColor,
                     ),
@@ -147,10 +150,7 @@ class _ServerPickerPlaceholder extends StatelessWidget {
     return Row(
       key: const ValueKey('home_server_picker_loading'),
       children: [
-        const SizedBox.square(
-          dimension: 40,
-          child: Center(child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-        ),
+        const SizedBox.square(dimension: 40, child: Center(child: _ServerPickerProgress())),
         const SizedBox(width: 14),
         Expanded(
           child: Text(
@@ -165,4 +165,13 @@ class _ServerPickerPlaceholder extends StatelessWidget {
       ],
     );
   }
+}
+
+class _ServerPickerProgress extends StatelessWidget {
+  const _ServerPickerProgress();
+
+  @override
+  Widget build(BuildContext context) => MediaQuery.disableAnimationsOf(context)
+      ? const Icon(Icons.sync_rounded, size: 20)
+      : const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2));
 }

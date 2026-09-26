@@ -249,6 +249,7 @@
       },
       "autoSelection": "Автовыбор",
       "selectingBestServer": "Выбираем лучший сервер",
+      "checkingServers": "Проверяем серверы",
       "serverNames": {
         "fast": "БЫСТРЫЙ",
         "bypass": "СВЯЗЬ",

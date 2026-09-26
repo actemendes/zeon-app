@@ -232,6 +232,7 @@
       },
       "autoSelection": "Pilihan otomatis",
       "selectingBestServer": "Memilih server terbaik",
+      "checkingServers": "Memeriksa server",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

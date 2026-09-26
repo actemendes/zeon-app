@@ -230,7 +230,11 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
 
   OutboundInfo _asAutoBalancer(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {
     final realOutbound = _realOutbound(activeProxy, selector, stats);
-    final info = (realOutbound ?? activeProxy).deepCopy()
+    final selectedLeaf =
+        realOutbound != null && activeProxy.tag == realOutbound.tag && _hasNewerProbe(activeProxy, realOutbound)
+        ? activeProxy
+        : realOutbound ?? activeProxy;
+    final info = selectedLeaf.deepCopy()
       ..tag = _autoBalancerTag
       ..type = "balancer"
       ..tagDisplay = _autoBalancerTag
@@ -240,7 +244,25 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
       info.groupSelectedTag = realOutbound.tag;
       info.groupSelectedTagDisplay = realOutbound.tagDisplay;
     }
+    final selectedChecking = info.urlTestStatus == 'checking';
+    final selectedFailed = info.urlTestStatus == 'failed';
+    final otherCandidatesChecking =
+        selector?.items.any((item) => _isDisplayableLeaf(item) && item.urlTestStatus == 'checking') ?? false;
+    // A failed selected leaf can retain its terminal status while the next
+    // search cycle checks other candidates. Publish that search to Home.
+    if (selectedChecking || (selectedFailed && otherCandidatesChecking)) {
+      info.urlTestStatus = 'checking';
+    }
     return info;
+  }
+
+  bool _hasNewerProbe(OutboundInfo candidate, OutboundInfo baseline) {
+    if (!candidate.hasUrlTestTime()) return !baseline.hasUrlTestTime();
+    if (!baseline.hasUrlTestTime()) return true;
+    final candidateTime = candidate.urlTestTime;
+    final baselineTime = baseline.urlTestTime;
+    return candidateTime.seconds > baselineTime.seconds ||
+        (candidateTime.seconds == baselineTime.seconds && candidateTime.nanos >= baselineTime.nanos);
   }
 
   OutboundInfo? _realOutbound(OutboundInfo activeProxy, OutboundGroup? selector, SystemInfo stats) {

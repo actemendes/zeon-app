@@ -232,6 +232,7 @@
       },
       "autoSelection": "Otomatik seçim",
       "selectingBestServer": "En iyi sunucu seçiliyor",
+      "checkingServers": "Sunucular kontrol ediliyor",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

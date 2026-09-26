@@ -5,8 +5,9 @@ import 'package:zeon/features/home/notifier/home_selected_proxy_provider.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:zeon/utils/custom_loggers.dart';
+import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 
-class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
+class ActiveProxyDelayIndicator extends ConsumerWidget with InfraLogger {
   const ActiveProxyDelayIndicator({super.key, this.compact = false});
 
   final bool compact;
@@ -14,17 +15,24 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final proxy = ref.watch(homeSelectedProxyProvider);
+    if (proxy == null && !compact) return const SizedBox.shrink();
+
     final theme = Theme.of(context);
-
-    if (proxy == null) {
-      return const SizedBox.shrink();
-    }
-
-    final pingText = formatOutboundPing(proxy);
-    final failedPing = proxyPingFailed(proxy);
+    final pingStatus = proxy == null ? ProxyPingStatus.checking : outboundPingStatus(proxy);
+    final pingText = proxy == null ? '...' : formatOutboundPing(proxy);
+    final failedPing = pingStatus == ProxyPingStatus.failed;
     final isLightTheme = theme.brightness == Brightness.light;
     final activeBarColor = failedPing ? theme.colorScheme.error : (isLightTheme ? theme.colorScheme.onSurface : null);
     final inactiveBarColor = isLightTheme ? theme.colorScheme.onSurface.withValues(alpha: 0.35) : null;
+
+    final bars = proxy == null
+        ? const QualityBars(healthScore: null)
+        : QualityBars.fromOutbound(
+            proxy,
+            isActive: !failedPing,
+            activeColor: activeBarColor,
+            inactiveColor: inactiveBarColor,
+          );
 
     return Center(
       widthFactor: compact ? 1 : null,
@@ -33,47 +41,107 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
           try {
             await ref.read(activeProxyNotifierProvider.notifier).urlTest("");
           } catch (e) {
-            // Handle error here
             loggy.error("Error during URL test: $e");
           }
         },
         borderRadius: BorderRadius.circular(24),
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: compact ? 0 : 8, horizontal: compact ? 0 : 16),
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              if (compact)
-                QualityBars.fromOutbound(
-                  proxy,
-                  isActive: !failedPing,
-                  activeColor: activeBarColor,
-                  inactiveColor: inactiveBarColor,
+          child: compact
+              ? _CompactPing(
+                  proxy: proxy,
+                  status: pingStatus,
+                  text: pingText,
+                  bars: bars,
+                  textColor: failedPing ? theme.colorScheme.error : null,
+                  reduceMotion: MediaQuery.disableAnimationsOf(context),
                 )
-              else
-                const Icon(FluentIcons.wifi_1_24_regular),
-              Text(
-                pingText,
-                style: (compact ? theme.textTheme.bodyMedium : theme.textTheme.titleMedium)?.copyWith(
-                  fontSize: compact ? 14 : null,
-                  fontFamily: compact ? 'Montserrat' : null,
-                  fontWeight: compact ? FontWeight.w600 : FontWeight.bold,
-                  color: failedPing ? theme.colorScheme.error : null,
+              : Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    const Icon(FluentIcons.wifi_1_24_regular),
+                    Text(
+                      pingText,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: failedPing ? theme.colorScheme.error : null,
+                      ),
+                    ),
+                    bars,
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactPing extends StatelessWidget {
+  const _CompactPing({
+    required this.proxy,
+    required this.status,
+    required this.text,
+    required this.bars,
+    required this.textColor,
+    required this.reduceMotion,
+  });
+
+  final OutboundInfo? proxy;
+  final ProxyPingStatus status;
+  final String text;
+  final Widget bars;
+  final Color? textColor;
+  final bool reduceMotion;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = reduceMotion ? Duration.zero : const Duration(milliseconds: 180);
+    final qualityKey = '${proxy?.tag}:${status.name}:${proxy?.healthScore}:${proxy?.success}';
+    final quality = status == ProxyPingStatus.checking
+        ? reduceMotion
+              ? const Icon(Icons.sync_rounded, size: 18)
+              : const SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))
+        : bars;
+
+    return SizedBox(
+      key: const ValueKey('home_connected_ping_slot'),
+      width: 116,
+      height: 24,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 28,
+            height: 16,
+            child: AnimatedSwitcher(
+              duration: duration,
+              child: Center(key: ValueKey(qualityKey), child: quality),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 80,
+            height: 24,
+            child: AnimatedSwitcher(
+              duration: duration,
+              layoutBuilder: (current, previous) =>
+                  Stack(alignment: Alignment.centerLeft, children: [...previous, if (current != null) current]),
+              child: Text(
+                text,
+                key: ValueKey('${proxy?.tag}:$text'),
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontSize: 14,
+                  fontFamily: 'Montserrat',
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
                 ),
               ),
-              if (!compact) ...[
-                QualityBars.fromOutbound(
-                  proxy,
-                  isActive: !failedPing,
-                  activeColor: activeBarColor,
-                  inactiveColor: inactiveBarColor,
-                ),
-              ],
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

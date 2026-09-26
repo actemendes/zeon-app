@@ -233,6 +233,7 @@
       },
       "autoSelection": "Selección automática",
       "selectingBestServer": "Buscando el mejor servidor",
+      "checkingServers": "Comprobando servidores",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",
