@@ -244,6 +244,7 @@
       "autoSelection": "اختيار تلقائي",
       "selectingBestServer": "جارٍ اختيار أفضل خادم",
       "checkingServers": "جارٍ فحص الخوادم",
+      "restoringConnection": "جارٍ استعادة الاتصال",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

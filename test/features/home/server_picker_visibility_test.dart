@@ -13,6 +13,7 @@ import 'package:zeon/features/home/notifier/main_vpn_button_providers.dart';
 import 'package:zeon/features/proxy/active/active_proxy_card.dart';
 import 'package:zeon/features/proxy/active/active_proxy_delay_indicator.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
+import 'package:zeon/gen/translations_ru.g.dart';
 import 'package:zeon/zeoncore/generated/v2/hcore/hcore.pb.dart';
 import 'package:zeon/zeoncore/vpn_session_snapshot.dart';
 
@@ -44,6 +45,29 @@ void main() {
     expect(find.byKey(const ValueKey('home_server_picker')), findsOneWidget);
     expect(find.text('Server A'), findsOneWidget);
     expect(find.byKey(const ValueKey('home_server_picker_loading')), findsNothing);
+  });
+
+  testWidgets('Auto recovery has its own localized loading label', (tester) async {
+    expect(TranslationsRu().pages.proxies.selectingBestServer, 'Выбираем лучший сервер');
+    expect(TranslationsRu().pages.proxies.restoringConnection, 'Восстанавливаем подключение');
+    await _pumpFooter(
+      tester,
+      status: const Connected(),
+      activeProxy: OutboundInfo(
+        tag: 'balance',
+        tagDisplay: 'balance',
+        type: 'balancer',
+        isGroup: true,
+        isVisible: true,
+        groupSelectedTag: 'server-a',
+        groupSelectedTagDisplay: 'Server A',
+        urlTestStatus: recoveringAutoSearchStatus,
+      ),
+    );
+
+    expect(find.text(TranslationsEn().pages.proxies.restoringConnection), findsOneWidget);
+    expect(find.text('Server A'), findsNothing);
+    expect(find.byKey(const ValueKey('home_server_picker_loading')), findsOneWidget);
   });
 
   for (final legacyStatus in <ConnectionStatus?>[null, const Disconnected()]) {

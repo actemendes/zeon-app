@@ -10,6 +10,7 @@ import 'package:zeon/features/proxy/data/proxy_data_providers.dart';
 import 'package:zeon/features/proxy/data/proxy_repository.dart';
 import 'package:zeon/features/proxy/model/ip_info_entity.dart' as oldipinfo;
 import 'package:zeon/features/proxy/model/proxy_failure.dart';
+import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
 import 'package:zeon/features/stats/data/stats_data_providers.dart';
 import 'package:zeon/features/stats/data/stats_repository.dart';
 import 'package:zeon/features/stats/model/stats_failure.dart';
@@ -39,7 +40,7 @@ void main() {
   });
 
   for (final (selectedStatus, otherStatus, expectedStatus) in [
-    ('failed', 'checking', 'checking'),
+    ('failed', 'checking', recoveringAutoSearchStatus),
     ('success', 'checking', 'success'),
     ('failed', 'failed', 'failed'),
   ]) {
@@ -59,6 +60,9 @@ void main() {
       expect(result.tag, 'balance');
       expect(result.groupSelectedTagDisplay, 'Server A');
       expect(result.urlTestStatus, expectedStatus);
+      if (expectedStatus == recoveringAutoSearchStatus) {
+        expect(outboundPingStatus(result), ProxyPingStatus.checking);
+      }
     });
   }
 

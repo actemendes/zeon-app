@@ -233,6 +233,7 @@
       "autoSelection": "Otomatik seçim",
       "selectingBestServer": "En iyi sunucu seçiliyor",
       "checkingServers": "Sunucular kontrol ediliyor",
+      "restoringConnection": "Bağlantı yeniden kuruluyor",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

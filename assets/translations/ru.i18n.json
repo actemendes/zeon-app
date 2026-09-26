@@ -250,6 +250,7 @@
       "autoSelection": "Автовыбор",
       "selectingBestServer": "Выбираем лучший сервер",
       "checkingServers": "Проверяем серверы",
+      "restoringConnection": "Восстанавливаем подключение",
       "serverNames": {
         "fast": "БЫСТРЫЙ",
         "bypass": "СВЯЗЬ",

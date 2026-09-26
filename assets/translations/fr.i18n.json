@@ -234,6 +234,7 @@
       "autoSelection": "Sélection automatique",
       "selectingBestServer": "Choix du meilleur serveur",
       "checkingServers": "Vérification des serveurs",
+      "restoringConnection": "Rétablissement de la connexion",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

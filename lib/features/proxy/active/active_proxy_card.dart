@@ -35,7 +35,11 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
     final proxy = ref.watch(homeSelectedProxyProvider);
     final t = ref.watch(translationsProvider).requireValue;
     final isRechecking = proxy != null && outboundPingStatus(proxy) == ProxyPingStatus.checking;
-    final placeholderLabel = isRechecking ? t.pages.proxies.checkingServers : t.pages.proxies.selectingBestServer;
+    final placeholderLabel = proxy?.urlTestStatus == recoveringAutoSearchStatus
+        ? t.pages.proxies.restoringConnection
+        : isRechecking
+        ? t.pages.proxies.checkingServers
+        : t.pages.proxies.selectingBestServer;
 
     final theme = Theme.of(context);
     final displayInfo = proxy == null ? null : resolveOutboundDisplayInfo(proxy, translations: t);

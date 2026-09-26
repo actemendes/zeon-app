@@ -234,6 +234,7 @@
       "autoSelection": "انتخاب خودکار",
       "selectingBestServer": "در حال انتخاب بهترین سرور",
       "checkingServers": "در حال بررسی سرورها",
+      "restoringConnection": "در حال بازیابی اتصال",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

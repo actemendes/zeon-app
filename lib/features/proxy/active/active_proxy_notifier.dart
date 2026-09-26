@@ -21,6 +21,9 @@ import 'package:zeon/zeoncore/init_signal.dart';
 
 part 'active_proxy_notifier.g.dart';
 
+/// Home-only projection while Auto searches after its selected server failed.
+const recoveringAutoSearchStatus = 'recovering';
+
 @riverpod
 class IpInfoNotifier extends _$IpInfoNotifier with AppLogger {
   @override
@@ -250,7 +253,9 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
         selector?.items.any((item) => _isDisplayableLeaf(item) && item.urlTestStatus == 'checking') ?? false;
     // A failed selected leaf can retain its terminal status while the next
     // search cycle checks other candidates. Publish that search to Home.
-    if (selectedChecking || (selectedFailed && otherCandidatesChecking)) {
+    if (selectedFailed && otherCandidatesChecking) {
+      info.urlTestStatus = recoveringAutoSearchStatus;
+    } else if (selectedChecking) {
       info.urlTestStatus = 'checking';
     }
     return info;

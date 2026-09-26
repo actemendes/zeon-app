@@ -233,6 +233,7 @@
       "autoSelection": "Pilihan otomatis",
       "selectingBestServer": "Memilih server terbaik",
       "checkingServers": "Memeriksa server",
+      "restoringConnection": "Memulihkan koneksi",
       "serverNames": {
         "fast": "FAST",
         "bypass": "BYPASS",

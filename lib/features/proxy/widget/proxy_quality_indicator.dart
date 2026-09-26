@@ -104,6 +104,7 @@ ProxyPingStatus outboundPingStatus(OutboundInfo outbound) {
     case 'not_tested':
       return ProxyPingStatus.notTested;
     case 'checking':
+    case 'recovering':
       return ProxyPingStatus.checking;
     case 'success':
       return outbound.urlTestDelay > 0 && outbound.urlTestDelay < 65000
