@@ -13,6 +13,7 @@ import com.hiddify.core.mobile.Mobile
 import com.hiddify.core.mobile.SetupOptions
 import com.zeon.zeon.bg.Bugs
 import com.zeon.zeon.bg.CoreNativeOperationCoordinator
+import com.zeon.zeon.bg.CoreSetupDispatcher
 import com.zeon.zeon.bg.CoreShutdownDispatcher
 import com.zeon.zeon.bg.VpnSessionCoordinator
 import com.zeon.zeon.bg.StartPermissionRequestCoordinator
@@ -89,36 +90,40 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                 scope.launch {
                     result.runCatching {
                         val args = call.arguments as Map<*, *>
-                        Settings.baseDir = args["baseDir"] as String
-                        Settings.workingDir = args["workingDir"] as String
-                        Settings.tempDir = args["tempDir"] as String
-                        Settings.debugMode = args["debug"] as Boolean? ?: false
+                        val baseDir = args["baseDir"] as String
+                        val workingDir = args["workingDir"] as String
+                        val tempDir = args["tempDir"] as String
+                        val debug = args["debug"] as Boolean? ?: false
+                        Settings.baseDir = baseDir
+                        Settings.workingDir = workingDir
+                        Settings.tempDir = tempDir
+                        Settings.debugMode = debug
                         val mode = args["mode"] as Int
                         val grpcPort = args["grpcPort"] as Int
-                        Log.d("debugmode","${Settings.debugMode}")
+                        Log.d("debugmode", "$debug")
                         runCatching {
-                            if (!CoreShutdownDispatcher.awaitSettled()) {
-                                error("native core shutdown is still in progress")
-                            }
-                            CoreNativeOperationCoordinator.exclusive {
+                            CoreSetupDispatcher.run {
                                 if (!CoreShutdownDispatcher.awaitSettled()) {
-                                    error("native core shutdown started while setup was queued")
+                                    error("native core shutdown is still in progress")
                                 }
-                                Mobile.setup(
-                                    SetupOptions().also {
-                                        it.basePath = Settings.baseDir
-                                        it.workingDir = Settings.workingDir
-                                        it.tempDir = Settings.tempDir
-                                        it.fixAndroidStack = Bugs.fixAndroidStack
-                                        it.mode=mode.toLong()
-                                        it.listen= "127.0.0.1:" + grpcPort
-                                        it.secret=""
-                                        it.debug = Settings.debugMode
-                                    },null)
+                                CoreNativeOperationCoordinator.exclusive {
+                                    if (!CoreShutdownDispatcher.awaitSettled()) {
+                                        error("native core shutdown started while setup was queued")
+                                    }
+                                    Mobile.setup(
+                                        SetupOptions().also {
+                                            it.basePath = baseDir
+                                            it.workingDir = workingDir
+                                            it.tempDir = tempDir
+                                            it.fixAndroidStack = Bugs.fixAndroidStack
+                                            it.mode=mode.toLong()
+                                            it.listen= "127.0.0.1:" + grpcPort
+                                            it.secret=""
+                                            it.debug = debug
+                                        },null)
+                                }
+                                Libbox.redirectStderr(File(workingDir, "stderr2.log").path)
                             }
-
-//                            Libbox.setup(Settings.baseDir, Settings.workingDir, Settings.tempDir, false)
-                            Libbox.redirectStderr(File(Settings.workingDir, "stderr2.log").path)
 
                             success("")
                         }.onFailure {

@@ -19,8 +19,8 @@ $repoRoot = Split-Path -Parent $scriptDir
 . (Join-Path $scriptDir "build\common.ps1")
 
 $version = Get-ZeonAppVersion -RepoRoot $repoRoot
-if ($version -notmatch '^1\.5\.0\+([1-9][0-9]*)$') {
-    throw "Android runtime builds require the canonical 1.5.0+N version in pubspec.yaml. Current: $version"
+if ($version -notmatch '^1\.5\.(?:0|1)\+([1-9][0-9]*)$') {
+    throw "Android runtime builds require the canonical 1.5.0+N or 1.5.1+N version in pubspec.yaml. Current: $version"
 }
 
 $sourceStatus = @(& git -C $repoRoot status --porcelain=v1 --untracked-files=normal)

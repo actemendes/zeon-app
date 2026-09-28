@@ -1,18 +1,50 @@
 package test.com.zeon.zeon.bg
 
+import android.os.Handler
 import android.os.Looper
 import com.zeon.zeon.bg.CoreShutdownDispatcher
+import com.zeon.zeon.bg.CoreSetupDispatcher
 import com.zeon.zeon.bg.SessionCloseDispatcher
 import com.zeon.zeon.bg.CoreNativeOperationCoordinator
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class CoreShutdownDispatcherInstrumentedTest {
+    suspend fun blockedNativeSetupDoesNotBlockMainLooper() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val heartbeat = CountDownLatch(1)
+        val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val setup = mainScope.async {
+            CoreSetupDispatcher.run {
+                check(Looper.myLooper() !== Looper.getMainLooper()) {
+                    "native core setup ran on the Android main looper"
+                }
+                entered.countDown()
+                release.await()
+            }
+        }
+        try {
+            check(entered.await(2L, TimeUnit.SECONDS)) { "native setup worker did not start" }
+            Handler(Looper.getMainLooper()).post { heartbeat.countDown() }
+            check(heartbeat.await(2L, TimeUnit.SECONDS)) {
+                "Android main looper stopped responding during native setup"
+            }
+        } finally {
+            release.countDown()
+            withTimeout(2_000L) { setup.await() }
+        }
+        check(setup.isCompleted && !setup.isCancelled)
+    }
+
     suspend fun nativeCoreCloseNeverRunsOnMainLooper() {
         val invoked = AtomicBoolean(false)
         CoreShutdownDispatcher.close {

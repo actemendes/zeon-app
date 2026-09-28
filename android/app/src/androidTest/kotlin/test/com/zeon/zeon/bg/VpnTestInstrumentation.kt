@@ -228,6 +228,9 @@ class VpnTestInstrumentation : Instrumentation() {
             TestCase(shutdownTests.javaClass.name, "nativeCoreCloseNeverRunsOnMainLooper") {
                 shutdownTests.nativeCoreCloseNeverRunsOnMainLooper()
             },
+            TestCase(shutdownTests.javaClass.name, "blockedNativeSetupDoesNotBlockMainLooper") {
+                shutdownTests.blockedNativeSetupDoesNotBlockMainLooper()
+            },
             TestCase(shutdownTests.javaClass.name, "hungNativeCloseTimesOutWithoutAllowingConcurrentRestart") {
                 shutdownTests.hungNativeCloseTimesOutWithoutAllowingConcurrentRestart()
             },
