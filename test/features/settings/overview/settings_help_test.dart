@@ -21,6 +21,17 @@ const card = ValueKey('settings-help-card');
 const target = ValueKey('settings-help-target');
 const close = ValueKey('settings-help-close');
 
+Future<void> pumpLessonTarget(WidgetTester tester) async {
+  // The lesson waits for the route entrance, then measures its anchor after
+  // layout. Its card can exist while still invisible and without a target.
+  // Pump real frames until the interaction is available; the hand itself loops.
+  final targetFinder = find.byKey(target).hitTestable();
+  for (var frame = 0; frame < 60 && targetFinder.evaluate().isEmpty; frame++) {
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  expect(targetFinder, findsOneWidget, reason: 'The lesson target must become usable within one second');
+}
+
 Future<ProviderContainer> pumpHelp(
   WidgetTester tester,
   Widget child, {
@@ -62,6 +73,9 @@ Future<ProviderContainer> pumpHelp(
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 100));
+  if (find.byType(SettingsHelpOnboarding).evaluate().isNotEmpty && !container.read(Preferences.settingsHelpLearned)) {
+    await pumpLessonTarget(tester);
+  }
   return container;
 }
 
@@ -270,8 +284,8 @@ void main() {
     await tester.pump();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    // Commit geometry measured after the animation's final layout frame.
-    await tester.pump();
+    // Wait for the overlay's separate measurement frame after branch entrance.
+    await pumpLessonTarget(tester);
     expect(tester.getRect(find.byKey(target)).top, closeTo(tester.getRect(find.byType(SettingsTile)).top, 1));
     await tester.longPress(find.byKey(target));
     await tester.pumpAndSettle();

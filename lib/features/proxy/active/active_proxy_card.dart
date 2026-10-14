@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/home/notifier/home_connection_state_provider.dart';
 import 'package:zeon/features/home/notifier/home_selected_proxy_provider.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
@@ -79,62 +80,66 @@ class ActiveProxyFooter extends ConsumerWidget with InfraLogger {
         child: InkWell(
           borderRadius: BorderRadius.circular(_panelRadius),
           onTap: () => context.goNamed('proxies'),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: proxy == null || isRechecking
-                ? Semantics(
-                    identifier: 'zeon.server-picker',
-                    label: placeholderLabel,
-                    button: true,
-                    child: _ServerPickerPlaceholder(
+          child: KeyboardFocusOutline(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: proxy == null || isRechecking
+                  ? Semantics(
+                      identifier: 'zeon.server-picker',
                       label: placeholderLabel,
-                      foregroundColor: serverTextColor,
-                      iconColor: navBarIconColor,
-                    ),
-                  )
-                : Row(
-                    children: [
-                      InkWell(
-                        onTap: () async {
-                          await handleUrlTest();
-                          await ref.read(dialogNotifierProvider.notifier).showProxyInfo(outboundInfo: proxy);
-                        },
-                        onLongPress: () {},
-                        borderRadius: BorderRadius.circular(_panelRadius),
-                        child: IPCountryFlag(
-                          countryCode: resolveProxyCountryCode(
-                            tagDisplay: proxy.tagDisplay,
-                            fallbackCountryCode: displayInfo?.countryCode ?? proxy.ipinfo.countryCode,
-                          ),
-                          size: 40,
-                        ),
+                      button: true,
+                      child: _ServerPickerPlaceholder(
+                        label: placeholderLabel,
+                        foregroundColor: serverTextColor,
+                        iconColor: navBarIconColor,
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: SizedBox(
-                          height: 40,
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Semantics(
-                              identifier: 'zeon.server-picker',
-                              label: t.pages.proxies.activeProxy,
-                              child: Text(
-                                displayInfo?.title ?? proxy.tagDisplay,
-                                style:
-                                    (theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{}) ??
-                                            theme.textTheme.labelMedium)
-                                        ?.copyWith(color: serverTextColor, fontWeight: FontWeight.w700),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                    )
+                  : Row(
+                      children: [
+                        InkWell(
+                          onTap: () async {
+                            await handleUrlTest();
+                            await ref.read(dialogNotifierProvider.notifier).showProxyInfo(outboundInfo: proxy);
+                          },
+                          onLongPress: () {},
+                          borderRadius: BorderRadius.circular(_panelRadius),
+                          child: KeyboardFocusOutline(
+                            child: IPCountryFlag(
+                              countryCode: resolveProxyCountryCode(
+                                tagDisplay: proxy.tagDisplay,
+                                fallbackCountryCode: displayInfo?.countryCode ?? proxy.ipinfo.countryCode,
+                              ),
+                              size: 40,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: SizedBox(
+                            height: 40,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Semantics(
+                                identifier: 'zeon.server-picker',
+                                label: t.pages.proxies.activeProxy,
+                                child: Text(
+                                  displayInfo?.title ?? proxy.tagDisplay,
+                                  style:
+                                      (theme.navigationBarTheme.labelTextStyle?.resolve(const <WidgetState>{}) ??
+                                              theme.textTheme.labelMedium)
+                                          ?.copyWith(color: serverTextColor, fontWeight: FontWeight.w700),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 14),
-                      Icon(desktop ? Icons.apps : Icons.chevron_right_rounded, color: navBarIconColor, size: 19),
-                    ],
-                  ),
+                        const SizedBox(width: 14),
+                        Icon(desktop ? Icons.apps : Icons.chevron_right_rounded, color: navBarIconColor, size: 19),
+                      ],
+                    ),
+            ),
           ),
         ),
       ),

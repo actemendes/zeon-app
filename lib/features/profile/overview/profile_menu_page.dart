@@ -9,6 +9,7 @@ import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/profile/data/profile_name_parser.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
@@ -226,23 +227,25 @@ class _ProfileMenuCtaPanel extends HookConsumerWidget {
       child: InkWell(
         onTap: () =>
             unawaited(openExternalSubscriptionAccount(context, ref, profile is RemoteProfileEntity ? profile : null)),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onPrimary,
+        child: KeyboardFocusOutline(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onPrimary,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Icon(Icons.arrow_outward_rounded, size: 22, color: theme.colorScheme.onPrimary),
-            ],
+                const SizedBox(width: 12),
+                Icon(Icons.arrow_outward_rounded, size: 22, color: theme.colorScheme.onPrimary),
+              ],
+            ),
           ),
         ),
       ),
@@ -345,18 +348,20 @@ class _ProfileMenuSection extends StatelessWidget {
     final theme = Theme.of(context);
     return InkWell(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(icon, size: 23),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-            ),
-            const SizedBox(width: 8),
-            Icon(trailingIcon, size: 19, color: theme.colorScheme.onSurfaceVariant),
-          ],
+      child: KeyboardFocusOutline(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(icon, size: 23),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(width: 8),
+              Icon(trailingIcon, size: 19, color: theme.colorScheme.onSurfaceVariant),
+            ],
+          ),
         ),
       ),
     );

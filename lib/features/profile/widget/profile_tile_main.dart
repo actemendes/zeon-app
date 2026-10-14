@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gap/gap.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/profile/data/profile_name_parser.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/profile_notifier.dart';
@@ -73,25 +74,27 @@ class ProfileTileMain extends HookConsumerWidget {
                   .read(updateProfileNotifierProvider(profile.id).notifier)
                   .updateProfile(profile as RemoteProfileEntity),
               borderRadius: BorderRadius.circular(12),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+              child: KeyboardFocusOutline(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(FluentIcons.arrow_sync_24_filled, color: theme.colorScheme.primary, size: 20),
                     ),
-                    child: Icon(FluentIcons.arrow_sync_24_filled, color: theme.colorScheme.primary, size: 20),
-                  ),
-                  const Gap(6),
-                  Text(
-                    displayProfileName,
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                    const Gap(6),
+                    Text(
+                      displayProfileName,
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -138,10 +141,12 @@ class ProfileTileMain extends HookConsumerWidget {
                               child: InkWell(
                                 onTap: () => _launchUrlWithCheck(context, ref, subInfo.webPageUrl!),
                                 borderRadius: BorderRadius.circular(8),
-                                child: _InfoItem(
-                                  icon: _getLinkIcon(subInfo.webPageUrl!, FluentIcons.building_shop_24_regular),
-                                  label: t.components.subscriptionInfo.profileSite,
-                                  value: _formatSupportLink(subInfo.webPageUrl!),
+                                child: KeyboardFocusOutline(
+                                  child: _InfoItem(
+                                    icon: _getLinkIcon(subInfo.webPageUrl!, FluentIcons.building_shop_24_regular),
+                                    label: t.components.subscriptionInfo.profileSite,
+                                    value: _formatSupportLink(subInfo.webPageUrl!),
+                                  ),
                                 ),
                               ),
                             ),
@@ -151,10 +156,12 @@ class ProfileTileMain extends HookConsumerWidget {
                               child: InkWell(
                                 onTap: () => _launchUrlWithCheck(context, ref, subInfo.supportUrl!),
                                 borderRadius: BorderRadius.circular(8),
-                                child: _InfoItem(
-                                  icon: _getLinkIcon(subInfo.supportUrl!, FontAwesomeIcons.headset),
-                                  label: t.components.subscriptionInfo.profileSupport,
-                                  value: _formatSupportLink(subInfo.supportUrl!),
+                                child: KeyboardFocusOutline(
+                                  child: _InfoItem(
+                                    icon: _getLinkIcon(subInfo.supportUrl!, FontAwesomeIcons.headset),
+                                    label: t.components.subscriptionInfo.profileSupport,
+                                    value: _formatSupportLink(subInfo.supportUrl!),
+                                  ),
                                 ),
                               ),
                             ),

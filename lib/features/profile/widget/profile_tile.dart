@@ -13,6 +13,7 @@ import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/widget/adaptive_icon.dart';
 import 'package:zeon/core/widget/adaptive_menu.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/profile/data/profile_name_parser.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/profile_notifier.dart';
@@ -116,59 +117,61 @@ class ProfileTile extends HookConsumerWidget {
                         }
                       }
                     },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      child: Column(
-                        // mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (isMain)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Material(
-                                borderRadius: BorderRadius.circular(8),
-                                color: Colors.transparent,
-                                clipBehavior: Clip.antiAlias,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        displayProfileName,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.titleMedium?.copyWith(
-                                          fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
+                    child: KeyboardFocusOutline(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        child: Column(
+                          // mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (isMain)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Material(
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: Colors.transparent,
+                                  clipBehavior: Clip.antiAlias,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          displayProfileName,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.titleMedium?.copyWith(
+                                            fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
+                                          ),
+                                          semanticsLabel: t.pages.profiles.activeProfileName(name: displayProfileName),
                                         ),
-                                        semanticsLabel: t.pages.profiles.activeProfileName(name: displayProfileName),
                                       ),
-                                    ),
-                                    const Icon(Icons.arrow_drop_down_rounded),
-                                  ],
+                                      const Icon(Icons.arrow_drop_down_rounded),
+                                    ],
+                                  ),
                                 ),
+                              )
+                            else
+                              Text(
+                                displayProfileName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
+                                ),
+                                semanticsLabel: profile.active
+                                    ? t.pages.profiles.activeProfileName(name: displayProfileName)
+                                    : t.pages.profiles.nonActiveProfileName(name: displayProfileName),
                               ),
-                            )
-                          else
-                            Text(
-                              displayProfileName,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
-                              ),
-                              semanticsLabel: profile.active
-                                  ? t.pages.profiles.activeProfileName(name: displayProfileName)
-                                  : t.pages.profiles.nonActiveProfileName(name: displayProfileName),
-                            ),
-                          if (subInfo != null) ...[
-                            const Gap(4),
-                            RemainingTrafficIndicator(subInfo.ratio),
-                            const Gap(4),
-                            ProfileSubscriptionInfo(subInfo),
-                            const Gap(4),
+                            if (subInfo != null) ...[
+                              const Gap(4),
+                              RemainingTrafficIndicator(subInfo.ratio),
+                              const Gap(4),
+                              ProfileSubscriptionInfo(subInfo),
+                              const Gap(4),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -208,7 +211,7 @@ class ProfileActionButton extends HookConsumerWidget {
                   .read(updateProfileNotifierProvider(profile.id).notifier)
                   .updateProfile(profile as RemoteProfileEntity);
             },
-            child: const Icon(Icons.update_rounded),
+            child: const KeyboardFocusOutline(child: Icon(Icons.update_rounded)),
           ),
         ),
       );
@@ -221,7 +224,7 @@ class ProfileActionButton extends HookConsumerWidget {
           child: InkWell(
             borderRadius: ProfileTileConst.startBorderRadius(Directionality.of(context)),
             onTap: toggleVisibility,
-            child: Icon(AdaptiveIcon(context).more),
+            child: KeyboardFocusOutline(child: Icon(AdaptiveIcon(context).more)),
           ),
         ),
       );
@@ -533,25 +536,27 @@ class NewSiteSubscriptionInfo extends HookConsumerWidget {
     }
     return InkWell(
       onTap: () => launchUrl(Uri.parse(subInfo.webPageUrl ?? "")),
-      child: Column(
-        children: [
-          const Icon(FluentIcons.globe_person_24_filled, size: 24, color: Colors.blue),
-          Text(t.components.subscriptionInfo.profileSite),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  host,
-                  // style: theme.textTheme.bodySmall?.copyWith(color: remaining.$2),
-                  overflow: TextOverflow.ellipsis,
+      child: KeyboardFocusOutline(
+        child: Column(
+          children: [
+            const Icon(FluentIcons.globe_person_24_filled, size: 24, color: Colors.blue),
+            Text(t.components.subscriptionInfo.profileSite),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    host,
+                    // style: theme.textTheme.bodySmall?.copyWith(color: remaining.$2),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

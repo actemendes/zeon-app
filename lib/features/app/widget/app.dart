@@ -9,6 +9,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
+import 'package:zeon/core/device/android_tv_provider.dart';
 import 'package:zeon/core/localization/locale_extensions.dart';
 import 'package:zeon/core/localization/locale_preferences.dart';
 import 'package:zeon/core/localization/translation_context.dart';
@@ -24,6 +25,7 @@ import 'package:zeon/core/theme/app_theme.dart';
 import 'package:zeon/core/theme/system_bars_style.dart';
 import 'package:zeon/core/theme/theme_preferences.dart';
 import 'package:zeon/core/widget/app_visual_effects.dart';
+import 'package:zeon/core/widget/tv_display_layout.dart';
 import 'package:zeon/features/app_update/notifier/app_update_notifier.dart';
 import 'package:zeon/features/connection/widget/connection_wrapper.dart';
 import 'package:zeon/features/notifications/data/notification_data_providers.dart';
@@ -40,8 +42,16 @@ import 'package:zeon/zeoncore/zeon_core_service_provider.dart';
 bool _debugAccessibility = false;
 bool isOnPauseCalled = false;
 
-class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
+class App extends ConsumerWidget {
   const App({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      TvDisplayLayout(isTelevision: ref.watch(androidTvProvider).valueOrNull ?? false, child: const _AppContent());
+}
+
+class _AppContent extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
+  const _AppContent();
 
   void onInactive(WidgetRef ref) {
     if (PlatformUtils.isDesktop) return;

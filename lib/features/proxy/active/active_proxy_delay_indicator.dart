@@ -1,6 +1,7 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/home/notifier/home_selected_proxy_provider.dart';
 import 'package:zeon/features/proxy/active/active_proxy_notifier.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
@@ -45,33 +46,35 @@ class ActiveProxyDelayIndicator extends ConsumerWidget with InfraLogger {
           }
         },
         borderRadius: BorderRadius.circular(24),
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: compact ? 0 : 8, horizontal: compact ? 0 : 16),
-          child: compact
-              ? _CompactPing(
-                  proxy: proxy,
-                  status: pingStatus,
-                  text: pingText,
-                  bars: bars,
-                  textColor: failedPing ? theme.colorScheme.error : null,
-                  reduceMotion: MediaQuery.disableAnimationsOf(context),
-                )
-              : Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    const Icon(FluentIcons.wifi_1_24_regular),
-                    Text(
-                      pingText,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: failedPing ? theme.colorScheme.error : null,
+        child: KeyboardFocusOutline(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: compact ? 0 : 8, horizontal: compact ? 0 : 16),
+            child: compact
+                ? _CompactPing(
+                    proxy: proxy,
+                    status: pingStatus,
+                    text: pingText,
+                    bars: bars,
+                    textColor: failedPing ? theme.colorScheme.error : null,
+                    reduceMotion: MediaQuery.disableAnimationsOf(context),
+                  )
+                : Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      const Icon(FluentIcons.wifi_1_24_regular),
+                      Text(
+                        pingText,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: failedPing ? theme.colorScheme.error : null,
+                        ),
                       ),
-                    ),
-                    bars,
-                  ],
-                ),
+                      bars,
+                    ],
+                  ),
+          ),
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zeon/core/theme/theme_extensions.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 
 /// Presentation shared by the home entry point and isolated visual previews.
 class HomePremiumAccessView extends StatelessWidget {
@@ -91,7 +92,10 @@ class HomePremiumAccessView extends StatelessWidget {
                   ClipPath(clipper: _PremiumFillClipper(value, direction), child: text(accentText)),
                   Material(
                     color: Colors.transparent,
-                    child: InkWell(onTap: onPressed),
+                    child: InkWell(
+                      onTap: onPressed,
+                      child: const KeyboardFocusOutline(child: SizedBox.expand()),
+                    ),
                   ),
                 ],
               ),
@@ -215,59 +219,61 @@ class _InactivePremiumState extends StatelessWidget {
         decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), gradient: gradient),
         child: InkWell(
           onTap: onPressed,
-          child: Row(
-            children: [
-              Container(
-                width: _leftSegmentWidth,
-                height: _height,
-                color: Colors.transparent,
-                padding: const EdgeInsets.all(_crownPadding),
-                child: _PremiumCrownIcon(size: _crownSize, color: textColor),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontFamily: 'Unbounded',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                        color: textColor,
-                        height: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      subtitle.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'Montserrat',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: textColor,
-                        height: 1,
-                      ),
-                    ),
-                  ],
+          child: KeyboardFocusOutline(
+            child: Row(
+              children: [
+                Container(
+                  width: _leftSegmentWidth,
+                  height: _height,
+                  color: Colors.transparent,
+                  padding: const EdgeInsets.all(_crownPadding),
+                  child: _PremiumCrownIcon(size: _crownSize, color: textColor),
                 ),
-              ),
-              SizedBox.square(
-                dimension: 44,
-                child: Center(
-                  child: Transform.scale(
-                    scale: _arrowVisualScale,
-                    child: Icon(Icons.arrow_outward, size: _arrowSize, color: textColor),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontFamily: 'Unbounded',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                          color: textColor,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        subtitle.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'Montserrat',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: textColor,
+                          height: 1,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+                SizedBox.square(
+                  dimension: 44,
+                  child: Center(
+                    child: Transform.scale(
+                      scale: _arrowVisualScale,
+                      child: Icon(Icons.arrow_outward, size: _arrowSize, color: textColor),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

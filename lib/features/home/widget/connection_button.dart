@@ -8,6 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/theme/theme_extensions.dart';
 import 'package:zeon/core/widget/animated_text.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/button_appearance/data/button_appearance_provider.dart';
 import 'package:zeon/features/button_appearance/widget/custom_vpn_button.dart';
 import 'package:zeon/features/connection/notifier/connection_notifier.dart';
@@ -244,11 +245,12 @@ class _MainVpnButtonViewState extends State<MainVpnButtonView> {
                   ),
                 if (_showFocusHighlight)
                   IgnorePointer(
-                    child: DecoratedBox(
+                    child: CustomPaint(
                       key: const ValueKey('home_vpn_focus_outline'),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Theme.of(context).colorScheme.primary, width: 3),
+                      foregroundPainter: KeyboardFocusOutlinePainter(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: BorderRadius.circular(999),
+                        outset: 0,
                       ),
                     ),
                   ),

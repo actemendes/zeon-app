@@ -6,6 +6,7 @@ import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/profile/model/profile_entity.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/utils/link_parsers.dart';
@@ -141,25 +142,27 @@ class ProfileLinkAccountPage extends ConsumerWidget {
                         await ref.read(Preferences.introCompleted.notifier).update(false);
                         if (context.mounted) context.goNamed('intro');
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Row(
-                          children: [
-                            Icon(Icons.switch_account_rounded, size: 22, color: cs.onSurfaceVariant),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Text(
-                                t.deleteAccount,
-                                style: TextStyle(
-                                  fontFamily: 'Montserrat',
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: cs.onSurface,
+                      child: KeyboardFocusOutline(
+                        child: Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Row(
+                            children: [
+                              Icon(Icons.switch_account_rounded, size: 22, color: cs.onSurfaceVariant),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  t.deleteAccount,
+                                  style: TextStyle(
+                                    fontFamily: 'Montserrat',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: cs.onSurface,
+                                  ),
                                 ),
                               ),
-                            ),
-                            Icon(Icons.chevron_right_rounded, size: 19, color: cs.onSurfaceVariant),
-                          ],
+                              Icon(Icons.chevron_right_rounded, size: 19, color: cs.onSurfaceVariant),
+                            ],
+                          ),
                         ),
                       ),
                     ),

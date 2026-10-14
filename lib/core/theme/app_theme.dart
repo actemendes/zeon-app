@@ -4,6 +4,7 @@ import 'package:zeon/core/theme/app_color_tokens.dart';
 import 'package:zeon/core/theme/app_theme_mode.dart';
 import 'package:zeon/core/theme/system_bars_style.dart';
 import 'package:zeon/core/theme/theme_extensions.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 
 const Color _lightBackground = AppColorTokens.lightBackground;
 const Color _lightSurfaceAlt = AppColorTokens.lightSurfaceAlt;
@@ -206,6 +207,24 @@ class AppTheme {
     return base.copyWith(
       textTheme: textTheme,
       primaryTextTheme: _withHeadingFont(_withReadableBody(base.primaryTextTheme)),
+      filledButtonTheme: const FilledButtonThemeData(
+        style: ButtonStyle(backgroundBuilder: KeyboardFocusOutline.buttonBuilder),
+      ),
+      elevatedButtonTheme: const ElevatedButtonThemeData(
+        style: ButtonStyle(backgroundBuilder: KeyboardFocusOutline.buttonBuilder),
+      ),
+      outlinedButtonTheme: const OutlinedButtonThemeData(
+        style: ButtonStyle(backgroundBuilder: KeyboardFocusOutline.buttonBuilder),
+      ),
+      textButtonTheme: const TextButtonThemeData(
+        style: ButtonStyle(backgroundBuilder: KeyboardFocusOutline.buttonBuilder),
+      ),
+      iconButtonTheme: const IconButtonThemeData(
+        style: ButtonStyle(backgroundBuilder: KeyboardFocusOutline.buttonBuilder),
+      ),
+      menuButtonTheme: const MenuButtonThemeData(
+        style: ButtonStyle(backgroundBuilder: KeyboardFocusOutline.buttonBuilder),
+      ),
       iconTheme: scheme.brightness == Brightness.light ? IconThemeData(color: scheme.onSurface) : base.iconTheme,
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.background,

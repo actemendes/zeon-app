@@ -19,6 +19,7 @@
 | TV04 | Настройка core завершается ошибкой; недоступен optional Android Settings intent | MethodChannel отвечает ошибкой/результатом один раз, ожидание не зависает; unit/native injection отдельно от TV runtime |
 | TV05 | Отказ в уведомлениях на API 33+ → запрос VPN consent | Отказ в уведомлениях не запрещает сам VPN; системное VPN consent остаётся обязательным |
 | TV06 | Connect → независимый HTTPS → background/return → disconnect → повторный запуск | VPN/native state, реальный трафик и cleanup по общим правилам; без fixture или traffic evidence — BLOCKED/NOT_RUN |
+| TV07 | Connect/HTTPS → Home пульта → минимум 10 минут в фоне → return → disconnect | Первые 6 минут без тестового трафика, ввода и повторного Start; затем свежие независимые HTTPS на 6-й и 10-й минуте. VPN Network, TUN/foreground service и PID наблюдаются отдельно; после Stop — прямой трафик и cleanup. Не выдавать этот интервал за долговременную гарантию |
 
 TV01–TV05 подтверждают только перечисленные сценарии. TV06 не становится PASS
 из надписи Connected. Общие SHORT/FULL и Google Play TV review остаются отдельными

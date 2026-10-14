@@ -9,6 +9,7 @@ import 'package:zeon/core/router/adaptive_layout/shell_route_action.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/router/go_router/routing_config_notifier.dart';
 import 'package:zeon/core/theme/system_bars_style.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/home/widget/home_premium_access_button.dart';
 import 'package:zeon/features/stats/widget/side_bar_stats_overview.dart';
 
@@ -198,7 +199,9 @@ class MyAdaptiveLayout extends HookConsumerWidget {
       isMobileBreakpoint ? ['profileMenu', 'home', 'settings'] : ['home', 'settings', 'profileMenu', 'about'];
 
   List<NavigationDestination> _navDests(List<ShellRouteAction> actions) =>
-      actions.map((e) => NavigationDestination(icon: Icon(e.icon), label: e.title)).toList();
+      actions.map((e) => NavigationDestination(icon: _navigationIcon(e.icon), label: e.title)).toList();
   List<NavigationRailDestination> _navRailDests(List<ShellRouteAction> actions) =>
-      actions.map((e) => NavigationRailDestination(icon: Icon(e.icon), label: Text(e.title))).toList();
+      actions.map((e) => NavigationRailDestination(icon: _navigationIcon(e.icon), label: Text(e.title))).toList();
+
+  Widget _navigationIcon(IconData icon) => KeyboardFocusOutline(outset: 10, child: Icon(icon));
 }

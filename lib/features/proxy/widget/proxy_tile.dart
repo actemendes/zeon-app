@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zeon/core/localization/translation_context.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/proxy/active/ip_widget.dart';
 import 'package:zeon/features/proxy/model/proxy_display_name.dart';
 import 'package:zeon/features/proxy/widget/proxy_quality_indicator.dart';
@@ -55,87 +56,89 @@ class ProxyTile extends StatelessWidget with PresLogger {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Semantics(
-                  label: ipv6Mode == IPv6Mode.disable ? null : ipv6StatusText,
-                  child: Container(
-                    key: const ValueKey('proxy-ipv6-flag-frame'),
-                    width: 42,
-                    height: 42,
-                    alignment: Alignment.center,
-                    decoration: showIpv6Outline
-                        ? BoxDecoration(
-                            border: Border.all(color: const Color(0xFF3CE74F), width: 2),
-                            borderRadius: BorderRadius.circular(9),
-                          )
-                        : null,
-                    // The flag is part of the row's selection target.
-                    child: IgnorePointer(
-                      child: IPCountryFlag(
-                        countryCode:
-                            countryCode ??
-                            resolveProxyCountryCode(
-                              tagDisplay: proxy.tagDisplay,
-                              fallbackCountryCode: proxy.ipinfo.countryCode,
-                            ),
-                        size: 34,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    displayTitle ?? formatOutboundTitle(proxy, translations: context.translations),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Montserrat',
-                      fontFamilyFallback: const ['Emoji'],
-                      fontSize: 16,
-                      height: 1.3,
-                      fontWeight: FontWeight.w600,
-                      color: primaryColor,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (showIpv6Unavailable || failedPing)
-                      Icon(
-                        Icons.close_rounded,
-                        key: ValueKey(showIpv6Unavailable ? 'proxy-ipv6-unavailable-cross' : 'proxy-ping'),
-                        size: 16,
-                        color: selected ? primaryColor : cs.error,
-                        semanticLabel: showIpv6Unavailable ? ipv6StatusText : pingText,
-                      )
-                    else
-                      Text(
-                        pingText,
-                        key: const ValueKey('proxy-ping'),
-                        style: TextStyle(
-                          fontFamily: 'Montserrat',
-                          fontSize: 14,
-                          height: 1.2,
-                          fontWeight: FontWeight.w600,
-                          color: selected ? primaryColor : pingColor,
+          child: KeyboardFocusOutline(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Semantics(
+                    label: ipv6Mode == IPv6Mode.disable ? null : ipv6StatusText,
+                    child: Container(
+                      key: const ValueKey('proxy-ipv6-flag-frame'),
+                      width: 42,
+                      height: 42,
+                      alignment: Alignment.center,
+                      decoration: showIpv6Outline
+                          ? BoxDecoration(
+                              border: Border.all(color: const Color(0xFF3CE74F), width: 2),
+                              borderRadius: BorderRadius.circular(9),
+                            )
+                          : null,
+                      // The flag is part of the row's selection target.
+                      child: IgnorePointer(
+                        child: IPCountryFlag(
+                          countryCode:
+                              countryCode ??
+                              resolveProxyCountryCode(
+                                tagDisplay: proxy.tagDisplay,
+                                fallbackCountryCode: proxy.ipinfo.countryCode,
+                              ),
+                          size: 34,
                         ),
                       ),
-                    const SizedBox(width: 8),
-                    QualityBars.fromOutbound(
-                      proxy,
-                      isActive: isActive,
-                      activeColor: selected ? primaryColor : null,
-                      inactiveColor: primaryColor.withValues(alpha: .16),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      displayTitle ?? formatOutboundTitle(proxy, translations: context.translations),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Montserrat',
+                        fontFamilyFallback: const ['Emoji'],
+                        fontSize: 16,
+                        height: 1.3,
+                        fontWeight: FontWeight.w600,
+                        color: primaryColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (showIpv6Unavailable || failedPing)
+                        Icon(
+                          Icons.close_rounded,
+                          key: ValueKey(showIpv6Unavailable ? 'proxy-ipv6-unavailable-cross' : 'proxy-ping'),
+                          size: 16,
+                          color: selected ? primaryColor : cs.error,
+                          semanticLabel: showIpv6Unavailable ? ipv6StatusText : pingText,
+                        )
+                      else
+                        Text(
+                          pingText,
+                          key: const ValueKey('proxy-ping'),
+                          style: TextStyle(
+                            fontFamily: 'Montserrat',
+                            fontSize: 14,
+                            height: 1.2,
+                            fontWeight: FontWeight.w600,
+                            color: selected ? primaryColor : pingColor,
+                          ),
+                        ),
+                      const SizedBox(width: 8),
+                      QualityBars.fromOutbound(
+                        proxy,
+                        isActive: isActive,
+                        activeColor: selected ? primaryColor : null,
+                        inactiveColor: primaryColor.withValues(alpha: .16),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

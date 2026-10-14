@@ -9,6 +9,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
+import 'package:zeon/core/device/android_tv_provider.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/logger/logger.dart';
@@ -237,6 +238,9 @@ Future<ProviderContainer> _bootstrapContainer(
   LoggerController.init(container.read(logPathResolverProvider).appFile().path);
 
   final appInfo = await _init("app info", () => container.read(appInfoProvider.future));
+  if (PlatformUtils.isAndroid && initializeDesktopUi) {
+    await _init("TV presentation", () => container.read(androidTvProvider.future));
+  }
   await _init("preferences", () => container.read(sharedPreferencesProvider.future));
 
   await _init("preferences migration", () async {

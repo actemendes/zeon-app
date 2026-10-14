@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 
 Future<T?> showZeonDialog<T>(BuildContext context, Widget child) {
   if (MediaQuery.sizeOf(context).width < 600) {
@@ -83,12 +84,12 @@ class ZeonDialog extends StatelessWidget {
             contentPadding: const EdgeInsets.all(18),
             border: border,
             enabledBorder: border,
-            focusedBorder: border,
+            focusedBorder: border.copyWith(borderSide: BorderSide(color: cs.primary, width: 4)),
             errorBorder: border,
-            focusedErrorBorder: border,
+            focusedErrorBorder: border.copyWith(borderSide: BorderSide(color: cs.error, width: 4)),
             disabledBorder: border,
           ),
-          textButtonTheme: TextButtonThemeData(style: actionStyle),
+          textButtonTheme: TextButtonThemeData(style: theme.textButtonTheme.style?.merge(actionStyle) ?? actionStyle),
         ),
         child: Material(
           color: cs.secondaryContainer,
@@ -269,34 +270,36 @@ class DialogChoice extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  if (leading != null) ...[leading!, const SizedBox(width: 12)],
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontFamily: 'Montserrat',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        height: 1.5,
-                        color: cs.onSurface,
+            child: KeyboardFocusOutline(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    if (leading != null) ...[leading!, const SizedBox(width: 12)],
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontFamily: 'Montserrat',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          height: 1.5,
+                          color: cs.onSurface,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  if (selected)
-                    Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle),
-                      child: Icon(Icons.check_rounded, size: 16, color: cs.onPrimary),
-                    )
-                  else
-                    Icon(Icons.circle_outlined, size: 22, color: cs.onSurfaceVariant.withValues(alpha: .6)),
-                ],
+                    const SizedBox(width: 10),
+                    if (selected)
+                      Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle),
+                        child: Icon(Icons.check_rounded, size: 16, color: cs.onPrimary),
+                      )
+                    else
+                      Icon(Icons.circle_outlined, size: 22, color: cs.onSurfaceVariant.withValues(alpha: .6)),
+                  ],
+                ),
               ),
             ),
           ),

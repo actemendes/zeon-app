@@ -12,6 +12,7 @@ import 'package:zeon/core/notification/in_app_notification_controller.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
 import 'package:zeon/features/home/widget/world_map_background.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
@@ -225,19 +226,21 @@ class _IntroFooter extends ConsumerWidget {
                 key: const ValueKey('intro_terms_button'),
                 borderRadius: BorderRadius.circular(14),
                 onTap: onTermsTap,
-                child: Text.rich(
-                  key: const ValueKey(UiNames.textIntroTermsAndPolicy),
-                  textAlign: TextAlign.center,
-                  t.intro.termsAndPolicyCaution(
-                    tap: (text) => TextSpan(
-                      text: text,
-                      style: theme.textTheme.bodySmall?.copyWith(color: linkColor, fontWeight: FontWeight.w600),
+                child: KeyboardFocusOutline(
+                  child: Text.rich(
+                    key: const ValueKey(UiNames.textIntroTermsAndPolicy),
+                    textAlign: TextAlign.center,
+                    t.intro.termsAndPolicyCaution(
+                      tap: (text) => TextSpan(
+                        text: text,
+                        style: theme.textTheme.bodySmall?.copyWith(color: linkColor, fontWeight: FontWeight.w600),
+                      ),
                     ),
-                  ),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.brightness == Brightness.dark ? const Color(0xFF989CA3) : const Color(0xFF63707B),
-                    fontFamily: 'Montserrat',
-                    fontWeight: FontWeight.w600,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.brightness == Brightness.dark ? const Color(0xFF989CA3) : const Color(0xFF63707B),
+                      fontFamily: 'Montserrat',
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -286,60 +289,62 @@ class _IntroStartButton extends StatelessWidget {
           key: const ValueKey(UiNames.buttonIntroStart),
           autofocus: true,
           onTap: isLoading ? null : onPressed,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                _IntroCrownIcon(size: 22, color: crownColor),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontFamily: 'Unbounded',
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          color: titleColor,
-                          height: 1,
-                        ),
-                      ),
-                      const Gap(5),
-                      Text(
-                        subtitle,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontFamily: 'Montserrat',
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: subtitleColor,
-                          height: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox.square(
-                  dimension: 40,
-                  child: Center(
-                    child: isLoading
-                        ? SizedBox(
-                            width: _arrowSize,
-                            height: _arrowSize,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              valueColor: AlwaysStoppedAnimation<Color>(arrowColor),
-                            ),
-                          )
-                        : Transform.scale(
-                            scale: _arrowVisualScale,
-                            child: Icon(Icons.arrow_outward, size: _arrowSize, color: arrowColor),
+          child: KeyboardFocusOutline(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  _IntroCrownIcon(size: 22, color: crownColor),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontFamily: 'Unbounded',
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            color: titleColor,
+                            height: 1,
                           ),
+                        ),
+                        const Gap(5),
+                        Text(
+                          subtitle,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontFamily: 'Montserrat',
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: subtitleColor,
+                            height: 1,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  SizedBox.square(
+                    dimension: 40,
+                    child: Center(
+                      child: isLoading
+                          ? SizedBox(
+                              width: _arrowSize,
+                              height: _arrowSize,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                valueColor: AlwaysStoppedAnimation<Color>(arrowColor),
+                              ),
+                            )
+                          : Transform.scale(
+                              scale: _arrowVisualScale,
+                              child: Icon(Icons.arrow_outward, size: _arrowSize, color: arrowColor),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -367,16 +372,18 @@ class _IntroSecondaryButton extends StatelessWidget {
         onTap: () {
           showDialog<void>(context: context, builder: (_) => const _BindAccountCodeDialog());
         },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Center(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontFamily: 'Montserrat',
-                fontWeight: FontWeight.w600,
-                color: textColor,
+        child: KeyboardFocusOutline(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Center(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontFamily: 'Montserrat',
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
               ),
             ),
           ),

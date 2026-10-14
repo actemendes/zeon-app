@@ -209,13 +209,21 @@ void main() {
   testWidgets('real runtime projection drives images, cancel/stop semantics and reduced motion', (tester) async {
     final semantics = tester.ensureSemantics();
     var calls = 0;
-    Future<void> render(VpnSessionPhase phase, {bool reduced = false}) async {
+    Future<void> render(VpnSessionPhase phase, {bool reduced = false, bool ready = true}) async {
+      final connected = phase == VpnSessionPhase.connected && ready;
       final snapshot = VpnSessionSnapshot(
         generation: 1,
         runtimeEpoch: 'test',
         sequenceNumber: 1,
         snapshotVersion: 1,
         phase: phase,
+        coreReady: connected,
+        coreStarted: connected,
+        commandEndpointReady: connected,
+        tunnelReady: connected,
+        protectSucceeded: connected,
+        platformVpnValidated: connected,
+        selectedOutboundId: connected ? 'test-outbound' : '',
         requestedAction: 'connect',
         recoverable: true,
       );
@@ -244,6 +252,10 @@ void main() {
     expect(tester.widget<CustomVpnButton>(find.byType(CustomVpnButton)).phase, ButtonPhase.connecting);
     await tester.tap(find.byType(CustomVpnButton));
     expect(calls, 1);
+    // A native phase label alone must not paint an unverified session connected.
+    await render(VpnSessionPhase.connected, ready: false);
+    expect(tester.widget<CustomVpnButton>(find.byType(CustomVpnButton)).phase, ButtonPhase.connecting);
+    expect(find.bySemanticsLabel('Нажмите для отключения'), findsNothing);
     await render(VpnSessionPhase.connected);
     expect(tester.widget<CustomVpnButton>(find.byType(CustomVpnButton)).phase, ButtonPhase.connected);
     expect(find.bySemanticsLabel('Нажмите для отключения'), findsOneWidget);

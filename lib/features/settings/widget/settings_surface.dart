@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/settings/widget/settings_help.dart';
 
 /// Shared, full-width settings composition. Each group keeps its own live controls.
@@ -119,55 +120,58 @@ class SettingsTile extends StatelessWidget {
         onSecondaryTap: help == null
             ? null
             : () => showSettingsHelp(context, title: title is Text ? (title as Text).data ?? '' : '', message: help!),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
-          child: Row(
-            children: [
-              if (leading != null) ...[
-                IconTheme(
-                  data: IconThemeData(size: 22, color: cs.onSurfaceVariant),
-                  child: leading!,
-                ),
-                const SizedBox(width: 16),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    DefaultTextStyle(
-                      style: TextStyle(
-                        fontFamily: 'Montserrat',
-                        fontSize: 16,
-                        height: 1.4,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurface,
-                      ),
-                      child: title,
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 5),
+        child: KeyboardFocusOutline(
+          includeDescendantFocus: true,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+            child: Row(
+              children: [
+                if (leading != null) ...[
+                  IconTheme(
+                    data: IconThemeData(size: 22, color: cs.onSurfaceVariant),
+                    child: leading!,
+                  ),
+                  const SizedBox(width: 16),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       DefaultTextStyle(
                         style: TextStyle(
                           fontFamily: 'Montserrat',
+                          fontSize: 16,
+                          height: 1.4,
                           fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          height: 1.5,
-                          color: cs.onSurfaceVariant,
+                          color: cs.onSurface,
                         ),
-                        child: subtitle!,
+                        child: title,
                       ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 5),
+                        DefaultTextStyle(
+                          style: TextStyle(
+                            fontFamily: 'Montserrat',
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            height: 1.5,
+                            color: cs.onSurfaceVariant,
+                          ),
+                          child: subtitle!,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              if (trailing != null || onTap != null) ...[
-                const SizedBox(width: 12),
-                IconTheme(
-                  data: IconThemeData(size: 19, color: cs.onSurfaceVariant),
-                  child: trailing ?? const Icon(Icons.chevron_right_rounded),
-                ),
+                if (trailing != null || onTap != null) ...[
+                  const SizedBox(width: 12),
+                  IconTheme(
+                    data: IconThemeData(size: 19, color: cs.onSurfaceVariant),
+                    child: trailing ?? const Icon(Icons.chevron_right_rounded),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

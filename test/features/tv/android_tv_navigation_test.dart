@@ -7,6 +7,7 @@ import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/router/adaptive_layout/my_adaptive_layout.dart';
 import 'package:zeon/core/router/go_router/routing_config_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/button_appearance/button_appearance.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
 import 'package:zeon/features/home/widget/connection_button.dart';
@@ -30,6 +31,10 @@ bool focusIsInside(Finder finder) {
   });
   return inside;
 }
+
+Finder get visibleFocusOutline => find.byWidgetPredicate(
+  (widget) => widget is CustomPaint && widget.foregroundPainter is KeyboardFocusOutlinePainter,
+);
 
 final _readyToConnect = MainVpnButtonState.fromSnapshot(
   const VpnSessionSnapshot(
@@ -129,10 +134,12 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
     expect(focusIsInside(account), isTrue);
+    expect(find.descendant(of: account, matching: visibleFocusOutline), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
     expect(terms, findsOneWidget);
     expect(focusIsInside(terms), isTrue, reason: 'The terms link must be reachable without touch.');
+    expect(find.descendant(of: terms, matching: visibleFocusOutline), findsOneWidget);
   });
 
   testWidgets('D-pad center opens account input and system Back closes it', (tester) async {
@@ -390,6 +397,12 @@ void main() {
       await tester.sendKeyEvent(towardsRail);
       await tester.pump();
       expect(focusIsInside(find.byType(NavigationRail)), isTrue);
+      expect(find.descendant(of: find.byType(NavigationRail), matching: visibleFocusOutline), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(find.descendant(of: find.byType(NavigationRail), matching: visibleFocusOutline), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
       await tester.sendKeyEvent(towardsRail);
       await tester.pump();
       expect(
