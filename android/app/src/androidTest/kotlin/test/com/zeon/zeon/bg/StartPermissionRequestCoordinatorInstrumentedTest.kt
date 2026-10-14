@@ -65,15 +65,34 @@ class StartPermissionRequestCoordinatorInstrumentedTest {
         check(h.outcomes == listOf(granted))
     }
 
-    fun notificationDeniedTerminatesAttempt() {
+    fun notificationDeniedStillRequestsVpnAndCompletes() {
         val h = Harness()
         h.begin(notificationGranted = false, vpnGranted = false)
-        h.gate.completeNotification(
+        check(h.gate.completeNotification(
             resultGranted = false,
             notificationGranted = false,
             vpnGranted = false,
-        )
-        check(h.outcomes == listOf(StartPermissionRequestCoordinator.Outcome.NotificationDenied))
+        ) == vpnAction)
+        check(h.outcomes.isEmpty())
+        check(h.gate.completeVpn(true, notificationGranted = false, vpnGranted = true) == noAction)
+        check(h.outcomes == listOf(granted))
+    }
+
+    fun notificationDeniedWithVpnConsentStillCompletes() {
+        val h = Harness()
+        h.begin(notificationGranted = false, vpnGranted = true)
+        check(h.gate.completeNotification(false, notificationGranted = false, vpnGranted = true) == noAction)
+        check(h.outcomes == listOf(granted))
+    }
+
+    fun duplicateStartDuringDeniedNotificationKeepsOptionalPermission() {
+        val h = Harness()
+        h.begin(notificationGranted = false, vpnGranted = false)
+        h.begin(notificationGranted = false, vpnGranted = false)
+        check(h.gate.completeNotification(false, notificationGranted = false, vpnGranted = false) == vpnAction)
+        check(h.gate.completeVpn(true, notificationGranted = false, vpnGranted = true) == noAction)
+        check(h.outcomes == listOf(granted, granted))
+        check(h.events.count { "source=notification reason=dialog_launch" in it } == 1)
     }
 
     fun vpnDeniedTerminatesAttempt() {

@@ -38,6 +38,23 @@
 приложения не требуется. Для продуктового исправления успешная сборка, analyzer,
 unit/widget или native tests не заменяют реальные проверки двух платформ.
 
+## Android TV acceptance: ANDROID-TV-TARGETED-v1
+
+Для адаптации TV использовать строки TV01–TV06 в [MATRIX.md](MATRIX.md).
+Начальный UI smoke допустим на отдельном Android TV AVD с известными API/ABI.
+Установку, cold start и переходы выполнять реальными D-pad key events; widget
+tests дополняют runtime, но не заменяют его. Перед установкой на физический TV
+проверить существующий пакет и сохранить пользовательские данные; для native
+instrumentation использовать отдельный validation application ID.
+
+Фиксировать отдельно: эмулятор/физическое устройство, запуск UI, управление
+пультом, VPN consent и подтверждённый трафик. Ошибка core setup должна завершать
+MethodChannel-вызов; fault injection не доказывает реальную причину сбоя на TV.
+Отсутствующий стандартный Settings intent или отказ в уведомлениях не подменяет
+отказ системного VPN consent. Evidence хранить в Temp с удалёнными секретами.
+TV smoke не подтверждает общий SHORT/FULL, производительность Haier или выпуск
+для Google Play TV.
+
 ## Отдельная Apple acceptance: APPLE-TARGETED-v1
 
 Apple-стенд не наследует PASS Windows/Android. Для инфраструктурной задачи

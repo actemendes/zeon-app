@@ -4,6 +4,26 @@
 передачи — в [README.md](README.md). Очередь исправлений — [PLAN.md](PLAN.md).
 Все строки ниже — требования; результат появляется только в отчёте конкретного run.
 
+## Android TV TARGETED (ANDROID-TV-TARGETED-v1)
+
+Отдельная проверка TV-совместимости: настоящий Android TV AVD либо физический
+телевизор. Записывать модель, Android API, ABI, source/artifact SHA и способ ввода.
+Эмулятор не подтверждает GPU, производительность или прошивку физического TV.
+Для UI использовать только D-pad, Select/Enter и Back, без touch/mouse.
+
+| ID | Проверка | Приёмка |
+|---|---|---|
+| TV01 | Установка, запуск из Leanback launcher, повторный cold start | Отзывчивый экран приложения; нет crash/ANR или бесконечной загрузки |
+| TV02 | Первый запуск, условия использования, продолжение | Все действия доступны с пульта, выбранный элемент заметен |
+| TV03 | Home → Settings → Profile → Home; диалог и возврат Back | Фокус остаётся в открытом диалоге, возвращается в рабочий экран; основной VPN control доступен |
+| TV04 | Настройка core завершается ошибкой; недоступен optional Android Settings intent | MethodChannel отвечает ошибкой/результатом один раз, ожидание не зависает; unit/native injection отдельно от TV runtime |
+| TV05 | Отказ в уведомлениях на API 33+ → запрос VPN consent | Отказ в уведомлениях не запрещает сам VPN; системное VPN consent остаётся обязательным |
+| TV06 | Connect → независимый HTTPS → background/return → disconnect → повторный запуск | VPN/native state, реальный трафик и cleanup по общим правилам; без fixture или traffic evidence — BLOCKED/NOT_RUN |
+
+TV01–TV05 подтверждают только перечисленные сценарии. TV06 не становится PASS
+из надписи Connected. Общие SHORT/FULL и Google Play TV review остаются отдельными
+проверками; запуск TV не доказывает их выполнение.
+
 ## Apple TARGETED (APPLE-TARGETED-v1)
 
 Независимый инфраструктурный scope; не входит в Windows/Android SHORT/FULL.

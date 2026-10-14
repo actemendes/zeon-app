@@ -33,6 +33,7 @@ internal class StartPermissionRequestCoordinator(
     data class Request(
         val generation: Long,
         val startAfterGrant: Boolean,
+        val notificationPrompted: Boolean = false,
         val callback: (Outcome) -> Unit,
     )
 
@@ -176,14 +177,10 @@ internal class StartPermissionRequestCoordinator(
             owner.generation,
             details(current, expectedStage, if (resultGranted) "granted" else "denied"),
         )
-        if (!resultGranted) {
-            owner.callback(
-                if (expectedStage == Stage.Notification) {
-                    Outcome.NotificationDenied
-                } else {
-                    Outcome.VpnDenied
-                },
-            )
+        // POST_NOTIFICATIONS controls notification visibility, not permission
+        // to run an FGS. TV/OEM devices may decline this optional permission.
+        if (!resultGranted && expectedStage == Stage.Vpn) {
+            owner.callback(Outcome.VpnDenied)
             return activateQueued(notificationGranted, vpnGranted, current)
         }
 
@@ -210,8 +207,8 @@ internal class StartPermissionRequestCoordinator(
         vpnGranted: Boolean,
         current: Long,
     ): Action {
-        if (!notificationGranted) {
-            pending = Pending(request, Stage.Notification)
+        if (!notificationGranted && !request.notificationPrompted) {
+            pending = Pending(request.copy(notificationPrompted = true), Stage.Notification)
             event(
                 "permission_request_started",
                 request.generation,
@@ -240,6 +237,7 @@ internal class StartPermissionRequestCoordinator(
 
     private fun merge(first: Request, second: Request) = second.copy(
         startAfterGrant = first.startAfterGrant || second.startAfterGrant,
+        notificationPrompted = first.notificationPrompted || second.notificationPrompted,
         callback = { outcome ->
             first.callback(outcome)
             second.callback(outcome)

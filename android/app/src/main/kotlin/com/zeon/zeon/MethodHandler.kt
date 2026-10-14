@@ -88,7 +88,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
 
             Trigger.Setup.method -> {
                 scope.launch {
-                    result.runCatching {
+                    completeCoreSetup(result) {
                         val args = call.arguments as Map<*, *>
                         val baseDir = args["baseDir"] as String
                         val workingDir = args["workingDir"] as String
@@ -101,35 +101,28 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         val mode = args["mode"] as Int
                         val grpcPort = args["grpcPort"] as Int
                         Log.d("debugmode", "$debug")
-                        runCatching {
-                            CoreSetupDispatcher.run {
-                                if (!CoreShutdownDispatcher.awaitSettled()) {
-                                    error("native core shutdown is still in progress")
-                                }
-                                CoreNativeOperationCoordinator.exclusive {
-                                    if (!CoreShutdownDispatcher.awaitSettled()) {
-                                        error("native core shutdown started while setup was queued")
-                                    }
-                                    Mobile.setup(
-                                        SetupOptions().also {
-                                            it.basePath = baseDir
-                                            it.workingDir = workingDir
-                                            it.tempDir = tempDir
-                                            it.fixAndroidStack = Bugs.fixAndroidStack
-                                            it.mode=mode.toLong()
-                                            it.listen= "127.0.0.1:" + grpcPort
-                                            it.secret=""
-                                            it.debug = debug
-                                        },null)
-                                }
-                                Libbox.redirectStderr(File(workingDir, "stderr2.log").path)
+                        CoreSetupDispatcher.run {
+                            if (!CoreShutdownDispatcher.awaitSettled()) {
+                                error("native core shutdown is still in progress")
                             }
-
-                            success("")
-                        }.onFailure {
-                            error(it)
+                            CoreNativeOperationCoordinator.exclusive {
+                                if (!CoreShutdownDispatcher.awaitSettled()) {
+                                    error("native core shutdown started while setup was queued")
+                                }
+                                Mobile.setup(
+                                    SetupOptions().also {
+                                        it.basePath = baseDir
+                                        it.workingDir = workingDir
+                                        it.tempDir = tempDir
+                                        it.fixAndroidStack = Bugs.fixAndroidStack
+                                        it.mode = mode.toLong()
+                                        it.listen = "127.0.0.1:" + grpcPort
+                                        it.secret = ""
+                                        it.debug = debug
+                                    }, null)
+                            }
+                            Libbox.redirectStderr(File(workingDir, "stderr2.log").path)
                         }
-
                     }
                 }
             }

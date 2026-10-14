@@ -36,33 +36,64 @@ class MyAdaptiveLayout extends HookConsumerWidget {
     final selectedActionIndex = actionBranchNames.indexOf(selectedBranchName);
     final navSelectedIndex = selectedActionIndex >= 0 ? selectedActionIndex : 0;
     // focus switch management
-    final primaryFocusHash = useState<int?>(null);
+    final previousFocus = useRef<FocusNode?>(null);
+    final pressedArrow = useRef<LogicalKeyboardKey?>(null);
     final navScopeNode = useFocusScopeNode();
+    final rtl = Directionality.of(context) == TextDirection.rtl;
     useEffect(() {
+      void focusPane(FocusScopeNode scope) {
+        final scopeContext = scope.context;
+        if (scopeContext == null) return;
+        final target = scope.focusedChild ?? FocusTraversalGroup.of(scopeContext).findFirstFocus(scope);
+        target?.requestFocus();
+      }
+
       bool handler(KeyEvent event) {
         final arrows = isMobileBreakpoint ? KeyboardConst.verticalArrows : KeyboardConst.horizontalArrows;
         if (!arrows.contains(event.logicalKey)) return false;
         if (event is KeyDownEvent) {
-          primaryFocusHash.value = FocusManager.instance.primaryFocus.hashCode;
-        } else {
-          // focus node does not change => true.
-          if (primaryFocusHash.value == FocusManager.instance.primaryFocus.hashCode) {
-            if (branchesScope.values.any((node) => node.hasFocus)) {
-              navScopeNode.requestFocus();
-            } else if (navScopeNode.hasFocus) {
-              branchesScope[getNameOfBranch(isMobileBreakpoint, showProfilesAction, navigationShell.currentIndex)]
-                  ?.requestFocus();
-            }
-          }
+          previousFocus.value = FocusManager.instance.primaryFocus;
+          pressedArrow.value = event.logicalKey;
+          return false;
         }
-        return true;
+        if (event is! KeyUpEvent || pressedArrow.value != event.logicalKey) return false;
+        pressedArrow.value = null;
+        final primaryFocus = FocusManager.instance.primaryFocus;
+        if (primaryFocus != previousFocus.value) return false;
+        // A dialog owns its traversal; the shell must never pull focus out of it.
+        final focusContext = primaryFocus?.context;
+        if (focusContext != null && ModalRoute.of(focusContext) is PopupRoute) return false;
+        // Cursor movement consumes arrows without changing the focused node.
+        if (focusContext?.findAncestorWidgetOfExactType<EditableText>() != null) return false;
+        final towardsNavigation = isMobileBreakpoint
+            ? LogicalKeyboardKey.arrowDown
+            : rtl
+            ? LogicalKeyboardKey.arrowRight
+            : LogicalKeyboardKey.arrowLeft;
+        final towardsContent = isMobileBreakpoint
+            ? LogicalKeyboardKey.arrowUp
+            : rtl
+            ? LogicalKeyboardKey.arrowLeft
+            : LogicalKeyboardKey.arrowRight;
+        // Only cross the shared edge. The outer screen edges stay in their pane.
+        if (event.logicalKey == towardsNavigation && branchesScope.values.any((node) => node.hasFocus)) {
+          focusPane(navScopeNode);
+          return true;
+        }
+        if (event.logicalKey == towardsContent && navScopeNode.hasFocus) {
+          final branch =
+              branchesScope[getNameOfBranch(isMobileBreakpoint, showProfilesAction, navigationShell.currentIndex)];
+          if (branch != null) focusPane(branch);
+          return true;
+        }
+        return false;
       }
 
       HardwareKeyboard.instance.addHandler(handler);
       return () {
         HardwareKeyboard.instance.removeHandler(handler);
       };
-    }, [isMobileBreakpoint, showProfilesAction, navigationShell.currentIndex]);
+    }, [isMobileBreakpoint, showProfilesAction, navigationShell.currentIndex, rtl]);
     return Material(
       child: Scaffold(
         // Paint branch backgrounds behind the rounded mobile panel. Scaffold

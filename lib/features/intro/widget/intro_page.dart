@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -220,20 +219,27 @@ class _IntroFooter extends ConsumerWidget {
               const Gap(16),
             ] else
               const Gap(16),
-            Text.rich(
-              key: const ValueKey(UiNames.textIntroTermsAndPolicy),
-              textAlign: TextAlign.center,
-              t.intro.termsAndPolicyCaution(
-                tap: (text) => TextSpan(
-                  text: text,
-                  style: theme.textTheme.bodySmall?.copyWith(color: linkColor, fontWeight: FontWeight.w600),
-                  recognizer: TapGestureRecognizer()..onTap = onTermsTap,
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                key: const ValueKey('intro_terms_button'),
+                borderRadius: BorderRadius.circular(14),
+                onTap: onTermsTap,
+                child: Text.rich(
+                  key: const ValueKey(UiNames.textIntroTermsAndPolicy),
+                  textAlign: TextAlign.center,
+                  t.intro.termsAndPolicyCaution(
+                    tap: (text) => TextSpan(
+                      text: text,
+                      style: theme.textTheme.bodySmall?.copyWith(color: linkColor, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.brightness == Brightness.dark ? const Color(0xFF989CA3) : const Color(0xFF63707B),
+                    fontFamily: 'Montserrat',
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.brightness == Brightness.dark ? const Color(0xFF989CA3) : const Color(0xFF63707B),
-                fontFamily: 'Montserrat',
-                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -278,6 +284,7 @@ class _IntroStartButton extends StatelessWidget {
         ),
         child: InkWell(
           key: const ValueKey(UiNames.buttonIntroStart),
+          autofocus: true,
           onTap: isLoading ? null : onPressed,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

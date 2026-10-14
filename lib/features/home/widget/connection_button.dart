@@ -47,6 +47,7 @@ class ConnectionButton extends ConsumerWidget {
     final presentation = buttonState.present(t);
 
     return MainVpnButtonView(
+      autofocus: true,
       appearance: ref.watch(buttonAppearanceProvider).valueOrNull ?? const ButtonAppearance(),
       faceKey: faceKey,
       showStatus: showStatus,
@@ -61,7 +62,7 @@ class ConnectionButton extends ConsumerWidget {
   }
 }
 
-class MainVpnButtonView extends StatelessWidget {
+class MainVpnButtonView extends StatefulWidget {
   const MainVpnButtonView({
     super.key,
     this.faceKey,
@@ -72,6 +73,7 @@ class MainVpnButtonView extends StatelessWidget {
     required this.useImage,
     required this.secureLabel,
     this.appearance = const ButtonAppearance(),
+    this.autofocus = false,
   });
 
   final VoidCallback? onTap;
@@ -82,9 +84,120 @@ class MainVpnButtonView extends StatelessWidget {
   final bool useImage;
   final String secureLabel;
   final ButtonAppearance appearance;
+  final bool autofocus;
+
+  @override
+  State<MainVpnButtonView> createState() => _MainVpnButtonViewState();
+}
+
+class _MainVpnButtonViewState extends State<MainVpnButtonView> {
+  final _focusNode = FocusNode(debugLabel: 'home-main-vpn');
+  bool _initialFocusResolved = false;
+  bool _restoreFocusAfterDisabled = false;
+  bool _focusCheckQueued = false;
+  bool _hasFocus = false;
+  bool _showFocusHighlight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_updateFocusHighlight);
+    FocusManager.instance.addListener(_observeFocusOwner);
+    FocusManager.instance.addHighlightModeListener(_highlightModeChanged);
+  }
+
+  void _highlightModeChanged(FocusHighlightMode _) => _updateFocusHighlight();
+
+  void _updateFocusHighlight() {
+    final focused = _focusNode.hasFocus;
+    final highlighted = focused && FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
+    if (_hasFocus == focused && _showFocusHighlight == highlighted) return;
+    setState(() {
+      _hasFocus = focused;
+      _showFocusHighlight = highlighted;
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scheduleInitialFocus();
+  }
+
+  @override
+  void didUpdateWidget(covariant MainVpnButtonView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.autofocus && oldWidget.presentation.state.enabled && !widget.presentation.state.enabled) {
+      _restoreFocusAfterDisabled = _focusNode.hasFocus;
+    }
+    _scheduleInitialFocus();
+  }
+
+  bool _focusIsUnclaimed() {
+    final focused = FocusManager.instance.primaryFocus;
+    final scope = FocusScope.of(context);
+    // A different leaf belongs to the user's navigation. A scope outside our
+    // branch can also belong to a root dialog with no autofocus control.
+    final unclaimedScope =
+        focused is FocusScopeNode &&
+        (focused == scope || scope.ancestors.contains(focused) || focused.ancestors.contains(scope));
+    return focused == null || focused == _focusNode || unclaimedScope;
+  }
+
+  void _observeFocusOwner() {
+    if (_restoreFocusAfterDisabled && mounted && !_focusIsUnclaimed()) {
+      _restoreFocusAfterDisabled = false;
+    }
+  }
+
+  void _scheduleInitialFocus() {
+    // Register visibility dependencies even while the native state is loading.
+    final visible = TickerMode.of(context);
+    final currentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    if (!widget.autofocus ||
+        (_initialFocusResolved && !_restoreFocusAfterDisabled) ||
+        _focusCheckQueued ||
+        !widget.presentation.state.enabled ||
+        widget.onTap == null ||
+        !visible ||
+        !currentRoute) {
+      return;
+    }
+    _focusCheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusCheckQueued = false;
+      if (!mounted ||
+          !widget.autofocus ||
+          (_initialFocusResolved && !_restoreFocusAfterDisabled) ||
+          !widget.presentation.state.enabled ||
+          widget.onTap == null ||
+          !TickerMode.of(context) ||
+          ModalRoute.of(context)?.isCurrent == false ||
+          !_focusNode.canRequestFocus) {
+        return;
+      }
+      _initialFocusResolved = true;
+      _restoreFocusAfterDisabled = false;
+      if (_focusIsUnclaimed()) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeHighlightModeListener(_highlightModeChanged);
+    FocusManager.instance.removeListener(_observeFocusOwner);
+    _focusNode.removeListener(_updateFocusHighlight);
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final presentation = widget.presentation;
+    final appearance = widget.appearance;
+    final onTap = widget.onTap;
+    final showStatus = widget.showStatus;
+    final secureLabel = widget.secureLabel;
     final state = presentation.state;
     return Column(
       mainAxisSize: showStatus ? MainAxisSize.max : MainAxisSize.min,
@@ -94,16 +207,21 @@ class MainVpnButtonView extends StatelessWidget {
           identifier: 'zeon.vpn.${state.phase.name}',
           button: true,
           enabled: state.enabled,
+          focused: _hasFocus,
           label: presentation.semanticsLabel,
           onTap: appearance.preset != ButtonPreset.standard && state.enabled ? onTap : null,
           child: Container(
-            key: faceKey,
+            key: widget.faceKey,
             decoration: const BoxDecoration(shape: BoxShape.circle),
             width: _ConnectionButtonFace.outerSize,
             height: _ConnectionButtonFace.outerSize,
-            child: appearance.preset != ButtonPreset.standard
-                ? ExcludeSemantics(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (appearance.preset != ButtonPreset.standard)
+                  ExcludeSemantics(
                     child: CustomVpnButton(
+                      focusNode: _focusNode,
                       diameter: _ConnectionButtonFace.outerSize,
                       appearance: appearance,
                       phase: switch (state.visualState) {
@@ -114,14 +232,28 @@ class MainVpnButtonView extends StatelessWidget {
                       onPressed: state.enabled ? onTap : null,
                     ),
                   )
-                : _ConnectionButtonFace(
+                else
+                  _ConnectionButtonFace(
+                    focusNode: _focusNode,
                     onTap: onTap,
                     enabled: state.enabled,
-                    image: image,
-                    useImage: useImage,
+                    image: widget.image,
+                    useImage: widget.useImage,
                     visualState: state.visualState,
                     isStopping: state.isStopping,
                   ),
+                if (_showFocusHighlight)
+                  IgnorePointer(
+                    child: DecoratedBox(
+                      key: const ValueKey('home_vpn_focus_outline'),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Theme.of(context).colorScheme.primary, width: 3),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
         if (showStatus) ...[
@@ -202,6 +334,7 @@ class _ConnectionContentOpacity extends StatelessWidget {
 
 class _ConnectionButtonFace extends StatefulWidget {
   const _ConnectionButtonFace({
+    required this.focusNode,
     required this.onTap,
     required this.enabled,
     required this.image,
@@ -214,6 +347,7 @@ class _ConnectionButtonFace extends StatefulWidget {
   static const double glyphDiameter = 47;
 
   final VoidCallback? onTap;
+  final FocusNode focusNode;
   final bool enabled;
   final AssetGenImage image;
   final bool useImage;
@@ -362,6 +496,8 @@ class _ConnectionButtonFaceState extends State<_ConnectionButtonFace> with Ticke
       shape: const CircleBorder(),
       child: InkWell(
         key: const ValueKey('home_connection_button'),
+        focusNode: widget.focusNode,
+        focusColor: theme.colorScheme.primary.withValues(alpha: .3),
         customBorder: const CircleBorder(),
         splashFactory: NoSplash.splashFactory,
         highlightColor: Colors.transparent,

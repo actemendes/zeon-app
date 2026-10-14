@@ -53,6 +53,7 @@ class VpnTestInstrumentation : Instrumentation() {
         val proxySelectionTests = ProxySelectionPersistenceInstrumentedTest(targetContext)
         val routePolicyTests = VpnRoutePolicyInstrumentedTest()
         val bitmapTests = SampledBitmapDecoderInstrumentedTest(targetContext)
+        val compatibilityTests = PlatformCompatibilityInstrumentedTest()
         val tests = mutableListOf(
             TestCase(notificationTests.javaClass.name, "disabledDynamicNotificationStillUpdatesConnectedOutbound") {
                 notificationTests.disabledDynamicNotificationStillUpdatesConnectedOutbound()
@@ -283,8 +284,12 @@ class VpnTestInstrumentation : Instrumentation() {
                 startPermissionTests::notificationGrantedThenVpnGrantedCompletesOneAttempt,
             "vpnAlreadyGrantedWaitsOnlyForNotification" to
                 startPermissionTests::vpnAlreadyGrantedWaitsOnlyForNotification,
-            "notificationDeniedTerminatesAttempt" to
-                startPermissionTests::notificationDeniedTerminatesAttempt,
+            "notificationDeniedStillRequestsVpnAndCompletes" to
+                startPermissionTests::notificationDeniedStillRequestsVpnAndCompletes,
+            "notificationDeniedWithVpnConsentStillCompletes" to
+                startPermissionTests::notificationDeniedWithVpnConsentStillCompletes,
+            "duplicateStartDuringDeniedNotificationKeepsOptionalPermission" to
+                startPermissionTests::duplicateStartDuringDeniedNotificationKeepsOptionalPermission,
             "vpnDeniedTerminatesAttempt" to startPermissionTests::vpnDeniedTerminatesAttempt,
             "closedDialogIsDenied" to startPermissionTests::closedDialogIsDenied,
             "delayedCallbacksKeepTheOwningGeneration" to
@@ -322,6 +327,20 @@ class VpnTestInstrumentation : Instrumentation() {
                 bitmapTests::notificationOrProfileIconIsNotUpscaled,
         ).forEach { (name, body) ->
             tests += TestCase(bitmapTests.javaClass.name, name) { body() }
+        }
+
+        listOf<Pair<String, suspend () -> Unit>>(
+            "failedCoreSetupSettlesFlutterInsteadOfHanging" to compatibilityTests::failedCoreSetupSettlesFlutterInsteadOfHanging,
+            "missingNativeSymbolSettlesFlutterInsteadOfHanging" to compatibilityTests::missingNativeSymbolSettlesFlutterInsteadOfHanging,
+            "cancelledCoreSetupSettlesAndPreservesCancellation" to compatibilityTests::cancelledCoreSetupSettlesAndPreservesCancellation,
+            "successfulCoreSetupRepliesExactlyOnce" to compatibilityTests::successfulCoreSetupRepliesExactlyOnce,
+            "setupReplyDeliveryFailureDoesNotSendSecondReply" to compatibilityTests::setupReplyDeliveryFailureDoesNotSendSecondReply,
+            "missingSettingsActivitySettlesFalse" to { compatibilityTests.missingSettingsActivitySettlesFalse() },
+            "rejectedSettingsIntentSettlesFalse" to { compatibilityTests.rejectedSettingsIntentSettlesFalse() },
+            "activityDetachSettlesOnceAndAllowsRetry" to { compatibilityTests.activityDetachSettlesOnceAndAllowsRetry() },
+            "concurrentSettingsRequestDoesNotLoseFirstReply" to { compatibilityTests.concurrentSettingsRequestDoesNotLoseFirstReply() },
+        ).forEach { (name, body) ->
+            tests += TestCase(compatibilityTests.javaClass.name, name, body)
         }
 
         var failures = 0

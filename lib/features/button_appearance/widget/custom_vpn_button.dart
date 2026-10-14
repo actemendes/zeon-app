@@ -44,6 +44,8 @@ class CustomVpnButton extends StatefulWidget {
     this.onPressed,
     this.animate = true,
     this.semanticsLabel,
+    this.autofocus = false,
+    this.focusNode,
   });
   final ButtonPhase phase;
   final ButtonAppearance appearance;
@@ -51,6 +53,8 @@ class CustomVpnButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final bool animate;
   final String? semanticsLabel;
+  final bool autofocus;
+  final FocusNode? focusNode;
   @override
   State<CustomVpnButton> createState() => _CustomVpnButtonState();
 }
@@ -171,6 +175,8 @@ class _CustomVpnButtonState extends State<CustomVpnButton> with SingleTickerProv
                 shape: const CircleBorder(),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
+                  autofocus: widget.autofocus,
+                  focusNode: widget.focusNode,
                   customBorder: const CircleBorder(),
                   onTap: widget.onPressed,
                   focusColor: zeonGreen.withValues(alpha: .3),

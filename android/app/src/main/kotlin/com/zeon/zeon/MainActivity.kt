@@ -164,8 +164,21 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     private fun executePermissionAction(action: StartPermissionRequestCoordinator.Action) {
         when (action) {
             StartPermissionRequestCoordinator.Action.None -> Unit
-            StartPermissionRequestCoordinator.Action.RequestNotification ->
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            StartPermissionRequestCoordinator.Action.RequestNotification -> {
+                try {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } catch (_: RuntimeException) {
+                    // Notification permission is optional even when a TV/OEM
+                    // cannot show the request UI. VPN consent remains required.
+                    executePermissionAction(
+                        startPermissionRequests.completeNotification(
+                            resultGranted = false,
+                            notificationGranted = notificationPermissionGranted(),
+                            vpnGranted = vpnPermissionGranted(),
+                        ),
+                    )
+                }
+            }
             StartPermissionRequestCoordinator.Action.RequestVpn -> {
                 val intent = VpnService.prepare(this)
                 if (intent == null) {

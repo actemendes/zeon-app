@@ -11,6 +11,8 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.net.NetworkCapabilities
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import android.util.Log
 import com.google.gson.Gson
@@ -33,7 +35,9 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
     PluginRegistry.ActivityResultListener {
     private var channel: MethodChannel? = null
     private var activity: Activity? = null
-    private lateinit var ignoreRequestResult: MethodChannel.Result
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val ignoreRequest = OptionalActivityRequest()
+    private var activityBinding: ActivityPluginBinding? = null
 
     companion object {
         const val channelName = "com.zeon.app/platform"
@@ -65,29 +69,36 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel?.setMethodCallHandler(null)
+        ignoreRequest.complete(false)
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activityBinding = binding
         activity = binding.activity
         binding.addActivityResultListener(this)
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
-        activity = null
+        onDetachedFromActivity()
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
-        activity = binding.activity
-        binding.addActivityResultListener(this)
+        onAttachedToActivity(binding)
     }
 
     override fun onDetachedFromActivity() {
+        activityBinding?.removeActivityResultListener(this)
+        activityBinding = null
         activity = null
+        ignoreRequest.complete(false)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
         if (requestCode == REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) {
-            ignoreRequestResult.success(resultCode == Activity.RESULT_OK)
+            ignoreRequest.complete(
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+                    Application.powerManager.isIgnoringBatteryOptimizations(Application.application.packageName),
+            )
             return true
         }
         return false
@@ -122,8 +133,19 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
                     android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                     Uri.parse("package:${Application.application.packageName}")
                 )
-                ignoreRequestResult = result
-                activity?.startActivityForResult(intent, REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                mainHandler.post {
+                    ignoreRequest.begin(result) {
+                        val currentActivity = activity
+                        if (currentActivity == null || currentActivity.isFinishing || currentActivity.isDestroyed) {
+                            false
+                        } else {
+                            // Some TV Settings apps do not provide this action.
+                            // A missing activity or a denied launch is optional.
+                            currentActivity.startActivityForResult(intent, REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                            true
+                        }
+                    }
+                }
             }
 
             Trigger.GetInstalledPackages.method -> {
