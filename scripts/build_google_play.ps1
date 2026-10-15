@@ -4,6 +4,8 @@ param(
 
     [string]$SentryDsn = "",
 
+    [switch]$IncludeInstallApk,
+
     [switch]$SkipPubGet,
 
     [switch]$SkipCodeGeneration
@@ -172,6 +174,25 @@ try {
     Write-Host ""
     Write-Host "Google Play artifact: $publishedPath"
     Write-Host "SHA-256: $hash"
+
+    if ($IncludeInstallApk) {
+        # Keep the APK on the exact same target and Dart defines as the bundle.
+        $apkBuildArgs = $buildArgs.Clone()
+        $apkBuildArgs[1] = "apk"
+        Write-Host "Building the installable APK with the same Google Play release contract."
+        & flutter @apkBuildArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "Google Play install APK build failed."
+        }
+
+        $apkSourcePath = Join-Path $repoRoot "build\app\outputs\flutter-apk\app-release.apk"
+        $apkPublishedPath = Publish-ZeonFile `
+            -RepoRoot $repoRoot `
+            -Platform "android" `
+            -SourcePath $apkSourcePath `
+            -DestinationName "ZEON-$appVersion-google-play.apk"
+        Write-Host "Google Play install APK: $apkPublishedPath"
+    }
 }
 finally {
     if ($null -eq $previousGradleOpts) {

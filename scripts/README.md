@@ -149,6 +149,9 @@ override в WinINet-профиле именно `ZEONRuntime`. Это не до�
 # Google Play: подписанный release AAB без GitHub-проверки обновлений и её UI
 .\scripts\build.ps1 -Action android-google-play
 
+# Google Play: тот же AAB и APK для установки и проверки магазинного варианта
+.\scripts\build.ps1 -Action android-google-play -IncludeInstallApk
+
 # Android: debug APK, установка на единственный подключённый телефон и запуск
 .\scripts\build.ps1 -Action android-debug-install -CleanInstall -Launch
 ```
@@ -168,6 +171,13 @@ override в WinINet-профиле именно `ZEONRuntime`. Это не до�
 и настроенный upload keystore. В этой сборке автоматический GitHub checker и ручная
 кнопка «Проверить обновления» отключены; магазинный `UpgradeAlert` остаётся
 Google Play-механизмом обновления.
+Опция `-IncludeInstallApk` дополнительно собирает универсальный
+`ZEON-<version>-google-play.apk` с теми же target, `release=google-play`,
+версией и настроенным release/upload ключом. По умолчанию действие по-прежнему
+выпускает только AAB; обычные `android-apk`/`android-apks` не меняются.
+APK предназначен для прямой установки и проверки поведения магазинного варианта;
+он не является артефактом, переподписанным Google Play App Signing. Загрузка в
+Play Console и установка на устройство остаются отдельными действиями.
 Entrypoint проверяет версию Flutter из `pubspec.yaml`; если общий SDK новее, закреплённая
 версия автоматически готовится в `Z:\Zeon-Envelope\Caches\Flutter` из локального Git tag.
 Переопределить SDK можно переменной `ZEON_FLUTTER_ROOT`.

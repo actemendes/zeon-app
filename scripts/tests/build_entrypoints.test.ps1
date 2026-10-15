@@ -79,8 +79,78 @@ try {
         $outsideWasRejected = $true
     }
     Assert-True -Condition $outsideWasRejected -Message "Path guard accepted an artifact outside out/installers"
+
+    # Exercise the real dispatcher and Play builder with local command doubles.
+    # Fixture artifacts are text files; no Flutter/Gradle process or signing runs.
+    $fixtureRoot = Join-Path $testRoot "google-play"
+    foreach ($directory in @("scripts\build", "lib", "android\app\libs")) {
+        New-Item -ItemType Directory -Path (Join-Path $fixtureRoot $directory) -Force | Out-Null
+    }
+    foreach ($scriptName in @("build.ps1", "build_google_play.ps1")) {
+        Copy-Item -LiteralPath (Join-Path $scriptDir $scriptName) -Destination (Join-Path $fixtureRoot "scripts\$scriptName")
+    }
+    $fixtureCommon = Join-Path $fixtureRoot "scripts\build\common.ps1"
+    Copy-Item -LiteralPath $commonPath -Destination $fixtureCommon
+    Add-Content -LiteralPath $fixtureCommon -Value 'function Use-ZeonPinnedFlutter { param($RepoRoot) return "fixture-sdk" }'
+    Set-Content -LiteralPath (Join-Path $fixtureRoot "pubspec.yaml") -Value "version: 1.2.3+456"
+    Set-Content -LiteralPath (Join-Path $fixtureRoot "lib\main_prod.dart") -Value "fixture"
+    Set-Content -LiteralPath (Join-Path $fixtureRoot "android\app\libs\hiddify-core.aar") -Value "fixture"
+    Set-Content -LiteralPath (Join-Path $fixtureRoot "android\fixture.jks") -Value "fixture"
+    $fixtureProperties = Join-Path $fixtureRoot "android\key.properties"
+    Set-Content -LiteralPath $fixtureProperties -Value @(
+        "storeFile=../fixture.jks", "storePassword=fixture", "keyPassword=fixture", "keyAlias=fixture"
+    )
+    $global:zeonGooglePlayFixtureCalls = [System.Collections.Generic.List[object]]::new()
+    function flutter {
+        $global:zeonGooglePlayFixtureCalls.Add([string[]]$args)
+        if ($args[0] -eq "build") {
+            $relativeOutput = switch ($args[1]) {
+                "appbundle" { "build\app\outputs\bundle\release\app-release.aab" }
+                "apk" { "build\app\outputs\flutter-apk\app-release.apk" }
+                default { throw "Unexpected fixture build command" }
+            }
+            $output = Join-Path (Get-Location).Path $relativeOutput
+            New-Item -ItemType Directory -Path (Split-Path -Parent $output) -Force | Out-Null
+            Set-Content -LiteralPath $output -Value "fixture artifact"
+        }
+        $global:LASTEXITCODE = 0
+    }
+    function dart { $global:LASTEXITCODE = 0 }
+    $fixtureEntrypoint = Join-Path $fixtureRoot "scripts\build.ps1"
+    $fixtureInstallers = Join-Path $fixtureRoot "out\installers\android"
+    & $fixtureEntrypoint -Action android-google-play -SkipCodeGeneration 6>$null
+    $defaultBuilds = @($global:zeonGooglePlayFixtureCalls | Where-Object { $_[0] -eq "build" })
+    Assert-True -Condition ($defaultBuilds.Count -eq 1 -and $defaultBuilds[0][1] -eq "appbundle") -Message "Default Play action must only build AAB"
+    Assert-True -Condition (Test-Path -LiteralPath (Join-Path $fixtureInstallers "ZEON-1.2.3+456-google-play.aab")) -Message "Play AAB was not published"
+    Assert-True -Condition (-not (Test-Path -LiteralPath (Join-Path $fixtureInstallers "ZEON-1.2.3+456-google-play.apk"))) -Message "Default Play action unexpectedly published APK"
+
+    $global:zeonGooglePlayFixtureCalls.Clear()
+    & $fixtureEntrypoint -Action android-google-play -IncludeInstallApk -SkipCodeGeneration 6>$null
+    $pairedBuilds = @($global:zeonGooglePlayFixtureCalls | Where-Object { $_[0] -eq "build" })
+    Assert-True -Condition ($pairedBuilds.Count -eq 2 -and $pairedBuilds[0][1] -eq "appbundle" -and $pairedBuilds[1][1] -eq "apk") -Message "Opt-in Play action must build AAB then APK"
+    Assert-True -Condition (($pairedBuilds[0][2..($pairedBuilds[0].Length - 1)] -join '|') -eq ($pairedBuilds[1][2..($pairedBuilds[1].Length - 1)] -join '|')) -Message "Play AAB and APK differ in target/defines/mode"
+    Assert-True -Condition ($pairedBuilds[1] -contains "--release" -and $pairedBuilds[1] -contains "release=google-play") -Message "Install APK lost the Google Play release contract"
+    Assert-True -Condition (Test-Path -LiteralPath (Join-Path $fixtureInstallers "ZEON-1.2.3+456-google-play.apk")) -Message "Play APK was not published with a distinct name"
+
+    Remove-Item -LiteralPath $fixtureProperties
+    $global:zeonGooglePlayFixtureCalls.Clear()
+    $missingKeyRejected = $false
+    try {
+        & $fixtureEntrypoint -Action android-google-play -IncludeInstallApk -SkipCodeGeneration 6>$null
+    }
+    catch { $missingKeyRejected = $_.Exception.Message.Contains("configured upload keystore") }
+    Assert-True -Condition $missingKeyRejected -Message "Play APK action must fail closed without signing configuration"
+    Assert-True -Condition ($global:zeonGooglePlayFixtureCalls.Count -eq 0) -Message "Play action invoked Flutter before rejecting missing signing configuration"
+
+    $wrongActionRejected = $false
+    try {
+        & $fixtureEntrypoint -Action android-apk -IncludeInstallApk 6>$null
+    }
+    catch { $wrongActionRejected = $_.Exception.Message.Contains("only supported") }
+    Assert-True -Condition $wrongActionRejected -Message "Play-only install APK option was accepted for a general build"
 }
 finally {
+    Remove-Variable -Name zeonGooglePlayFixtureCalls -Scope Global -ErrorAction SilentlyContinue
     $resolvedTestRoot = [System.IO.Path]::GetFullPath($testRoot)
     $allowedPrefix = [System.IO.Path]::GetFullPath("Z:\Zeon-Envelope\Temp").TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
     if (-not $resolvedTestRoot.StartsWith($allowedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
