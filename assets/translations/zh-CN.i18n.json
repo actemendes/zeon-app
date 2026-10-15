@@ -570,6 +570,10 @@
         },
         "connect": "连接",
         "paymentLaunchError": "无法打开支付页面",
+        "tvPaymentTitle": "使用手机付款",
+        "tvPaymentScan": "用手机扫描二维码，选择套餐并付款。",
+        "tvPaymentRefresh": "付款后，订阅将自动更新。您也可以关闭此窗口，然后点击主屏幕右上角的按钮更新订阅。",
+        "tvPaymentUpdated": "订阅已更新",
         "pricing": {
           "personalizedPrice": "个性化价格",
           "loadingPrices": "正在加载价格...",

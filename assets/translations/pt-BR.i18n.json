@@ -571,6 +571,10 @@
         },
         "connect": "Conectar",
         "paymentLaunchError": "Não foi possível abrir a página de pagamento",
+        "tvPaymentTitle": "Pagar pelo celular",
+        "tvPaymentScan": "Leia o código QR com seu celular para escolher um plano e pagar.",
+        "tvPaymentRefresh": "Após o pagamento, sua assinatura será atualizada automaticamente. Você também pode fechar esta janela e atualizá-la pelo botão no canto superior direito da tela inicial.",
+        "tvPaymentUpdated": "Assinatura atualizada",
         "pricing": {
           "personalizedPrice": "Preço personalizado",
           "loadingPrices": "Carregando preços...",

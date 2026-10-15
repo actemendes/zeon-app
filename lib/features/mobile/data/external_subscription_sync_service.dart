@@ -54,7 +54,16 @@ class ExternalSubscriptionSyncService with InfraLogger {
       return ExternalSubscriptionSyncResult.skipped;
     }
 
+    return refreshSubscription();
+  }
+
+  /// TV stays in the app while payment takes place on a second device.
+  /// Restrict that refresh to the account whose QR code is being displayed.
+  Future<ExternalSubscriptionSyncResult> refreshSubscription({String? expectedProfileId}) async {
     final active = await ref.read(activeProfileProvider.future);
+    if (expectedProfileId != null && active?.id != expectedProfileId) {
+      return ExternalSubscriptionSyncResult.skipped;
+    }
     if (active is! RemoteProfileEntity) {
       loggy.warning('external subscription refresh skipped [reason=active_profile_is_not_remote]');
       await finishPendingCheck();
@@ -84,6 +93,9 @@ class ExternalSubscriptionSyncService with InfraLogger {
       return ExternalSubscriptionSyncResult.unchanged;
     }
 
+    if (expectedProfileId != null && (await ref.read(activeProfileProvider.future))?.id != expectedProfileId) {
+      return ExternalSubscriptionSyncResult.skipped;
+    }
     await finishPendingCheck();
     await ref.read(connectionNotifierProvider.notifier).reconnect(updated);
     loggy.info(

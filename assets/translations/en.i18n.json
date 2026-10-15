@@ -615,6 +615,10 @@
         },
         "connect": "Connect",
         "paymentLaunchError": "Unable to open payment page",
+        "tvPaymentTitle": "Pay on your phone",
+        "tvPaymentScan": "Scan the QR code with your phone to choose a plan and pay.",
+        "tvPaymentRefresh": "After payment, your subscription will update automatically. You can also close this window and refresh the subscription using the button in the top-right corner of the home screen.",
+        "tvPaymentUpdated": "Subscription updated",
         "pricing": {
           "personalizedPrice": "Personalized price",
           "loadingPrices": "Loading prices...",

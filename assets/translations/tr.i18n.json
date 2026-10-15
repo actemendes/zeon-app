@@ -570,6 +570,10 @@
         },
         "connect": "Bağlan",
         "paymentLaunchError": "Ödeme sayfası açılamadı",
+        "tvPaymentTitle": "Telefonunuzdan ödeme yapın",
+        "tvPaymentScan": "Paket seçmek ve ödeme yapmak için QR kodunu telefonunuzla tarayın.",
+        "tvPaymentRefresh": "Ödemeden sonra aboneliğiniz otomatik olarak güncellenir. Bu pencereyi kapatıp ana ekranın sağ üst köşesindeki düğmeyle de aboneliğinizi güncelleyebilirsiniz.",
+        "tvPaymentUpdated": "Abonelik güncellendi",
         "pricing": {
           "personalizedPrice": "Kişisel fiyat",
           "loadingPrices": "Fiyatlar yükleniyor...",

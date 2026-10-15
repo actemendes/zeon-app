@@ -570,6 +570,10 @@
         },
         "connect": "Hubungkan",
         "paymentLaunchError": "Halaman pembayaran tidak dapat dibuka",
+        "tvPaymentTitle": "Bayar melalui ponsel",
+        "tvPaymentScan": "Pindai kode QR dengan ponsel Anda untuk memilih paket dan membayar.",
+        "tvPaymentRefresh": "Setelah pembayaran, langganan akan diperbarui secara otomatis. Anda juga dapat menutup jendela ini dan memperbaruinya dengan tombol di sudut kanan atas layar utama.",
+        "tvPaymentUpdated": "Langganan diperbarui",
         "pricing": {
           "personalizedPrice": "Harga personal",
           "loadingPrices": "Memuat harga...",

@@ -571,6 +571,10 @@
         },
         "connect": "Conectar",
         "paymentLaunchError": "No se pudo abrir la página de pago",
+        "tvPaymentTitle": "Pagar desde el teléfono",
+        "tvPaymentScan": "Escanee el código QR con su teléfono para elegir un plan y pagar.",
+        "tvPaymentRefresh": "Tras el pago, la suscripción se actualizará automáticamente. También puede cerrar esta ventana y actualizarla con el botón de la esquina superior derecha de la pantalla principal.",
+        "tvPaymentUpdated": "Suscripción actualizada",
         "pricing": {
           "personalizedPrice": "Precio personalizado",
           "loadingPrices": "Cargando precios...",

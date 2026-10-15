@@ -570,6 +570,10 @@
         },
         "connect": "連接",
         "paymentLaunchError": "無法開啟付款頁面",
+        "tvPaymentTitle": "使用手機付款",
+        "tvPaymentScan": "使用手機掃描 QR 碼，選擇方案並付款。",
+        "tvPaymentRefresh": "付款後，訂閱將自動更新。您也可以關閉此視窗，然後點選主畫面右上角的按鈕更新訂閱。",
+        "tvPaymentUpdated": "訂閱已更新",
         "pricing": {
           "personalizedPrice": "個人化價格",
           "loadingPrices": "正在載入價格...",

@@ -571,6 +571,10 @@
         },
         "connect": "Connecter",
         "paymentLaunchError": "Impossible d'ouvrir la page de paiement",
+        "tvPaymentTitle": "Payer sur votre téléphone",
+        "tvPaymentScan": "Scannez le code QR avec votre téléphone pour choisir une offre et payer.",
+        "tvPaymentRefresh": "Après le paiement, votre abonnement sera mis à jour automatiquement. Vous pouvez aussi fermer cette fenêtre et utiliser le bouton en haut à droite de l’écran d’accueil pour le mettre à jour.",
+        "tvPaymentUpdated": "Abonnement mis à jour",
         "pricing": {
           "personalizedPrice": "Prix personnalisé",
           "loadingPrices": "Chargement des prix...",
