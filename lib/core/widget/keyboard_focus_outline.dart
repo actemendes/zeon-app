@@ -9,12 +9,16 @@ class KeyboardFocusOutline extends StatefulWidget {
     this.borderRadius = const BorderRadius.all(Radius.circular(14)),
     this.outset = 0,
     this.includeDescendantFocus = false,
+    this.focused,
   });
 
   final Widget child;
   final BorderRadius borderRadius;
   final double outset;
   final bool includeDescendantFocus;
+
+  /// For composite Material controls whose focus node is inside [child].
+  final bool? focused;
 
   /// Wraps the whole padded Material button without replacing its local style.
   static Widget buttonBuilder(BuildContext context, Set<WidgetState> states, Widget? child) =>
@@ -42,12 +46,13 @@ class _KeyboardFocusOutlineState extends State<KeyboardFocusOutline> {
   @override
   Widget build(BuildContext context) {
     final node = Focus.maybeOf(context);
-    final focused = (widget.includeDescendantFocus ? node?.hasFocus : node?.hasPrimaryFocus) ?? false;
+    final focused =
+        widget.focused ?? ((widget.includeDescendantFocus ? node?.hasFocus : node?.hasPrimaryFocus) ?? false);
     final visible = focused && FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     return CustomPaint(
       foregroundPainter: visible
-          ? KeyboardFocusOutlinePainter(
-              color: Theme.of(context).colorScheme.primary,
+          ? KeyboardFocusOutlinePainter.fromTheme(
+              Theme.of(context),
               borderRadius: widget.borderRadius,
               outset: widget.outset,
             )
@@ -58,11 +63,35 @@ class _KeyboardFocusOutlineState extends State<KeyboardFocusOutline> {
 }
 
 class KeyboardFocusOutlinePainter extends CustomPainter {
-  const KeyboardFocusOutlinePainter({required this.color, required this.borderRadius, required this.outset});
+  const KeyboardFocusOutlinePainter({
+    required this.color,
+    required this.borderRadius,
+    required this.outset,
+    this.separatorColor = const Color(0xFF101010),
+    this.separatorWidth = 8,
+  });
+
+  factory KeyboardFocusOutlinePainter.fromTheme(
+    ThemeData theme, {
+    required BorderRadius borderRadius,
+    required double outset,
+  }) {
+    final colors = theme.colorScheme;
+    final light = colors.brightness == Brightness.light;
+    return KeyboardFocusOutlinePainter(
+      color: light ? Color.lerp(colors.primary, colors.onSurface, .45)! : colors.primary,
+      separatorColor: light ? colors.surface : const Color(0xFF101010),
+      separatorWidth: light ? 6 : 8,
+      borderRadius: borderRadius,
+      outset: outset,
+    );
+  }
 
   final Color color;
   final BorderRadius borderRadius;
   final double outset;
+  final Color separatorColor;
+  final double separatorWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -70,13 +99,13 @@ class KeyboardFocusOutlinePainter extends CustomPainter {
     final bounds = (Offset.zero & size).inflate(outset).deflate(4);
     if (bounds.isEmpty) return;
     final outline = borderRadius.toRRect(bounds);
-    // The dark edge separates the green ring from selected/green controls.
+    // Separate focus from selected green controls without a black edge in Light.
     canvas.drawRRect(
       outline,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 8
-        ..color = const Color(0xFF101010),
+        ..strokeWidth = separatorWidth
+        ..color = separatorColor,
     );
     canvas.drawRRect(
       outline,
@@ -89,5 +118,9 @@ class KeyboardFocusOutlinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(KeyboardFocusOutlinePainter oldDelegate) =>
-      color != oldDelegate.color || borderRadius != oldDelegate.borderRadius || outset != oldDelegate.outset;
+      color != oldDelegate.color ||
+      separatorColor != oldDelegate.separatorColor ||
+      separatorWidth != oldDelegate.separatorWidth ||
+      borderRadius != oldDelegate.borderRadius ||
+      outset != oldDelegate.outset;
 }

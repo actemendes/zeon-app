@@ -247,8 +247,8 @@ class _MainVpnButtonViewState extends State<MainVpnButtonView> {
                   IgnorePointer(
                     child: CustomPaint(
                       key: const ValueKey('home_vpn_focus_outline'),
-                      foregroundPainter: KeyboardFocusOutlinePainter(
-                        color: Theme.of(context).colorScheme.primary,
+                      foregroundPainter: KeyboardFocusOutlinePainter.fromTheme(
+                        Theme.of(context),
                         borderRadius: BorderRadius.circular(999),
                         outset: 0,
                       ),

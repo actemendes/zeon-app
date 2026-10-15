@@ -172,6 +172,15 @@ Entrypoint проверяет версию Flutter из `pubspec.yaml`; если
 версия автоматически готовится в `Z:\Zeon-Envelope\Caches\Flutter` из локального Git tag.
 Переопределить SDK можно переменной `ZEON_FLUTTER_ROOT`.
 
+### Ресурсы Android TV
+
+`python scripts/generate_android_tv_branding.py` обновляет TV-баннер 16:9 и
+квадратную TV-иконку из `assets/images/SVG/big-logo-dark.svg` на тёмном градиенте.
+Проверка актуальности без записи: та же команда с `--check`. XML хранится в Git;
+`values-television` выбирает отдельную иконку только на TV, телефонные ресурсы
+остаются прежними. После изменения логотипа проверьте его поля и читаемость
+в launcher телевизора. Устанавливаемый APK собирается через `build.ps1`.
+
 ### iOS и macOS
 
 ```bash

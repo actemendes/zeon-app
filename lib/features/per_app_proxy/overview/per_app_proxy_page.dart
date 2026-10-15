@@ -11,6 +11,7 @@ import 'package:zeon/core/model/region.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
+import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/per_app_proxy/model/app_package_info.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/features/per_app_proxy/model/pkg_flag.dart';
@@ -300,54 +301,77 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
           itemBuilder: (context, index) {
             final package = packages[index];
             final flag = selectedApps.requireValue[package.packageName];
-            return Material(
-              color: theme.colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.vertical(
-                top: Radius.circular(index == 0 ? 20 : 0),
-                bottom: Radius.circular(index == packages.length - 1 ? 20 : 0),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: ListTileTheme(
-                data: ListTileThemeData(
-                  titleTextStyle: theme.textTheme.bodyMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600),
-                  subtitleTextStyle: theme.textTheme.bodySmall?.copyWith(fontSize: 14),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                ),
-                child: CheckboxListTile.adaptive(
-                  title: Row(
-                    children: [
-                      Flexible(child: Text(package.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      if (flag != null && PkgFlag.forceDeselection.check(flag)) ...[
-                        const Gap(6),
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle),
+            return HookBuilder(
+              key: ValueKey(package.packageName),
+              builder: (context) {
+                final focused = useState(false);
+                final hovered = useState(false);
+                return MouseRegion(
+                  onEnter: (_) => hovered.value = true,
+                  onExit: (_) => hovered.value = false,
+                  child: KeyboardFocusOutline(
+                    focused: focused.value,
+                    child: Material(
+                      color: hovered.value
+                          ? Color.alphaBlend(
+                              theme.colorScheme.primary.withValues(alpha: .10),
+                              theme.colorScheme.secondaryContainer,
+                            )
+                          : theme.colorScheme.secondaryContainer,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(index == 0 ? 20 : 0),
+                        bottom: Radius.circular(index == packages.length - 1 ? 20 : 0),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: ListTileTheme(
+                        data: ListTileThemeData(
+                          titleTextStyle: theme.textTheme.bodyMedium?.copyWith(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          subtitleTextStyle: theme.textTheme.bodySmall?.copyWith(fontSize: 14),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                         ),
-                      ],
-                    ],
-                  ),
-                  subtitle: Text(
-                    package.packageName,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  value: flag == null ? false : PkgFlag.checkboxValue(flag),
-                  tristate: true,
-                  onChanged: (_) => ref.read(PerAppProxyProvider(mode).notifier).updatePkg(package.packageName),
-                  secondary: package.icon == null
-                      ? null
-                      : Image.memory(
-                          package.icon!,
-                          width: applicationIconLogicalSize,
-                          height: applicationIconLogicalSize,
-                          cacheWidth: applicationIconPhysicalSize,
-                          cacheHeight: applicationIconPhysicalSize,
-                          filterQuality: FilterQuality.high,
+                        child: CheckboxListTile.adaptive(
+                          onFocusChange: (value) => focused.value = value,
+                          title: Row(
+                            children: [
+                              Flexible(child: Text(package.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                              if (flag != null && PkgFlag.forceDeselection.check(flag)) ...[
+                                const Gap(6),
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle),
+                                ),
+                              ],
+                            ],
+                          ),
+                          subtitle: Text(
+                            package.packageName,
+                            style: Theme.of(context).textTheme.bodySmall,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          value: flag == null ? false : PkgFlag.checkboxValue(flag),
+                          tristate: true,
+                          onChanged: (_) => ref.read(PerAppProxyProvider(mode).notifier).updatePkg(package.packageName),
+                          secondary: package.icon == null
+                              ? null
+                              : Image.memory(
+                                  package.icon!,
+                                  width: applicationIconLogicalSize,
+                                  height: applicationIconLogicalSize,
+                                  cacheWidth: applicationIconPhysicalSize,
+                                  cacheHeight: applicationIconPhysicalSize,
+                                  filterQuality: FilterQuality.high,
+                                ),
                         ),
-                ),
-              ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             );
           },
           itemCount: packages.length,

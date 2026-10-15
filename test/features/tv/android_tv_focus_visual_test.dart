@@ -68,9 +68,21 @@ void main() {
           return Color.fromARGB(bytes.getUint8(i + 3), bytes.getUint8(i), bytes.getUint8(i + 1), bytes.getUint8(i + 2));
         }
 
-        expect(pixel(120, 1), const Color(0xFF101010), reason: 'Dark separation must remain above the green fill.');
-        expect(pixel(120, 4), theme.colorScheme.primary, reason: 'The green focus stroke must actually render.');
-        expect(pixel(120, 7), const Color(0xFF101010));
+        if (mode == AppThemeMode.light) {
+          expect(pixel(120, 1), theme.colorScheme.surface, reason: 'Light focus uses a soft surface separator.');
+          final stroke = pixel(120, 4);
+          expect(stroke.g, greaterThan(stroke.r));
+          expect(stroke.g, greaterThan(stroke.b));
+          expect(
+            (theme.colorScheme.secondaryContainer.computeLuminance() + .05) / (stroke.computeLuminance() + .05),
+            greaterThan(3),
+            reason: 'The calmer green must remain visible on a light control.',
+          );
+        } else {
+          expect(pixel(120, 1), const Color(0xFF101010), reason: 'Dark separation must remain above the green fill.');
+          expect(pixel(120, 4), theme.colorScheme.primary, reason: 'The green focus stroke must actually render.');
+          expect(pixel(120, 7), const Color(0xFF101010));
+        }
         const evidence = String.fromEnvironment('FOCUS_EVIDENCE_DIR');
         if (evidence.isNotEmpty) {
           final png = (await image.toByteData(format: ui.ImageByteFormat.png))!;

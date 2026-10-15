@@ -29,7 +29,7 @@ import 'package:zeon/utils/utils.dart';
 
 part 'routing_config_notifier.g.dart';
 
-// each branch in go router has its own focus scope
+// Each branch navigator, including its pushed pages, shares a focus scope.
 final branchesScope = <String, FocusScopeNode>{
   'home': FocusScopeNode(),
   'profiles': FocusScopeNode(),
@@ -89,8 +89,17 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
       },
       routes: <RouteBase>[
         StatefulShellRoute(
-          navigatorContainerBuilder: (_, navigationShell, children) =>
-              AnimatedBranchContainer(currentIndex: navigationShell.currentIndex, children: children),
+          navigatorContainerBuilder: (_, navigationShell, children) => AnimatedBranchContainer(
+            currentIndex: navigationShell.currentIndex,
+            // Navigator pages are siblings: the rail must also reach pushed pages.
+            children: [
+              for (var index = 0; index < children.length; index++)
+                FocusScope(
+                  node: branchesScope[getNameOfBranch(isMobileBreakpoint, showProfilesAction, index)],
+                  child: children[index],
+                ),
+            ],
+          ),
           builder: (_, _, navigationShell) => MyAdaptiveLayout(
             navigationShell: navigationShell,
             isMobileBreakpoint: isMobileBreakpoint,
@@ -102,7 +111,7 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                 GoRoute(
                   name: 'home',
                   path: '/home',
-                  builder: (_, _) => FocusScope(node: branchesScope['home'], child: const HomePage()),
+                  builder: (_, _) => const HomePage(),
                   routes: <GoRoute>[
                     GoRoute(
                       name: 'proxies',
@@ -135,7 +144,7 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                   GoRoute(
                     name: 'profiles',
                     path: '/profiles',
-                    builder: (_, _) => FocusScope(node: branchesScope['profiles'], child: const ProfilesPage()),
+                    builder: (_, _) => const ProfilesPage(),
                     routes: <GoRoute>[
                       GoRoute(
                         name: 'profileDetails',
@@ -156,13 +165,10 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                 GoRoute(
                   name: 'settings',
                   path: '/settings',
-                  builder: (context, _) => FocusScope(
-                    node: branchesScope['settings'],
-                    child: PopScope(
-                      canPop: false,
-                      onPopInvokedWithResult: (_, _) => context.goNamed('home'),
-                      child: SettingsPage(),
-                    ),
+                  builder: (context, _) => PopScope(
+                    canPop: false,
+                    onPopInvokedWithResult: (_, _) => context.goNamed('home'),
+                    child: SettingsPage(),
                   ),
                   routes: <GoRoute>[
                     GoRoute(
@@ -265,22 +271,10 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
             ),
             if (!isMobileBreakpoint) ...[
               StatefulShellBranch(
-                routes: <GoRoute>[
-                  GoRoute(
-                    name: 'logs',
-                    path: '/logs',
-                    builder: (_, _) => FocusScope(node: branchesScope['logs'], child: const LogsPage()),
-                  ),
-                ],
+                routes: <GoRoute>[GoRoute(name: 'logs', path: '/logs', builder: (_, _) => const LogsPage())],
               ),
               StatefulShellBranch(
-                routes: <GoRoute>[
-                  GoRoute(
-                    name: 'about',
-                    path: '/about',
-                    builder: (_, _) => FocusScope(node: branchesScope['about'], child: const AboutPage()),
-                  ),
-                ],
+                routes: <GoRoute>[GoRoute(name: 'about', path: '/about', builder: (_, _) => const AboutPage())],
               ),
             ],
             StatefulShellBranch(
@@ -288,7 +282,7 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                 GoRoute(
                   name: 'profileMenu',
                   path: '/profile-menu',
-                  builder: (_, _) => FocusScope(node: branchesScope['profileMenu'], child: const ProfileMenuPage()),
+                  builder: (_, _) => const ProfileMenuPage(),
                   routes: <GoRoute>[
                     GoRoute(
                       name: 'profileLinkAccount',

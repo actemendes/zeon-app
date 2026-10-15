@@ -27,7 +27,7 @@
     <application
         android:allowBackup="false"
         android:name=".Application"
-        android:banner="@mipmap/ic_banner"
+        android:banner="@drawable/ic_tv_banner"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
