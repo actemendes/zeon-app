@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
@@ -77,6 +78,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     }
     val streamingCoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val notificationLock = Any()
+    private val updateLimiter = NotificationUpdateLimiter(lock = notificationLock)
     @Volatile
     private var notificationGeneration = 0L
 
@@ -138,6 +140,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
             if (processOwner != null && snapshot.generation < processOwner.generation) return
             synchronized(notificationLock) {
                 if (snapshot.generation < notificationGeneration) return
+                if (!updateLimiter.start(snapshot.generation)) return
                 notificationGeneration = snapshot.generation
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     Application.notification.createNotificationChannel(
@@ -214,23 +217,45 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
         receiverRegistered = true
     }
 
-    fun updateStatus(previous:SystemInfo,status: SystemInfo) {
-        val uplink=status.uplink_total - previous.uplink_total
-        val downlink=status.downlink_total - previous.downlink_total
-        val generation = activeGeneration
+    fun updateStatus(
+        previous: SystemInfo,
+        status: SystemInfo,
+        generation: Long,
+        sessionAcceptsOperations: () -> Boolean,
+    ) {
+        // Use the stream's captured owner, never relabel a late old response
+        // with activeGeneration after a new session has been installed.
+        if (!isPollingCurrent(generation, sessionAcceptsOperations, "update")) return
         val snapshot = VpnSessionSnapshotCoordinator.selectedOutbound(
             generation,
             status.current_outbound,
             if (status.current_outbound.startsWith(AUTO_BALANCER_TAG)) AUTO_BALANCER_TAG else "selector",
         )
         if (!snapshot.provesConnected() || !Settings.dynamicNotification || !checkPermission()) return
+        val uplink = (status.uplink_total - previous.uplink_total).coerceAtLeast(0L)
+        val downlink = (status.downlink_total - previous.downlink_total).coerceAtLeast(0L)
         val currentOutbound = presentOutboundForNotification(snapshot.selectedOutboundLabel)
         val content = "${Libbox.formatBytes(uplink)}/s \u2191\t${Libbox.formatBytes(downlink)}/s \u2193 \n$currentOutbound"
         val title = "${status.current_profile}"
-        Application.notificationManager.notify(
-                notificationId,
-                notificationBuilder.setContentTitle(title).setContentText(content).build()
-        )
+        synchronized(foregroundLock) {
+            // Same lock order as show()/close(): a response cannot notify after
+            // Stop removed the foreground notification or replace a newer owner.
+            updateLimiter.publish(
+                generation,
+                NotificationUpdateLimiter.Content(title, snapshot.selectedOutboundId, snapshot.phase.name, content),
+                SystemClock.elapsedRealtime(),
+                stillOwnsNotification = {
+                    foregroundOwner?.notification === this && foregroundOwner?.generation == generation &&
+                        notificationGeneration == generation &&
+                        isPollingCurrent(generation, sessionAcceptsOperations, "publish")
+                },
+            ) {
+                Application.notificationManager.notify(
+                    notificationId,
+                    notificationBuilder.setContentTitle(title).setContentText(content).build(),
+                )
+            }
+        }
     }
 
     private fun presentOutboundForNotification(outbound: String): String {
@@ -307,6 +332,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
                     return false
                 }
                 notificationGeneration = 0L
+                updateLimiter.close()
                 detachSystemInfoListener(maximumGeneration = maximumGeneration)?.job?.cancel()
                 if (processOwner?.notification === this) {
                     foregroundOwner = null
@@ -352,7 +378,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
                 var previous: SystemInfo? = null
                 for (current in responses) {
                     if (!isPollingCurrent(generation, sessionAcceptsOperations, "result")) break
-                    updateStatus(previous ?: current, current)
+                    updateStatus(previous ?: current, current, generation, sessionAcceptsOperations)
                     previous = current
                 }
             } catch (e: CancellationException) {
@@ -360,8 +386,15 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
                 Log.d("notification", "SystemInfo polling cancelled")
             } catch (e: Exception) {
                 Log.e("notification", "SystemInfo polling failed", e)
-                if (generation == activeGeneration) {
-                    notification.cancel(notificationId)
+                synchronized(foregroundLock) {
+                    synchronized(notificationLock) {
+                        if (foregroundOwner?.notification === this@ServiceNotification &&
+                            foregroundOwner?.generation == generation && notificationGeneration == generation &&
+                            generation == activeGeneration
+                        ) {
+                            notification.cancel(notificationId)
+                        }
+                    }
                 }
             } finally {
                 systemInfoStream.cancel()

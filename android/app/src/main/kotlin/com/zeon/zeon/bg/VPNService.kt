@@ -9,6 +9,7 @@ import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import com.hiddify.core.libbox.Notification
 import com.hiddify.core.libbox.PlatformInterface
 import com.zeon.zeon.constant.PerAppProxyMode
@@ -24,6 +25,7 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
     }
 
     private val service = BoxService(this, ::platformInterfaceForGeneration)
+    private val socketProtectionLogs = SocketProtectionLogPolicy()
 
     private fun platformInterfaceForGeneration(generation: Long): PlatformInterface =
         GenerationBoundPlatformInterface(
@@ -74,12 +76,19 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
 
     private fun autoDetectInterfaceControl(ownerGeneration: Long, fd: Int) {
         val protected = protect(fd)
-        VpnSessionCoordinator.event(
-            "protect_result",
+        socketProtectionLogs.record(
             ownerGeneration,
-            "source=core_socket success=$protected",
-            if (protected) Log.INFO else Log.ERROR,
-        )
+            VpnSessionCoordinator.current(),
+            protected,
+            SystemClock.elapsedRealtime(),
+        )?.let { emission ->
+            VpnSessionCoordinator.event(
+                if (!emission.success || emission.initial) "protect_result" else "protect_success_summary",
+                ownerGeneration,
+                "source=core_socket success=${emission.success} count=${emission.count} window_ms=${emission.windowMillis}",
+                if (emission.success) Log.INFO else Log.ERROR,
+            )
+        }
         if (!protected) {
             error("android: VpnService.protect failed for core socket")
         }

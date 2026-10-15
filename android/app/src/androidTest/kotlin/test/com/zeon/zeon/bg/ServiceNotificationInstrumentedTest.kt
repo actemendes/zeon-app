@@ -17,6 +17,27 @@ import com.zeon.zeon.bg.VpnStopSource
 import com.hiddify.core.api.v2.hcore.SystemInfo
 
 class ServiceNotificationInstrumentedTest {
+    fun staleStreamCannotRelabelItsResponseWithTheNewGeneration() {
+        val service = object : Service() {
+            override fun onBind(intent: Intent?): IBinder? = null
+        }
+        val notification = ServiceNotification(MutableLiveData(Status.Started), service)
+        val generation = VpnSessionCoordinator.next("notification_stale_response_test")
+        notification.installSystemInfoGenerationForTesting(generation)
+        VpnSessionSnapshotCoordinator.begin(generation, "connect")
+        VpnSessionSnapshotCoordinator.selectedOutbound(generation, "Current server", "selector")
+        try {
+            notification.updateStatus(SystemInfo(), SystemInfo(current_outbound = "Stale server"), generation - 1L) { true }
+            check(VpnSessionSnapshotCoordinator.current().selectedOutboundLabel == "Current server")
+            notification.detachSystemInfoListener(expectedGeneration = generation)
+            notification.updateStatus(SystemInfo(), SystemInfo(current_outbound = "Detached server"), generation) { true }
+            check(VpnSessionSnapshotCoordinator.current().selectedOutboundLabel == "Current server")
+        } finally {
+            notification.detachSystemInfoListener(expectedGeneration = generation)
+            VpnSessionSnapshotCoordinator.publishDisconnected(generation, VpnStopSource.FLUTTER)
+        }
+    }
+
     fun disabledDynamicNotificationStillUpdatesConnectedOutbound() {
         val service = object : Service() {
             override fun onBind(intent: Intent?): IBinder? = null
@@ -34,7 +55,7 @@ class ServiceNotificationInstrumentedTest {
             }
             // An unattached Service cannot render notifications. Publishing the
             // native outbound must nevertheless work while rendering is disabled.
-            notification.updateStatus(SystemInfo(), SystemInfo(current_outbound = "Server B"))
+            notification.updateStatus(SystemInfo(), SystemInfo(current_outbound = "Server B"), generation) { true }
             val snapshot = VpnSessionSnapshotCoordinator.current()
             check(snapshot.provesConnected())
             check(snapshot.selectedOutboundLabel == "Server B")

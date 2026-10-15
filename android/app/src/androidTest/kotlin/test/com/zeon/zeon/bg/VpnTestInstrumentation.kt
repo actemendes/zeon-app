@@ -50,6 +50,8 @@ class VpnTestInstrumentation : Instrumentation() {
         val snapshotTests = VpnSessionSnapshotInstrumentedTest()
         val shutdownTests = CoreShutdownDispatcherInstrumentedTest()
         val notificationTests = ServiceNotificationInstrumentedTest()
+        val notificationUpdateTests = NotificationUpdateLimiterTest()
+        val socketProtectionLogTests = SocketProtectionLogPolicyTest()
         val proxySelectionTests = ProxySelectionPersistenceInstrumentedTest(targetContext)
         val routePolicyTests = VpnRoutePolicyInstrumentedTest()
         val bitmapTests = SampledBitmapDecoderInstrumentedTest(targetContext)
@@ -57,6 +59,9 @@ class VpnTestInstrumentation : Instrumentation() {
         val tests = mutableListOf(
             TestCase(notificationTests.javaClass.name, "disabledDynamicNotificationStillUpdatesConnectedOutbound") {
                 notificationTests.disabledDynamicNotificationStillUpdatesConnectedOutbound()
+            },
+            TestCase(notificationTests.javaClass.name, "staleStreamCannotRelabelItsResponseWithTheNewGeneration") {
+                notificationTests.staleStreamCannotRelabelItsResponseWithTheNewGeneration()
             },
             TestCase(generationTests.javaClass.name, "generationIsStrictlyMonotonic") {
                 generationTests.generationIsStrictlyMonotonic()
@@ -260,6 +265,34 @@ class VpnTestInstrumentation : Instrumentation() {
                 proxySelectionTests.notificationAutoReplacesDurableManualChoice()
             },
         )
+        listOf(
+            "firstSampleAtClockZeroPublishesAndTrafficWaitsFiveSeconds" to notificationUpdateTests::firstSampleAtClockZeroPublishesAndTrafficWaitsFiveSeconds,
+            "repeatedZeroSpeedIsDeduplicatedButTransitionToZeroIsEventuallyShown" to notificationUpdateTests::repeatedZeroSpeedIsDeduplicatedButTransitionToZeroIsEventuallyShown,
+            "profileServerAndRecoveryChangesBypassTrafficInterval" to notificationUpdateTests::profileServerAndRecoveryChangesBypassTrafficInterval,
+            "identicalTextFromDifferentServerStillPublishesImmediately" to notificationUpdateTests::identicalTextFromDifferentServerStillPublishesImmediately,
+            "newGenerationCanPublishSameContentAndStaleResetIsRejected" to notificationUpdateTests::newGenerationCanPublishSameContentAndStaleResetIsRejected,
+            "closeRejectsLateResponseAndSameGenerationRestart" to notificationUpdateTests::closeRejectsLateResponseAndSameGenerationRestart,
+            "lostForegroundOwnershipDoesNotConsumePublication" to notificationUpdateTests::lostForegroundOwnershipDoesNotConsumePublication,
+            "backwardClockRebasesWithoutFreezingUpdates" to notificationUpdateTests::backwardClockRebasesWithoutFreezingUpdates,
+            "largeMonotonicClockDoesNotOverflowElapsedComparison" to notificationUpdateTests::largeMonotonicClockDoesNotOverflowElapsedComparison,
+            "failedSendDoesNotSuppressTheNextLiveSample" to notificationUpdateTests::failedSendDoesNotSuppressTheNextLiveSample,
+            "concurrentIdenticalSamplesPublishOnlyOnce" to notificationUpdateTests::concurrentIdenticalSamplesPublishOnlyOnce,
+            "stopWaitsForCurrentPublicationAndRejectsAllLaterResponses" to notificationUpdateTests::stopWaitsForCurrentPublicationAndRejectsAllLaterResponses,
+        ).forEach { (name, body) ->
+            tests += TestCase(notificationUpdateTests.javaClass.name, name) { body() }
+        }
+        listOf(
+            "firstSuccessAtZeroIsLoggedAndBurstIsAggregatedAtThirtySeconds" to socketProtectionLogTests::firstSuccessAtZeroIsLoggedAndBurstIsAggregatedAtThirtySeconds,
+            "everyFailureIsLoggedWithoutChangingSuccessWindow" to socketProtectionLogTests::everyFailureIsLoggedWithoutChangingSuccessWindow,
+            "newGenerationGetsImmediateFirstRecordAndOldCallbackCannotResetIt" to socketProtectionLogTests::newGenerationGetsImmediateFirstRecordAndOldCallbackCannotResetIt,
+            "staleOrInvalidFirstCallbackDoesNotInitializeSampler" to socketProtectionLogTests::staleOrInvalidFirstCallbackDoesNotInitializeSampler,
+            "idleWindowWaitsForLiveSocketInsteadOfSchedulingWork" to socketProtectionLogTests::idleWindowWaitsForLiveSocketInsteadOfSchedulingWork,
+            "backwardClockFlushesPendingCountAndRebases" to socketProtectionLogTests::backwardClockFlushesPendingCountAndRebases,
+            "largeClockValuesPreserveIntervalBoundary" to socketProtectionLogTests::largeClockValuesPreserveIntervalBoundary,
+            "concurrentSocketSuccessesAreCountedExactlyOnce" to socketProtectionLogTests::concurrentSocketSuccessesAreCountedExactlyOnce,
+        ).forEach { (name, body) ->
+            tests += TestCase(socketProtectionLogTests.javaClass.name, name) { body() }
+        }
         listOf(
             "firstConnectPermissionGrantedCompletesCurrentAttempt" to permissionTests::firstConnectPermissionGrantedCompletesCurrentAttempt,
             "permissionDeniedDoesNotBecomeGranted" to permissionTests::permissionDeniedDoesNotBecomeGranted,
