@@ -191,6 +191,13 @@
     "bindAccountDialogDescription": "Чтобы привязать ваш аккаунт вставьте ссылку которую прислал вам бот",
     "bindAccountDialogLinkLabel": "Ссылка для привязки",
     "bindAccountDialogInvalidLink": "Вставьте корректную ссылку из бота",
+    "tvAccountNumberTitle": "Номер подписки",
+    "tvAccountNumberDescription": "Все цифры после /open/ в ссылке подписки.",
+    "tvAccountNumberLabel": "Номер из ссылки",
+    "tvAccountNumberClear": "Очистить номер",
+    "tvAccountNumberDelete": "Удалить последнюю цифру",
+    "tvAccountNumberUseLink": "Ввести ссылку",
+    "tvAccountNumberInvalid": "Проверьте номер: введите все цифры после /open/ в ссылке.",
     "termsAndPolicyCaution(rich)": "Продолжая, вы соглашаетесь с ${tap(@:pages.about.termsAndConditions)}",
     "info": "Сделано с ❤️ ZEON",
     "bindErrors": {

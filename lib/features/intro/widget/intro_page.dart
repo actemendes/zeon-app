@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/device/android_tv_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/model/constants.dart';
 import 'package:zeon/core/model/region.dart';
@@ -15,6 +16,8 @@ import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/core/widget/keyboard_focus_outline.dart';
 import 'package:zeon/features/home/model/main_vpn_button_state.dart';
 import 'package:zeon/features/home/widget/world_map_background.dart';
+import 'package:zeon/features/intro/widget/tv_account_number_dialog.dart';
+import 'package:zeon/features/mobile/data/account_number.dart';
 import 'package:zeon/features/mobile/data/mobile_conn_link_import_service.dart';
 import 'package:zeon/features/mobile/data/mobile_device_rebind_service.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
@@ -370,7 +373,7 @@ class _IntroSecondaryButton extends StatelessWidget {
       child: InkWell(
         key: const ValueKey(UiNames.buttonIntroAlreadyHaveAccount),
         onTap: () {
-          showDialog<void>(context: context, builder: (_) => const _BindAccountCodeDialog());
+          showDialog<void>(context: context, builder: (_) => const IntroAccountDialog());
         },
         child: KeyboardFocusOutline(
           child: Padding(
@@ -393,8 +396,8 @@ class _IntroSecondaryButton extends StatelessWidget {
   }
 }
 
-class _BindAccountCodeDialog extends HookConsumerWidget {
-  const _BindAccountCodeDialog();
+class IntroAccountDialog extends HookConsumerWidget {
+  const IntroAccountDialog({super.key});
 
   static const _sampleBindLink = 'https://zeon-vps.link/open/XXXXXX';
 
@@ -405,17 +408,21 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
     final linkController = useTextEditingController();
     final linkFocusNode = useFocusNode();
     final isSubmitting = useState(false);
+    final television = ref.watch(androidTvProvider);
+    final preferNumberInput = useState(true);
+    final useNumberInput = television.valueOrNull == true && preferNumberInput.value;
 
     useListenable(linkController);
 
     useEffect(() {
+      if (useNumberInput || television.isLoading) return null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
           linkFocusNode.requestFocus();
         }
       });
       return null;
-    }, [linkFocusNode]);
+    }, [linkFocusNode, useNumberInput, television.isLoading]);
 
     bool isValidBindCode(String value) => RegExp('^[A-Za-z0-9_-]{4,}\$').hasMatch(value);
 
@@ -477,7 +484,11 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
       return input.contains('/') || input.contains('?');
     }
 
-    final isInputValid = isLikelyAccountLink(linkController.text) || extractBindCode(linkController.text) != null;
+    bool isValidInput(String value) => useNumberInput
+        ? isValidAccountNumber(value.trim())
+        : isLikelyAccountLink(value) || extractBindCode(value) != null;
+
+    final isInputValid = isValidInput(linkController.text);
 
     String mapBindError(String code) {
       switch (code.trim()) {
@@ -510,14 +521,15 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
       isSubmitting.value = true;
       try {
         final importService = ref.read(mobileConnLinkImportServiceProvider);
+        final rebindService = ref.read(mobileDeviceRebindServiceProvider);
         MobileConnLinkImportResult importResult;
-        if (isLikelyAccountLink(rawInput) || extractBindCode(rawInput) != null) {
+        if (isValidInput(rawInput)) {
           importResult = await importService
               .importConnectionLink(rawInput, mode: MobileConnLinkImportMode.fast)
               .timeout(const Duration(seconds: 25));
-          await ref.read(mobileDeviceRebindServiceProvider).syncManualImportRebind(importResult);
+          await rebindService.syncManualImportRebind(importResult);
         } else {
-          showError(t.errors.profiles.invalidUrl);
+          showError(useNumberInput ? t.intro.tvAccountNumberInvalid : t.errors.profiles.invalidUrl);
           isSubmitting.value = false;
           return;
         }
@@ -537,9 +549,8 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
         showError(t.errors.unexpected);
         return;
       }
-      isSubmitting.value = false;
-
       if (!context.mounted) return;
+      isSubmitting.value = false;
 
       final notification = ref.read(inAppNotificationControllerProvider);
       notification.showSuccessToast(t.common.done);
@@ -548,6 +559,19 @@ class _BindAccountCodeDialog extends HookConsumerWidget {
 
       Navigator.of(context).pop();
       context.goNamed('home');
+    }
+
+    if (useNumberInput) {
+      return TvAccountNumberDialog(
+        controller: linkController,
+        isSubmitting: isSubmitting.value,
+        onSubmit: isInputValid && !isSubmitting.value ? bind : null,
+        errorText: linkController.text.isNotEmpty && !isInputValid ? t.intro.tvAccountNumberInvalid : null,
+        onUseLink: () {
+          linkController.clear();
+          preferNumberInput.value = false;
+        },
+      );
     }
 
     final dialogBackgroundColor = theme.brightness == Brightness.dark

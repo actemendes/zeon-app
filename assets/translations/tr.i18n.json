@@ -177,6 +177,13 @@
     "previous": "Önceki"
   },
   "intro": {
+    "tvAccountNumberTitle": "Abonelik numarası",
+    "tvAccountNumberDescription": "Abonelik bağlantınızda /open/ sonrasındaki tüm rakamlar.",
+    "tvAccountNumberLabel": "Bağlantıdaki numara",
+    "tvAccountNumberClear": "Numarayı temizle",
+    "tvAccountNumberDelete": "Son rakamı sil",
+    "tvAccountNumberUseLink": "Bağlantı gir",
+    "tvAccountNumberInvalid": "Numarayı kontrol edin: bağlantıda /open/ sonrasındaki tüm rakamları girin.",
     "banner": "Sınırsız bir internet için ihtiyacınız olan her şey",
     "appBarLine1": "REKLAMSIZ.",
     "appBarLine2": "SINIRSIZ.",

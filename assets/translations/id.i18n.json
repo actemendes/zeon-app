@@ -177,6 +177,13 @@
     "previous": "Sebelumnya"
   },
   "intro": {
+    "tvAccountNumberTitle": "Nomor langganan",
+    "tvAccountNumberDescription": "Semua digit setelah /open/ pada tautan langganan Anda.",
+    "tvAccountNumberLabel": "Nomor dari tautan",
+    "tvAccountNumberClear": "Hapus nomor",
+    "tvAccountNumberDelete": "Hapus digit terakhir",
+    "tvAccountNumberUseLink": "Masukkan tautan",
+    "tvAccountNumberInvalid": "Periksa nomor: masukkan semua digit setelah /open/ pada tautan.",
     "banner": "Semua yang Anda butuhkan untuk internet tanpa batasan",
     "appBarLine1": "TANPA IKLAN.",
     "appBarLine2": "TANPA BATAS.",

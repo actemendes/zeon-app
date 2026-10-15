@@ -187,6 +187,13 @@
     "bindAccountDialogDescription": "To link your account, paste the link sent by the bot",
     "bindAccountDialogLinkLabel": "Link for account binding",
     "bindAccountDialogInvalidLink": "Paste a valid link sent by the bot",
+    "tvAccountNumberTitle": "Subscription number",
+    "tvAccountNumberDescription": "All digits after /open/ in your subscription link.",
+    "tvAccountNumberLabel": "Number from the link",
+    "tvAccountNumberClear": "Clear number",
+    "tvAccountNumberDelete": "Delete last digit",
+    "tvAccountNumberUseLink": "Enter a link",
+    "tvAccountNumberInvalid": "Check the number: enter all digits after /open/ in the link.",
     "termsAndPolicyCaution(rich)": "By continuing you agree to ${tap(@:pages.about.termsAndConditions)}",
     "info": "Made with ❤️ by ZEON",
     "bindErrors": {

@@ -34,6 +34,7 @@ class ZeonDialog extends StatelessWidget {
     this.actions,
     this.footer,
     this.primaryAction = true,
+    this.canDismiss = true,
     this.maxWidth = 460,
     this.fontFamilyFallback,
   });
@@ -43,6 +44,7 @@ class ZeonDialog extends StatelessWidget {
   final Widget? footer;
   final List<Widget>? actions;
   final bool primaryAction;
+  final bool canDismiss;
   final double maxWidth;
   final List<String>? fontFamilyFallback;
 
@@ -65,111 +67,114 @@ class ZeonDialog extends StatelessWidget {
         fontWeight: FontWeight.w600,
       ),
     );
-    final contents = ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: maxWidth,
-        maxHeight: math.max(
-          0,
-          math.min(760, media.size.height - media.viewInsets.bottom - media.padding.vertical - (mobile ? 24 : 48)),
-        ),
-      ),
-      child: Theme(
-        data: theme.copyWith(
-          textTheme: fontFamilyFallback == null
-              ? theme.textTheme
-              : theme.textTheme.apply(fontFamilyFallback: fontFamilyFallback),
-          inputDecorationTheme: InputDecorationTheme(
-            filled: true,
-            fillColor: cs.surface,
-            contentPadding: const EdgeInsets.all(18),
-            border: border,
-            enabledBorder: border,
-            focusedBorder: border.copyWith(borderSide: BorderSide(color: cs.primary, width: 4)),
-            errorBorder: border,
-            focusedErrorBorder: border.copyWith(borderSide: BorderSide(color: cs.error, width: 4)),
-            disabledBorder: border,
+    final contents = PopScope(
+      canPop: canDismiss,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: maxWidth,
+          maxHeight: math.max(
+            0,
+            math.min(760, media.size.height - media.viewInsets.bottom - media.padding.vertical - (mobile ? 24 : 48)),
           ),
-          textButtonTheme: TextButtonThemeData(style: theme.textButtonTheme.style?.merge(actionStyle) ?? actionStyle),
         ),
-        child: Material(
-          color: cs.secondaryContainer,
-          borderRadius: BorderRadius.circular(28),
-          clipBehavior: Clip.antiAlias,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final header = Row(
-                  children: [
-                    if (!compact) ...[
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(color: cs.surface, shape: BoxShape.circle),
-                        child: IconTheme(
-                          data: IconThemeData(size: 20, color: cs.onSurface),
-                          child: icon ?? const Icon(Icons.tune_rounded),
+        child: Theme(
+          data: theme.copyWith(
+            textTheme: fontFamilyFallback == null
+                ? theme.textTheme
+                : theme.textTheme.apply(fontFamilyFallback: fontFamilyFallback),
+            inputDecorationTheme: InputDecorationTheme(
+              filled: true,
+              fillColor: cs.surface,
+              contentPadding: const EdgeInsets.all(18),
+              border: border,
+              enabledBorder: border,
+              focusedBorder: border.copyWith(borderSide: BorderSide(color: cs.primary, width: 4)),
+              errorBorder: border,
+              focusedErrorBorder: border.copyWith(borderSide: BorderSide(color: cs.error, width: 4)),
+              disabledBorder: border,
+            ),
+            textButtonTheme: TextButtonThemeData(style: theme.textButtonTheme.style?.merge(actionStyle) ?? actionStyle),
+          ),
+          child: Material(
+            color: cs.secondaryContainer,
+            borderRadius: BorderRadius.circular(28),
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final header = Row(
+                    children: [
+                      if (!compact) ...[
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(color: cs.surface, shape: BoxShape.circle),
+                          child: IconTheme(
+                            data: IconThemeData(size: 20, color: cs.onSurface),
+                            child: icon ?? const Icon(Icons.tune_rounded),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(
+                        child: DefaultTextStyle(
+                          style: TextStyle(
+                            fontFamily: 'Unbounded',
+                            fontFamilyFallback: fontFamilyFallback,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            height: 1.45,
+                            color: cs.onSurface,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          child: title ?? const SizedBox.shrink(),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        onPressed: canDismiss ? () => Navigator.of(context).pop() : null,
+                        tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                        icon: Icon(Icons.close_rounded, size: 20, color: cs.onSurfaceVariant),
+                      ),
                     ],
-                    Expanded(
-                      child: DefaultTextStyle(
-                        style: TextStyle(
-                          fontFamily: 'Unbounded',
-                          fontFamilyFallback: fontFamilyFallback,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          height: 1.45,
-                          color: cs.onSurface,
-                        ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        child: title ?? const SizedBox.shrink(),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-                      icon: Icon(Icons.close_rounded, size: 20, color: cs.onSurfaceVariant),
-                    ),
-                  ],
-                );
-                final body = DefaultTextStyle(
-                  style: TextStyle(
-                    fontFamily: 'Montserrat',
-                    fontFamilyFallback: fontFamilyFallback,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    height: 1.65,
-                    color: cs.onSurfaceVariant,
-                  ),
-                  child: content ?? const SizedBox.shrink(),
-                );
-                final buttons = footer ?? _DialogActions(actions: actions ?? const [], primaryAction: primaryAction);
-                // With a keyboard or exceptionally short window the entire surface scrolls;
-                // on normal screens only the content scrolls and actions remain visible.
-                if (constraints.maxHeight < 300 * media.textScaler.scale(1)) {
-                  return SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [header, const SizedBox(height: 22), body, const SizedBox(height: 24), buttons],
-                    ),
                   );
-                }
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    header,
-                    const SizedBox(height: 22),
-                    Flexible(child: SingleChildScrollView(child: body)),
-                    if (footer != null || (actions?.isNotEmpty ?? false)) ...[const SizedBox(height: 24), buttons],
-                  ],
-                );
-              },
+                  final body = DefaultTextStyle(
+                    style: TextStyle(
+                      fontFamily: 'Montserrat',
+                      fontFamilyFallback: fontFamilyFallback,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      height: 1.65,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    child: content ?? const SizedBox.shrink(),
+                  );
+                  final buttons = footer ?? _DialogActions(actions: actions ?? const [], primaryAction: primaryAction);
+                  // With a keyboard or exceptionally short window the entire surface scrolls;
+                  // on normal screens only the content scrolls and actions remain visible.
+                  if (constraints.maxHeight < 300 * media.textScaler.scale(1)) {
+                    return SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [header, const SizedBox(height: 22), body, const SizedBox(height: 24), buttons],
+                      ),
+                    );
+                  }
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      header,
+                      const SizedBox(height: 22),
+                      Flexible(child: SingleChildScrollView(child: body)),
+                      if (footer != null || (actions?.isNotEmpty ?? false)) ...[const SizedBox(height: 24), buttons],
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),

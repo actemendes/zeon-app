@@ -13,6 +13,7 @@ import 'package:zeon/core/http_client/windows_system_http_transport.dart';
 import 'package:zeon/core/model/failures.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/home_tips/home_tip_provider.dart';
+import 'package:zeon/features/mobile/data/account_number.dart';
 import 'package:zeon/features/mobile/data/mobile_sensitive_storage.dart';
 import 'package:zeon/features/profile/data/profile_data_providers.dart';
 import 'package:zeon/features/profile/data/profile_data_source.dart';
@@ -716,6 +717,7 @@ class MobileConnLinkImportService with InfraLogger {
   static String? _extractOpenId(String input) {
     final normalized = input.trim();
     if (normalized.isEmpty) return null;
+    if (isValidAccountNumber(normalized)) return normalized;
     final direct = RegExp(r'^[A-Za-z0-9_-]{4,}$').firstMatch(normalized);
     if (direct != null) return direct.group(0);
     final parsed = Uri.tryParse(normalized);
@@ -724,7 +726,7 @@ class MobileConnLinkImportService with InfraLogger {
       final openIndex = segments.lastIndexWhere((segment) => segment.toLowerCase() == "open");
       if (openIndex != -1 && openIndex + 1 < segments.length) {
         final candidate = segments[openIndex + 1];
-        if (RegExp('^[A-Za-z0-9_-]{4,}\$').hasMatch(candidate)) return candidate;
+        if (isValidAccountNumber(candidate) || RegExp('^[A-Za-z0-9_-]{4,}\$').hasMatch(candidate)) return candidate;
       }
     }
     final match = RegExp('/open/([A-Za-z0-9_-]{4,})').firstMatch(normalized);

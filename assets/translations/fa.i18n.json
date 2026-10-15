@@ -177,6 +177,13 @@
     "previous": "قبلی"
   },
   "intro": {
+    "tvAccountNumberTitle": "شمارهٔ اشتراک",
+    "tvAccountNumberDescription": "همهٔ ارقام بعد از /open/ در لینک اشتراک شما.",
+    "tvAccountNumberLabel": "شمارهٔ داخل لینک",
+    "tvAccountNumberClear": "پاک کردن شماره",
+    "tvAccountNumberDelete": "حذف آخرین رقم",
+    "tvAccountNumberUseLink": "وارد کردن لینک",
+    "tvAccountNumberInvalid": "شماره را بررسی کنید: همهٔ ارقام بعد از /open/ در لینک را وارد کنید.",
     "banner": "هرآنچه برای اینترنت بدون محدودیت نیاز دارید",
     "appBarLine1": "بدون تبلیغات.",
     "appBarLine2": "بدون محدودیت.",

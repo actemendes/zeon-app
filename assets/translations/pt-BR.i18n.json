@@ -177,6 +177,13 @@
     "previous": "Anterior"
   },
   "intro": {
+    "tvAccountNumberTitle": "Número da assinatura",
+    "tvAccountNumberDescription": "Todos os dígitos após /open/ no link da sua assinatura.",
+    "tvAccountNumberLabel": "Número do link",
+    "tvAccountNumberClear": "Limpar número",
+    "tvAccountNumberDelete": "Apagar último dígito",
+    "tvAccountNumberUseLink": "Inserir link",
+    "tvAccountNumberInvalid": "Confira o número: digite todos os dígitos após /open/ no link.",
     "banner": "Tudo o que você precisa para uma internet sem restrições",
     "appBarLine1": "SEM ANÚNCIOS.",
     "appBarLine2": "SEM LIMITES.",

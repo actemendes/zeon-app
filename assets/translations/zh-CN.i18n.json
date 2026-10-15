@@ -177,6 +177,13 @@
     "previous": "上一个"
   },
   "intro": {
+    "tvAccountNumberTitle": "订阅号码",
+    "tvAccountNumberDescription": "订阅链接中 /open/ 后的全部数字。",
+    "tvAccountNumberLabel": "链接中的号码",
+    "tvAccountNumberClear": "清空号码",
+    "tvAccountNumberDelete": "删除最后一位数字",
+    "tvAccountNumberUseLink": "输入链接",
+    "tvAccountNumberInvalid": "请检查号码：输入链接中 /open/ 后的全部数字。",
     "banner": "畅享无限制网络的所需一切",
     "appBarLine1": "无广告。",
     "appBarLine2": "无限制。",

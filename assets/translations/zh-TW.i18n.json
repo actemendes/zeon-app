@@ -177,6 +177,13 @@
     "previous": "上一個"
   },
   "intro": {
+    "tvAccountNumberTitle": "訂閱號碼",
+    "tvAccountNumberDescription": "訂閱連結中 /open/ 後的所有數字。",
+    "tvAccountNumberLabel": "連結中的號碼",
+    "tvAccountNumberClear": "清空號碼",
+    "tvAccountNumberDelete": "刪除最後一位數字",
+    "tvAccountNumberUseLink": "輸入連結",
+    "tvAccountNumberInvalid": "請檢查號碼：輸入連結中 /open/ 後的所有數字。",
     "banner": "暢享無限制網路的所需一切",
     "appBarLine1": "無廣告。",
     "appBarLine2": "無限制。",

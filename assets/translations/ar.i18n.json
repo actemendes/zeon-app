@@ -183,6 +183,13 @@
     "previous": "السابق"
   },
   "intro": {
+    "tvAccountNumberTitle": "رقم الاشتراك",
+    "tvAccountNumberDescription": "جميع الأرقام بعد /open/ في رابط اشتراكك.",
+    "tvAccountNumberLabel": "الرقم من الرابط",
+    "tvAccountNumberClear": "مسح الرقم",
+    "tvAccountNumberDelete": "حذف آخر رقم",
+    "tvAccountNumberUseLink": "إدخال رابط",
+    "tvAccountNumberInvalid": "تحقق من الرقم: أدخل جميع الأرقام بعد /open/ في الرابط.",
     "banner": "كل ما تحتاجه لإنترنت بلا قيود",
     "appBarLine1": "بدون إعلانات.",
     "appBarLine2": "بدون حدود.",
