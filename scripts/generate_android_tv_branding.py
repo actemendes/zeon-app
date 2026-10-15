@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Generate Android TV vector resources from the approved ZEON wordmark.
+"""Generate the Android TV banner from the approved ZEON wordmark.
 
 Run with Python 3 (standard library only):
   python scripts/generate_android_tv_branding.py
   python scripts/generate_android_tv_branding.py --check
 
 The application minSdk is 24, which supports VectorDrawable gradients. The
-banner remains a real 16:9 drawable on every supported API. TV-only mipmap
-aliases select the square fallback/adaptive icon without changing phone icons.
+banner remains a real 16:9 drawable on every supported API. Small launcher
+icons use the existing Android adaptive and legacy resources on TV as well.
 """
 
 from __future__ import annotations
@@ -106,27 +106,7 @@ def resources() -> dict[Path, str]:
     banner = vector(160, 90, 320, 180)
     background(banner, 320, 180)
     wordmark(banner, 240, 160, 90)  # 40px side margins, full unmodified wordmark.
-    legacy = vector(80, 80, 108, 108)
-    background(legacy, 108, 108)
-    wordmark(legacy, 64, 54, 54)  # Entire wordmark fits the adaptive safe zone.
-    icon_background = vector(108, 108, 108, 108)
-    background(icon_background, 108, 108)
-    foreground = vector(108, 108, 108, 108)
-    wordmark(foreground, 64, 54, 54)
-    adaptive = ET.Element("adaptive-icon")
-    ET.SubElement(adaptive, "background", attr(drawable="@drawable/ic_tv_icon_background"))
-    ET.SubElement(adaptive, "foreground", attr(drawable="@drawable/ic_tv_icon_foreground"))
-    aliases = ET.Element("resources")
-    for name in ("ic_launcher", "ic_launcher_round"):
-        ET.SubElement(aliases, "item", {"type": "mipmap", "name": name}).text = "@mipmap/ic_tv_icon"
-    return {RES / name: serialize(resource) for name, resource in {
-        "drawable/ic_tv_banner.xml": banner,
-        "mipmap/ic_tv_icon.xml": legacy,
-        "drawable/ic_tv_icon_background.xml": icon_background,
-        "drawable/ic_tv_icon_foreground.xml": foreground,
-        "mipmap-v26/ic_tv_icon.xml": adaptive,
-        "values-television/tv_launcher_icons.xml": aliases,
-    }.items()}
+    return {RES / "drawable/ic_tv_banner.xml": serialize(banner)}
 
 
 def main() -> None:
