@@ -121,6 +121,7 @@ try {
     & $fixtureEntrypoint -Action android-google-play -SkipCodeGeneration 6>$null
     $defaultBuilds = @($global:zeonGooglePlayFixtureCalls | Where-Object { $_[0] -eq "build" })
     Assert-True -Condition ($defaultBuilds.Count -eq 1 -and $defaultBuilds[0][1] -eq "appbundle") -Message "Default Play action must only build AAB"
+    Assert-True -Condition ($defaultBuilds[0] -contains '--android-project-arg=zeonTvOnly=false') -Message "Default Play action must retain mobile compatibility"
     Assert-True -Condition (Test-Path -LiteralPath (Join-Path $fixtureInstallers "ZEON-1.2.3+456-google-play.aab")) -Message "Play AAB was not published"
     Assert-True -Condition (-not (Test-Path -LiteralPath (Join-Path $fixtureInstallers "ZEON-1.2.3+456-google-play.apk"))) -Message "Default Play action unexpectedly published APK"
 
@@ -132,11 +133,33 @@ try {
     Assert-True -Condition ($pairedBuilds[1] -contains "--release" -and $pairedBuilds[1] -contains "release=google-play") -Message "Install APK lost the Google Play release contract"
     Assert-True -Condition (Test-Path -LiteralPath (Join-Path $fixtureInstallers "ZEON-1.2.3+456-google-play.apk")) -Message "Play APK was not published with a distinct name"
 
+    $global:zeonGooglePlayFixtureCalls.Clear()
+    & $fixtureEntrypoint -Action android-google-play -AndroidTvOnly -IncludeInstallApk -SkipCodeGeneration 6>$null
+    $tvBuilds = @($global:zeonGooglePlayFixtureCalls | Where-Object { $_[0] -eq "build" })
+    Assert-True -Condition ($tvBuilds.Count -eq 2) -Message "TV paired build must produce AAB and APK"
+    foreach ($tvBuild in $tvBuilds) {
+        Assert-True -Condition ($tvBuild -contains '--android-project-arg=zeonTvOnly=true') -Message "TV build must require Leanback"
+        Assert-True -Condition ($tvBuild -contains 'release=google-play') -Message "TV build must retain store updater suppression"
+    }
+    Assert-True -Condition (($tvBuilds[0][2..($tvBuilds[0].Count - 1)] -join '|') -eq ($tvBuilds[1][2..($tvBuilds[1].Count - 1)] -join '|')) -Message "TV AAB and APK must use identical build options"
+    foreach ($extension in @('aab', 'apk')) {
+        Assert-True -Condition (Test-Path -LiteralPath (Join-Path $fixtureInstallers "ZEON-1.2.3+456-google-play-tv.$extension")) -Message "TV artifact needs a distinct name"
+    }
+    $global:zeonGooglePlayFixtureCalls.Clear()
+    & $fixtureEntrypoint -Action android-google-play -SkipCodeGeneration 6>$null
+    $afterTvBuilds = @($global:zeonGooglePlayFixtureCalls | Where-Object { $_[0] -eq "build" })
+    Assert-True -Condition ($afterTvBuilds[0] -contains '--android-project-arg=zeonTvOnly=false') -Message "TV mode leaked into the next general build"
+
+    $wrongTvActionRejected = $false
+    try { & $fixtureEntrypoint -Action android-apk -AndroidTvOnly 6>$null }
+    catch { $wrongTvActionRejected = $_.Exception.Message.Contains("only supported") }
+    Assert-True -Condition $wrongTvActionRejected -Message "TV-only switch must reject non-Play actions"
+
     Remove-Item -LiteralPath $fixtureProperties
     $global:zeonGooglePlayFixtureCalls.Clear()
     $missingKeyRejected = $false
     try {
-        & $fixtureEntrypoint -Action android-google-play -IncludeInstallApk -SkipCodeGeneration 6>$null
+        & $fixtureEntrypoint -Action android-google-play -AndroidTvOnly -IncludeInstallApk -SkipCodeGeneration 6>$null
     }
     catch { $missingKeyRejected = $_.Exception.Message.Contains("configured upload keystore") }
     Assert-True -Condition $missingKeyRejected -Message "Play APK action must fail closed without signing configuration"
@@ -188,7 +211,6 @@ $googlePlayBuilder = Get-Content -LiteralPath (Join-Path $scriptDir "build_googl
 Assert-True -Condition $googlePlayBuilder.Contains('"appbundle"') -Message "Google Play builder must produce an Android App Bundle"
 Assert-True -Condition $googlePlayBuilder.Contains('"release=google-play"') -Message "Google Play builder must hard-code the store release contract"
 Assert-True -Condition $googlePlayBuilder.Contains('This build never generates or substitutes a signing identity.') -Message "Google Play builder must fail closed without the configured upload key"
-Assert-True -Condition $googlePlayBuilder.Contains('google-play.aab') -Message "Google Play builder must publish a distinct AAB artifact"
 Assert-True -Condition $googlePlayBuilder.Contains('Publish-ZeonFile') -Message "Google Play builder must publish through the installer path guard"
 
 $androidGradle = Get-Content -LiteralPath (Join-Path $repoRoot "android\app\build.gradle") -Raw

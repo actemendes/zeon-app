@@ -6,6 +6,8 @@ param(
 
     [switch]$IncludeInstallApk,
 
+    [switch]$AndroidTvOnly,
+
     [switch]$SkipPubGet,
 
     [switch]$SkipCodeGeneration
@@ -138,6 +140,8 @@ try {
         throw "Translation generation failed."
     }
 
+    $tvRequired = if ($AndroidTvOnly) { "true" } else { "false" }
+    $artifactVariant = if ($AndroidTvOnly) { "google-play-tv" } else { "google-play" }
     $buildArgs = @(
         "build",
         "appbundle",
@@ -145,7 +149,8 @@ try {
         "--target",
         $BuildTarget,
         "--dart-define",
-        "release=google-play"
+        "release=google-play",
+        "--android-project-arg=zeonTvOnly=$tvRequired"
     )
     if ($SentryDsn) {
         $buildArgs += @("--dart-define", "sentry_dsn=$SentryDsn")
@@ -163,7 +168,7 @@ try {
     }
 
     $appVersion = ConvertTo-ZeonArtifactVersion -Version (Get-ZeonAppVersion -RepoRoot $repoRoot)
-    $destinationName = "ZEON-$appVersion-google-play.aab"
+    $destinationName = "ZEON-$appVersion-$artifactVariant.aab"
     $publishedPath = Publish-ZeonFile `
         -RepoRoot $repoRoot `
         -Platform "android" `
@@ -190,7 +195,7 @@ try {
             -RepoRoot $repoRoot `
             -Platform "android" `
             -SourcePath $apkSourcePath `
-            -DestinationName "ZEON-$appVersion-google-play.apk"
+            -DestinationName "ZEON-$appVersion-$artifactVariant.apk"
         Write-Host "Google Play install APK: $apkPublishedPath"
     }
 }

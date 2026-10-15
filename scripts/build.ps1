@@ -25,6 +25,8 @@ param(
 
     [switch]$IncludeInstallApk,
 
+    [switch]$AndroidTvOnly,
+
     [string]$SentryDsn = "",
 
     [string]$DeviceId,
@@ -75,7 +77,7 @@ $actions = @(
     [pscustomobject]@{ Action = "windows-runtime"; Result = "Headless Windows runtime harness ZIP and provenance manifest" },
     [pscustomobject]@{ Action = "android-apk"; Result = "Universal APK in out/installers/android" },
     [pscustomobject]@{ Action = "android-apks"; Result = "Universal and per-ABI APKs in out/installers/android" },
-    [pscustomobject]@{ Action = "android-google-play"; Result = "Signed Google Play AAB; optional -IncludeInstallApk; GitHub updates disabled" },
+    [pscustomobject]@{ Action = "android-google-play"; Result = "Signed Google Play AAB; optional -AndroidTvOnly / -IncludeInstallApk" },
     [pscustomobject]@{ Action = "android-runtime"; Result = "Isolated Android validation APKs and provenance manifest" },
     [pscustomobject]@{ Action = "android-debug-install"; Result = "Debug APK in out/installers/android and install via ADB" },
     [pscustomobject]@{ Action = "android-release-install"; Result = "Release APK in out/installers/android and install via ADB" }
@@ -93,6 +95,10 @@ if ($ListActions -or $Action -eq "help") {
 
 if ($IncludeInstallApk -and $Action -ne "android-google-play") {
     throw "-IncludeInstallApk is only supported with -Action android-google-play."
+}
+
+if ($AndroidTvOnly -and $Action -ne "android-google-play") {
+    throw "-AndroidTvOnly is only supported with -Action android-google-play."
 }
 
 function Add-CommonWindowsParameters {
@@ -176,6 +182,7 @@ try {
         "android-google-play" {
             $params = @{ BuildTarget = $BuildTarget }
             if ($IncludeInstallApk) { $params.IncludeInstallApk = $true }
+            if ($AndroidTvOnly) { $params.AndroidTvOnly = $true }
             if ($SentryDsn) { $params.SentryDsn = $SentryDsn }
             if ($SkipCodeGeneration) { $params.SkipCodeGeneration = $true }
             & (Join-Path $scriptDir "build_google_play.ps1") @params

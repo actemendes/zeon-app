@@ -178,6 +178,19 @@ Google Play-механизмом обновления.
 APK предназначен для прямой установки и проверки поведения магазинного варианта;
 он не является артефактом, переподписанным Google Play App Signing. Загрузка в
 Play Console и установка на устройство остаются отдельными действиями.
+
+Для отдельного Android TV-трека Play Console используйте
+`.\scripts\build.ps1 -Action android-google-play -AndroidTvOnly` (при необходимости
+добавьте `-IncludeInstallApk`). Артефакты называются
+`ZEON-<version>-google-play-tv.aab` / `ZEON-<version>-google-play-tv.apk`.
+В них `android.software.leanback` обязателен (`required=true`); обычная сборка
+сохраняет `required=false` для телефонов и TV. Флаг передаётся Gradle на конкретный
+запуск через `--android-project-arg=zeonTvOnly=true`, без изменения общего manifest
+или переменных окружения. Package ID, upload key и `release=google-play` сохраняются.
+Номер `versionCode` должен быть новым для каждого загружаемого артефакта в приложении,
+включая разные треки. Перед загрузкой проверяйте именно манифест готового AAB:
+required leanback, optional touchscreen/camera, TV launcher и banner.
+Принятие артефакта Play Console и TV quality review подтверждаются отдельно.
 Entrypoint проверяет версию Flutter из `pubspec.yaml`; если общий SDK новее, закреплённая
 версия автоматически готовится в `Z:\Zeon-Envelope\Caches\Flutter` из локального Git tag.
 Переопределить SDK можно переменной `ZEON_FLUTTER_ROOT`.

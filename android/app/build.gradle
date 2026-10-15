@@ -69,6 +69,13 @@ def readPubspecAppVersion = {
 
 def pubspecAppVersion = readPubspecAppVersion()
 
+// Dedicated Play TV tracks need a TV-only artifact. Keep normal builds usable
+// on both mobile and TV; the canonical Play builder passes this per invocation.
+def zeonTvOnly = providers.gradleProperty('zeonTvOnly').orElse('false').get()
+if (!(zeonTvOnly in ['true', 'false'])) {
+    throw new GradleException('zeonTvOnly must be true or false')
+}
+
 boolean hasKeyStore = false
 
 def keystoreProperties = new Properties()
@@ -117,6 +124,7 @@ android {
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        manifestPlaceholders.zeonLeanbackRequired = zeonTvOnly
         // Shared code can call the evidence bridge, but every normal artifact
         // compiles it as a hard no-op. physicalValidation overrides this flag.
         buildConfigField "boolean", "ROUTE_EVIDENCE_ENABLED", "false"
