@@ -177,8 +177,11 @@
     "previous": "Sebelumnya"
   },
   "intro": {
+    "bindAccountDialogDescription": "Untuk menautkan akun Anda, tempel tautan yang dikirim oleh bot.",
+    "bindAccountDialogLinkLabel": "Tautan untuk menautkan akun",
+    "bindAccountDialogInvalidLink": "Tempel tautan valid yang dikirim oleh bot.",
     "tvAccountNumberTitle": "Nomor langganan",
-    "tvAccountNumberDescription": "Semua digit setelah /open/ pada tautan langganan Anda.",
+    "tvAccountNumberDescription": "Buka “@:pages.profileDetails.title” → “@:pages.profileDetails.menu.bindAccount”.\nMasukkan semua digit setelah /open/ pada tautan langganan.",
     "tvAccountNumberLabel": "Nomor dari tautan",
     "tvAccountNumberClear": "Hapus nomor",
     "tvAccountNumberDelete": "Hapus digit terakhir",
@@ -552,6 +555,10 @@
       "title": "Profil",
       "menu": {
         "bindAccount": "Tautkan akun"
+      },
+      "linkAccount": {
+        "title": "Tautkan akun",
+        "codeLabel": "Kode penautan"
       },
       "specialServers": {
         "headerLineOne": "SERVER KHUSUS",

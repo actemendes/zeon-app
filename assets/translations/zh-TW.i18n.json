@@ -177,8 +177,11 @@
     "previous": "上一個"
   },
   "intro": {
+    "bindAccountDialogDescription": "若要綁定帳號，請貼上機器人傳送的連結。",
+    "bindAccountDialogLinkLabel": "帳號綁定連結",
+    "bindAccountDialogInvalidLink": "請貼上機器人傳送的有效連結。",
     "tvAccountNumberTitle": "訂閱號碼",
-    "tvAccountNumberDescription": "訂閱連結中 /open/ 後的所有數字。",
+    "tvAccountNumberDescription": "開啟「@:pages.profileDetails.title」→「@:pages.profileDetails.menu.bindAccount」。\n輸入訂閱連結中 /open/ 後的所有數字。",
     "tvAccountNumberLabel": "連結中的號碼",
     "tvAccountNumberClear": "清空號碼",
     "tvAccountNumberDelete": "刪除最後一位數字",
@@ -552,6 +555,10 @@
       "title": "設定檔",
       "menu": {
         "bindAccount": "綁定帳號"
+      },
+      "linkAccount": {
+        "title": "綁定帳號",
+        "codeLabel": "綁定代碼"
       },
       "specialServers": {
         "headerLineOne": "專屬伺服器",

@@ -183,8 +183,11 @@
     "previous": "السابق"
   },
   "intro": {
+    "bindAccountDialogDescription": "لربط حسابك، ألصق الرابط الذي أرسله البوت.",
+    "bindAccountDialogLinkLabel": "رابط ربط الحساب",
+    "bindAccountDialogInvalidLink": "ألصق رابطًا صالحًا أرسله البوت.",
     "tvAccountNumberTitle": "رقم الاشتراك",
-    "tvAccountNumberDescription": "جميع الأرقام بعد /open/ في رابط اشتراكك.",
+    "tvAccountNumberDescription": "افتح «@:pages.profileDetails.title» ثم «@:pages.profileDetails.menu.bindAccount».\nأدخل جميع الأرقام بعد /open/ في رابط الاشتراك.",
     "tvAccountNumberLabel": "الرقم من الرابط",
     "tvAccountNumberClear": "مسح الرقم",
     "tvAccountNumberDelete": "حذف آخر رقم",
@@ -563,6 +566,10 @@
       "title": "الملف الشخصي",
       "menu": {
         "bindAccount": "ربط الحساب"
+      },
+      "linkAccount": {
+        "title": "ربط الحساب",
+        "codeLabel": "رمز الربط"
       },
       "specialServers": {
         "headerLineOne": "خوادم خاصة",

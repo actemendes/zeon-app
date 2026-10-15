@@ -177,8 +177,11 @@
     "previous": "上一个"
   },
   "intro": {
+    "bindAccountDialogDescription": "要绑定账号，请粘贴机器人发送的链接。",
+    "bindAccountDialogLinkLabel": "账号绑定链接",
+    "bindAccountDialogInvalidLink": "请粘贴机器人发送的有效链接。",
     "tvAccountNumberTitle": "订阅号码",
-    "tvAccountNumberDescription": "订阅链接中 /open/ 后的全部数字。",
+    "tvAccountNumberDescription": "打开「@:pages.profileDetails.title」→「@:pages.profileDetails.menu.bindAccount」。\n输入订阅链接中 /open/ 后的全部数字。",
     "tvAccountNumberLabel": "链接中的号码",
     "tvAccountNumberClear": "清空号码",
     "tvAccountNumberDelete": "删除最后一位数字",
@@ -552,6 +555,10 @@
       "title": "配置文件",
       "menu": {
         "bindAccount": "绑定账号"
+      },
+      "linkAccount": {
+        "title": "绑定账号",
+        "codeLabel": "绑定代码"
       },
       "specialServers": {
         "headerLineOne": "专属服务器",

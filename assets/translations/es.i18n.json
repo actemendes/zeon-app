@@ -177,8 +177,11 @@
     "previous": "Anterior"
   },
   "intro": {
+    "bindAccountDialogDescription": "Para vincular su cuenta, pegue el enlace enviado por el bot.",
+    "bindAccountDialogLinkLabel": "Enlace para vincular la cuenta",
+    "bindAccountDialogInvalidLink": "Pegue un enlace válido enviado por el bot.",
     "tvAccountNumberTitle": "Número de suscripción",
-    "tvAccountNumberDescription": "Todos los dígitos después de /open/ en tu enlace de suscripción.",
+    "tvAccountNumberDescription": "Abra «@:pages.profileDetails.title» → «@:pages.profileDetails.menu.bindAccount».\nIntroduzca todos los dígitos después de /open/ en el enlace de suscripción.",
     "tvAccountNumberLabel": "Número del enlace",
     "tvAccountNumberClear": "Borrar número",
     "tvAccountNumberDelete": "Borrar último dígito",
@@ -553,6 +556,10 @@
       "title": "Perfil",
       "menu": {
         "bindAccount": "Vincular cuenta"
+      },
+      "linkAccount": {
+        "title": "Vincular cuenta",
+        "codeLabel": "Código de vinculación"
       },
       "specialServers": {
         "headerLineOne": "SERVIDORES ESPECIALES",

@@ -188,7 +188,7 @@
     "bindAccountDialogLinkLabel": "Link for account binding",
     "bindAccountDialogInvalidLink": "Paste a valid link sent by the bot",
     "tvAccountNumberTitle": "Subscription number",
-    "tvAccountNumberDescription": "All digits after /open/ in your subscription link.",
+    "tvAccountNumberDescription": "Open “@:pages.profileDetails.title” → “@:pages.profileDetails.menu.bindAccount”.\nEnter all digits after /open/ in the subscription link.",
     "tvAccountNumberLabel": "Number from the link",
     "tvAccountNumberClear": "Clear number",
     "tvAccountNumberDelete": "Delete last digit",

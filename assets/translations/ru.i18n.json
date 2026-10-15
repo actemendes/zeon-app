@@ -192,7 +192,7 @@
     "bindAccountDialogLinkLabel": "Ссылка для привязки",
     "bindAccountDialogInvalidLink": "Вставьте корректную ссылку из бота",
     "tvAccountNumberTitle": "Номер подписки",
-    "tvAccountNumberDescription": "Все цифры после /open/ в ссылке подписки.",
+    "tvAccountNumberDescription": "Зайдите в «@:pages.profileDetails.title» → «@:pages.profileDetails.menu.bindAccount».\nВведите все цифры после /open/ в ссылке подписки.",
     "tvAccountNumberLabel": "Номер из ссылки",
     "tvAccountNumberClear": "Очистить номер",
     "tvAccountNumberDelete": "Удалить последнюю цифру",

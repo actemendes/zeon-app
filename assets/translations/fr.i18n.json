@@ -177,8 +177,11 @@
     "previous": "Précédent"
   },
   "intro": {
+    "bindAccountDialogDescription": "Pour lier votre compte, collez le lien envoyé par le bot.",
+    "bindAccountDialogLinkLabel": "Lien de liaison du compte",
+    "bindAccountDialogInvalidLink": "Collez un lien valide envoyé par le bot.",
     "tvAccountNumberTitle": "Numéro d’abonnement",
-    "tvAccountNumberDescription": "Tous les chiffres après /open/ dans votre lien d’abonnement.",
+    "tvAccountNumberDescription": "Ouvrez « @:pages.profileDetails.title » → « @:pages.profileDetails.menu.bindAccount ».\nSaisissez tous les chiffres après /open/ dans le lien d’abonnement.",
     "tvAccountNumberLabel": "Numéro dans le lien",
     "tvAccountNumberClear": "Effacer le numéro",
     "tvAccountNumberDelete": "Effacer le dernier chiffre",
@@ -553,6 +556,10 @@
       "title": "Profil",
       "menu": {
         "bindAccount": "Lier le compte"
+      },
+      "linkAccount": {
+        "title": "Lier le compte",
+        "codeLabel": "Code de liaison"
       },
       "specialServers": {
         "headerLineOne": "SERVEURS SPÉCIAUX",

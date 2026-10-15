@@ -177,8 +177,11 @@
     "previous": "Önceki"
   },
   "intro": {
+    "bindAccountDialogDescription": "Hesabınızı bağlamak için botun gönderdiği bağlantıyı yapıştırın.",
+    "bindAccountDialogLinkLabel": "Hesap bağlama bağlantısı",
+    "bindAccountDialogInvalidLink": "Botun gönderdiği geçerli bir bağlantıyı yapıştırın.",
     "tvAccountNumberTitle": "Abonelik numarası",
-    "tvAccountNumberDescription": "Abonelik bağlantınızda /open/ sonrasındaki tüm rakamlar.",
+    "tvAccountNumberDescription": "“@:pages.profileDetails.title” → “@:pages.profileDetails.menu.bindAccount” bölümünü açın.\nAbonelik bağlantısında /open/ sonrasındaki tüm rakamları girin.",
     "tvAccountNumberLabel": "Bağlantıdaki numara",
     "tvAccountNumberClear": "Numarayı temizle",
     "tvAccountNumberDelete": "Son rakamı sil",
@@ -552,6 +555,10 @@
       "title": "Profil",
       "menu": {
         "bindAccount": "Hesabı bağla"
+      },
+      "linkAccount": {
+        "title": "Hesabı bağla",
+        "codeLabel": "Bağlama kodu"
       },
       "specialServers": {
         "headerLineOne": "ÖZEL SUNUCULAR",

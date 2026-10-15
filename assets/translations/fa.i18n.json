@@ -177,8 +177,11 @@
     "previous": "قبلی"
   },
   "intro": {
+    "bindAccountDialogDescription": "برای اتصال حساب، لینک فرستاده‌شده توسط ربات را جای‌گذاری کنید.",
+    "bindAccountDialogLinkLabel": "لینک اتصال حساب",
+    "bindAccountDialogInvalidLink": "یک لینک معتبر از ربات جای‌گذاری کنید.",
     "tvAccountNumberTitle": "شمارهٔ اشتراک",
-    "tvAccountNumberDescription": "همهٔ ارقام بعد از /open/ در لینک اشتراک شما.",
+    "tvAccountNumberDescription": "«@:pages.profileDetails.title» و سپس «@:pages.profileDetails.menu.bindAccount» را باز کنید.\nهمهٔ ارقام بعد از /open/ در لینک اشتراک را وارد کنید.",
     "tvAccountNumberLabel": "شمارهٔ داخل لینک",
     "tvAccountNumberClear": "پاک کردن شماره",
     "tvAccountNumberDelete": "حذف آخرین رقم",
@@ -553,6 +556,10 @@
       "title": "پروفایل",
       "menu": {
         "bindAccount": "اتصال حساب"
+      },
+      "linkAccount": {
+        "title": "اتصال حساب",
+        "codeLabel": "کد اتصال"
       },
       "specialServers": {
         "headerLineOne": "سرورهای ویژه",
