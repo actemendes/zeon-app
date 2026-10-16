@@ -10,6 +10,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/app_info/app_info_provider.dart';
 import 'package:zeon/core/device/android_tv_provider.dart';
+import 'package:zeon/core/device/android_watch_provider.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/logger/logger.dart';
@@ -240,6 +241,9 @@ Future<ProviderContainer> _bootstrapContainer(
   final appInfo = await _init("app info", () => container.read(appInfoProvider.future));
   if (PlatformUtils.isAndroid && initializeDesktopUi) {
     await _init("TV presentation", () => container.read(androidTvProvider.future));
+  }
+  if (PlatformUtils.isAndroid) {
+    await _init("watch presentation", () => container.read(androidWatchProvider.future));
   }
   await _init("preferences", () => container.read(sharedPreferencesProvider.future));
 

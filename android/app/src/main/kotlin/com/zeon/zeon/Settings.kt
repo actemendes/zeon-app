@@ -70,8 +70,11 @@ object Settings {
         JSONObject().put("group_tag", "select").put("outbound_tag", "balance").toString(),
     ).commit()
 
+    val isWatch: Boolean get() = Application.packageManager.hasSystemFeature("android.hardware.type.watch")
+
     var serviceMode: String
         get() {
+            if (isWatch) return "proxy"
             val storedMode = preferences.getString(SettingsKey.SERVICE_MODE, ServiceMode.VPN)
             val canonicalMode = ServiceMode.canonicalize(storedMode)
             if (storedMode != canonicalMode) {
@@ -109,7 +112,7 @@ object Settings {
         get() = preferences.getBoolean(SettingsKey.STARTED_BY_USER, false)
         set(value) = preferences.edit().putBoolean(SettingsKey.STARTED_BY_USER, value).apply()
 
-    fun serviceClass(): Class<*> = VPNService::class.java
+    fun serviceClass(): Class<*> = if (isWatch) com.zeon.zeon.bg.WatchProxyService::class.java else VPNService::class.java
 
     private var currentServiceMode : String? = null
 

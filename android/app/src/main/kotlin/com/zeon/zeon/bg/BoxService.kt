@@ -742,6 +742,7 @@ class BoxService(
             return
         }
         if (previousSession != null) {
+            if (service is WatchProxyService) WatchProxySettings.stop(service, previousSession.generation)
             closeSession(previousSession, "service_reload")
         }
         if (!tunOwner.awaitSettled()) {
@@ -824,6 +825,7 @@ class BoxService(
             VpnSessionCoordinator.stale(generation, "stop_service/${source.wireValue}")
             return
         }
+        if (service is WatchProxyService) WatchProxySettings.stop(service, generation)
         val closingSession = activeSession
         sessionGeneration = VpnSessionCoordinator.accept(generation, "stop_service")
         if (status.value == Status.Stopping) {
@@ -971,6 +973,7 @@ class BoxService(
                 Log.WARN,
             )
             serviceScope.launch {
+                if (service is WatchProxyService) WatchProxySettings.stop(service, previousSession.generation)
                 closeSession(previousSession, "explicit_connect_supersedes_stale_owner")
                 if (!tunOwner.awaitSettled()) {
                     stopPreemptively(generation, VpnStopSource.INTERNAL)
@@ -1259,6 +1262,17 @@ class BoxService(
             return false
         }
 
+        if (service is WatchProxyService) {
+            try {
+                withContext(Dispatchers.IO) { WatchProxySettings.verifyTraffic() }
+                if (!VpnSessionCoordinator.isCurrent(generation) || !session.acceptsOperations()) return false
+                WatchProxySettings.enable(service, generation)
+            } catch (error: Exception) {
+                WatchProxySettings.stop(service, generation)
+                stopAndAlert(generation, Alert.StartService, "Watch proxy: ${error.javaClass.simpleName}")
+                return false
+            }
+        }
         val selectedOutbound = awaitSelectedOutbound(generation)
         VpnSessionSnapshotCoordinator.selectedOutbound(
             generation,

@@ -113,6 +113,7 @@ class PlatformSettingsHandler : FlutterPlugin, MethodChannel.MethodCallHandler, 
     @SuppressLint("BatteryLife")
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "watch_proxy_permission" -> result.success(com.zeon.zeon.Settings.isWatch && com.zeon.zeon.bg.WatchProxySettings.permitted(Application.application))
             Trigger.IsIgnoringBatteryOptimizations.method -> {
                 result.runCatching {
                     success(

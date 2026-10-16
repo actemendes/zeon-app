@@ -11,6 +11,8 @@
         android:name="android.hardware.camera"
         android:required="false" />
 
+    <!-- Granted explicitly over ADB for the watch proxy prototype only. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -136,6 +138,9 @@
                 android:value="vpn" />
             <meta-data android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"
                 android:value="true"/>
+        </service>
+        <service android:name=".bg.WatchProxyService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User initiated local HTTP/SOCKS proxy on Wear OS" />
         </service>
         <receiver
             android:name=".bg.VpnNotificationActionReceiver"

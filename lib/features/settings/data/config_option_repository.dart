@@ -2,6 +2,7 @@ import 'package:dartx/dartx.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zeon/core/device/android_watch_provider.dart';
 import 'package:zeon/core/http_client/mobile_api_proxy_route.dart';
 import 'package:zeon/core/model/optional_range.dart';
 import 'package:zeon/core/model/region.dart';
@@ -386,7 +387,8 @@ abstract class ConfigOptions {
   };
 
   static final singboxConfigOptions = Provider<SingboxConfigOption>((ref) {
-    final mode = ref.watch(serviceMode);
+    final watch = ref.watch(androidWatchProvider).valueOrNull == true;
+    final mode = watch ? ServiceMode.proxy : ref.watch(serviceMode);
     final rules = <SingboxRule>[];
     // final reg = ref.watch(Preferences.region.notifier).raw();
 
@@ -403,7 +405,7 @@ abstract class ConfigOptions {
       remoteDnsDomainStrategy: ref.watch(remoteDnsDomainStrategy),
       directDnsAddress: ref.watch(directDnsAddress),
       directDnsDomainStrategy: ref.watch(directDnsDomainStrategy),
-      mixedPort: ref.watch(mixedPort),
+      mixedPort: watch ? 12334 : ref.watch(mixedPort),
       tproxyPort: ref.watch(tproxyPort),
       directPort: ref.watch(directPort),
       redirectPort: ref.watch(redirectPort),
@@ -422,7 +424,7 @@ abstract class ConfigOptions {
       // enableTunService: mode == false, //ServiceMode.tunService,
       setSystemProxy: mode == ServiceMode.systemProxy,
       bypassLan: ref.watch(bypassLan),
-      allowConnectionFromLan: ref.watch(allowConnectionFromLan),
+      allowConnectionFromLan: !watch && ref.watch(allowConnectionFromLan),
       enableFakeDns: ref.watch(enableFakeDns),
       // enableDnsRouting: ref.watch(enableDnsRouting),
       independentDnsCache: ref.watch(independentDnsCache),

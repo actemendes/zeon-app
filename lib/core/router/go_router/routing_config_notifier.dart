@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zeon/core/device/android_watch_provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
@@ -25,6 +26,7 @@ import 'package:zeon/features/settings/overview/sections/route_options_page.dart
 import 'package:zeon/features/settings/overview/sections/tls_tricks_page.dart';
 import 'package:zeon/features/settings/overview/sections/warp_options_page.dart';
 import 'package:zeon/features/settings/overview/settings_page.dart';
+import 'package:zeon/features/watch/watch_proxy_page.dart';
 import 'package:zeon/utils/utils.dart';
 
 part 'routing_config_notifier.g.dart';
@@ -56,6 +58,14 @@ int getIndexOfBranch(bool isMobileBreakpoint, bool showProfilesAction, String na
 class RoutingConfigNotifier extends _$RoutingConfigNotifier {
   @override
   RoutingConfig build() {
+    if (ref.watch(androidWatchProvider).valueOrNull == true) {
+      return RoutingConfig(
+        routes: [
+          GoRoute(path: "/home", builder: (_, _) => const WatchProxyPage()),
+          GoRoute(path: "/intro", redirect: (_, _) => "/home"),
+        ],
+      );
+    }
     final isMobileBreakpoint = ref.watch(isMobileBreakpointProvider);
     final bool showProfilesAction;
     if (isMobileBreakpoint == true) {

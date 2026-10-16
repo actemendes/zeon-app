@@ -24,6 +24,7 @@ class Application : Application() {
         super.onCreate()
 
         Seq.setContext(this)
+        if (Settings.isWatch) com.zeon.zeon.bg.WatchProxySettings.restore(this)
 
         registerReceiver(AppChangeReceiver(), IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
