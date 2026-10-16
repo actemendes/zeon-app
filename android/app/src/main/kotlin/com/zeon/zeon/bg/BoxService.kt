@@ -825,8 +825,12 @@ class BoxService(
             VpnSessionCoordinator.stale(generation, "stop_service/${source.wireValue}")
             return
         }
-        if (service is WatchProxyService) WatchProxySettings.stop(service, generation)
         val closingSession = activeSession
+        // Replacement teardown reserves the next start's generation. Fence only
+        // the session being closed, never that future start or an empty owner.
+        if (service is WatchProxyService && closingSession != null) {
+            WatchProxySettings.stop(service, closingSession.generation)
+        }
         sessionGeneration = VpnSessionCoordinator.accept(generation, "stop_service")
         if (status.value == Status.Stopping) {
             val newestSource = newestStopSource(terminalStop.source, source)
@@ -1263,11 +1267,18 @@ class BoxService(
         }
 
         if (service is WatchProxyService) {
+            var stage = "https_probe"
             try {
                 withContext(Dispatchers.IO) { WatchProxySettings.verifyTraffic() }
                 if (!VpnSessionCoordinator.isCurrent(generation) || !session.acceptsOperations()) return false
+                stage = "system_proxy_lease"
                 WatchProxySettings.enable(service, generation)
             } catch (error: Exception) {
+                VpnSessionCoordinator.event(
+                    "watch_proxy_start_failed", generation,
+                    "stage=$stage error=${error.javaClass.simpleName} cause=${error.cause?.javaClass?.simpleName ?: "none"}",
+                    Log.ERROR,
+                )
                 WatchProxySettings.stop(service, generation)
                 stopAndAlert(generation, Alert.StartService, "Watch proxy: ${error.javaClass.simpleName}")
                 return false
