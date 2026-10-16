@@ -1269,7 +1269,12 @@ class BoxService(
         if (service is WatchProxyService) {
             var stage = "https_probe"
             try {
-                withContext(Dispatchers.IO) { WatchProxySettings.verifyTraffic() }
+                val reachable = withContext(Dispatchers.IO) {
+                    WatchProxySettings.verifyTraffic {
+                        VpnSessionCoordinator.isCurrent(generation) && session.acceptsOperations()
+                    }
+                }
+                if (!reachable) return false
                 if (!VpnSessionCoordinator.isCurrent(generation) || !session.acceptsOperations()) return false
                 stage = "system_proxy_lease"
                 WatchProxySettings.enable(service, generation)

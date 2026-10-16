@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Settings.Global
+import android.os.SystemClock
+import kotlinx.coroutines.delay
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.URL
@@ -65,15 +67,27 @@ object WatchProxySettings {
         prefs.edit().clear().commit()
     }
 
-    /** Explicit proxy, normal TLS verification, bounded and independent of system proxy settings. */
-    fun verifyTraffic() {
-        val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", PORT))
-        val connection = URL("https://www.gstatic.com/generate_204").openConnection(proxy) as HttpsURLConnection
-        try {
-            connection.connectTimeout = 10000
-            connection.readTimeout = 10000
-            connection.useCaches = false
-            check(connection.responseCode == 204) { "Watch proxy HTTPS verification failed" }
-        } finally { connection.disconnect() }
+    /** Auto selection needs time to find its first usable outbound after core start. */
+    suspend fun verifyTraffic(isCurrent: () -> Boolean): Boolean {
+        val deadline = SystemClock.elapsedRealtime() + 30_000L
+        var lastError: Exception? = null
+        while (SystemClock.elapsedRealtime() < deadline && isCurrent()) {
+            val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", PORT))
+            val connection = URL("https://www.gstatic.com/generate_204").openConnection(proxy) as HttpsURLConnection
+            try {
+                connection.connectTimeout = 3000
+                connection.readTimeout = 3000
+                connection.useCaches = false
+                check(connection.responseCode == 204) { "Watch proxy HTTPS verification failed" }
+                return isCurrent()
+            } catch (error: java.io.IOException) {
+                lastError = error
+            } catch (error: IllegalStateException) {
+                lastError = error
+            } finally { connection.disconnect() }
+            delay(750L)
+        }
+        if (!isCurrent()) return false
+        throw lastError ?: IllegalStateException("Watch proxy readiness timed out")
     }
 }
