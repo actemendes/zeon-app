@@ -16,7 +16,7 @@ void main() {
       final configured = ProviderContainer(
         overrides: [
           sharedPreferencesProvider.overrideWith((_) => prefs),
-          androidWatchProvider.overrideWith((_) async => watch),
+          androidWatchProvider.overrideWith((_) => Future.value(watch)),
         ],
       );
       addTearDown(configured.dispose);

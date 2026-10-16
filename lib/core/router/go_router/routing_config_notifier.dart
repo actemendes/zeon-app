@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:zeon/core/device/android_watch_provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:zeon/core/device/android_watch_provider.dart';
 import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/adaptive_layout/animated_branch_container.dart';
 import 'package:zeon/core/router/adaptive_layout/my_adaptive_layout.dart';
@@ -61,7 +61,7 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
     if (ref.watch(androidWatchProvider).valueOrNull == true) {
       return RoutingConfig(
         routes: [
-          GoRoute(path: "/home", builder: (_, _) => const WatchProxyPage()),
+          GoRoute(name: "home", path: "/home", builder: (_, _) => const WatchProxyPage()),
           GoRoute(path: "/intro", redirect: (_, _) => "/home"),
         ],
       );
