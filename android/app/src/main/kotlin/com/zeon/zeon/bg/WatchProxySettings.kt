@@ -68,8 +68,9 @@ object WatchProxySettings {
     }
 
     /** Auto selection needs time to find its first usable outbound after core start. */
-    suspend fun verifyTraffic(backup: Boolean = false, isCurrent: () -> Boolean): Boolean {
-        val deadline = SystemClock.elapsedRealtime() + 30_000L
+    suspend fun verifyTraffic(backup: Boolean = false, timeoutMs: Long = if (backup) 45_000L else 30_000L, isCurrent: () -> Boolean): Boolean {
+        // Backup starts on restricted mobile networks, where Auto may test many outbounds first.
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
         var lastError: Exception? = null
         while (SystemClock.elapsedRealtime() < deadline && isCurrent()) {
             val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", PORT))

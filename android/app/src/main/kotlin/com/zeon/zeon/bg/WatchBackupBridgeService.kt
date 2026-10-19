@@ -68,8 +68,16 @@ class WatchBackupBridgeService : Service() {
                     if (clientToken == null) {
                         try { token.linkToDeath(clientDeath, 0); clientToken = token; ensureStarted() }
                         catch (_: android.os.RemoteException) { releaseClient() }
+                    } else if (clientToken == token && (state < 0 || (state == 2 && !routeAlive()))) {
+                        // Self-heal for the same lease: a failed attempt or a route that stopped since READY.
+                        request?.cancel(); request = null; stopOwned(); state = 0
+                        ensureStarted()
                     }
                 }
+            }
+            if (code == STATUS && state == 2 && !routeAlive()) {
+                reply?.writeNoException(); reply?.writeInt(1)
+                return true
             }
             if (code == RELEASE) scope.launch { releaseClient() }
             reply?.writeNoException()
@@ -79,6 +87,8 @@ class WatchBackupBridgeService : Service() {
     }
 
     override fun onBind(intent: Intent): IBinder = api
+
+    private fun routeAlive() = VpnSessionSnapshotCoordinator.current().provesConnected()
 
     private fun ensureStarted() {
         if (request != null || state != 0) return
@@ -95,7 +105,8 @@ class WatchBackupBridgeService : Service() {
                             .putExtra(BoxService.EXTRA_SESSION_GENERATION, ownedGeneration)
                             .putExtra(EXTRA_BACKUP, true))
                 }
-                withTimeout(45_000) {
+                // Owned starts verify the gateway inside BoxService (up to 45 s); the watch waits 60 s.
+                withTimeout(55_000) {
                     while (true) {
                         val current = VpnSessionSnapshotCoordinator.current()
                         if (ownedGeneration != 0L) check(VpnSessionCoordinator.isCurrent(ownedGeneration))
@@ -105,8 +116,17 @@ class WatchBackupBridgeService : Service() {
                         }
                         delay(200)
                     }
-                    // An already user-owned proxy remains user-owned; only its selector is changed.
-                    if (ownedGeneration == 0L) selectAuto()
+                    // An already user-owned proxy remains user-owned. Keep the user's server when it
+                    // already reaches the gateway; switch to Auto only when it does not.
+                    if (ownedGeneration == 0L) {
+                        val generation = VpnSessionSnapshotCoordinator.current().generation
+                        val current = { VpnSessionSnapshotCoordinator.current().let { it.generation == generation && it.provesConnected() } }
+                        val direct = runCatching { WatchProxySettings.verifyTraffic(backup = true, timeoutMs = 6_000L, isCurrent = current) }.getOrDefault(false)
+                        if (!direct) {
+                            selectAuto()
+                            check(WatchProxySettings.verifyTraffic(backup = true, timeoutMs = 40_000L, isCurrent = current)) { "User session ended" }
+                        }
+                    }
                 }
                 state = 2
             } catch (e: TimeoutCancellationException) {
