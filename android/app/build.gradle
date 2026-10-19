@@ -159,6 +159,12 @@ android {
         }
     }
 
+    // Preserve the installed private prototype's signing identity across workstations.
+    def debugKeyPath = System.getenv("ZEON_DEBUG_KEYSTORE")
+    if (debugKeyPath) {
+        signingConfigs.debug.storeFile = file(debugKeyPath)
+    }
+
     buildTypes {
         validation {
             initWith debug

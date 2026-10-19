@@ -575,7 +575,7 @@ class BoxService(
 
             DefaultNetworkMonitor.start(generation)
             Libbox.setMemoryLimit(!Settings.disableMemoryLimit)
-            val startsCoreHere = Settings.startCoreAfterStartingService
+            val startsCoreHere = Settings.startCoreAfterStartingService || (service as? WatchProxyService)?.backupOnly == true
             VpnSessionCoordinator.event("core_start_requested", generation, "owner=android starts_core=$startsCoreHere")
             var lastEndpointProbe = CommandEndpointProbe(ready = false, failureCategory = "not_attempted")
             val readiness = CoreNativeOperationCoordinator.exclusive {
@@ -674,6 +674,7 @@ class BoxService(
                 notification.show(activeProfileName, VpnSessionSnapshotCoordinator.current())
             }
             if (startsCoreHere) {
+                if ((service as? WatchProxyService)?.backupOnly == true) WatchBackupBridgeService.selectAuto()
                 confirmCoreStarted(generation)
             }
         } catch (e: Exception) {
@@ -1270,14 +1271,14 @@ class BoxService(
             var stage = "https_probe"
             try {
                 val reachable = withContext(Dispatchers.IO) {
-                    WatchProxySettings.verifyTraffic {
+                    WatchProxySettings.verifyTraffic(backup = service.backupOnly) {
                         VpnSessionCoordinator.isCurrent(generation) && session.acceptsOperations()
                     }
                 }
                 if (!reachable) return false
                 if (!VpnSessionCoordinator.isCurrent(generation) || !session.acceptsOperations()) return false
                 stage = "system_proxy_lease"
-                WatchProxySettings.enable(service, generation)
+                if (!service.backupOnly) WatchProxySettings.enable(service, generation)
             } catch (error: Exception) {
                 VpnSessionCoordinator.event(
                     "watch_proxy_start_failed", generation,

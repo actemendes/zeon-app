@@ -68,17 +68,17 @@ object WatchProxySettings {
     }
 
     /** Auto selection needs time to find its first usable outbound after core start. */
-    suspend fun verifyTraffic(isCurrent: () -> Boolean): Boolean {
+    suspend fun verifyTraffic(backup: Boolean = false, isCurrent: () -> Boolean): Boolean {
         val deadline = SystemClock.elapsedRealtime() + 30_000L
         var lastError: Exception? = null
         while (SystemClock.elapsedRealtime() < deadline && isCurrent()) {
             val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", PORT))
-            val connection = URL("https://www.gstatic.com/generate_204").openConnection(proxy) as HttpsURLConnection
+            val connection = URL(if (backup) "https://watch.zeon-vps.online/health" else "https://www.gstatic.com/generate_204").openConnection(proxy) as HttpsURLConnection
             try {
                 connection.connectTimeout = 3000
                 connection.readTimeout = 3000
                 connection.useCaches = false
-                check(connection.responseCode == 204) { "Watch proxy HTTPS verification failed" }
+                check(connection.responseCode == if (backup) 200 else 204) { "Watch proxy HTTPS verification failed" }
                 return isCurrent()
             } catch (error: java.io.IOException) {
                 lastError = error
