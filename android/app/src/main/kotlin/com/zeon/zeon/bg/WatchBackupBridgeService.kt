@@ -109,6 +109,10 @@ class WatchBackupBridgeService : Service() {
                     if (ownedGeneration == 0L) selectAuto()
                 }
                 state = 2
+            } catch (e: TimeoutCancellationException) {
+                state = -1
+                android.util.Log.w("ZeonBackup", "start timed out")
+                stopOwned()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
