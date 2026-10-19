@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ZEON VPN · экран часов</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+@property --zsw{syntax:'<angle>';inherits:false;initial-value:216deg}
+@keyframes zv-spin{to{transform:rotate(360deg)}}
+.zv-orbit{animation:zv-spin 1.5s linear infinite}
+.zv-flow{animation:zv-spin 6s linear infinite}
+.zv-z{transform-origin:50% 50%;transition:opacity .46s cubic-bezier(.65,0,.35,1),transform .14s cubic-bezier(.33,1,.68,1)}
+.zv-disk:active .zv-z{transform:scale(.96)}
+</style>
+</helmet>
+<div onPointerDown="{{g.down}}" onPointerMove="{{g.move}}" onPointerUp="{{g.up}}" onPointerCancel="{{g.cancel}}" onClickCapture="{{g.click}}" onWheel="{{g.wheel}}" style="width: {{W}}px; height: {{H}}px; border-radius: {{R}}px; overflow: hidden; background: #000; position: relative; touch-action: pan-y; user-select: none; -webkit-user-select: none; font-family: 'Montserrat', sans-serif; color: #D8DEE6">
+
+<div style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; opacity: {{v.homeO}}; pointer-events: {{v.homePe}}; transform: translateX({{v.homeX}}px); transition: {{v.homeT}}">
+<div style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; transform: translateY({{pager.y}}px); transition: {{pager.t}}">
+
+<div style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; overflow: hidden; border-radius: {{R}}px">
+<div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; border-radius: {{R}}px; pointer-events: none; box-shadow: inset 0 0 46px 6px rgba(58,63,71,.8); opacity: {{gl.rim}}; transition: opacity .46s cubic-bezier(.65,0,.35,1)"></div>
+<div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; pointer-events: none; filter: blur(9px); opacity: {{gl.arcO}}; transition: opacity .46s ease {{gl.arcD}}s">
+<div style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; box-sizing: border-box; padding: {{gl.T}}px; border-radius: {{R}}px; overflow: hidden; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; transition: padding .46s cubic-bezier(.65,0,.35,1)">
+<div class="zv-orbit" style="position: absolute; left: {{gl.sx}}px; top: {{gl.sy}}px; width: {{S}}px; height: {{S}}px; border-radius: 50%; animation-play-state: {{gl.play}}; --zsw: {{gl.sw}}deg; transition: --zsw .46s cubic-bezier(.65,0,.35,1); background: conic-gradient(from 0deg, rgba(60,231,79,0) 0deg, #3CE74F 16deg, #BFDD71 calc(var(--zsw) * .5), #3CE74F calc(var(--zsw) - 16deg), rgba(60,231,79,0) var(--zsw), rgba(0,0,0,0) 360deg)"></div>
+</div>
+</div>
+<div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; pointer-events: none; filter: blur(9px); opacity: {{gl.ringO}}; transition: opacity .46s cubic-bezier(.65,0,.35,1)">
+<div style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; box-sizing: border-box; padding: {{gl.T}}px; border-radius: {{R}}px; overflow: hidden; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; transition: padding .46s cubic-bezier(.65,0,.35,1)">
+<div class="zv-flow" style="position: absolute; left: {{gl.sx}}px; top: {{gl.sy}}px; width: {{S}}px; height: {{S}}px; border-radius: 50%; background: conic-gradient(from 0deg, #3CE74F, #BFDD71, #3CE74F)"></div>
+</div>
+</div>
+
+<button type="button" class="zv-disk" onClick="{{tapDisk}}" onPointerDown="{{pressDisk}}" onPointerUp="{{releaseDisk}}" onPointerLeave="{{releaseDisk}}" onContextMenu="{{noMenu}}" aria-label="{{diskLabel}}" style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; border-radius: {{R}}px; border: none; padding: 0; background: transparent; cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent">
+<svg class="zv-z" aria-hidden="true" viewBox="0 7.73 79.98 75.7" style="position: absolute; left: {{z.x}}px; top: {{z.y}}px; width: {{z.w}}px; height: {{z.h}}px; opacity: {{z.lo}}"><path fill="#FFFFFF" d="M43.15,36.78v-9.34c0,-2.05 -1.79,-3.72 -3.99,-3.72H3.99c-2.2,0 -3.99,-1.66 -3.99,-3.72v-8.56c0,-2.05 1.79,-3.72 3.99,-3.72h71.15c3.58,0 5.35,4.06 2.78,6.38l-27.99,25.34c-2.53,2.29 -6.77,0.62 -6.77,-2.67ZM35.99,54.7v9.33c0,2.05 1.79,3.72 3.99,3.72h35.17c2.2,0 3.99,1.66 3.99,3.72v8.64c0,2.05 -1.79,3.72 -3.99,3.72H4c-3.58,0 -5.35,-4.05 -2.78,-6.38l28,-25.4c2.53,-2.29 6.77,-0.63 6.77,2.66Z"></path></svg>
+</button>
+
+<div style="position: absolute; left: 0; right: 0; top: {{pill.y}}px; display: flex; justify-content: center; pointer-events: none">
+<button type="button" onClick="{{openServers}}" aria-label="Сервер: {{srv.name}}" style="height: 52px; border-radius: 26px; border: none; background: {{pillBg}}; box-sizing: border-box; padding: 0 22px 0 10px; display: flex; align-items: center; gap: 10px; color: #F2F4F6; font-family: 'Montserrat', sans-serif; cursor: pointer; pointer-events: auto; transition: background .6s ease">
+<span style="width: 34px; height: 34px; border-radius: 50%; background: {{srv.avBg}}; color: {{srv.avFg}}; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0">
+<sc-if value="{{srv.isAuto}}" hint-placeholder-val="{{ true }}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#001A05" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6L13 3z"></path></svg></sc-if>
+<sc-if value="{{srv.isCountry}}" hint-placeholder-val="{{ false }}">{{srv.code}}</sc-if>
+</span>
+<span style="font-size: 20px; font-weight: 700; white-space: nowrap">{{srv.name}}</span>
+<span style="font-size: 16px; font-weight: 600; color: #B1B8C2; white-space: nowrap">{{srv.tail}}</span>
+</button>
+</div>
+</div>
+
+<div ref="{{setMenu}}" onScroll="{{onMenuScroll}}" style="position: absolute; left: 0; top: {{H}}px; width: {{W}}px; height: {{H}}px; overflow-y: auto; scrollbar-width: none; background: #000">
+<div style="padding: {{menuPad.pt}}px {{menuPad.px}}px {{menuPad.pb}}px; display: flex; flex-direction: column">
+<sc-for list="{{menuItems}}" as="it" hint-placeholder-count="4">
+<div style="height: {{it.h}}px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center; transform: scale({{it.s}}); opacity: {{it.o}}"><dc-import name="VpnItem" item="{{it}}" hint-size="100%,92px"></dc-import></div>
+</sc-for>
+</div>
+</div>
+
+</div>
+</div>
+
+
+<div aria-hidden="true" style="position: absolute; left: {{dots.x}}px; top: {{dots.y}}px; width: 8px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; opacity: {{v.homeO}}; transition: opacity .3s ease">
+<span style="width: 8px; height: 8px; border-radius: 4px; background: {{dots.a}}; transition: background .3s ease"></span>
+<span style="width: 8px; height: 8px; border-radius: 4px; background: {{dots.b}}; transition: background .3s ease"></span>
+</div>
+
+<sc-for list="{{panes}}" as="pane" hint-placeholder-count="2">
+<div ref="{{pane.ref}}" onScroll="{{pane.onScroll}}" style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; background: #000; overflow-y: auto; scrollbar-width: none; opacity: {{pane.o}}; pointer-events: {{pane.pe}}; transform: translateX({{pane.x}}px); transition: {{pane.t}}">
+<div style="padding: {{listPad.pt}}px {{listPad.px}}px {{listPad.pb}}px; display: flex; flex-direction: column">
+<sc-for list="{{pane.items}}" as="it" hint-placeholder-count="5">
+<div style="height: {{it.h}}px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center; transform: scale({{it.s}}); opacity: {{it.o}}"><dc-import name="VpnItem" item="{{it}}" hint-size="100%,92px"></dc-import></div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+
+<div style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; background: #000; box-sizing: border-box; padding-top: {{intro.wpt}}px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; opacity: {{intro.wO}}; pointer-events: {{intro.wPe}}; transform: translateX({{intro.wX}}px); transition: {{intro.wT}}">
+<div style="font-size: 17px; font-weight: 700; letter-spacing: 1px; color: #8B939C">СВОБОДНО. БЫСТРО. БЕСПЛАТНО</div>
+<button type="button" onClick="{{startNow}}" aria-label="Стартуем — и премиум в подарок" style="margin-top: 22px; width: 300px; height: 88px; border-radius: 44px; border: none; background: linear-gradient(90deg, #3CE74F, #BFDD71); color: #001A05; font-family: 'Montserrat', sans-serif; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; opacity: {{intro.startO}}; transition: opacity .3s ease">
+<span style="font-size: 27px; font-weight: 700; letter-spacing: 1px">СТАРТУЕМ</span>
+<span style="font-size: 16px; font-weight: 600">и премиум в подарок</span>
+</button>
+<button type="button" onClick="{{haveAccount}}" style="margin-top: 6px; height: 52px; padding: 0 22px; border-radius: 26px; border: none; background: transparent; color: #D8DEE6; font-family: 'Montserrat', sans-serif; font-size: 19px; font-weight: 600; cursor: pointer; pointer-events: {{intro.accPe}}">Я уже имею аккаунт</button>
+</div>
+
+<div style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; background: #000; box-sizing: border-box; padding: {{intro.pt}}px {{intro.px}}px 0; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; opacity: {{intro.aO}}; pointer-events: {{intro.aPe}}; transform: translateX({{intro.aX}}px); transition: {{intro.aT}}">
+<div style="font-size: 25px; font-weight: 700; color: #F2F4F6">Привязка часов</div>
+<div style="font-size: 19px; font-weight: 600; line-height: 1.3; color: #B1B8C2">На телефоне откройте ZEON:<br>Профиль → Привязать аккаунт</div>
+<div style="font-size: 19px; font-weight: 600; line-height: 1.3; color: #B1B8C2">Введите 6 цифр после /open/ в ссылке</div>
+<button type="button" onClick="{{introNext}}" style="margin-top: 6px; height: 64px; padding: 0 34px; border-radius: 32px; border: none; background: #3CE74F; color: #001A05; font-family: 'Montserrat', sans-serif; font-size: 22px; font-weight: 700; cursor: pointer">Ввести номер</button>
+</div>
+
+<div style="position: absolute; left: 0; top: 0; width: {{W}}px; height: {{H}}px; background: #000; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; padding-top: {{code.pt}}px; gap: 14px; opacity: {{intro.bO}}; pointer-events: {{intro.bPe}}; transform: translateX({{intro.bX}}px); transition: {{intro.bT}}">
+<div role="group" aria-label="Номер подписки: {{code.label}}" style="display: flex; gap: 8px">
+<sc-for list="{{code.slots}}" as="sl" hint-placeholder-count="6">
+<span style="width: 40px; height: 54px; border-radius: 13px; background: #1A1B1F; border: 2px solid {{sl.line}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 700; color: #F2F4F6; transition: border-color .2s ease">{{sl.d}}</span>
+</sc-for>
+</div>
+<div style="width: 268px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{code.keys}}" as="k" hint-placeholder-count="12">
+<button type="button" onClick="{{k.act}}" aria-label="{{k.label}}" style="height: 54px; border-radius: 16px; border: none; background: #1A1B1F; color: #F2F4F6; font-family: 'Montserrat', sans-serif; font-size: 26px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: {{k.o}}">
+<sc-if value="{{k.isDigit}}" hint-placeholder-val="{{ true }}">{{k.label}}</sc-if>
+<sc-if value="{{k.isClear}}" hint-placeholder-val="{{ false }}"><svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#B1B8C2" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16"></path><path d="M4 12h10"></path><path d="M4 17h6"></path><path d="M15 15l5 5"></path><path d="M20 15l-5 5"></path></svg></sc-if>
+<sc-if value="{{k.isDel}}" hint-placeholder-val="{{ false }}"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#B1B8C2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"></path><path d="M17 9l-5 6"></path><path d="M12 9l5 6"></path></svg></sc-if>
+</button>
+</sc-for>
+</div>
+</div>
+
+<svg role="img" aria-label="ZEON" viewBox="0 0 346.67 91.55" style="position: absolute; left: {{wm.x}}px; top: {{wm.y}}px; width: {{wm.w}}px; height: {{wm.h}}px; opacity: {{wm.o}}; pointer-events: none; transition: opacity .5s ease, left .5s cubic-bezier(.2,.8,.2,1), top .5s cubic-bezier(.2,.8,.2,1), width .5s cubic-bezier(.2,.8,.2,1), height .5s cubic-bezier(.2,.8,.2,1)"><defs><linearGradient id="zvO" x1="169.5" y1="0" x2="260.5" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3CE74F"></stop><stop offset="1" stop-color="#BFDD71"></stop></linearGradient></defs><path fill="#DCE3E7" d="M43.15,36.78v-9.34c0,-2.05 -1.79,-3.72 -3.99,-3.72H3.99c-2.2,0 -3.99,-1.66 -3.99,-3.72v-8.56c0,-2.05 1.79,-3.72 3.99,-3.72h71.15c3.58,0 5.35,4.06 2.78,6.38l-27.99,25.34c-2.53,2.29 -6.77,0.62 -6.77,-2.67ZM35.99,54.7v9.33c0,2.05 1.79,3.72 3.99,3.72h35.17c2.2,0 3.99,1.66 3.99,3.72v8.64c0,2.05 -1.79,3.72 -3.99,3.72H4c-3.58,0 -5.35,-4.05 -2.78,-6.38l28,-25.4c2.53,-2.29 6.77,-0.63 6.77,2.66Z"></path><path fill="#DCE3E7" d="M85.54,75.51h0c0,4.37 3.55,7.92 7.92,7.92h61.97c4.37,0 7.92,-3.55 7.92,-7.92h0c0,-4.37 -3.55,-7.92 -7.92,-7.92h-61.97c-4.37,0 -7.92,3.55 -7.92,7.92ZM85.54,15.8h0c0,4.37 3.55,7.92 7.92,7.92h62.04c4.37,0 7.92,-3.55 7.92,-7.92h0c0,-4.37 -3.55,-7.92 -7.92,-7.92h-62.04c-4.37,0 -7.92,3.55 -7.92,7.92Z"></path><rect fill="#DCE3E7" x="85.54" y="37.64" width="77.88" height="15.84" rx="7.92"></rect><circle cx="215" cy="45.6" r="37.35" fill="none" stroke="url(#zvO)" stroke-width="16.3"></circle><path fill="#DCE3E7" d="M297.33,42.98h-10.01c-2.05,0 -3.72,1.78 -3.72,3.97v32.59c0,2.19 -1.66,3.97 -3.72,3.97h-8.64c-2.05,0 -3.72,-1.78 -3.72,-3.97V11.86c0,-3.51 3.95,-5.3 6.31,-2.85l26.08,27.14c2.39,2.49 0.74,6.82 -2.59,6.82ZM316.86,48.34h10.01c2.05,0 3.72,1.78 3.72,3.98V11.71c0,-2.2 1.66,-3.98 3.72,-3.98h8.64c2.05,0 3.72,1.78 3.72,3.98v67.81c0,3.52 -3.96,5.31 -6.31,2.85l-26.08,-27.2c-2.39,-2.49 -0.74,-6.83 2.59,-6.83Z"></path></svg>
+
+<div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 60px; height: {{H}}px; pointer-events: none; background: linear-gradient(90deg, rgba(242,244,246,.22), rgba(242,244,246,0)); opacity: {{v.edgeO}}"></div>
+
+<button type="button" onClick="{{tapIsland}}" aria-label="{{island.label}}" style="position: absolute; left: {{island.x}}px; top: {{island.y}}px; width: {{island.w}}px; height: 48px; border-radius: 24px; border: none; padding: 0 22px; box-sizing: border-box; background: #1A1B1F; box-shadow: 0 6px 18px rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; font-family: 'Montserrat', sans-serif; opacity: {{island.o}}; pointer-events: {{island.pe}}; transform: translateY({{island.ty}}px) scale({{island.sc}}); transition: opacity .3s ease, transform .4s cubic-bezier(.2,.8,.2,1), width .35s cubic-bezier(.2,.8,.2,1), left .35s cubic-bezier(.2,.8,.2,1)">
+<span style="width: 12px; height: 12px; border-radius: 6px; background: {{island.dot}}; flex-shrink: 0"></span>
+<span style="font-size: 19px; font-weight: 600; color: #F2F4F6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{island.text}}</span>
+</button>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"shape":{"editor":"enum","options":["round","square"],"default":"round"},"conn":{"editor":"enum","options":["off","connecting","on","error"],"default":"on"},"stage":{"editor":"enum","options":["splash","home","menu","servers","settings","strategy","port","proto","dns","pay"],"default":"home"},"settings":{"editor":null},"server":{"editor":"enum","options":["auto","nl","de","fi","kz","us"],"default":"auto"},"days":{"editor":"int","default":12},"profile":{"editor":"text","default":"ZEON Premium"},"islandText":{"editor":"text","default":""},"islandTone":{"editor":"enum","options":["ok","warn","err","info"],"default":"ok"},"toTop":{"editor":null},"code":{"editor":"text","default":""},"binding":{"editor":"boolean","default":false},"payDone":{"editor":"boolean","default":false},"payCheck":{"editor":null},"starting":{"editor":"boolean","default":false},"onNav":{"editor":null},"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  state = { pg: 0, scroll: {}, dx: 0, dragging: false, vy: 0, paging: false };
+  qrBits = '1111111000111001101000111111110000010101101101100101000001101110101110110100100010111011011101010110000110010101110110111010000000011011101011101100000100011000100101010000011111111010101010101010111111100000000101000111000100000000100000101001100011010110011101011110001101100101101011011001111110110001111100100000000011100001011010000011011010001110111001110101100010110000101100001011100001011011110011000101111110000000001101011001100110000011001000000110010110110010001010001101000001100100100001101111000011011101111110101000001001001100001100110100101100001000011101110000101101111001101101111111101110000000010011010011010001100011111110000000000101101011100100000100001101110011000100001011101000001110011111111100010111010011101100111100001110101110100010100111000111111101000001001110100111001000110111111110110100110001011001100';
+  servers = [
+    { key: 'auto', name: 'Авто', code: '', ms: 0 },
+    { key: 'nl', name: 'Нидерланды', code: 'NL', ms: 38 },
+    { key: 'de', name: 'Германия', code: 'DE', ms: 46 },
+    { key: 'fi', name: 'Финляндия', code: 'FI', ms: 52 },
+    { key: 'kz', name: 'Казахстан', code: 'KZ', ms: 71 },
+    { key: 'us', name: 'США', code: 'US', ms: 142 }
+  ];
+  months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  // Swipe-to-dismiss returns to the parent screen, as on Wear OS.
+  // Settings mirror zeon-app (settings_page.dart and its sections). On the watch the core always runs in proxy mode,
+  // so TUN, per-app routing, theme and button appearance are left out; free-form values become preset pickers.
+  choices = {
+    lang: { parent: 'sGeneral', title: 'Язык', list: [['ru', 'Русский'], ['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['ptBr', 'Português (BR)'], ['tr', 'Türkçe'], ['id', 'Bahasa Indonesia'], ['zhCn', '简体中文'], ['zhTw', '繁體中文'], ['fa', 'فارسی'], ['ar', 'العربية']] },
+    testUrl: { parent: 'sGeneral', title: 'URL для теста соединения', list: ['https://1.1.1.1', 'https://zeon-vps.link/generate_204', 'http://connectivitycheck.gstatic.com/generate_204', 'http://www.gstatic.com/generate_204', 'https://www.gstatic.com/generate_204', 'https://redirector.googlevideo.com/generate_204', 'http://cp.cloudflare.com', 'http://kernel.org', 'http://detectportal.firefox.com', 'http://captive.apple.com/hotspot-detect.html', 'http://1.1.1.1'].map((u) => [u, u.replace(/^https?:\/\//, ''), u.startsWith('https') ? 'HTTPS' : 'HTTP']) },
+    interval: { parent: 'sGeneral', title: 'Интервал теста URL', list: [[1, '1 мин'], [3, '3 мин', 'по умолчанию'], [5, '5 мин'], [10, '10 мин'], [15, '15 мин'], [30, '30 мин'], [60, '1 ч']] },
+    region: { parent: 'sRouting', title: 'Регион', list: [['ru', 'Россия (ru)', 'по умолчанию'], ['other', 'Глобальный']] },
+    balancer: { parent: 'sRouting', title: 'Режим автовыбора', list: [['smartActiveAuto', 'Умный автовыбор', 'держит стабильный лучший сервер'], ['roundRobin', 'Балансировка', 'чаще распределяет соединения']] },
+    ipv6: { parent: 'sRouting', title: 'Маршрут IPv6', list: [['disable', 'Отключить', 'только IPv4'], ['enable', 'Включить', 'IPv4, затем IPv6'], ['prefer', 'Предпочтительно', 'IPv6, затем IPv4'], ['only', 'Только', 'без IPv4']] },
+    packets: { parent: 'sTls', title: 'Пакеты фрагментации', list: [['tlshello', 'TLS Hello', 'начало защищённого соединения'], ['1-1', '1-1'], ['1-2', '1-2'], ['1-3', '1-3'], ['1-4', '1-4'], ['1-5', '1-5', 'по умолчанию']] },
+    fragSize: { parent: 'sTls', title: 'Размер фрагмента', list: [['10-30', '10–30 байт', 'по умолчанию'], ['1-10', '1–10 байт'], ['30-100', '30–100 байт']] },
+    fragSleep: { parent: 'sTls', title: 'Задержка фрагмента', list: [['2-8', '2–8 мс', 'по умолчанию'], ['0-2', '0–2 мс'], ['8-20', '8–20 мс']] },
+    padSize: { parent: 'sTls', title: 'Размер дополнения', list: [['1-1500', '1–1500 байт', 'по умолчанию'], ['100-500', '100–500 байт'], ['500-1000', '500–1000 байт']] },
+    port: { parent: 'sSystem', title: 'Локальный порт прокси', list: [[12334, '12334', 'по умолчанию'], [10808, '10808'], [1080, '1080'], [8080, '8080']] }
+  };
+  parents = (() => {
+    const p = { servers: 'home', settings: 'home', pay: 'home', intro: 'home', introBind: 'intro', introCode: 'introBind', sGeneral: 'settings', sRouting: 'settings', sTls: 'settings', sSystem: 'settings', sAbout: 'settings' };
+    Object.keys(this.choices).forEach((k) => { p['c_' + k] = this.choices[k].parent; });
+    return p;
+  })();
+  paneIds = ['servers', 'pay', 'settings', 'sGeneral', 'sRouting', 'sTls', 'sSystem', 'sAbout'].concat(Object.keys(this.choices).map((k) => 'c_' + k));
+  defaults = { lang: 'ru', haptic: true, notifications: true, lowPower: false, battery: false, memoryLimit: true, testUrl: 'https://1.1.1.1', interval: 3,
+    region: 'ru', balancer: 'smartActiveAuto', blockAds: true, bypassLan: true, resolveDest: false, ipv6: 'disable',
+    tls: false, packets: '1-5', fragSize: '10-30', fragSleep: '2-8', sni: true, padding: false, padSize: '1-1500', port: 12334, lan: false };
+  heights = { title: 76, group: 46, profile: 150, action: 92, nav: 96, toggle: 96, choice: 96, info: 108, qr: 262, note: 96, status: 60 };
+  els = {};
+  refs = {};
+  scrolls = {};
+  // The island owns the top row; everything else lives in the area below it and never slides under it.
+  size() { return (this.props.shape ?? 'round') === 'square' ? { W: 420, H: 512, R: 100, round: false } : { W: 480, H: 480, R: 240, round: true }; }
+  stage() { return this.props.stage ?? 'home'; }
+  cfg() { return { ...this.defaults, ...(this.props.settings || {}) }; }
+  nav(key, arg) { const f = this.props.onNav; if (f) f(key, arg); }
+  isAncestor(a, s) { let p = this.parents[s]; while (p) { if (p === a) return true; p = this.parents[p]; } return false; }
+  label(key, val) { const o = this.choices[key].list.find((x) => x[0] === val); return o ? o[1] : String(val); }
+  refFor(id) { return this.refs[id] || (this.refs[id] = (el) => { this.els[id] = el; }); }
+  scrollFor(id) {
+    return this.scrolls[id] || (this.scrolls[id] = (e) => {
+      const top = e.currentTarget.scrollTop;
+      this.setState((st) => ({ scroll: { ...st.scroll, [id]: top } }));
+    });
+  }
+  setMenu = (el) => { this.menuEl = el; };
+  onMenuScroll = (e) => {
+    const top = e.currentTarget.scrollTop;
+    this.menuScrolledAt = Date.now();
+    this.setState((st) => ({ scroll: { ...st.scroll, menu: top } }));
+  };
+  // Two whole pages, the button and the menu: one swipe or one bezel step flips between them.
+  page(pg) {
+    if (pg === this.state.pg) return;
+    if (pg === 1 && this.menuEl) { this.menuEl.scrollTop = 0; this.setState((st) => ({ scroll: { ...st.scroll, menu: 0 } })); }
+    this.setState({ pg });
+  }
+  menuAtTop() { return !this.menuEl || this.menuEl.scrollTop <= 0; }
+  componentDidMount() {
+    if (this.stage() === 'menu') this.setState({ pg: 1 });
+    this.nav('parents', this.parents);
+  }
+  componentDidUpdate(prev) {
+    const s = this.stage(), p = prev.stage ?? 'home';
+    // The hardware Home key and a picked server bring the button back into view.
+    if ((prev.toTop ?? 0) !== (this.props.toTop ?? 0)) this.page(0);
+    if (s === p) return;
+    if (s === 'menu') this.page(1);
+    // A screen opened from its parent starts at the top; returning from a child keeps the position.
+    if (this.paneIds.includes(s) && !this.isAncestor(s, p)) {
+      const el = this.els[s];
+      if (el) el.scrollTop = 0;
+      this.setState((st) => ({ scroll: { ...st.scroll, [s]: 0 } }));
+    }
+  }
+  componentWillUnmount() { clearTimeout(this.lpT); }
+  onHome() { const s = this.stage(); return s === 'home' || s === 'menu'; }
+
+  // Gestures: swipe right goes back; on the main screen a vertical swipe flips button/menu;
+  // long press on the button opens servers; the wheel (bezel) scrolls lists and flips pages.
+  gDown = (e) => {
+    this.moved = false;
+    const back = !!this.parents[this.stage()];
+    if (!back && !this.onHome()) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    this.drag = { x: e.clientX, y: e.clientY, id: e.pointerId, mode: '', back, k: r.width ? r.width / this.size().W : 1 };
+  };
+  gMove = (e) => {
+    const d = this.drag;
+    if (!d || d.id !== e.pointerId) return;
+    const dx = (e.clientX - d.x) / d.k, dy = (e.clientY - d.y) / d.k;
+    if (!d.mode) {
+      if (d.back && dx > 14 && dx > Math.abs(dy)) d.mode = 'back';
+      else if (!d.back && Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx)) {
+        const pg = this.state.pg;
+        if ((pg === 0 && dy < 0) || (pg === 1 && dy > 0 && this.menuAtTop())) d.mode = 'page';
+        else { this.drag = null; return; }
+      } else if (Math.abs(dx) > 14 || Math.abs(dy) > 14) { this.drag = null; return; }
+      else return;
+      this.moved = true;
+      clearTimeout(this.lpT);
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
+    }
+    if (d.mode === 'back') this.setState({ dx: Math.max(0, dx), dragging: true });
+    else this.setState({ vy: this.state.pg === 0 ? Math.min(0, dy) : Math.max(0, dy), paging: true });
+  };
+  gUp = () => {
+    const d = this.drag;
+    this.drag = null;
+    if (!d || !d.mode) return;
+    if (d.mode === 'back') {
+      const done = this.state.dx > this.size().W * 0.3;
+      this.setState({ dx: 0, dragging: false });
+      if (done) this.nav('open', this.parents[this.stage()] || 'home');
+      return;
+    }
+    const flip = Math.abs(this.state.vy || 0) > 50;
+    this.setState({ vy: 0, paging: false });
+    if (flip) this.page(this.state.pg ? 0 : 1);
+  };
+  gCancel = () => { this.drag = null; this.setState({ dx: 0, dragging: false, vy: 0, paging: false }); };
+  gClick = (e) => { if (this.moved) { this.moved = false; e.stopPropagation(); e.preventDefault(); } };
+  gWheel = (e) => {
+    if (!this.onHome()) return;
+    const now = Date.now();
+    if (now - (this.wheelAt || 0) < 650) return;
+    if (this.state.pg === 0 && e.deltaY > 12) { this.wheelAt = now; this.page(1); }
+    else if (this.state.pg === 1 && e.deltaY < -12 && this.menuAtTop() && now - (this.menuScrolledAt || 0) > 300) { this.wheelAt = now; this.page(0); }
+  };
+  pressDisk = () => {
+    clearTimeout(this.lpT);
+    this.lpFired = false;
+    this.lpT = setTimeout(() => { if (!this.moved) { this.lpFired = true; this.nav('longPress'); } }, 600);
+  };
+  releaseDisk = () => clearTimeout(this.lpT);
+  noMenu = (e) => e.preventDefault();
+  tapDisk = () => { if (this.lpFired) { this.lpFired = false; return; } this.nav('disk'); };
+
+  qrPath() {
+    if (this.qrD) return this.qrD;
+    const n = 29, b = this.qrBits;
+    let d = '';
+    for (let y = 0; y < n; y++) {
+      let x = 0;
+      while (x < n) {
+        if (b[y * n + x] === '1') {
+          let len = 1;
+          while (x + len < n && b[y * n + x + len] === '1') len++;
+          d += 'M' + x + ' ' + y + 'h' + len + 'v1h-' + len + 'z';
+          x += len;
+        } else x++;
+      }
+    }
+    this.qrD = d;
+    return d;
+  }
+  daysWord(n) {
+    const a = n % 10, b = n % 100;
+    if (a === 1 && b !== 11) return 'день';
+    if (a >= 2 && a <= 4 && (b < 12 || b > 14)) return 'дня';
+    return 'дней';
+  }
+  // Cards grow towards the centre of the screen and shrink and fade towards the bezel.
+  lay(items, scrollTop, top, cw) {
+    const { H } = this.size();
+    let y = top;
+    return items.map((it) => {
+      const h = it.hh || this.heights[it.kind];
+      const d = Math.abs(y + h / 2 - scrollTop - H / 2);
+      y += h;
+      const t = Math.min(1, d / (H * 0.48));
+      return { ...it, h, w: cw, s: (1.16 - 0.48 * t * t).toFixed(3), o: (1 - 0.6 * t * t).toFixed(3),
+        isTitle: it.kind === 'title', isProfile: it.kind === 'profile', isAction: it.kind === 'action', isNav: it.kind === 'nav',
+        isToggle: it.kind === 'toggle', isChoice: it.kind === 'choice', isInfo: it.kind === 'info', isGroup: it.kind === 'group', isQr: it.kind === 'qr', isNote: it.kind === 'note', isStatus: it.kind === 'status',
+        op: it.dis ? 0.42 : 1, pe: it.dis ? 'none' : 'auto' };
+    });
+  }
+  toggle(text, key, c, dis) {
+    const on = !!c[key];
+    return { kind: 'toggle', text, on, dis, track: on ? '#3CE74F' : '#3A3F47', knob: on ? '#001A05' : '#B1B8C2', kx: on ? 29 : 5, act: () => this.nav('set', [key, !on]) };
+  }
+  pick(text, key, c, dis) { return { kind: 'nav', text, meta: this.label(key, c[key]), dis, act: () => this.nav('open', 'c_' + key) }; }
+  group(text) { return { kind: 'group', text }; }
+  payStatus(done, pc) {
+    if (done) return { kind: 'status', hh: 80, text: 'Подписка обновлена', meta: 'Подключение обновлено', c: '#3CE74F', pulse: '' };
+    if (pc.checking) return { kind: 'status', hh: 80, text: 'Проверяю оплату…', meta: '', c: '#D8DEE6', pulse: 'zv-pulse' };
+    if (pc.stopped) return { kind: 'status', hh: 80, text: 'Проверка остановлена', meta: 'Меню → Обновить подписку', c: '#B1B8C2', pulse: '' };
+    return { kind: 'status', hh: 80, text: 'Ждём оплату…', meta: 'Проверка через ' + (pc.nextIn ?? 15) + ' с', c: '#B1B8C2', pulse: 'zv-pulse' };
+  }
+  choice(text, meta, sel, act, av) {
+    return { kind: 'choice', text, meta, sel, act, border: sel ? '#3CE74F' : 'transparent', checkO: sel ? 1 : 0, hasAv: !!av, pl: av ? 12 : 26,
+      isAuto: !!(av && av.auto), code: av && !av.auto ? av.code : '', avBg: av && av.auto ? '#3CE74F' : '#2A2D33' };
+  }
+
+  renderVals() {
+    const { W, H, R, round } = this.size();
+    const conn = this.props.conn ?? 'on';
+    const stage = this.stage();
+    const c = this.cfg();
+    const S = Math.round(Math.max(W, H) * 1.5);
+    const onHome = stage === 'home' || stage === 'menu';
+
+    // The app's ConnectDial motion moved onto the screen edge: rest = dim grey rim; connecting = a 216° arc
+    // orbiting every 1.5 s; connected = the arc closes into a full ring whose gradient flows (6 s); failed = rest.
+    // Same 460 ms easeInOutCubic morph, logo opacity .45 / .7 / 1, press scale .96.
+    const spinning = conn === 'connecting';
+    const live = spinning || conn === 'on';
+    const gl = { rim: live ? (spinning ? 0.4 : 0) : 1, arcO: live ? (spinning ? 1 : 0) : 0, arcD: conn === 'on' ? 0.3 : 0, ringO: conn === 'on' ? 1 : 0,
+      T: live ? (spinning ? 22 : 26) : 0, sw: live ? (spinning ? 216 : 360) : (this.lastSw || 216), play: spinning ? 'running' : 'paused', sx: (W - S) / 2, sy: (H - S) / 2 };
+    if (live) this.lastSw = gl.sw;
+    const zw = Math.round(Math.min(W, H) * 0.24), zh = Math.round(zw * 75.7 / 79.98);
+    const z = { w: zw, h: zh, x: (W - zw) / 2, y: (H - zh) / 2 - (round ? 8 : 6), lo: conn === 'on' ? 1 : spinning ? 0.7 : 0.45 };
+    const pillBg = '#1A1B1F';
+
+    const key = this.props.server ?? 'auto';
+    const best = this.servers[1];
+    const cur = this.servers.find((s) => s.key === key) || this.servers[0];
+    const srv = { name: cur.name, code: cur.code, isAuto: cur.key === 'auto', isCountry: cur.key !== 'auto', tail: cur.key === 'auto' ? best.code : '', avBg: cur.key === 'auto' ? '#3CE74F' : '#2A2D33', avFg: '#F2F4F6' };
+
+    const days = Number(this.props.days ?? 12);
+    const warn = days <= 3;
+    const dc = days <= 0 ? '#FF7A45' : warn ? '#FFB020' : '#3CE74F';
+    const until = new Date();
+    until.setDate(until.getDate() + Math.max(days, 0));
+    const payBg = warn ? '#FFB020' : '#3CE74F', payFg = warn ? '#241500' : '#001A05';
+
+    const px = round ? 52 : 26, cw = W - px * 2, pb = Math.round(H / 2 - 46);
+    const sc = this.state.scroll;
+    const menuPad = { pt: round ? 64 : 40, pb, px };
+    const menuItems = this.lay([
+      { kind: 'profile', text: this.props.profile ?? 'ZEON Premium', c: dc, days: days <= 0 ? 'Подписка закончилась' : days + ' ' + this.daysWord(days),
+        meta: days <= 0 ? '' : '· до ' + until.getDate() + ' ' + this.months[until.getMonth()], bar: Math.round(Math.max(0, Math.min(1, days / 30)) * 100) + '%' },
+      { kind: 'action', text: 'Оплатить', iconQr: true, bg: payBg, fg: payFg, line: payBg, act: () => this.nav('open', 'pay') },
+      { kind: 'nav', text: 'Обновить подписку', meta: 'Проверить продление', act: () => this.nav('refreshSub') },
+      { kind: 'nav', text: 'Сервер', meta: cur.name, act: () => this.nav('open', 'servers') },
+      { kind: 'nav', text: 'Настройки', meta: '', act: () => this.nav('open', 'settings') },
+      { kind: 'nav', text: 'Сменить аккаунт', meta: 'Привязать по номеру', act: () => this.nav('open', 'introBind') }
+    ], sc.menu || 0, menuPad.pt, cw);
+
+    const lists = {
+      servers: [{ kind: 'title', text: 'Сервер' }].concat(this.servers.map((s) => this.choice(s.name, s.key === 'auto' ? 'Сейчас: ' + best.name : s.ms + ' мс', s.key === key,
+        () => this.nav('pickServer', s.key), s.key === 'auto' ? { auto: true } : { code: s.code }))),
+      settings: [
+        { kind: 'title', text: 'Настройки' },
+        this.group('Приложение'),
+        { kind: 'nav', text: 'Общие', meta: 'Язык · уведомления · проверка', act: () => this.nav('open', 'sGeneral') },
+        this.group('Соединение'),
+        { kind: 'nav', text: 'Маршрутизация', meta: 'Регион · Маршрут IPv6', act: () => this.nav('open', 'sRouting') },
+        { kind: 'nav', text: 'Фрагментация', meta: c.tls ? 'Включена' : 'Выключена', act: () => this.nav('open', 'sTls') },
+        { kind: 'nav', text: 'Системные', meta: 'Прокси · порт ' + c.port, act: () => this.nav('open', 'sSystem') },
+        this.group(''),
+        { kind: 'nav', text: 'О программе', meta: 'ZEON 1.5.1', act: () => this.nav('open', 'sAbout') },
+        { kind: 'action', text: 'Проверить обновления', iconRefresh: true, bg: 'transparent', fg: '#3CE74F', line: '#3CE74F', act: () => this.nav('checkUpdate') },
+        { kind: 'action', text: 'Сбросить настройки', iconReset: true, bg: '#1A1B1F', fg: '#F2F4F6', line: '#1A1B1F', act: () => this.nav('reset') }
+      ],
+      sGeneral: [
+        { kind: 'title', text: 'Общие' },
+        this.group('Оформление'),
+        this.pick('Язык', 'lang', c),
+        this.group('Уведомления и отклик'),
+        this.toggle('Тактильный отклик', 'haptic', c),
+        this.toggle('Уведомления', 'notifications', c),
+        this.group('Работа приложения'),
+        this.toggle('Слабое устройство', 'lowPower', c),
+        this.toggle('Отключить оптимизацию батареи', 'battery', c),
+        this.toggle('Ограничение памяти', 'memoryLimit', c),
+        this.group('Проверка соединения'),
+        this.pick('URL для теста соединения', 'testUrl', c),
+        this.pick('Интервал теста URL', 'interval', c)
+      ],
+      sRouting: [
+        { kind: 'title', text: 'Маршрутизация' },
+        this.pick('Регион', 'region', c),
+        this.pick('Режим автовыбора', 'balancer', c),
+        this.group('Правила трафика'),
+        this.toggle('Блокировать рекламу', 'blockAds', c),
+        this.toggle('Обход LAN', 'bypassLan', c),
+        this.toggle('Определять адрес назначения', 'resolveDest', c),
+        this.pick('Маршрут IPv6', 'ipv6', c)
+      ],
+      sTls: [
+        { kind: 'title', text: 'Фрагментация' },
+        this.toggle('Включить фрагментацию', 'tls', c),
+        this.group('Параметры фрагментации'),
+        this.pick('Пакеты фрагментации', 'packets', c, !c.tls),
+        this.pick('Размер фрагмента', 'fragSize', c, !c.tls),
+        this.pick('Задержка фрагмента', 'fragSleep', c, !c.tls),
+        this.group('TLS'),
+        this.toggle('Включить смешанный регистр SNI', 'sni', c, !c.tls),
+        this.toggle('Включить дополнение', 'padding', c, !c.tls),
+        this.pick('Размер дополнения', 'padSize', c, !c.tls)
+      ],
+      sSystem: [
+        { kind: 'title', text: 'Системные' },
+        { kind: 'info', text: 'Способ подключения', meta: 'Прокси' },
+        this.pick('Локальный порт прокси', 'port', c),
+        { kind: 'info', text: 'Адрес прокси', meta: '127.0.0.1:' + c.port },
+        this.toggle('Поделиться VPN в локальной сети', 'lan', c)
+      ],
+      sAbout: [
+        { kind: 'title', text: 'О программе' },
+        { kind: 'info', text: 'Версия', meta: '1.5.1 (1050075)' },
+        { kind: 'nav', text: 'Канал в Telegram', meta: 'Откроется на телефоне', act: () => this.nav('phone') },
+        { kind: 'nav', text: 'Условия использования', meta: 'Откроется на телефоне', act: () => this.nav('phone') },
+        { kind: 'nav', text: 'Политика конфиденциальности', meta: 'Откроется на телефоне', act: () => this.nav('phone') }
+      ]
+    };
+    const payDone = !!this.props.payDone;
+    lists.pay = [
+      { kind: 'title', text: 'Оплата с телефона' },
+      { kind: 'qr', qrD: this.qrPath(), qs: round ? 232 : 252 },
+      { kind: 'note', text: 'Отсканируйте QR-код камерой телефона, чтобы выбрать тариф и оплатить подписку.', hh: 108 },
+      { kind: 'note', text: 'После оплаты подписка обновится автоматически.', hh: 80 },
+      this.payStatus(payDone, this.props.payCheck || {})
+    ];
+    Object.keys(this.choices).forEach((k) => {
+      const ch = this.choices[k];
+      lists['c_' + k] = [{ kind: 'title', text: ch.title }].concat(ch.list.map((o) => this.choice(o[1], o[2] || '', c[k] === o[0],
+        () => { this.nav('set', [k, o[0]]); this.nav('open', ch.parent); })));
+    });
+    // Only the visible pane, its ancestors and the one sliding out render their cards.
+    if (this.lastStage !== stage) { this.prevStage = this.lastStage; this.lastStage = stage; }
+    const rendered = (id) => id === stage || id === this.prevStage || this.isAncestor(id, stage);
+
+    const drag = this.state.dragging, f = Math.min(1, this.state.dx / W);
+    const ease = 'opacity .3s ease, transform .45s cubic-bezier(.2,.8,.2,1)';
+    const pos = (id) => {
+      if (id === stage) return { x: this.state.dx, o: (1 - 0.5 * f).toFixed(3), t: drag ? 'none' : ease, pe: 'auto' };
+      if (this.isAncestor(id, stage)) return { x: Math.round(-60 + 60 * f), o: f.toFixed(3), t: drag ? 'none' : ease, pe: 'none' };
+      return { x: 60, o: 0, t: ease, pe: 'none' };
+    };
+    const listPad = { pt: round ? 64 : 40, pb, px };
+    const panes = this.paneIds.map((id) => ({ ...pos(id), ref: this.refFor(id), onScroll: this.scrollFor(id), items: rendered(id) ? this.lay(lists[id], sc[id] || 0, listPad.pt, cw) : [] }));
+
+    const it = this.props.islandText ?? '';
+    if (it) this.lastIt = it;
+    const tone = { ok: '#3CE74F', warn: '#FFB020', err: '#FF7A45', info: '#B1B8C2' }[this.props.islandTone ?? 'ok'] || '#3CE74F';
+    // Event-only island: hidden until something happens, then drops in at the top for its duration.
+    const iw = Math.min(round ? 290 : 360, Math.round(64 + (this.lastIt || '').length * 11.5));
+    const show = !!it && stage !== 'splash';
+    const island = { o: show ? 1 : 0, pe: show ? 'auto' : 'none', ty: show ? 0 : -24, sc: show ? 1 : 0.9, w: iw, x: (W - iw) / 2, y: round ? 30 : 14,
+      text: this.lastIt || '', dot: tone, label: it || 'Уведомление' };
+
+    const homeP = onHome ? { x: 0, o: 1, t: ease } : stage === 'splash' ? { x: 0, o: 0, t: ease } : pos('home');
+    const v = { splashO: stage === 'splash' ? 1 : 0, homeO: homeP.o, homePe: onHome ? 'auto' : 'none', homeX: homeP.x, homeT: homeP.t,
+      edgeO: drag ? (1 - f).toFixed(3) : 0 };
+
+    // Binding by subscription number, as zeon-app does on Android TV (tv_account_number_dialog.dart):
+    // an on-screen 3×4 keypad, no system keyboard; on the watch the sixth digit submits.
+    // First run, as in zeon-app intro_page.dart: «Стартуем» creates a profile without registration;
+    // «Я уже имею аккаунт» leads to binding by subscription number.
+    const pw = pos('intro'), pa = pos('introBind'), pb2 = pos('introCode');
+    const starting = !!this.props.starting;
+    const intro = { wpt: round ? 132 : 112, wO: pw.o, wPe: pw.pe, wX: pw.x, wT: pw.t, startO: starting ? 0.6 : 1, accPe: starting ? 'none' : 'auto',
+      pt: round ? 128 : 96, px: round ? 64 : 34, aO: pa.o, aPe: pa.pe, aX: pa.x, aT: pa.t, bO: pb2.o, bPe: pb2.pe, bX: pb2.x, bT: pb2.t };
+    const digits = String(this.props.code ?? '').replace(/[^0-9]/g, '').slice(0, 6);
+    const binding = !!this.props.binding;
+    const slots = [0, 1, 2, 3, 4, 5].map((i) => ({ d: digits[i] || '', line: binding ? '#3CE74F' : i === digits.length ? '#D8DEE6' : '#1A1B1F' }));
+    const padKey = (label, act, kind) => ({ label, act, isDigit: !kind, isClear: kind === 'clear', isDel: kind === 'del', o: binding ? 0.42 : 1 });
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => padKey(d, () => this.nav('digit', d)))
+      .concat([padKey('Очистить номер', () => this.nav('clearCode'), 'clear'), padKey('0', () => this.nav('digit', '0')), padKey('Удалить последнюю цифру', () => this.nav('delDigit'), 'del')]);
+    const code = { pt: round ? 66 : 70, slots, keys, label: digits || 'пусто' };
+
+    const paging = this.state.paging;
+    const pager = { y: -this.state.pg * H + (this.state.vy || 0), t: paging ? 'none' : 'transform .45s cubic-bezier(.2,.8,.2,1)' };
+
+    return { W, H, R, S, gl, z, pager, pillBg, srv, island, v, menuItems, menuPad, panes, listPad,
+      pill: { y: H - (round ? 92 : 72) },
+      wm: stage === 'intro' || stage === 'introBind' ? { w: 170, h: 45, x: (W - 170) / 2, y: round ? 64 : 34, o: 1 } : { w: 300, h: 79, x: (W - 300) / 2, y: (H - 79) / 2, o: stage === 'splash' ? 1 : 0 },
+      intro, code, introNext: () => this.nav('open', 'introCode'),
+      startNow: () => { if (!starting) this.nav('start'); }, haveAccount: () => this.nav('open', 'introBind'),
+      dots: { x: W - (round ? 22 : 14), y: H / 2 - 12, a: this.state.pg === 0 ? '#F2F4F6' : '#4A4F57', b: this.state.pg === 1 ? '#F2F4F6' : '#4A4F57' },
+      diskLabel: conn === 'on' ? 'Отключить ZEON' : conn === 'connecting' ? 'Отменить подключение' : 'Подключить ZEON',
+      setMenu: this.setMenu, onMenuScroll: this.onMenuScroll,
+      tapDisk: this.tapDisk, pressDisk: this.pressDisk, releaseDisk: this.releaseDisk, noMenu: this.noMenu,
+      openServers: () => this.nav('open', 'servers'), tapIsland: () => this.nav('island'),
+      g: { down: this.gDown, move: this.gMove, up: this.gUp, cancel: this.gCancel, click: this.gClick, wheel: this.gWheel } };
+  }
+}
+</script>
+</body>
+</html>

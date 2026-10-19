@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ZEON VPN · прототип часов</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 560px; height: 760px; background: #0B0C0E; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; padding: 20px; gap: 16px; font-family: 'Montserrat', sans-serif; color: #D8DEE6">
+<div style="height: 512px; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+<dc-import name="Vpn" shape="{{shape}}" conn="{{conn}}" stage="{{stage}}" server="{{server}}" days="{{days}}" profile="ZEON Premium" code="{{code}}" binding="{{binding}}" pay-done="{{payDone}}" pay-check="{{payCheck}}" starting="{{starting}}" settings="{{settings}}" to-top="{{toTop}}" island-text="{{islandText}}" island-tone="{{islandTone}}" on-nav="{{nav}}" hint-size="480px,480px"></dc-import>
+</div>
+<div style="display: flex; gap: 8px; justify-content: center">
+<button type="button" onClick="{{keyBack}}" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid #3A3F47; background: #1A1B1F; color: #F2F4F6; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 15px; cursor: pointer">Кнопка «Назад»</button>
+<button type="button" onClick="{{keyHome}}" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid #3A3F47; background: #1A1B1F; color: #F2F4F6; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 15px; cursor: pointer">Кнопка «Домой»</button>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 520px">
+<button type="button" onClick="{{nextShape}}" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid #3CE74F; background: #1A1B1F; color: #3CE74F; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 15px; cursor: pointer">Часы: {{shapeLabel}} ›</button>
+<button type="button" onClick="{{restart}}" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid #252730; background: #1A1B1F; color: #D8DEE6; font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 15px; cursor: pointer">Сначала</button>
+<button type="button" onClick="{{demoFail}}" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid #252730; background: #1A1B1F; color: #D8DEE6; font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 15px; cursor: pointer">Сценарий: сбой</button>
+<button type="button" onClick="{{demoExpiring}}" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid #252730; background: #1A1B1F; color: #D8DEE6; font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 15px; cursor: pointer">Сценарий: подписка кончается</button>
+<button type="button" onClick="{{demoPaid}}" style="height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid #252730; background: #1A1B1F; color: #D8DEE6; font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 15px; cursor: pointer">Сценарий: оплатить на телефоне</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":560,"height":760}}'>
+class Component extends DCLogic {
+  state = { shape: 'round', conn: 'off', stage: 'splash', server: 'auto', days: 12, islandText: '', islandTone: 'ok', toTop: 0, bound: false, starting: false, code: '', binding: false, payDone: false, paidPending: false,
+    payCheck: { checking: false, nextIn: 15, stopped: false, attempts: 0 },
+    settings: {} };
+  names = { auto: 'Авто', nl: 'Нидерланды', de: 'Германия', fi: 'Финляндия', kz: 'Казахстан', us: 'США' };
+  // The watch screen reports its navigation tree on mount; the hardware Back key follows it.
+  parents = {};
+  // act: where a tap on the island leads — servers, pay or retry.
+  island(text, tone, ms, act) {
+    clearTimeout(this.islandTimer);
+    this.islandAct = act || '';
+    this.setState({ islandText: text, islandTone: tone });
+    if (ms) this.islandTimer = setTimeout(() => this.setState({ islandText: '' }), ms);
+  }
+  connect(fast) {
+    clearTimeout(this.connTimer);
+    this.setState({ conn: 'connecting' });
+    this.island('Подключаю…', 'info', 0, 'servers');
+    this.connTimer = setTimeout(() => {
+      if (this.failNext) {
+        this.failNext = false;
+        this.setState({ conn: 'error' });
+        this.island('Сбой подключения', 'err', 0, 'retry');
+        return;
+      }
+      this.setState({ conn: 'on' });
+      this.island('Подключено', 'ok', 2600, 'servers');
+    }, fast ? 1300 : 2400);
+  }
+  disconnect() {
+    clearTimeout(this.connTimer);
+    this.setState({ conn: 'off' });
+    this.island('Отключено', 'info', 1800);
+  }
+  // Demo: 000000 is rejected, any other six digits bind the watch.
+  bind(code) {
+    this.setState({ binding: true });
+    this.island('Привязываю…', 'info');
+    clearTimeout(this.bindTimer);
+    this.bindTimer = setTimeout(() => {
+      if (code === '000000') {
+        this.setState({ binding: false, code: '' });
+        this.island('Неверный код', 'err', 2600);
+        return;
+      }
+      this.setState((s) => ({ binding: false, code: '', bound: true, stage: 'home', toTop: s.toTop + 1 }));
+      this.island('Аккаунт привязан', 'ok', 2400);
+    }, 1600);
+  }
+  splash() {
+    clearTimeout(this.splashTimer);
+    this.splashTimer = setTimeout(() => this.setState((s) => ({ stage: s.bound ? 'home' : 'intro' })), 1500);
+  }
+  nav = (key, arg) => {
+    const st = this.state;
+    if (key === 'disk') {
+      if (st.days <= 0) { this.island('Нужна оплата', 'warn', 2600); return; }
+      if (st.conn === 'on' || st.conn === 'connecting') this.disconnect(); else this.connect();
+    }
+    if (key === 'open') {
+      this.setState({ stage: arg });
+      if (arg === 'introBind' || arg === 'introCode') this.setState({ code: '', binding: false });
+    }
+    if (key === 'digit' && !st.binding && st.code.length < 6) {
+      const code = st.code + arg;
+      this.setState({ code });
+      if (code.length === 6) this.bind(code);
+    }
+    if (key === 'clearCode' && !st.binding) this.setState({ code: '' });
+    if (key === 'delDigit' && !st.binding) this.setState({ code: st.code.slice(0, -1) });
+    if (key === 'longPress') this.setState({ stage: 'servers' });
+    if (key === 'back') this.setState({ stage: this.parents[st.stage] || 'home' });
+    if (key === 'pickServer') {
+      this.setState({ server: arg, stage: 'home', toTop: st.toTop + 1 });
+      if (st.conn === 'on' || st.conn === 'connecting' || st.conn === 'error') setTimeout(() => this.connect(true), 350);
+      else this.island(this.names[arg], 'info', 2200, 'servers');
+    }
+    if (key === 'parents') this.parents = arg;
+    if (key === 'refreshSub') this.refreshSubscription('manual');
+    if (key === 'start' && !st.starting) {
+      // The profile is created on the server without registration, then the main screen opens.
+      this.setState({ starting: true });
+      this.island('Создаём профиль…', 'info');
+      clearTimeout(this.bindTimer);
+      this.bindTimer = setTimeout(() => {
+        this.setState((s) => ({ starting: false, bound: true, stage: 'home', toTop: s.toTop + 1 }));
+        this.island('Профиль создан', 'ok', 2400);
+      }, 1500);
+    }
+    if (key === 'set') {
+      const [k, v] = arg;
+      this.setState((s) => ({ settings: { ...s.settings, [k]: v } }));
+    }
+    if (key === 'checkUpdate') this.island('Последняя версия', 'ok', 2200);
+    if (key === 'reset') { this.setState({ settings: {} }); this.island('Настройки сброшены', 'info', 2200); }
+    if (key === 'phone') this.island('Открыто на телефоне', 'info', 2200);
+    if (key === 'island') {
+      const act = this.islandAct;
+      this.island('', 'ok');
+      if (act === 'servers') this.setState({ stage: 'servers' });
+      if (act === 'pay') this.setState({ stage: 'pay' });
+      if (act === 'retry') this.connect();
+    }
+  };
+  // While the payment screen is open: one check every 15 s, at most 40 (10 minutes), as on Android TV.
+  // A changed expiry stops the checks, reconnects with the updated profile and says so.
+  startPayPoll() {
+    clearInterval(this.payTick);
+    this.setState({ payDone: false, payCheck: { checking: false, nextIn: 15, stopped: false, attempts: 0 } });
+    this.payTick = setInterval(() => {
+      const pc = this.state.payCheck;
+      if (pc.checking || pc.stopped || this.state.payDone) return;
+      if (pc.nextIn > 1) { this.setState({ payCheck: { ...pc, nextIn: pc.nextIn - 1 } }); return; }
+      this.setState({ payCheck: { ...pc, checking: true, nextIn: 0, attempts: pc.attempts + 1 } });
+      this.payCheckTimer = setTimeout(() => {
+        const cur = this.state.payCheck;
+        if (this.state.paidPending) { clearInterval(this.payTick); this.applyRenewal('pay'); return; }
+        // Temporary failures keep the QR usable; the next check simply retries.
+        const stopped = cur.attempts >= 40;
+        if (stopped) clearInterval(this.payTick);
+        this.setState({ payCheck: { ...cur, checking: false, nextIn: 15, stopped } });
+      }, 900);
+    }, 1000);
+  }
+  stopPayPoll() { clearInterval(this.payTick); clearTimeout(this.payCheckTimer); }
+  applyRenewal(source) {
+    this.setState((s) => ({ paidPending: false, days: 42, payDone: true, payCheck: { ...s.payCheck, checking: false } }));
+    this.island(source === 'pay' ? 'Подписка обновлена' : 'Продлено: 42 дня', 'ok', 3000);
+    // The updated profile is applied by reconnecting, without the usual connect banners.
+    if (this.state.conn === 'on' || this.state.conn === 'connecting') {
+      clearTimeout(this.connTimer);
+      this.setState({ conn: 'connecting' });
+      this.connTimer = setTimeout(() => this.setState({ conn: 'on' }), 1300);
+    }
+  }
+  refreshSubscription() {
+    this.island('Обновляю подписку…', 'info');
+    clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => {
+      if (this.state.paidPending) this.applyRenewal('manual');
+      else this.island('Без изменений', 'info', 2200);
+    }, 1200);
+  }
+  componentDidUpdate(prevProps, prevState) {
+    if (!prevState) return;
+    if (prevState.stage !== 'pay' && this.state.stage === 'pay') this.startPayPoll();
+    if (prevState.stage === 'pay' && this.state.stage !== 'pay') this.stopPayPoll();
+  }
+  componentDidMount() {
+    this.splash();
+  }
+  componentWillUnmount() { this.stopPayPoll(); clearTimeout(this.refreshTimer); clearTimeout(this.bindTimer); clearTimeout(this.splashTimer); clearTimeout(this.islandTimer); clearTimeout(this.connTimer); }
+  renderVals() {
+    const st = this.state;
+    return { starting: st.starting, code: st.code, binding: st.binding, payDone: st.payDone, payCheck: st.payCheck, shape: st.shape, conn: st.conn, stage: st.stage, server: st.server, days: st.days, settings: st.settings, toTop: st.toTop,
+      islandText: st.islandText, islandTone: st.islandTone, nav: this.nav,
+      shapeLabel: st.shape === 'round' ? 'круглые' : 'квадратные',
+      keyBack: () => { if (this.parents[st.stage]) this.setState({ stage: this.parents[st.stage] }); },
+      keyHome: () => { if (st.stage !== 'splash' && st.bound) this.setState({ stage: 'home', toTop: st.toTop + 1 }); },
+      nextShape: () => this.setState({ shape: st.shape === 'round' ? 'square' : 'round' }),
+      restart: () => { clearTimeout(this.connTimer); this.failNext = false; this.setState({ conn: 'off', stage: 'splash', server: 'auto', days: 12, settings: {}, bound: false, starting: false, code: '', binding: false, paidPending: false, payDone: false, toTop: st.toTop + 1 }); this.island('', 'ok'); this.splash(); },
+      demoFail: () => { this.failNext = true; this.setState({ stage: 'home', bound: true, toTop: st.toTop + 1 }); this.connect(); },
+      demoExpiring: () => { this.setState({ days: 2, stage: 'home', bound: true }); this.island('Подписка: 2 дня', 'warn', 6000, 'pay'); },
+      demoPaid: () => {
+        this.setState({ paidPending: true, bound: true });
+        if (st.stage !== 'pay') this.island('Оплачено на телефоне', 'info', 2200);
+      } };
+  }
+}
+</script>
+</body>
+</html>

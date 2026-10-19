@@ -1,0 +1,257 @@
+{
+ "v": 3,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-10-19T15:10:00Z"
+ },
+ "title": "ZEON VPN Watch",
+ "launch": {
+  "view": "canvas"
+ },
+ "pages": [],
+ "boards": {
+  "Main.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 560,
+   "h": 760,
+   "radius": 32,
+   "is_interactive": true,
+   "title": "Прототип · Play"
+  },
+  "Vpn.dc.html": {
+   "x": 640,
+   "y": 0,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "Компонент экрана · Tweaks"
+  },
+  "Splash.dc.html": {
+   "x": 1200,
+   "y": 0,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "00 · Заставка · длинный логотип"
+  },
+  "FullOff.dc.html": {
+   "x": 0,
+   "y": 1000,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "01 · Выключено"
+  },
+  "FullConnecting.dc.html": {
+   "x": 560,
+   "y": 1000,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "02 · Подключаю · дуга бежит по краю"
+  },
+  "FullOn.dc.html": {
+   "x": 1120,
+   "y": 1000,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "03 · Подключено · кольцо по краю"
+  },
+  "FullError.dc.html": {
+   "x": 1680,
+   "y": 1000,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "04 · Сбой · как выключено + островок"
+  },
+  "IslandOn.dc.html": {
+   "x": 0,
+   "y": 1860,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "05 · Островок только при событии"
+  },
+  "IslandWarn.dc.html": {
+   "x": 560,
+   "y": 1860,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "06 · Островок · подписка"
+  },
+  "Menu.dc.html": {
+   "x": 1120,
+   "y": 1860,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "07 · Меню (+ Сменить аккаунт)"
+  },
+  "Servers.dc.html": {
+   "x": 1680,
+   "y": 1860,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "08 · Серверы (долгое нажатие)"
+  },
+  "Pay.dc.html": {
+   "x": 2240,
+   "y": 1860,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "09 · Оплата с телефона · QR и инструкция"
+  },
+  "SqFullOn.dc.html": {
+   "x": 0,
+   "y": 2720,
+   "w": 420,
+   "h": 512,
+   "radius": 100,
+   "title": "15 · Квадрат · подключено"
+  },
+  "SqMenu.dc.html": {
+   "x": 500,
+   "y": 2720,
+   "w": 420,
+   "h": 512,
+   "radius": 100,
+   "title": "16 · Квадрат · меню"
+  },
+  "SqPay.dc.html": {
+   "x": 1000,
+   "y": 2720,
+   "w": 420,
+   "h": 512,
+   "radius": 100,
+   "title": "17 · Квадрат · оплатить"
+  },
+  "VpnItem.dc.html": {
+   "x": 3440,
+   "y": 0,
+   "w": 376,
+   "h": 92,
+   "radius": 24,
+   "title": "Карточка списка"
+  },
+  "Settings.dc.html": {
+   "x": 2800,
+   "y": 1860,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "10 · Настройки"
+  },
+  "Strategy.dc.html": {
+   "x": 3920,
+   "y": 1860,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "12 · Настройки › Маршрутизация"
+  },
+  "General.dc.html": {
+   "x": 3360,
+   "y": 1860,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "11 · Настройки › Общие"
+  },
+  "Fragment.dc.html": {
+   "x": 4480,
+   "y": 1860,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "13 · Фрагментация (выключена → пункты неактивны)"
+  },
+  "Picker.dc.html": {
+   "x": 5040,
+   "y": 1860,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "14 · Выбор значения"
+  },
+  "Intro.dc.html": {
+   "x": 1760,
+   "y": 0,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "00b · Первый запуск · Стартуем"
+  },
+  "IntroCode.dc.html": {
+   "x": 2880,
+   "y": 0,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "00d · Номер подписки · 6 цифр"
+  },
+  "IntroBind.dc.html": {
+   "x": 2320,
+   "y": 0,
+   "w": 480,
+   "h": 480,
+   "radius": 240,
+   "title": "00c · Я уже имею аккаунт"
+  }
+ },
+ "order": [
+  "Main.dc.html",
+  "Vpn.dc.html",
+  "Splash.dc.html",
+  "FullOff.dc.html",
+  "FullConnecting.dc.html",
+  "FullOn.dc.html",
+  "FullError.dc.html",
+  "IslandOn.dc.html",
+  "IslandWarn.dc.html",
+  "Menu.dc.html",
+  "Servers.dc.html",
+  "Pay.dc.html",
+  "SqFullOn.dc.html",
+  "SqMenu.dc.html",
+  "SqPay.dc.html",
+  "VpnItem.dc.html",
+  "Settings.dc.html",
+  "Strategy.dc.html",
+  "General.dc.html",
+  "Fragment.dc.html",
+  "Picker.dc.html",
+  "Intro.dc.html",
+  "IntroCode.dc.html",
+  "IntroBind.dc.html"
+ ],
+ "notes": {
+  "t-full": {
+   "x": 0,
+   "y": 740,
+   "text": "Кнопка ZEON на весь экран · свечение края",
+   "kind": "title1",
+   "maxW": 2160
+  },
+  "t-flow": {
+   "x": 0,
+   "y": 1600,
+   "text": "Островок, профиль, серверы, оплата, настройки",
+   "kind": "title1",
+   "maxW": 5520
+  },
+  "t-square": {
+   "x": 0,
+   "y": 2460,
+   "text": "Квадратные часы",
+   "kind": "title1",
+   "maxW": 1420
+  }
+ },
+ "designSystems": []
+}
