@@ -192,6 +192,42 @@ HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Discord
       expect(apps.single.icon, samplePng);
       expect(requestedIconSources, contains(r'C:\Users\User\AppData\Local\Discord\app.ico'));
     });
+
+    test('preserves Cyrillic program names and reads real UTF-16 Windows registry/process entries without mojibake', () async {
+      const cyrillicReg = r'''
+HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\YandexDisk
+    DisplayName    REG_SZ    Яндекс.Диск
+    DisplayIcon    REG_SZ    "C:\Users\User\AppData\Roaming\Yandex\YandexDisk2\YandexDisk2.exe",0
+
+HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\InnoSetup
+    DisplayName    REG_SZ    Inno Setup, версия 6.7.3
+    DisplayIcon    REG_SZ    "C:\Users\User\AppData\Local\Programs\Inno Setup 6\Compil32.exe",0
+''';
+
+      final service = WindowsInstalledAppsService(
+        environment: const <String, String>{},
+        fileExists: (path) => true,
+        exeFinder: (dirPath, {int maxDepth = 2}) => const <String>[],
+        registryReader: (args) async => args[1].contains('Uninstall') ? cyrillicReg : '',
+        runningProcessPathsReader: () async => const <String>[],
+        iconLoader: (_) => null,
+      );
+
+      final apps = await service.getInstalledApps();
+      expect(apps.map((a) => a.name), containsAll(<String>['Яндекс.Диск', 'Inno Setup, версия 6.7.3']));
+      expect(WindowsInstalledAppsService.repairWindowsMojibake('ßíäåêñ.Äèñê'), 'Яндекс.Диск');
+
+      if (Platform.isWindows) {
+        final liveService = WindowsInstalledAppsService(iconLoader: (_) => null);
+        final livePrograms = await liveService.discoverPrograms(hideSystem: false);
+        expect(livePrograms, isNotEmpty);
+        // Ensure no CP866/CP1251 mojibake characters appear in any discovered program name
+        for (final prog in livePrograms) {
+          expect(prog.name.contains('џ'), isFalse, reason: 'Mojibake detected in ${prog.name}');
+          expect(prog.name.contains('РЇ'), isFalse, reason: 'Mojibake detected in ${prog.name}');
+        }
+      }
+    });
   });
 
   group('DesktopRoutingRuleCompiler', () {

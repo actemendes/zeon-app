@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:installed_apps/app_info.dart';
+import 'package:win32_registry/win32_registry.dart';
 import 'package:zeon/features/per_app_proxy/data/windows_icon_extractor.dart';
 
 typedef RegistryOutputReader = Future<String> Function(List<String> arguments);
@@ -282,10 +283,11 @@ class WindowsInstalledAppsService {
     if (cleaned == null) return;
     if (isIgnoredExecutable(cleaned)) return;
     final key = cleaned.toLowerCase();
+    final candidateName = repairWindowsMojibake(candidate.name.trim());
     final existing = byPath[key];
     if (existing == null) {
       byPath[key] = DiscoveredWindowsProgram(
-        name: candidate.name.trim().isNotEmpty ? candidate.name.trim() : friendlyProgramName(cleaned),
+        name: candidateName.isNotEmpty ? candidateName : friendlyProgramName(cleaned),
         executablePath: cleaned,
         isSystemApp: candidate.isSystemApp,
         versionName: candidate.versionName,
@@ -296,7 +298,7 @@ class WindowsInstalledAppsService {
     }
     // Prefer richer display name from Registry over generic filename.
     final genericExisting = existing.name.toLowerCase() == existing.executableName.replaceAll('.exe', '').toLowerCase();
-    final betterName = genericExisting && candidate.name.trim().isNotEmpty ? candidate.name.trim() : existing.name;
+    final betterName = genericExisting && candidateName.isNotEmpty ? candidateName : existing.name;
     byPath[key] = DiscoveredWindowsProgram(
       name: betterName,
       executablePath: existing.executablePath,
@@ -608,6 +610,8 @@ class WindowsInstalledAppsService {
         lower.startsWith('microsoft asp.net') ||
         lower.startsWith('microsoft windows desktop runtime') ||
         lower.startsWith('microsoft edge webview2') ||
+        lower.startsWith('среда выполнения microsoft') ||
+        lower.startsWith('пакет драйверов windows') ||
         lower.startsWith('windows software development kit') ||
         lower.contains('redistributable');
   }
@@ -622,6 +626,11 @@ class WindowsInstalledAppsService {
     }
     final known = _knownExecutableTitles[lowerBase];
     if (known != null) return known;
+
+    final versionDesc = WindowsIconExtractor.extractExecutableDescription(executablePath);
+    if (versionDesc != null && versionDesc.trim().isNotEmpty) {
+      return repairWindowsMojibake(versionDesc.trim());
+    }
 
     final stem = base.toLowerCase().endsWith('.exe') ? base.substring(0, base.length - 4) : base;
     if (fallbackFolderName != null &&
@@ -662,6 +671,32 @@ class WindowsInstalledAppsService {
         .join(' ');
   }
 
+  /// Repairs Windows-1251 strings that were widened as Latin-1 (`0xC0..0xFF`) by legacy installers.
+  static String repairWindowsMojibake(String input) {
+    if (input.isEmpty) return input;
+    // If valid Cyrillic is already present, do not touch.
+    if (RegExp(r'[\u0400-\u04FF]').hasMatch(input)) {
+      return input;
+    }
+    var latin1CyrillicCount = 0;
+    for (final unit in input.codeUnits) {
+      if ((unit >= 0xC0 && unit <= 0xFF) || unit == 0xA8 || unit == 0xB8) {
+        latin1CyrillicCount++;
+      }
+    }
+    if (latin1CyrillicCount < 2) {
+      return input;
+    }
+    final repaired = input.codeUnits.map((unit) {
+      if (unit >= 0xC0 && unit <= 0xFF) return unit + 0x0350;
+      if (unit == 0xA8) return 0x0401; // Ё
+      if (unit == 0xB8) return 0x0451; // ё
+      if (unit == 0xB9) return 0x2116; // №
+      return unit;
+    });
+    return String.fromCharCodes(repaired);
+  }
+
   static String _stripQuotes(String value) {
     var result = value.trim();
     if (result.length >= 2 && result.startsWith('"') && result.endsWith('"')) {
@@ -671,30 +706,80 @@ class WindowsInstalledAppsService {
   }
 
   static Future<String> _defaultRegistryReader(List<String> arguments) async {
-    if (!Platform.isWindows) return '';
-    final result = await Process.run('reg.exe', arguments);
-    if (result.exitCode != 0) return '';
-    return (result.stdout ?? '').toString();
+    if (!Platform.isWindows || arguments.length < 2) return '';
+    final fullKey = arguments[1].trim();
+    final firstSlash = fullKey.indexOf(r'\');
+    if (firstSlash <= 0) return '';
+
+    final hivePrefix = fullKey.substring(0, firstSlash).toUpperCase();
+    final subPath = fullKey.substring(firstSlash + 1);
+    final hive = switch (hivePrefix) {
+      'HKLM' || 'HKEY_LOCAL_MACHINE' => RegistryHive.localMachine,
+      'HKCU' || 'HKEY_CURRENT_USER' => RegistryHive.currentUser,
+      _ => null,
+    };
+    if (hive == null) return '';
+
+    final fullHiveName = hive == RegistryHive.localMachine ? 'HKEY_LOCAL_MACHINE' : 'HKEY_CURRENT_USER';
+    final isAppPaths = subPath.toLowerCase().endsWith('app paths');
+    final buffer = StringBuffer();
+
+    RegistryKey? rootKey;
+    try {
+      rootKey = Registry.openPath(hive, path: subPath);
+      final subkeyNames = rootKey.subkeyNames.toList(growable: false);
+      for (final subkeyName in subkeyNames) {
+        RegistryKey? subkey;
+        try {
+          subkey = Registry.openPath(hive, path: '$subPath\\$subkeyName');
+          buffer.writeln('$fullHiveName\\$subPath\\$subkeyName');
+          if (isAppPaths) {
+            final defaultVal = subkey.getStringValue('', expandPaths: true);
+            if (defaultVal != null && defaultVal.trim().isNotEmpty) {
+              buffer.writeln('    (Default)    REG_SZ    ${defaultVal.trim()}');
+            }
+          } else {
+            final displayName = subkey.getStringValue('DisplayName', expandPaths: true);
+            final displayIcon = subkey.getStringValue('DisplayIcon', expandPaths: true);
+            final installLocation = subkey.getStringValue('InstallLocation', expandPaths: true);
+            final displayVersion = subkey.getStringValue('DisplayVersion', expandPaths: true);
+            final systemComponent = subkey.getIntValue('SystemComponent');
+
+            if (displayName != null && displayName.trim().isNotEmpty && !displayName.trim().startsWith('@')) {
+              buffer.writeln('    DisplayName    REG_SZ    ${displayName.trim()}');
+            }
+            if (displayIcon != null && displayIcon.trim().isNotEmpty) {
+              buffer.writeln('    DisplayIcon    REG_SZ    ${displayIcon.trim()}');
+            }
+            if (installLocation != null && installLocation.trim().isNotEmpty) {
+              buffer.writeln('    InstallLocation    REG_SZ    ${installLocation.trim()}');
+            }
+            if (displayVersion != null && displayVersion.trim().isNotEmpty) {
+              buffer.writeln('    DisplayVersion    REG_SZ    ${displayVersion.trim()}');
+            }
+            if (systemComponent != null && systemComponent != 0) {
+              buffer.writeln('    SystemComponent    REG_DWORD    0x1');
+            }
+          }
+          buffer.writeln();
+        } catch (_) {
+          // Ignore unreadable individual subkeys.
+        } finally {
+          subkey?.close();
+        }
+      }
+    } catch (_) {
+      return '';
+    } finally {
+      rootKey?.close();
+    }
+
+    return buffer.toString();
   }
 
   static Future<List<String>> _defaultRunningProcessPathsReader() async {
     if (!Platform.isWindows) return const <String>[];
-    final result = await Process.run(
-      'powershell.exe',
-      const <String>[
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        r'Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath } | Select-Object -ExpandProperty ExecutablePath -Unique',
-      ],
-    );
-    if (result.exitCode != 0) return const <String>[];
-    return (result.stdout ?? '')
-        .toString()
-        .split(RegExp(r'\r?\n'))
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList(growable: false);
+    return WindowsIconExtractor.enumerateRunningProcessPaths();
   }
 
   static List<String> _defaultExeFinder(String directoryPath, {int maxDepth = 2}) {
