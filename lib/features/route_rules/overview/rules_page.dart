@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:zeon/core/localization/translations.dart';
 import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/features/route_rules/notifier/rules_notifier.dart';
 import 'package:zeon/features/route_rules/overview/rule_page.dart';
 import 'package:zeon/features/route_rules/widget/rule_tile.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/features/settings/widget/settings_surface.dart';
 
 class RulesPage extends HookConsumerWidget {
   const RulesPage({super.key});
@@ -44,6 +45,8 @@ class RulesPage extends HookConsumerWidget {
     return Scaffold(
       key: const ValueKey(UiNames.screenRules),
       appBar: AppBar(
+        centerTitle: false,
+        titleTextStyle: theme.textTheme.titleMedium?.copyWith(fontSize: 17, fontWeight: FontWeight.w600),
         title: Text(t.pages.settings.routing.routeRule.title.toUpperCase()),
         actions: [
           PopupMenuButton(
@@ -65,12 +68,31 @@ class RulesPage extends HookConsumerWidget {
               label: Text(t.pages.settings.routing.routeRule.createRule),
               icon: Icon(Icons.add_rounded, color: fabForegroundColor),
             ),
-      body: ReorderableListView.builder(
-        buildDefaultDragHandles: false,
-        onReorder: ref.read(rulesNotifierProvider.notifier).reorder,
-        itemBuilder: (context, index) => RuleTile(key: Key('$index'), index: index, rule: rules[index]),
-        itemCount: rules.length,
-      ),
+      body: rules.isEmpty
+          ? SettingsList(
+              children: [
+                SettingsHint(message: t.pages.settings.routing.hint),
+                SettingsGroup(
+                  children: [
+                    SettingsTile(
+                      leading: const Icon(Icons.alt_route_rounded),
+                      title: Text(t.pages.settings.routing.routeRule.createRule),
+                      subtitle: Text(t.common.empty),
+                      onTap: () =>
+                          Navigator.of(context).push(MaterialPageRoute(builder: (context) => const RulePage())),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : ReorderableListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+              buildDefaultDragHandles: false,
+              proxyDecorator: (child, index, animation) => Material(color: Colors.transparent, child: child),
+              onReorder: ref.read(rulesNotifierProvider.notifier).reorder,
+              itemBuilder: (context, index) => RuleTile(key: Key('$index'), index: index, rule: rules[index]),
+              itemCount: rules.length,
+            ),
     );
   }
 }

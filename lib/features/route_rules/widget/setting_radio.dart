@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:zeon/core/router/dialog/dialog_notifier.dart';
+import 'package:zeon/features/settings/widget/settings_surface.dart';
 
 class SettingRadio<T> extends ConsumerWidget {
   const SettingRadio({
@@ -11,6 +12,7 @@ class SettingRadio<T> extends ConsumerWidget {
     required this.setValue,
     this.defaultValue,
     this.t,
+    this.icon,
   });
 
   final String title;
@@ -19,6 +21,7 @@ class SettingRadio<T> extends ConsumerWidget {
   final Function(T value) setValue;
   final T? defaultValue;
   final Map<String, String>? t;
+  final IconData? icon;
 
   String textWithTranslation(T e) {
     if (t == null) return '$e';
@@ -27,9 +30,10 @@ class SettingRadio<T> extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ListTile(
+    return SettingsTile(
       title: Text(title),
       subtitle: Text(textWithTranslation(value)),
+      leading: icon != null ? Icon(icon) : null,
       onTap: () async {
         final result = await ref
             .read(dialogNotifierProvider.notifier)

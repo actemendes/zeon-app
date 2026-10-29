@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:zeon/core/localization/translations.dart';
-import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:protobuf/protobuf.dart';
+import 'package:zeon/core/localization/translations.dart';
+import 'package:zeon/core/router/dialog/dialog_notifier.dart';
+import 'package:zeon/features/settings/widget/settings_surface.dart';
 
 class SettingCheckbox extends ConsumerWidget {
   const SettingCheckbox({
@@ -13,6 +14,7 @@ class SettingCheckbox extends ConsumerWidget {
     required this.setValue,
     this.defaultValue,
     this.t,
+    this.icon,
   });
 
   final String title;
@@ -21,9 +23,11 @@ class SettingCheckbox extends ConsumerWidget {
   final Function(List<ProtobufEnum> value) setValue;
   final List<ProtobufEnum>? defaultValue;
   final Map<String, String>? t;
+  final IconData? icon;
 
   String textWithTranslation(List<ProtobufEnum> e, WidgetRef ref) {
     if (t == null) {
+      if (e.isEmpty) return ref.watch(translationsProvider).requireValue.common.empty;
       return e.map((e) => '$e').toList().join(', ');
     } else {
       if (e.isEmpty) return t![''] ?? ref.watch(translationsProvider).requireValue.common.empty;
@@ -33,9 +37,10 @@ class SettingCheckbox extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ListTile(
+    return SettingsTile(
       title: Text(title),
       subtitle: Text(textWithTranslation(selectedValues, ref)),
+      leading: icon != null ? Icon(icon) : null,
       onTap: () async {
         final result = await ref
             .read(dialogNotifierProvider.notifier)

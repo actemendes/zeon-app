@@ -15,12 +15,14 @@ part 'rules_notifier.g.dart';
 
 @riverpod
 class RulesNotifier extends _$RulesNotifier with AppLogger {
-  late File file;
+  File? _file;
 
   @override
   List<Rule> build() {
-    final directories = ref.watch(appDirectoriesProvider).requireValue;
-    file = File('${directories.baseDir.path}/route_rule.proto');
+    final directories = ref.watch(appDirectoriesProvider).valueOrNull;
+    if (directories == null) return <Rule>[];
+    final file = File('${directories.baseDir.path}/route_rule.proto');
+    _file = file;
     if (file.existsSync()) {
       return RouteRule.fromBuffer(file.readAsBytesSync()).rules;
     } else {
@@ -155,13 +157,16 @@ class RulesNotifier extends _$RulesNotifier with AppLogger {
   }
 
   Future<void> resetRules() async {
-    if (await file.exists()) {
+    final file = _file;
+    if (file != null && await file.exists()) {
       await file.delete(recursive: true);
       state = <Rule>[];
     }
   }
 
   Future<void> _updateFile() async {
+    final file = _file;
+    if (file == null) return;
     if (!await file.exists()) {
       await file.parent.create(recursive: true);
     }

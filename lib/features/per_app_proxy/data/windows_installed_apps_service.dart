@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:installed_apps/app_info.dart';
+import 'package:zeon/features/per_app_proxy/data/windows_icon_extractor.dart';
 
 typedef RegistryOutputReader = Future<String> Function(List<String> arguments);
 typedef RunningProcessPathsReader = Future<List<String>> Function();
@@ -13,18 +14,40 @@ class DiscoveredWindowsProgram {
     required this.executablePath,
     required this.isSystemApp,
     this.versionName = '',
+    this.iconSource,
+    this.icon,
   });
 
   final String name;
   final String executablePath;
   final bool isSystemApp;
   final String versionName;
+  final String? iconSource;
+  final Uint8List? icon;
 
   String get executableName => executablePath.split(RegExp(r'[\\/]')).last;
 
+  DiscoveredWindowsProgram copyWith({
+    String? name,
+    String? executablePath,
+    bool? isSystemApp,
+    String? versionName,
+    String? iconSource,
+    Uint8List? icon,
+  }) {
+    return DiscoveredWindowsProgram(
+      name: name ?? this.name,
+      executablePath: executablePath ?? this.executablePath,
+      isSystemApp: isSystemApp ?? this.isSystemApp,
+      versionName: versionName ?? this.versionName,
+      iconSource: iconSource ?? this.iconSource,
+      icon: icon ?? this.icon,
+    );
+  }
+
   AppInfo toAppInfo() => AppInfo(
     name: name,
-    icon: null,
+    icon: icon,
     packageName: executablePath,
     versionName: versionName.isNotEmpty ? versionName : executableName,
     versionCode: 1,
@@ -40,17 +63,23 @@ class WindowsInstalledAppsService {
     Map<String, String>? environment,
     bool Function(String path)? fileExists,
     List<String> Function(String directoryPath, {int maxDepth})? exeFinder,
+    WindowsIconLoader? iconLoader,
   }) : _registryReader = registryReader ?? _defaultRegistryReader,
        _runningProcessPathsReader = runningProcessPathsReader ?? _defaultRunningProcessPathsReader,
        _environment = environment ?? Platform.environment,
        _fileExists = fileExists ?? ((path) => File(path).existsSync()),
-       _exeFinder = exeFinder ?? _defaultExeFinder;
+       _exeFinder = exeFinder ?? _defaultExeFinder,
+       _iconLoader = iconLoader ?? WindowsIconExtractor.extractIconPng;
 
   final RegistryOutputReader _registryReader;
   final RunningProcessPathsReader _runningProcessPathsReader;
   final Map<String, String> _environment;
   final bool Function(String path) _fileExists;
   final List<String> Function(String directoryPath, {int maxDepth}) _exeFinder;
+  final WindowsIconLoader _iconLoader;
+
+  static Uint8List? extractExecutableIcon(String executableOrIconPath) =>
+      WindowsIconExtractor.extractIconPng(executableOrIconPath);
 
   static const List<String> _uninstallRegistryKeys = <String>[
     r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
@@ -221,7 +250,7 @@ class WindowsInstalledAppsService {
           if (hideSystem && entry.value.isSystemApp) return false;
           return true;
         })
-        .map((entry) => entry.value)
+        .map((entry) => _attachProgramIcon(entry.value))
         .toList();
 
     filtered.sort((a, b) {
@@ -231,6 +260,18 @@ class WindowsInstalledAppsService {
     });
 
     return filtered;
+  }
+
+  DiscoveredWindowsProgram _attachProgramIcon(DiscoveredWindowsProgram program) {
+    if (program.icon != null) return program;
+    Uint8List? iconBytes;
+    final source = program.iconSource?.trim();
+    if (source != null && source.isNotEmpty) {
+      iconBytes = _iconLoader(source);
+    }
+    iconBytes ??= _iconLoader(program.executablePath);
+    if (iconBytes == null) return program;
+    return program.copyWith(icon: iconBytes);
   }
 
   void _mergeCandidate(
@@ -248,6 +289,8 @@ class WindowsInstalledAppsService {
         executablePath: cleaned,
         isSystemApp: candidate.isSystemApp,
         versionName: candidate.versionName,
+        iconSource: candidate.iconSource,
+        icon: candidate.icon,
       );
       return;
     }
@@ -259,6 +302,8 @@ class WindowsInstalledAppsService {
       executablePath: existing.executablePath,
       isSystemApp: existing.isSystemApp && candidate.isSystemApp,
       versionName: existing.versionName.isNotEmpty ? existing.versionName : candidate.versionName,
+      iconSource: existing.iconSource ?? candidate.iconSource,
+      icon: existing.icon ?? candidate.icon,
     );
   }
 
@@ -281,12 +326,14 @@ class WindowsInstalledAppsService {
         );
         if (exePath != null && !isIgnoredExecutable(exePath)) {
           final isSys = systemComponent || isSystemExecutablePath(exePath) || _isSystemDisplayName(name);
+          final resolvedIconSource = _resolveRegistryIconSource(displayIcon: displayIcon, fallbackExePath: exePath);
           results.add(
             DiscoveredWindowsProgram(
               name: name,
               executablePath: exePath,
               isSystemApp: isSys,
               versionName: displayVersion?.trim() ?? '',
+              iconSource: resolvedIconSource,
             ),
           );
         }
@@ -326,6 +373,16 @@ class WindowsInstalledAppsService {
     }
     flushCurrent();
     return results;
+  }
+
+  String? _resolveRegistryIconSource({required String? displayIcon, required String fallbackExePath}) {
+    if (displayIcon == null || displayIcon.trim().isEmpty) return fallbackExePath;
+    final parsed = WindowsIconExtractor.parseIconLocation(displayIcon);
+    if (parsed == null) return fallbackExePath;
+    if (_fileExists(parsed.filePath)) {
+      return displayIcon.trim();
+    }
+    return fallbackExePath;
   }
 
   @visibleForTesting
@@ -445,11 +502,19 @@ class WindowsInstalledAppsService {
 
       final bestExe = _pickBestExecutableInFolder(candidates, preferredTitle: folderName);
       if (bestExe == null) continue;
+
+      String? folderIcon;
+      final appIco = '${entity.path}\\app.ico';
+      if (_fileExists(appIco)) {
+        folderIcon = appIco;
+      }
+
       results.add(
         DiscoveredWindowsProgram(
           name: friendlyProgramName(bestExe, fallbackFolderName: folderName),
           executablePath: bestExe,
           isSystemApp: isSystemExecutablePath(bestExe),
+          iconSource: folderIcon,
         ),
       );
     }

@@ -2,30 +2,46 @@
 import 'package:dio/dio.dart';
 // ignore: depend_on_referenced_packages
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:zeon/features/route_rules/notifier/rule_notifier.dart';
-import 'package:zeon/utils/utils.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:installed_apps/installed_apps.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:zeon/features/per_app_proxy/data/windows_installed_apps_service.dart';
+import 'package:zeon/features/route_rules/notifier/rule_notifier.dart';
+import 'package:zeon/utils/utils.dart';
 
 part 'android_apps_notifier.g.dart';
 
 @riverpod
 Future<List<AppInfo>> apps(Ref ref) async {
-  if (!PlatformUtils.isAndroid) return [];
-  return await InstalledApps.getInstalledApps(false, true);
+  if (PlatformUtils.isAndroid) {
+    return await InstalledApps.getInstalledApps(false, true);
+  }
+  if (PlatformUtils.isDesktop) {
+    return await WindowsInstalledAppsService().getInstalledApps(hideSystem: false);
+  }
+  return [];
 }
 
 @riverpod
 Future<List<AppInfo>> appsHideSystem(Ref ref) async {
-  if (!PlatformUtils.isAndroid) return [];
-  return await InstalledApps.getInstalledApps(true, true);
+  if (PlatformUtils.isAndroid) {
+    return await InstalledApps.getInstalledApps(true, true);
+  }
+  if (PlatformUtils.isDesktop) {
+    return await WindowsInstalledAppsService().getInstalledApps();
+  }
+  return [];
 }
 
 @riverpod
 Future<List<String>> appPackages(Ref ref) async {
-  if (!PlatformUtils.isAndroid) return [];
-  return (await InstalledApps.getInstalledApps(false)).map((e) => e.packageName).toList();
+  if (PlatformUtils.isAndroid) {
+    return (await InstalledApps.getInstalledApps(false)).map((e) => e.packageName).toList();
+  }
+  if (PlatformUtils.isDesktop) {
+    return (await ref.watch(appsProvider.future)).map((e) => e.packageName).toList();
+  }
+  return [];
 }
 
 @riverpod
@@ -65,7 +81,10 @@ Future<List<dynamic>> filterBySearch(Ref ref, int? ruleListOrder) async {
     });
     return fullList;
   } else {
-    return filteredByHideSystem.where((app) => app.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
+    final query = searchQuery.toLowerCase();
+    return filteredByHideSystem
+        .where((app) => app.name.toLowerCase().contains(query) || app.packageName.toLowerCase().contains(query))
+        .toList();
   }
 }
 
@@ -94,7 +113,7 @@ class SearchQueryNotifier extends _$SearchQueryNotifier {
 @riverpod
 class SelectedPackagesNotifier extends _$SelectedPackagesNotifier {
   late int? _ruleListOrder;
-  final _ruleEnum = RuleEnum.packageName;
+  RuleEnum get _ruleEnum => PlatformUtils.isDesktop ? RuleEnum.processPath : RuleEnum.packageName;
 
   @override
   List<String> build(int? ruleListOrder) {

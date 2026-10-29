@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,9 +11,13 @@ import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/per_app_proxy/data/desktop_routing_rule_compiler.dart';
 import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
+import 'package:zeon/features/per_app_proxy/data/windows_icon_extractor.dart';
 import 'package:zeon/features/per_app_proxy/data/windows_installed_apps_service.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
+import 'package:zeon/features/route_rules/overview/rule_page.dart';
+import 'package:zeon/features/route_rules/overview/rules_page.dart';
 import 'package:zeon/features/settings/overview/sections/route_options_page.dart';
+import 'package:zeon/features/settings/widget/settings_surface.dart';
 import 'package:zeon/features/site_routing/model/site_routing_mode.dart';
 import 'package:zeon/features/site_routing/overview/site_routing_page.dart';
 import 'package:zeon/gen/translations_ru.g.dart';
@@ -120,6 +127,70 @@ HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Telegram.e
         ),
         'CustomApp',
       );
+    });
+
+    test('parses and attaches Windows application icons from DisplayIcon and executable paths', () async {
+      final parsedExe = WindowsIconExtractor.parseIconLocation(
+        r'"C:\Program Files\Google\Chrome\Application\chrome.exe",-101',
+      );
+      expect(parsedExe?.filePath, r'C:\Program Files\Google\Chrome\Application\chrome.exe');
+      expect(parsedExe?.iconIndex, -101);
+
+      final parsedIco = WindowsIconExtractor.parseIconLocation(r'C:\Users\User\AppData\Local\Discord\app.ico');
+      expect(parsedIco?.filePath, r'C:\Users\User\AppData\Local\Discord\app.ico');
+      expect(parsedIco?.iconIndex, 0);
+
+      final samplePng = WindowsIconExtractor.encodeRgbaPng(
+        width: 2,
+        height: 2,
+        rgba: Uint8List.fromList(const <int>[
+          255, 0, 0, 255, // red
+          0, 255, 0, 255, // green
+          0, 0, 255, 255, // blue
+          255, 255, 255, 128, // semi-transparent white
+        ]),
+      );
+      // Verify PNG signature
+      expect(samplePng.sublist(0, 8), const <int>[137, 80, 78, 71, 13, 10, 26, 10]);
+
+      if (Platform.isWindows && File(r'C:\Windows\explorer.exe').existsSync()) {
+        final explorerIcon = WindowsIconExtractor.extractIconPng(r'C:\Windows\explorer.exe');
+        expect(explorerIcon, isNotNull);
+        expect(explorerIcon!.sublist(0, 8), const <int>[137, 80, 78, 71, 13, 10, 26, 10]);
+      }
+
+      const fakeReg = r'''
+HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Discord
+    DisplayName    REG_SZ    Discord
+    DisplayIcon    REG_SZ    C:\Users\User\AppData\Local\Discord\app.ico
+    InstallLocation    REG_SZ    C:\Users\User\AppData\Local\Discord
+''';
+
+      final requestedIconSources = <String>[];
+      final service = WindowsInstalledAppsService(
+        environment: const <String, String>{},
+        fileExists: (path) {
+          final lower = path.toLowerCase();
+          return lower == r'c:\users\user\appdata\local\discord\app.ico' ||
+              lower == r'c:\users\user\appdata\local\discord\app-1.0.9015\discord.exe';
+        },
+        exeFinder: (dirPath, {int maxDepth = 2}) => const <String>[
+          r'C:\Users\User\AppData\Local\Discord\app-1.0.9015\Discord.exe',
+        ],
+        registryReader: (args) async => args[1].contains('Uninstall') ? fakeReg : '',
+        runningProcessPathsReader: () async => const <String>[],
+        iconLoader: (source) {
+          requestedIconSources.add(source);
+          return samplePng;
+        },
+      );
+
+      final apps = await service.getInstalledApps();
+      expect(apps, hasLength(1));
+      expect(apps.single.name, 'Discord');
+      expect(apps.single.icon, isNotNull);
+      expect(apps.single.icon, samplePng);
+      expect(requestedIconSources, contains(r'C:\Users\User\AppData\Local\Discord\app.ico'));
     });
   });
 
@@ -336,6 +407,55 @@ HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Telegram.e
       await tester.pumpAndSettle();
 
       expect(container.read(Preferences.excludeSites), const <String>['192.168.1.0/24']);
+    });
+
+    testWidgets('RulesPage and RulePage use ZEON SettingsList and SettingsGroup design artifacts', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final t = TranslationsRu();
+      final container = ProviderContainer(
+        overrides: [
+          sharedPreferencesProvider.overrideWith((_) => prefs),
+          translationsProvider.overrideWith((_) => t),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(sharedPreferencesProvider.future);
+      await container.read(translationsProvider.future);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            locale: Locale('ru'),
+            supportedLocales: [Locale('ru')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            home: RulesPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SettingsList), findsOneWidget);
+      expect(find.byType(SettingsGroup), findsOneWidget);
+      expect(find.byType(SettingsTile), findsOneWidget);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            locale: Locale('ru'),
+            supportedLocales: [Locale('ru')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            home: RulePage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SettingsList), findsOneWidget);
+      expect(find.byType(SettingsGroup), findsWidgets);
+      expect(find.byType(SettingsTile), findsWidgets);
     });
   });
 }

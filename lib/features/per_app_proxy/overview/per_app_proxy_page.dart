@@ -107,7 +107,7 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
                 AppPackageInfo(
                   packageName: normalized,
                   name: WindowsInstalledAppsService.friendlyProgramName(normalized),
-                  icon: null,
+                  icon: WindowsInstalledAppsService.extractExecutableIcon(normalized),
                 ),
               );
             }
@@ -410,16 +410,25 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
                           value: flag == null ? false : PkgFlag.checkboxValue(flag),
                           tristate: true,
                           onChanged: (_) => ref.read(PerAppProxyProvider(mode).notifier).updatePkg(package.packageName),
-                          secondary: package.icon == null
-                              ? null
-                              : Image.memory(
+                          secondary: package.icon != null
+                              ? Image.memory(
                                   package.icon!,
                                   width: applicationIconLogicalSize,
                                   height: applicationIconLogicalSize,
                                   cacheWidth: applicationIconPhysicalSize,
                                   cacheHeight: applicationIconPhysicalSize,
                                   filterQuality: FilterQuality.high,
-                                ),
+                                  errorBuilder: (context, error, stackTrace) => _DesktopAppFallbackIcon(
+                                    size: applicationIconLogicalSize,
+                                    name: package.name,
+                                  ),
+                                )
+                              : package.packageName.toLowerCase().endsWith('.exe')
+                              ? _DesktopAppFallbackIcon(
+                                  size: applicationIconLogicalSize,
+                                  name: package.name,
+                                )
+                              : null,
                         ),
                       ),
                     ),
@@ -432,6 +441,38 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
         ),
         error: (error, _) => SliverErrorBodyPlaceholder(error.toString()),
         loading: () => const Center(child: CircularProgressIndicator()),
+      ),
+    );
+  }
+}
+
+class _DesktopAppFallbackIcon extends StatelessWidget {
+  const _DesktopAppFallbackIcon({required this.size, required this.name});
+
+  final double size;
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final trimmed = name.trim();
+    final initial = trimmed.isNotEmpty ? trimmed.characters.first.toUpperCase() : '?';
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: TextStyle(
+          fontFamily: 'Montserrat',
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: cs.primary,
+        ),
       ),
     );
   }

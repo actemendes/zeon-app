@@ -7,6 +7,7 @@ import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/utils/preferences_utils.dart';
 import 'package:zeon/features/per_app_proxy/data/desktop_routing_rule_compiler.dart';
+import 'package:zeon/features/settings/widget/settings_surface.dart';
 import 'package:zeon/features/site_routing/model/site_routing_mode.dart';
 
 class SiteRoutingPage extends HookConsumerWidget {
@@ -70,6 +71,7 @@ class SiteRoutingPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final fabForegroundColor = theme.brightness == Brightness.dark ? const Color(0xFF000000) : null;
 
     final mode = ref.watch(Preferences.siteRoutingMode);
@@ -79,6 +81,8 @@ class SiteRoutingPage extends HookConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        centerTitle: false,
+        titleTextStyle: theme.textTheme.titleMedium?.copyWith(fontSize: 17, fontWeight: FontWeight.w600),
         title: Text(t.pages.settings.routing.websites.title.toUpperCase()),
         actions: [
           IconButton(
@@ -122,15 +126,14 @@ class SiteRoutingPage extends HookConsumerWidget {
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
-                      color: theme.colorScheme.surface,
-                      border: Border.all(color: theme.colorScheme.outlineVariant),
+                      color: cs.surface,
                     ),
                     child: Row(
                       children: [
                         const Gap(16),
                         Text(mode.present(t).title),
                         const Gap(4),
-                        Icon(Icons.arrow_drop_down_rounded, color: theme.colorScheme.onSurfaceVariant),
+                        Icon(Icons.arrow_drop_down_rounded, color: cs.onSurfaceVariant),
                         const Gap(8),
                       ],
                     ),
@@ -141,21 +144,34 @@ class SiteRoutingPage extends HookConsumerWidget {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        foregroundColor: fabForegroundColor,
-        tooltip: t.pages.settings.routing.websites.addNew,
-        onPressed: () => _showAddDialog(ref: ref, t: t, websites: websites, notifier: websitesNotifier),
-        child: Icon(Icons.add_rounded, color: fabForegroundColor),
-      ),
+      floatingActionButton: websites.isNotEmpty
+          ? FloatingActionButton(
+              foregroundColor: fabForegroundColor,
+              tooltip: t.pages.settings.routing.websites.addNew,
+              onPressed: () => _showAddDialog(ref: ref, t: t, websites: websites, notifier: websitesNotifier),
+              child: Icon(Icons.add_rounded, color: fabForegroundColor),
+            )
+          : FloatingActionButton.extended(
+              foregroundColor: fabForegroundColor,
+              onPressed: () => _showAddDialog(ref: ref, t: t, websites: websites, notifier: websitesNotifier),
+              label: Text(t.pages.settings.routing.websites.addNew),
+              icon: Icon(Icons.add_rounded, color: fabForegroundColor),
+            ),
       body: websites.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  t.pages.settings.routing.websites.empty,
-                  textAlign: TextAlign.center,
+          ? SettingsList(
+              children: [
+                SettingsHint(message: mode.present(t).message),
+                SettingsGroup(
+                  children: [
+                    SettingsTile(
+                      leading: const Icon(Icons.language_rounded),
+                      title: Text(t.pages.settings.routing.websites.addNew),
+                      subtitle: Text(t.pages.settings.routing.websites.empty),
+                      onTap: () => _showAddDialog(ref: ref, t: t, websites: websites, notifier: websitesNotifier),
+                    ),
+                  ],
                 ),
-              ),
+              ],
             )
           : ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
@@ -164,39 +180,53 @@ class SiteRoutingPage extends HookConsumerWidget {
                 final website = websites[index];
                 final isIpResource = DesktopRoutingRuleCompiler.isIpOrCidrEntry(website);
                 return Material(
-                  color: theme.colorScheme.secondaryContainer,
+                  color: cs.secondaryContainer,
                   borderRadius: BorderRadius.vertical(
                     top: Radius.circular(index == 0 ? 20 : 0),
                     bottom: Radius.circular(index == websites.length - 1 ? 20 : 0),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: ListTile(
-                    title: Text(website, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    leading: Icon(isIpResource ? Icons.lan_rounded : Icons.language_rounded),
-                    onTap: () =>
-                        _showEditDialog(ref: ref, t: t, websites: websites, index: index, notifier: websitesNotifier),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          onPressed: () => _showEditDialog(
-                            ref: ref,
-                            t: t,
-                            websites: websites,
-                            index: index,
-                            notifier: websitesNotifier,
-                          ),
-                          icon: const Icon(Icons.edit_rounded),
+                  child: Column(
+                    children: [
+                      if (index > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 54, right: 16),
+                          child: Divider(height: 1, color: cs.onSurface.withValues(alpha: .07)),
                         ),
-                        IconButton(
-                          onPressed: () async {
-                            final updated = <String>[...websites]..removeAt(index);
-                            await websitesNotifier.update(updated);
-                          },
-                          icon: const Icon(Icons.remove_circle_outline_rounded),
+                      SettingsTile(
+                        title: Text(website, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        leading: Icon(isIpResource ? Icons.lan_rounded : Icons.language_rounded),
+                        onTap: () => _showEditDialog(
+                          ref: ref,
+                          t: t,
+                          websites: websites,
+                          index: index,
+                          notifier: websitesNotifier,
                         ),
-                      ],
-                    ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: () => _showEditDialog(
+                                ref: ref,
+                                t: t,
+                                websites: websites,
+                                index: index,
+                                notifier: websitesNotifier,
+                              ),
+                              icon: const Icon(Icons.edit_rounded),
+                            ),
+                            IconButton(
+                              onPressed: () async {
+                                final updated = <String>[...websites]..removeAt(index);
+                                await websitesNotifier.update(updated);
+                              },
+                              icon: Icon(Icons.remove_circle_outline_rounded, color: cs.error),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 );
               },
