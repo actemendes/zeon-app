@@ -537,33 +537,87 @@ class ManagedApplicationRuleCompiler {
     required ManagedApplicationPlatform platform,
     Set<String> disabledIdentifiers = const <String>{},
   }) {
+    final disabledLower = disabledIdentifiers.map((e) => e.toLowerCase()).toSet();
     final grouped = <ManagedApplicationRoute, List<String>>{};
     for (final application in config.applications) {
-      if (!application.enabled ||
-          application.platform != platform ||
-          disabledIdentifiers.contains(application.stableIdentifier)) {
+      final isDisabled = platform == ManagedApplicationPlatform.windows
+          ? disabledLower.contains(application.stableIdentifier.toLowerCase())
+          : disabledIdentifiers.contains(application.stableIdentifier);
+      if (!application.enabled || application.platform != platform || isDisabled) {
         continue;
       }
       (grouped[application.route] ??= <String>[]).add(application.stableIdentifier);
     }
-    return <Map<String, dynamic>>[
-      for (final route in <ManagedApplicationRoute>[
-        ManagedApplicationRoute.block,
-        ManagedApplicationRoute.direct,
-        ManagedApplicationRoute.vpn,
-      ])
-        if (grouped[route]?.isNotEmpty ?? false)
-          <String, dynamic>{
-            'enabled': true,
-            'name': 'managed applications ${route.name.toUpperCase()} v${config.version}',
-            'outbound': switch (route) {
-              ManagedApplicationRoute.vpn => 0,
-              ManagedApplicationRoute.direct => 1,
-              ManagedApplicationRoute.block => 3,
+    if (platform == ManagedApplicationPlatform.android) {
+      return <Map<String, dynamic>>[
+        for (final route in <ManagedApplicationRoute>[
+          ManagedApplicationRoute.block,
+          ManagedApplicationRoute.direct,
+          ManagedApplicationRoute.vpn,
+        ])
+          if (grouped[route]?.isNotEmpty ?? false)
+            <String, dynamic>{
+              'enabled': true,
+              'name': 'managed applications ${route.name.toUpperCase()} v${config.version}',
+              'outbound': switch (route) {
+                ManagedApplicationRoute.vpn => 0,
+                ManagedApplicationRoute.direct => 1,
+                ManagedApplicationRoute.block => 3,
+              },
+              'package_names': grouped[route],
             },
-            'package_names': grouped[route],
-          },
-    ];
+      ];
+    }
+
+    final compiled = <Map<String, dynamic>>[];
+    for (final route in <ManagedApplicationRoute>[
+      ManagedApplicationRoute.block,
+      ManagedApplicationRoute.direct,
+      ManagedApplicationRoute.vpn,
+    ]) {
+      final identifiers = grouped[route];
+      if (identifiers == null || identifiers.isEmpty) continue;
+      final outbound = switch (route) {
+        ManagedApplicationRoute.vpn => 0,
+        ManagedApplicationRoute.direct => 1,
+        ManagedApplicationRoute.block => 3,
+      };
+      final processPaths = <String>[];
+      final processNames = <String>[];
+      for (final id in identifiers) {
+        if (id.contains(r'\') || id.contains('/')) {
+          final normalizedPath = platform == ManagedApplicationPlatform.windows ? id.replaceAll('/', r'\') : id;
+          if (!processPaths.contains(normalizedPath)) {
+            processPaths.add(normalizedPath);
+          }
+          final base = normalizedPath.split(RegExp(r'[\\/]')).last;
+          if (base.isNotEmpty && !processNames.contains(base)) {
+            processNames.add(base);
+          }
+        } else {
+          if (!processNames.contains(id)) {
+            processNames.add(id);
+          }
+        }
+      }
+      if (processPaths.isNotEmpty) {
+        compiled.add(<String, dynamic>{
+          'enabled': true,
+          'name': 'managed applications ${route.name.toUpperCase()} paths v${config.version}',
+          'outbound': outbound,
+          'process_paths': processPaths,
+        });
+      }
+      if (processNames.isNotEmpty) {
+        compiled.add(<String, dynamic>{
+          'enabled': true,
+          'name': 'managed applications ${route.name.toUpperCase()} v${config.version}',
+          'outbound': outbound,
+          'process_names': processNames,
+        });
+      }
+    }
+    return compiled;
   }
 }
 

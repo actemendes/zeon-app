@@ -92,7 +92,9 @@ class _AppContent extends HookConsumerWidget with WidgetsBindingObserver, PresLo
     final activeBreakpoint = Breakpoint(context).activeBreakpoint;
 
     ref.listen(foregroundProfilesUpdateNotifierProvider, (_, _) {});
-    if (PlatformUtils.isAndroid) ref.listen(perAppProxyServiceProvider, (_, _) {});
+    if (PlatformUtils.isAndroid || PlatformUtils.isDesktop) {
+      ref.listen(perAppProxyServiceProvider, (_, _) {});
+    }
     if (PlatformUtils.isDesktop) ref.listen(systemTrayNotifierProvider, (_, _) {});
     ref.listen(Preferences.remoteNotifications, (_, _) {
       unawaited(ref.read(notificationPollingServiceProvider).configurePlatformSchedulers());

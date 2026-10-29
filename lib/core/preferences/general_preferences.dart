@@ -6,6 +6,7 @@ import 'package:zeon/core/preferences/actions_at_closing.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/core/utils/preferences_utils.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
+import 'package:zeon/features/site_routing/model/site_routing_mode.dart';
 import 'package:zeon/utils/platform_utils.dart';
 
 part 'general_preferences.g.dart';
@@ -54,6 +55,21 @@ abstract class Preferences {
     <String>[],
   );
 
+  static final desktopCustomApps = PreferencesNotifier.create<List<String>, List<String>>(
+    "desktop_custom_apps_list",
+    <String>[],
+  );
+
+  static final includeSites = PreferencesNotifier.create<List<String>, List<String>>(
+    "site_routing_include_list",
+    <String>[],
+  );
+
+  static final excludeSites = PreferencesNotifier.create<List<String>, List<String>>(
+    "site_routing_exclude_list",
+    <String>[],
+  );
+
   static final windowMaximized = PreferencesNotifier.create<bool, bool>("window_maximized", false);
 
   static final windowPosition = PreferencesNotifier.create<Offset?, String?>(
@@ -92,6 +108,13 @@ abstract class Preferences {
     "per_app_proxy_mode",
     PerAppProxyMode.off,
     mapFrom: PerAppProxyMode.values.byName,
+    mapTo: (value) => value.name,
+  );
+
+  static final siteRoutingMode = PreferencesNotifier.create<SiteRoutingMode, String>(
+    "site_routing_mode",
+    SiteRoutingMode.off,
+    mapFrom: SiteRoutingMode.fromName,
     mapTo: (value) => value.name,
   );
 

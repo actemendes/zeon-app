@@ -19,6 +19,7 @@ import 'package:zeon/features/profile/overview/profile_link_account_page.dart';
 import 'package:zeon/features/profile/overview/profile_menu_page.dart';
 import 'package:zeon/features/profile/overview/profiles_page.dart';
 import 'package:zeon/features/proxy/overview/proxies_overview_page.dart';
+import 'package:zeon/features/route_rules/overview/rules_page.dart';
 import 'package:zeon/features/settings/overview/sections/dns_options_page.dart';
 import 'package:zeon/features/settings/overview/sections/general_page.dart';
 import 'package:zeon/features/settings/overview/sections/inbound_options_page.dart';
@@ -26,6 +27,7 @@ import 'package:zeon/features/settings/overview/sections/route_options_page.dart
 import 'package:zeon/features/settings/overview/sections/tls_tricks_page.dart';
 import 'package:zeon/features/settings/overview/sections/warp_options_page.dart';
 import 'package:zeon/features/settings/overview/settings_page.dart';
+import 'package:zeon/features/site_routing/overview/site_routing_page.dart';
 import 'package:zeon/features/watch/watch_proxy_page.dart';
 import 'package:zeon/utils/utils.dart';
 
@@ -208,6 +210,26 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                             TransitionType.slide,
                             state.pageKey,
                             const PerAppProxyPage(),
+                            reduceMotion: MediaQuery.disableAnimationsOf(context),
+                          ),
+                        ),
+                        GoRoute(
+                          name: 'siteRouting',
+                          path: '/site-routing',
+                          pageBuilder: (context, state) => customTransition(
+                            TransitionType.slide,
+                            state.pageKey,
+                            const SiteRoutingPage(),
+                            reduceMotion: MediaQuery.disableAnimationsOf(context),
+                          ),
+                        ),
+                        GoRoute(
+                          name: 'routeRules',
+                          path: '/route-rules',
+                          pageBuilder: (context, state) => customTransition(
+                            TransitionType.slide,
+                            state.pageKey,
+                            const RulesPage(),
                             reduceMotion: MediaQuery.disableAnimationsOf(context),
                           ),
                         ),

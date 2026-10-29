@@ -19,12 +19,14 @@ import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/connection/model/connection_failure.dart';
 import 'package:zeon/features/log/model/log_level.dart' as config_log_level;
+import 'package:zeon/features/per_app_proxy/data/desktop_routing_rule_compiler.dart';
 import 'package:zeon/features/per_app_proxy/data/managed_application_routing.dart';
 import 'package:zeon/features/per_app_proxy/data/selected_data_provider.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/features/per_app_proxy/model/pkg_flag.dart';
 import 'package:zeon/features/proxy/data/proxy_selection_persistence.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
+import 'package:zeon/features/site_routing/model/site_routing_mode.dart';
 import 'package:zeon/singbox/model/core_status.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/singbox/model/singbox_config_option.dart';
@@ -1532,14 +1534,21 @@ class ZeonCoreService with InfraLogger {
 
     final userRules = await _loadUserRouteRulesFromProto();
     final managedApplicationRules = await _loadManagedApplicationRules();
+    final routingOverlay = _compileDesktopAndSiteRoutingOverlay(options);
     final configuredRules = (map["rules"] as List? ?? const <dynamic>[])
         .whereType<Map>()
         .map((rule) => Map<String, dynamic>.from(rule))
         .toList();
     final rulePlan = MobileApiProxyRoute.planCoreRules(
       configuredRules: configuredRules,
-      userRules: userRules,
-      managedApplicationRules: managedApplicationRules,
+      userRules: <Map<String, dynamic>>[
+        ...userRules,
+        ...routingOverlay.leadingRules,
+      ],
+      managedApplicationRules: <Map<String, dynamic>>[
+        ...managedApplicationRules,
+        ...routingOverlay.trailingRules,
+      ],
     );
     map["rules"] = rulePlan.priorityRules;
     map["profile-rules"] = rulePlan.profileRules;
@@ -1604,18 +1613,53 @@ class ZeonCoreService with InfraLogger {
     }
   }
 
+  CompiledRoutingOverlay _compileDesktopAndSiteRoutingOverlay(SingboxConfigOption options) {
+    var perAppMode = PerAppProxyMode.off;
+    var includeApps = const <String>[];
+    var excludeApps = const <String>[];
+    try {
+      perAppMode = ref.read(Preferences.perAppProxyMode);
+      includeApps = ref.read(Preferences.includeApps);
+      excludeApps = ref.read(Preferences.excludeApps);
+    } on Object {
+      // SharedPreferences may not be overridden in isolated payload unit tests.
+    }
+    return const DesktopRoutingRuleCompiler().compileOverlay(
+      isDesktop: _isWindows || (!_isAndroid && PlatformUtils.isDesktop),
+      perAppProxyMode: perAppMode,
+      includeApps: includeApps,
+      excludeApps: excludeApps,
+      siteRoutingMode: SiteRoutingMode.fromName(options.siteRoutingMode),
+      includeSites: options.siteRoutingInclude,
+      excludeSites: options.siteRoutingExclude,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> _loadManagedApplicationRules() async {
-    if (!PlatformUtils.isAndroid) return const <Map<String, dynamic>>[];
+    final platform = _isAndroid
+        ? ManagedApplicationPlatform.android
+        : _isWindows
+        ? ManagedApplicationPlatform.windows
+        : null;
+    if (platform == null) return const <Map<String, dynamic>>[];
     try {
       final config = await ref.read(managedApplicationStoreProvider).readEffective();
-      final dataSource = ref.read(appProxyDataSourceProvider);
-      final disabledIdentifiers = <String>{
-        ...await dataSource.getPkgsByFlag(flag: PkgFlag.forceDeselection, mode: AppProxyMode.include),
-        ...await dataSource.getPkgsByFlag(flag: PkgFlag.forceDeselection, mode: AppProxyMode.exclude),
-      };
+      if (!config.applications.any((app) => app.platform == platform && app.enabled)) {
+        return const <Map<String, dynamic>>[];
+      }
+      var disabledIdentifiers = const <String>{};
+      try {
+        final dataSource = ref.read(appProxyDataSourceProvider);
+        disabledIdentifiers = <String>{
+          ...await dataSource.getPkgsByFlag(flag: PkgFlag.forceDeselection, mode: AppProxyMode.include),
+          ...await dataSource.getPkgsByFlag(flag: PkgFlag.forceDeselection, mode: AppProxyMode.exclude),
+        };
+      } on Object {
+        disabledIdentifiers = const <String>{};
+      }
       return const ManagedApplicationRuleCompiler().compile(
         config,
-        platform: ManagedApplicationPlatform.android,
+        platform: platform,
         disabledIdentifiers: disabledIdentifiers,
       );
     } on Object catch (error, stackTrace) {

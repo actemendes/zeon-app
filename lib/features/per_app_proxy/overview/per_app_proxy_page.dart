@@ -1,4 +1,5 @@
 import 'package:dartx/dartx.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -12,6 +13,7 @@ import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/router/dialog/dialog_notifier.dart';
 import 'package:zeon/core/ui/ui_names.dart';
 import 'package:zeon/core/widget/keyboard_focus_outline.dart';
+import 'package:zeon/features/per_app_proxy/data/windows_installed_apps_service.dart';
 import 'package:zeon/features/per_app_proxy/model/app_package_info.dart';
 import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/features/per_app_proxy/model/pkg_flag.dart';
@@ -39,11 +41,28 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
   }
 
   Future<Set<AppPackageInfo>> getApps(bool hideSystem) async {
-    if (!PlatformUtils.isAndroid) return {};
-    return (await InstalledApps.getInstalledApps(
-      hideSystem,
-      true,
-    )).map((e) => AppPackageInfo(packageName: e.packageName, name: e.name, icon: e.icon)).toSet();
+    if (PlatformUtils.isAndroid) {
+      return (await InstalledApps.getInstalledApps(
+        hideSystem,
+        true,
+      )).map((e) => AppPackageInfo(packageName: e.packageName, name: e.name, icon: e.icon)).toSet();
+    }
+    if (PlatformUtils.isDesktop) {
+      final apps = await WindowsInstalledAppsService().getInstalledApps(hideSystem: hideSystem);
+      return apps.map((e) => AppPackageInfo(packageName: e.packageName, name: e.name, icon: e.icon)).toSet();
+    }
+    return {};
+  }
+
+  Future<void> _pickCustomDesktopExecutable(WidgetRef ref, AppProxyMode? mode) async {
+    if (mode == null) return;
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const <String>['exe'],
+    );
+    final path = result?.files.singleOrNull?.path;
+    if (path == null || path.trim().isEmpty) return;
+    await ref.read(PerAppProxyProvider(mode).notifier).addAndSelectDesktopApp(path);
   }
 
   @override
@@ -56,6 +75,7 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
 
     final mode = ref.watch(Preferences.perAppProxyMode).toAppProxy();
     final selectedApps = ref.watch(PerAppProxyProvider(mode));
+    final customDesktopApps = ref.watch(Preferences.desktopCustomApps);
 
     final hideSystemApps = useState(false);
     final isSearching = useState(false);
@@ -73,16 +93,39 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
           return const AsyncValue.loading();
         }
         final appsList = asyncFilteredApps.requireData.toList();
+        if (PlatformUtils.isDesktop) {
+          final existingKeys = appsList.map((e) => e.packageName.toLowerCase()).toSet();
+          final extraPaths = <String>{
+            ...customDesktopApps,
+            ...selectedApps.requireValue.keys.where((k) => k.toLowerCase().endsWith('.exe')),
+          };
+          for (final rawPath in extraPaths) {
+            final normalized = WindowsInstalledAppsService.normalizeExecutablePath(rawPath);
+            if (normalized == null) continue;
+            if (existingKeys.add(normalized.toLowerCase())) {
+              appsList.add(
+                AppPackageInfo(
+                  packageName: normalized,
+                  name: WindowsInstalledAppsService.friendlyProgramName(normalized),
+                  icon: null,
+                ),
+              );
+            }
+          }
+        }
         if (searchQuery.value.isBlank) {
           appsList.sort((a, b) {
             final priorityA = _getPriority(a, selectedApps.requireValue);
             final priorityB = _getPriority(b, selectedApps.requireValue);
-            return priorityA.compareTo(priorityB);
+            final byPriority = priorityA.compareTo(priorityB);
+            if (byPriority != 0) return byPriority;
+            return a.name.toLowerCase().compareTo(b.name.toLowerCase());
           });
           return AsyncValue.data(appsList);
         }
+        final query = searchQuery.value.toLowerCase();
         final filteredAppsList = appsList
-            .filter((e) => e.name.toLowerCase().contains(searchQuery.value.toLowerCase()))
+            .filter((e) => e.name.toLowerCase().contains(query) || e.packageName.toLowerCase().contains(query))
             .toList();
         return AsyncValue.data(filteredAppsList);
       },
@@ -90,6 +133,8 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
         asyncFilteredApps.connectionState == ConnectionState.done,
         hideSystemApps.value,
         selectedApps.hasValue,
+        selectedApps.valueOrNull?.length,
+        customDesktopApps.length,
         searchQuery.value,
         sortListener.value,
       ],
@@ -281,6 +326,15 @@ class PerAppProxyPage extends HookConsumerWidget with PresLogger {
                         selected: hideSystemApps.value,
                         onSelected: (value) => hideSystemApps.value = value,
                       ),
+                      if (PlatformUtils.isDesktop) ...[
+                        const Gap(8),
+                        ActionChip(
+                          side: BorderSide.none,
+                          avatar: const Icon(Icons.add_rounded, size: 18),
+                          label: Text('${t.common.add} .exe'),
+                          onPressed: () => _pickCustomDesktopExecutable(ref, mode),
+                        ),
+                      ],
                     ],
                   ),
                 ),

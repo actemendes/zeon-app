@@ -27,6 +27,10 @@ enum PkgFlag {
 
   int toggle(int value) => value ^ this.value;
 
+  static bool isSelected(int flag) =>
+      !forceDeselection.check(flag) &&
+      (userSelection.check(flag) || autoSelection.check(flag) || managedSelection.check(flag));
+
   static bool? checkboxValue(int flag) => switch (flag) {
     _ when forceDeselection.check(flag) => false,
     _ when managedSelection.check(flag) => true,

@@ -15,6 +15,7 @@ import 'package:zeon/features/connection/notifier/connection_notifier.dart';
 import 'package:zeon/features/profile/notifier/active_profile_notifier.dart';
 import 'package:zeon/features/route_rules/data/managed_rule_set.dart';
 import 'package:zeon/features/route_rules/data/managed_rule_set_sync.dart';
+import 'package:zeon/features/route_rules/notifier/rules_notifier.dart';
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/utils/custom_loggers.dart';
 import 'package:zeon/utils/platform_utils.dart';
@@ -35,7 +36,7 @@ class ConfigOptionNotifier extends _$ConfigOptionNotifier with AppLogger {
       if (previous == null || next == previous) return;
       _scheduleRestart(force: true);
     });
-    if (PlatformUtils.isAndroid) {
+    if (PlatformUtils.isAndroid || PlatformUtils.isDesktop) {
       ref.listen(Preferences.perAppProxyMode, (previous, next) {
         if (previous == null || next == previous) return;
         _scheduleRestart(force: true);
@@ -49,6 +50,10 @@ class ConfigOptionNotifier extends _$ConfigOptionNotifier with AppLogger {
         _scheduleRestart(force: true);
       });
     }
+    ref.listen(rulesNotifierProvider, (previous, next) {
+      if (previous == null) return;
+      _scheduleRestart(force: true);
+    });
     return false;
   }
 

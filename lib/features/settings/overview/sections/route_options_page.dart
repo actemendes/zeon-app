@@ -11,6 +11,7 @@ import 'package:zeon/features/per_app_proxy/overview/per_app_proxy_notifier.dart
 import 'package:zeon/features/settings/data/config_option_repository.dart';
 import 'package:zeon/features/settings/widget/preference_tile.dart';
 import 'package:zeon/features/settings/widget/settings_surface.dart';
+import 'package:zeon/features/site_routing/model/site_routing_mode.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/utils/platform_utils.dart';
 
@@ -29,6 +30,7 @@ class RouteOptionsPage extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     final perAppProxy = ref.watch(Preferences.perAppProxyMode).enabled;
+    final siteRouting = ref.watch(Preferences.siteRoutingMode).enabled;
     final currentRegion = ref.watch(ConfigOptions.region);
     return Scaffold(
       key: const ValueKey(UiNames.screenRouteOptions),
@@ -42,18 +44,26 @@ class RouteOptionsPage extends HookConsumerWidget {
           SettingsHint(message: t.pages.settings.routing.hint),
           SettingsGroup(
             children: [
-              if (PlatformUtils.isAndroid)
+              if (PlatformUtils.isAndroid || PlatformUtils.isDesktop)
                 SettingsTile(
                   title: Text(t.pages.settings.routing.perAppProxy.title),
                   help: t.settingsHelp.apps,
                   leading: const Icon(Icons.apps_rounded),
-                  trailing: Switch(
-                    value: perAppProxy,
-                    onChanged: (value) async {
-                      final newMode = perAppProxy ? PerAppProxyMode.off : PerAppProxyMode.exclude;
-                      await ref.read(Preferences.perAppProxyMode.notifier).update(newMode);
-                      if (!perAppProxy && context.mounted) context.goNamed('perAppProxy');
-                    },
+                  trailing: SizedBox(
+                    width: 46,
+                    height: 30,
+                    child: FittedBox(
+                      child: Switch.adaptive(
+                        value: perAppProxy,
+                        trackOutlineWidth: const WidgetStatePropertyAll(0),
+                        trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+                        onChanged: (value) async {
+                          final newMode = perAppProxy ? PerAppProxyMode.off : PerAppProxyMode.exclude;
+                          await ref.read(Preferences.perAppProxyMode.notifier).update(newMode);
+                          if (!perAppProxy && context.mounted) context.goNamed('perAppProxy');
+                        },
+                      ),
+                    ),
                   ),
                   onTap: () async {
                     if (!perAppProxy) {
@@ -62,6 +72,40 @@ class RouteOptionsPage extends HookConsumerWidget {
                     if (context.mounted) context.goNamed('perAppProxy');
                   },
                 ),
+              SettingsTile(
+                title: Text(t.pages.settings.routing.websites.title),
+                help: t.settingsHelp.apps,
+                leading: const Icon(Icons.language_rounded),
+                trailing: SizedBox(
+                  width: 46,
+                  height: 30,
+                  child: FittedBox(
+                    child: Switch.adaptive(
+                      value: siteRouting,
+                      trackOutlineWidth: const WidgetStatePropertyAll(0),
+                      trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+                      onChanged: (value) async {
+                        final newMode = siteRouting ? SiteRoutingMode.off : SiteRoutingMode.exclude;
+                        await ref.read(Preferences.siteRoutingMode.notifier).update(newMode);
+                        if (!siteRouting && context.mounted) context.goNamed('siteRouting');
+                      },
+                    ),
+                  ),
+                ),
+                onTap: () async {
+                  if (!siteRouting) {
+                    await ref.read(Preferences.siteRoutingMode.notifier).update(SiteRoutingMode.exclude);
+                  }
+                  if (context.mounted) context.goNamed('siteRouting');
+                },
+              ),
+              SettingsTile(
+                title: Text(t.pages.settings.routing.routeRule.title),
+                leading: const Icon(Icons.alt_route_rounded),
+                onTap: () {
+                  if (context.mounted) context.goNamed('routeRules');
+                },
+              ),
               ChoicePreferenceWidget(
                 selected: currentRegion,
                 preferences: ref.watch(ConfigOptions.region.notifier),

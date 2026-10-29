@@ -2,11 +2,15 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zeon/core/directories/directories_provider.dart';
 import 'package:zeon/core/http_client/mobile_api_proxy_route.dart';
 import 'package:zeon/core/model/directories.dart';
 import 'package:zeon/core/model/optional_range.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
+import 'package:zeon/core/preferences/preferences_provider.dart';
 import 'package:zeon/features/log/model/log_level.dart';
+import 'package:zeon/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:zeon/singbox/model/singbox_config_enum.dart';
 import 'package:zeon/singbox/model/singbox_config_option.dart';
 import 'package:zeon/singbox/model/singbox_rule.dart';
@@ -114,6 +118,64 @@ void main() {
     expect(payload['network-transport-type'], 'unknown');
     expect(payload['network-interface-mtu'], 1500);
   });
+
+  test('Windows per-app include and site exclude compile into core priority rules with direct fallback', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final directory = await Directory.systemTemp.createTemp('zeon-core-options-windows-pc-routing-');
+    addTearDown(() => directory.delete(recursive: true));
+    final directories = (baseDir: directory, workingDir: directory, tempDir: directory);
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWith((_) => prefs),
+        appDirectoriesProvider.overrideWith(() => _TestAppDirectories(directories)),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(sharedPreferencesProvider.future);
+    await container.read(appDirectoriesProvider.future);
+
+    await container.read(Preferences.perAppProxyMode.notifier).update(PerAppProxyMode.include);
+    await container.read(Preferences.includeApps.notifier).update(const <String>[
+      r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+    ]);
+
+    final configured = MobileApiProxyRoute.enforce(
+      _configOptions(
+        rules: const <SingboxRule>[],
+        siteRoutingMode: 'exclude',
+        siteRoutingExclude: const <String>['gosuslugi.ru', '192.168.50.0/24'],
+      ),
+    );
+
+    final payload = await container
+        .read(_testWindowsCoreServiceProvider)
+        .buildCoreOptionsPayloadForTesting(configured);
+    final rules = (payload['rules'] as List).cast<Map<String, dynamic>>();
+
+    // 0: control-plane rule (api.zeon-vps.online -> proxy)
+    // 1: site-routing-exclude-domains (gosuslugi.ru -> direct)
+    // 2: site-routing-exclude-ips (192.168.50.0/24 -> direct)
+    // 3: pc-per-app-include-paths (chrome.exe path -> proxy)
+    // 4: pc-per-app-include-names (chrome.exe name variants -> proxy)
+    // 5: routing-include-fallback-direct (port_ranges 1:65535 -> direct)
+    expect(rules.first['domain_suffixes'], const <String>['api.zeon-vps.online']);
+    expect(rules[1]['name'], 'site-routing-exclude-domains');
+    expect(rules[1]['outbound'], 1);
+    expect(rules[1]['domain_suffixes'], const <String>['gosuslugi.ru']);
+    expect(rules[2]['name'], 'site-routing-exclude-ips');
+    expect(rules[2]['outbound'], 1);
+    expect(rules[2]['ip_cidrs'], const <String>['192.168.50.0/24']);
+    expect(rules[3]['name'], 'pc-per-app-include-paths');
+    expect(rules[3]['outbound'], 0);
+    expect(rules[3]['process_paths'], contains(r'C:\Program Files\Google\Chrome\Application\chrome.exe'));
+    expect(rules[4]['name'], 'pc-per-app-include-names');
+    expect(rules[4]['outbound'], 0);
+    expect(rules[4]['process_names'], contains('chrome.exe'));
+    expect(rules.last['name'], 'routing-include-fallback-direct');
+    expect(rules.last['outbound'], 1);
+    expect(rules.last['port_ranges'], const <String>['1:65535']);
+  });
 }
 
 class _TestAppDirectories extends AppDirectories {
@@ -129,6 +191,9 @@ SingboxConfigOption _configOptions({
   required List<SingboxRule> rules,
   int mtu = 1500,
   String networkMtuMode = 'adaptive',
+  String siteRoutingMode = 'off',
+  List<String> siteRoutingInclude = const <String>[],
+  List<String> siteRoutingExclude = const <String>[],
 }) {
   return SingboxConfigOption(
     region: 'other',
@@ -164,9 +229,9 @@ SingboxConfigOption _configOptions({
     allowConnectionFromLan: false,
     enableFakeDns: false,
     independentDnsCache: true,
-    siteRoutingMode: 'off',
-    siteRoutingInclude: const <String>[],
-    siteRoutingExclude: const <String>[],
+    siteRoutingMode: siteRoutingMode,
+    siteRoutingInclude: siteRoutingInclude,
+    siteRoutingExclude: siteRoutingExclude,
     rules: rules,
     tlsTricks: const SingboxTlsTricks(
       enableFragment: false,

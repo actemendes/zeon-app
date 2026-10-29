@@ -6,6 +6,7 @@ import 'package:zeon/core/device/android_watch_provider.dart';
 import 'package:zeon/core/http_client/mobile_api_proxy_route.dart';
 import 'package:zeon/core/model/optional_range.dart';
 import 'package:zeon/core/model/region.dart';
+import 'package:zeon/core/preferences/general_preferences.dart';
 import 'package:zeon/core/utils/exception_handler.dart';
 import 'package:zeon/core/utils/json_converters.dart';
 import 'package:zeon/core/utils/preferences_utils.dart';
@@ -390,6 +391,9 @@ abstract class ConfigOptions {
     final watch = ref.watch(androidWatchProvider).valueOrNull == true;
     final mode = watch ? ServiceMode.proxy : ref.watch(serviceMode);
     final rules = <SingboxRule>[];
+    final siteRoutingMode = ref.watch(Preferences.siteRoutingMode);
+    final siteRoutingInclude = _normalizeWebsites(ref.watch(Preferences.includeSites));
+    final siteRoutingExclude = _normalizeWebsites(ref.watch(Preferences.excludeSites));
     // final reg = ref.watch(Preferences.region.notifier).raw();
 
     return SingboxConfigOption(
@@ -428,9 +432,9 @@ abstract class ConfigOptions {
       enableFakeDns: ref.watch(enableFakeDns),
       // enableDnsRouting: ref.watch(enableDnsRouting),
       independentDnsCache: ref.watch(independentDnsCache),
-      siteRoutingMode: "off",
-      siteRoutingInclude: const [],
-      siteRoutingExclude: const [],
+      siteRoutingMode: siteRoutingMode.name,
+      siteRoutingInclude: siteRoutingInclude,
+      siteRoutingExclude: siteRoutingExclude,
       // mux: SingboxMuxOption(
       //   enable: ref.watch(enableMux),
       //   padding: ref.watch(muxPadding),
@@ -476,6 +480,16 @@ abstract class ConfigOptions {
       rules: rules,
     );
   });
+
+  static List<String> _normalizeWebsites(List<String> rawValues) {
+    final normalized = <String>[];
+    for (final value in rawValues) {
+      final candidate = value.trim().toLowerCase();
+      if (candidate.isEmpty || normalized.contains(candidate)) continue;
+      normalized.add(candidate);
+    }
+    return normalized;
+  }
 }
 
 class ConfigOptionRepository with ExceptionHandler, InfraLogger {

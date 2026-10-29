@@ -24,7 +24,11 @@ import 'package:zeon/utils/utils.dart';
 
 part 'per_app_proxy_notifier.g.dart';
 
-Set<String> managedApplicationPackagesForMode(ManagedApplicationConfig config, AppProxyMode mode) {
+Set<String> managedApplicationPackagesForMode(
+  ManagedApplicationConfig config,
+  AppProxyMode mode, {
+  ManagedApplicationPlatform platform = ManagedApplicationPlatform.android,
+}) {
   final route = switch (mode) {
     AppProxyMode.include => ManagedApplicationRoute.vpn,
     AppProxyMode.exclude => ManagedApplicationRoute.direct,
@@ -33,7 +37,7 @@ Set<String> managedApplicationPackagesForMode(ManagedApplicationConfig config, A
       .where(
         (application) =>
             application.enabled &&
-            application.platform == ManagedApplicationPlatform.android &&
+            application.platform == platform &&
             application.route == route,
       )
       .map((application) => application.stableIdentifier)
@@ -50,6 +54,28 @@ class PerAppProxy extends _$PerAppProxy with AppLogger {
     _mode = mode;
     if (_mode == null) return Stream.value({});
     final managedConfig = ref.watch(managedApplicationConfigProvider.future);
+    if (!PlatformUtils.isAndroid) {
+      return Stream.fromFuture(() async {
+        try {
+          final config = await managedConfig;
+          _managedPackages = managedApplicationPackagesForMode(
+            config,
+            mode!,
+            platform: ManagedApplicationPlatform.windows,
+          );
+        } catch (_) {
+          _managedPackages = const <String>{};
+        }
+      }()).asyncExpand((_) {
+        return ref.watch(appProxyDataSourceProvider).watchAll(mode: _mode).map((entryList) {
+          final result = <String, int>{for (final entry in entryList) entry.pkgName: entry.flags};
+          for (final pkg in _managedPackages) {
+            result[pkg] = PkgFlag.managedSelection.add(result[pkg] ?? 0);
+          }
+          return result;
+        });
+      });
+    }
     return Stream.fromFuture(() async {
       final appsInfo = await InstalledApps.getInstalledApps(false);
       final config = await managedConfig;
@@ -69,13 +95,40 @@ class PerAppProxy extends _$PerAppProxy with AppLogger {
     });
   }
 
+  Future<void> _syncDesktopPreferencesIfNeeded() async {
+    if (PlatformUtils.isAndroid || _mode == null) return;
+    final entries = await ref.read(appProxyDataSourceProvider).watchAll(mode: _mode).first;
+    final active = entries
+        .where((e) => PkgFlag.isSelected(e.flags))
+        .map((e) => e.pkgName)
+        .toList(growable: false);
+    final pref = _mode == AppProxyMode.include ? Preferences.includeApps : Preferences.excludeApps;
+    await ref.read(pref.notifier).update(active);
+  }
+
   Future<void> updatePkg(String pkg) async {
     loggy.info('Updationg $pkg status');
     if (_managedPackages.contains(pkg)) {
       await ref.read(appProxyDataSourceProvider).toggleManagedPkgOverride(pkg: pkg, mode: _mode!);
+      await _syncDesktopPreferencesIfNeeded();
       return;
     }
     await ref.read(appProxyDataSourceProvider).updatePkg(pkg: pkg, mode: _mode!);
+    await _syncDesktopPreferencesIfNeeded();
+  }
+
+  Future<void> addAndSelectDesktopApp(String rawExePath) async {
+    final cleaned = rawExePath.trim().replaceAll('/', r'\');
+    if (cleaned.isEmpty || !cleaned.toLowerCase().endsWith('.exe')) return;
+    final currentCustom = ref.read(Preferences.desktopCustomApps);
+    if (!currentCustom.any((item) => item.toLowerCase() == cleaned.toLowerCase())) {
+      await ref.read(Preferences.desktopCustomApps.notifier).update(<String>[...currentCustom, cleaned]);
+    }
+    if (_mode == null) return;
+    final currentFlags = state.valueOrNull?[cleaned] ?? 0;
+    if (!PkgFlag.isSelected(currentFlags)) {
+      await updatePkg(cleaned);
+    }
   }
 
   Future<bool> applyAutoSelection() async {
@@ -124,6 +177,7 @@ class PerAppProxy extends _$PerAppProxy with AppLogger {
     loggy.info('Clearing all items');
     await ref.read(appProxyDataSourceProvider).clearAll(mode: _mode!);
     await ref.watch(Preferences.autoAppsSelectionRegion.notifier).update(null);
+    await _syncDesktopPreferencesIfNeeded();
   }
 
   Future<bool> importClipboard() async {
